@@ -1,0 +1,1744 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Poker Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@600;700&family=Rubik:wght@400;500;600;700&display=swap');
+
+:root{
+  --bg1:#022c22; --bg2:#0c0a09;
+  --card:#064e3b; --card-b:#065f46;
+  --input:#022c22; --input-b:#047857;
+  --text:#f5f5f4; --muted:#6ee7b7; --muted2:#34d399;
+  --gold:#fbbf24; --gold-text:#1c1917;
+  --rose:#4c0519; --rose-b:#be123c; --rose-t:#fda4af;
+  --green-box:#065f46;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;background:var(--bg2);}
+body{
+  font-family:'Rubik',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  color:var(--text);
+  min-height:100vh;
+  background:linear-gradient(to bottom,var(--bg1),var(--bg2));
+}
+.serif{font-family:'Frank Ruhl Libre',Georgia,serif;}
+#app{max-width:520px;margin:0 auto;min-height:100vh;padding-bottom:40px;}
+.px5{padding-left:20px;padding-right:20px;}
+.notice{background:#78350f;color:#fde68a;font-size:12px;text-align:center;padding:8px 12px;display:flex;align-items:center;justify-content:center;gap:10px;}
+.notice button{background:none;border:none;color:inherit;text-decoration:underline;cursor:pointer;font-size:12px;}
+.top{padding:24px 20px 10px;}
+.screen-tag{color:var(--gold);font-size:10px;font-weight:700;letter-spacing:.15em;text-align:center;padding:12px 20px 0;opacity:.8;}
+.eyebrow{color:var(--gold);font-size:11px;font-weight:700;letter-spacing:.2em;margin-bottom:4px;}
+h1{font-size:28px;margin:0;font-weight:700;}
+h1.sm{font-size:20px;}
+.sub{color:var(--muted);font-size:13px;margin-top:6px;}
+.card{background:var(--card);border:1px solid var(--card-b);border-radius:16px;padding:16px;margin-bottom:10px;display:flex;align-items:center;gap:12px;cursor:pointer;}
+.card-open{border-color:var(--gold);background:rgba(251,191,36,.08);}
+.open-badge{font-size:11px;font-weight:700;color:var(--gold-text);background:var(--gold);border-radius:8px;padding:3px 8px;}
+.card:active{transform:scale(0.98);}
+.card .name{font-weight:700;font-size:16px;}
+.card .meta{color:var(--muted);font-size:12px;margin-top:4px;display:flex;align-items:center;gap:5px;}
+.chev{color:#059669;flex-shrink:0;}
+.row{display:flex;align-items:center;gap:12px;}
+.row-between{display:flex;align-items:center;justify-content:space-between;}
+.flex1{flex:1;}
+.btn{border:none;border-radius:12px;font-weight:700;font-size:14px;padding:11px 16px;cursor:pointer;font-family:inherit;}
+.btn:active{transform:scale(0.96);}
+.btn-primary{background:var(--gold);color:var(--gold-text);}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed;}
+.btn-ghost{background:#065f46;color:var(--text);border:1px solid var(--card-b);}
+.btn-block{width:100%;}
+.btn-sm{padding:7px 12px;font-size:12px;border-radius:9px;}
+.icon-btn{background:#065f46;border:none;color:var(--text);padding:7px;border-radius:9px;cursor:pointer;display:flex;}
+.icon-btn.danger{background:#450a0a;color:#fca5a5;}
+.icon-btn.gold{color:var(--gold);}
+.icon-btn.ok{background:#065f46;color:#6ee7b7;}
+.bottom-bar{position:fixed;bottom:0;left:0;right:0;max-width:520px;margin:0 auto;padding:16px 20px;background:linear-gradient(to top,var(--bg2) 60%, transparent);}
+.empty{text-align:center;padding:50px 20px;color:#059669;font-size:14px;}
+.section-title{color:var(--gold);font-size:11px;font-weight:700;letter-spacing:.05em;margin:0 0 8px;padding:0 20px;}
+.field{display:block;margin-bottom:14px;}
+.field label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;}
+input[type=text],input[type=number],input[type=date],.select-input{
+  width:100%;padding:11px 14px;border-radius:12px;background:var(--input);border:1px solid var(--input-b);
+  color:var(--text);font-family:inherit;font-size:15px;outline:none;
+}
+input:focus,.select-input:focus{border-color:var(--gold);}
+.chip-row{display:flex;gap:8px;margin-bottom:12px;}
+.chip-btn{flex:1;padding:9px;border-radius:9px;background:var(--input);border:1px solid var(--input-b);color:var(--text);font-family:inherit;cursor:pointer;}
+.overlay{position:fixed;inset:0;background:#000;display:flex;align-items:flex-end;justify-content:center;z-index:50;}
+@media(min-width:600px){.overlay{align-items:center;}}
+.modal{background:#064e3b;width:100%;max-width:480px;border-radius:20px 20px 0 0;border:1px solid var(--card-b);padding:20px;max-height:85vh;overflow-y:auto;}
+@media(min-width:600px){.modal{border-radius:20px;}}
+.modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+.modal-head h3{margin:0;font-size:18px;}
+.close-x{background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;}
+.roster-row{display:flex;align-items:center;justify-content:space-between;background:var(--input);border:1px solid var(--card-b);border-radius:12px;padding:10px 14px;margin-bottom:8px;}
+.scroll-list{max-height:50vh;overflow-y:auto;padding-left:2px;}
+.checkbox-row{display:flex;align-items:center;gap:10px;background:var(--input);border:1px solid var(--card-b);border-radius:12px;padding:10px 14px;margin-bottom:6px;}
+.checkbox-row input{width:17px;height:17px;accent-color:var(--gold);}
+.coin{border-radius:50%;border:2px solid #78716c;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;background:#022c22;}
+.coin.sm{width:36px;height:36px;font-size:11px;}
+.coin.pos{border-color:#34d399;color:#6ee7b7;}
+.coin.neg{border-color:#fb7185;color:#fda4af;}
+.player-card{display:flex;align-items:center;gap:12px;background:var(--input);border:1px solid #14532d;border-radius:16px;padding:14px;margin-bottom:8px;}
+.poker-table-wrap{position:relative;width:100%;padding-top:118%;margin:8px 0 18px;}
+.poker-table-felt{position:absolute;inset:9%;border-radius:50%;background:radial-gradient(ellipse at 50% 40%, #0f6b48, #073826 75%);border:7px solid #3d2412;box-shadow:inset 0 0 34px rgba(0,0,0,.45);}
+.seat-wrap{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;width:78px;touch-action:none;}
+.seat-circle{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;}
+.seat-circle.empty{border:2px dashed rgba(255,255,255,.35);color:var(--muted);background:rgba(255,255,255,.05);font-size:20px;}
+.seat-circle.filled{background:var(--gold);color:var(--gold-text);border:2px solid var(--gold);}
+.seat-circle.filled.cashed-out{background:#57534e;border-color:#57534e;}
+.seat-name{font-size:11px;font-weight:700;color:var(--text);text-align:center;white-space:nowrap;max-width:78px;overflow:hidden;text-overflow:ellipsis;}
+.seat-caption{font-size:9.5px;color:#a7f3d0;text-align:center;line-height:1.35;white-space:nowrap;}
+.player-name{font-weight:600;}
+.player-meta{color:#059669;font-size:12px;margin-top:2px;}
+.balance-line{font-size:12px;font-weight:700;margin-top:2px;}
+.balance-pos{color:#6ee7b7;}
+.balance-neg{color:#fda4af;}
+.balance-neutral{color:#a8a29e;}
+.pot-box{margin:0 20px 16px;border-radius:16px;background:var(--card);border:1px solid var(--card-b);padding:14px 16px;display:flex;justify-content:space-between;align-items:center;font-size:14px;}
+.pot-label{color:#059669;font-size:11px;margin-bottom:2px;}
+.pot-val{font-weight:700;}
+.badge{font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;}
+.badge-ok{background:#065f46;color:#fff;}
+.badge-bad{background:#9f1239;color:#fff;}
+.stats-net{border-radius:12px;padding:14px;text-align:center;margin-bottom:12px;}
+.stats-net.pos{background:#065f46;}
+.stats-net.neg{background:#4c0519;}
+.stats-net .val{font-size:24px;font-weight:700;}
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.stats-grid .box{background:var(--input);border:1px solid var(--card-b);border-radius:12px;padding:10px 12px;}
+.stats-grid .box .l{color:#059669;font-size:11px;margin-bottom:2px;}
+.stats-grid .box .v{font-weight:700;}
+.bar-chart-title{color:var(--gold);font-size:11px;font-weight:700;margin:14px 0 6px;}
+.bar-chart{display:flex;align-items:flex-end;justify-content:space-between;gap:3px;height:120px;padding:8px 2px 0;}
+.bar-col{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;flex:1;height:100%;min-width:0;}
+.bar-count{font-size:10px;color:var(--muted);margin-bottom:3px;font-weight:700;}
+.bar-fill{width:100%;max-width:24px;border-radius:4px 4px 0 0;}
+.bar-fill.loss{background:var(--rose-b);}
+.bar-fill.win{background:var(--muted2);}
+.bar-label{font-size:7px;color:var(--text);margin-top:4px;text-align:center;white-space:nowrap;}
+.txn-row{display:flex;align-items:center;gap:8px;background:var(--input);border:1px solid var(--card-b);border-radius:12px;padding:12px 14px;margin-bottom:8px;}
+.txn-amt{font-weight:700;color:var(--gold);}
+.note{color:#059669;font-size:11px;margin-top:12px;line-height:1.6;}
+.back-arrow{background:none;border:none;color:#6ee7b7;cursor:pointer;padding:4px;display:flex;}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+// ---------- Real persistence: backed by the app's own server + database ----------
+function uid(){ return Math.random().toString(36).slice(2,10); }
+
+// A stable per-browser id so the server knows which "personal identity" bucket belongs
+// to this device. Not a login - just lets each browser keep its own typed-in name.
+function getClientId(){
+  let id = localStorage.getItem("poker-tracker-client-id");
+  if (!id) {
+    id = (crypto.randomUUID ? crypto.randomUUID() : (uid()+uid()+uid()));
+    localStorage.setItem("poker-tracker-client-id", id);
+  }
+  return id;
+}
+
+// ---------- AI vision helper (calls our server, which calls Claude with the real API key) ----------
+const CHIP_COLOR_OPTIONS = ["white","red","blue","green","black","purple","yellow","orange","pink","gray"];
+async function callClaudeVision(dataUrl, promptText){
+  const response = await fetch("/api/vision", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dataUrl, promptText })
+  });
+  if (!response.ok) throw new Error("vision request failed");
+  return await response.json();
+}
+
+function defaultState(){
+  return { communities: [], games: [] };
+}
+
+async function loadState(){
+  try {
+    const res = await fetch("/api/state");
+    if (res.ok) return await res.json();
+  } catch(e) { /* no data saved yet, or fetch failed - fall back to defaults */ }
+  return defaultState();
+}
+
+let saveInFlight = null;
+async function saveState(){
+  // Serialize saves so overlapping calls don't race each other.
+  const run = async () => {
+    try {
+      await fetch("/api/state", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(state)
+      });
+    }
+    catch(e){ console.error("save failed", e); alert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+  };
+  saveInFlight = (saveInFlight || Promise.resolve()).then(run);
+  return saveInFlight;
+}
+
+// ---------- "Who am I" - private per-browser identity, used only to tag who created a community ----------
+// Not a real login: it's a name each user types once, remembered for their own browser via
+// a per-device id. It lets us show/allow "delete" only to the creator, but someone could
+// still type someone else's name - it's a courtesy, not security.
+async function loadIdentity(){
+  try {
+    const res = await fetch("/api/identity?clientId=" + encodeURIComponent(getClientId()));
+    if (res.ok) {
+      const data = await res.json();
+      if (data) return data;
+    }
+  } catch(e) { /* not set yet */ }
+  return { id: uid(), name: null };
+}
+async function saveIdentity(){
+  try {
+    await fetch("/api/identity?clientId=" + encodeURIComponent(getClientId()), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(myIdentity)
+    });
+  }
+  catch(e){ console.error("identity save failed", e); }
+}
+
+let state = defaultState();
+let myIdentity = { id: uid(), name: null };
+
+// ---------- Navigation (not persisted - always starts at home) ----------
+let nav = { screen: "home", communityId: null, gameId: null };
+let modal = null; // {type, ...}
+
+function go(screen, extra){ nav = Object.assign({screen}, extra||{}); modal = null; render(); }
+function openModal(m){ modal = m; render(); }
+function closeModal(){ modal = null; render(); }
+function updateModal(partial){
+  // Toggling a checkbox shouldn't jump the scroll back to the top - capture and
+  // restore scroll positions of the modal and any inner scrollable list around the re-render.
+  const modalEl = document.querySelector(".modal");
+  const listEl = document.querySelector(".scroll-list");
+  const modalScroll = modalEl ? modalEl.scrollTop : null;
+  const listScroll = listEl ? listEl.scrollTop : null;
+  modal = Object.assign({}, modal, partial);
+  render();
+  const modalEl2 = document.querySelector(".modal");
+  const listEl2 = document.querySelector(".scroll-list");
+  if (modalEl2 && modalScroll != null) modalEl2.scrollTop = modalScroll;
+  if (listEl2 && listScroll != null) listEl2.scrollTop = listScroll;
+}
+
+// ---------- Data helpers ----------
+function getCommunity(id){ return state.communities.find(c => c.id === id); }
+function getGame(id){ return state.games.find(g => g.id === id); }
+function maybeAutoCloseNight(g){
+  if (g.players.length > 0 && g.players.every(p => p.id in g.cashouts)) g.closed = true;
+}
+function gamesForCommunity(id){ return state.games.filter(g => g.communityId === id).sort((a,b)=> a.date < b.date ? 1 : -1); }
+
+const PROFIT_BUCKETS = [
+  {min:-Infinity, max:-200, label:"-200",     loss:true},
+  {min:-200,      max:-150, label:"-200/-150", loss:true},
+  {min:-150,      max:-100, label:"-150/-100", loss:true},
+  {min:-100,      max:-50,  label:"-100/-50",  loss:true},
+  {min:-50,       max:0,    label:"-50/0",     loss:true},
+  {min:0,         max:50,   label:"0-50",    loss:false},
+  {min:50,        max:100,  label:"50-100",  loss:false},
+  {min:100,       max:150,  label:"100-150", loss:false},
+  {min:150,       max:200,  label:"150-200", loss:false},
+  {min:200,       max:Infinity, label:"200+", loss:false},
+];
+function computeProfitBuckets(profits){
+  return PROFIT_BUCKETS.map(b => ({
+    label: b.label, loss: b.loss,
+    count: profits.filter(p => p > b.min && p <= b.max).length
+  }));
+}
+function renderBarChart(buckets){
+  const max = Math.max(1, ...buckets.map(b=>b.count));
+  const bars = buckets.map(b => `
+    <div class="bar-col">
+      <div class="bar-count">${b.count || ""}</div>
+      <div class="bar-fill ${b.loss?'loss':'win'}" style="height:${b.count ? Math.max(6, Math.round(b.count/max*100)) : 2}px"></div>
+      <div class="bar-label">${b.label}</div>
+    </div>`).join("");
+  return `<div class="bar-chart-title">התפלגות רווח/הפסד לפי ערב (הפסדים מימין, רווחים משמאל)</div><div class="bar-chart">${bars}</div>`;
+}
+
+function playerNetProfit(communityId, playerId){
+  let net = 0, count = 0;
+  gamesForCommunity(communityId).forEach(g => {
+    const co = g.cashouts[playerId];
+    if (!co) return;
+    const buyins = g.buyins.filter(b=>b.playerId===playerId).reduce((s,b)=>s+b.amount,0);
+    net += (co.amount - buyins);
+    count++;
+  });
+  return { net, count };
+}
+function netBadge(stat){
+  const { net, count } = stat;
+  if (count === 0) return `<span class="balance-line balance-neutral" style="margin-top:0;">עדיין לא שיחק</span>`;
+  const cls = net>0.5?"balance-pos":(net<-0.5?"balance-neg":"balance-neutral");
+  const gamesText = count === 1 ? "ממשחק אחד" : `מ-${count} משחקים`;
+  return `<span class="balance-line ${cls}" style="margin-top:0;">${net>=0?"+":""}₪${Math.round(net)} ${gamesText}</span>`;
+}
+
+// ---------- Settlement algorithm ----------
+function computeBalances(game){
+  const balances = {};
+  game.players.forEach(p => {
+    const buyins = game.buyins.filter(b => b.playerId === p.id).reduce((s,b)=>s+b.amount,0);
+    const cashout = (game.cashouts[p.id] || {}).amount ?? 0;
+    balances[p.id] = { buyins, cashedOut: p.id in game.cashouts, profit: cashout - buyins };
+  });
+  return balances;
+}
+function settleTransactions(balances, players){
+  const creditors = [], debtors = [];
+  Object.entries(balances).forEach(([id,b])=>{
+    if (b.profit > 0.005) creditors.push({id, amt:b.profit});
+    else if (b.profit < -0.005) debtors.push({id, amt:-b.profit});
+  });
+  creditors.sort((a,b)=>b.amt-a.amt);
+  debtors.sort((a,b)=>b.amt-a.amt);
+  const nameOf = id => (players.find(p=>p.id===id)||{}).name || "?";
+  const txns = [];
+  let ci=0, di=0;
+  while(ci<creditors.length && di<debtors.length){
+    const c=creditors[ci], d=debtors[di];
+    const amt = Math.min(c.amt, d.amt);
+    if (amt > 0.005) txns.push({from:d.id, fromName:nameOf(d.id), to:c.id, toName:nameOf(c.id), amount:Math.round(amt*100)/100});
+    c.amt -= amt; d.amt -= amt;
+    if (c.amt <= 0.005) ci++;
+    if (d.amt <= 0.005) di++;
+  }
+  return txns;
+}
+
+// A player who left mid-game and arranged payment directly with active counterpart(s)
+// already moved real cash with those specific people. That must count toward the
+// final settlement - otherwise the app would ask for transfers that ignore money
+// that already changed hands, or ask people to pay twice.
+function computeArrangementAdjustments(game){
+  const raw = computeBalances(game);
+  const adjusted = {};
+  Object.keys(raw).forEach(id => { adjusted[id] = raw[id].profit; });
+  const excluded = new Set();
+  const entries = Object.entries(game.cashouts).sort((a,b) => (a[1].ts||0) - (b[1].ts||0));
+  entries.forEach(([playerId, co]) => {
+    if (co.arrangedWith && co.arrangedWith.length > 0) {
+      const share = adjusted[playerId] / co.arrangedWith.length;
+      co.arrangedWith.forEach(cid => { if (adjusted[cid] !== undefined) adjusted[cid] += share; });
+      excluded.add(playerId);
+    }
+  });
+  return { adjusted, excluded };
+}
+
+function computeFinalBalances(game){
+  const { adjusted, excluded } = computeArrangementAdjustments(game);
+  const finalBalances = {};
+  Object.keys(adjusted).forEach(id => { if (!excluded.has(id)) finalBalances[id] = {profit: adjusted[id]}; });
+  return finalBalances;
+}
+
+// ---------- Icons (tiny inline SVGs) ----------
+const ICONS = {
+  plus: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  back: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>',
+  chev: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate(180deg)"><path d="M9 18l6-6-6-6"/></svg>',
+  x: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>',
+  check: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
+  pencil: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 114 4L7.5 20.5 2 22l1.5-5.5z"/></svg>',
+  trash: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/></svg>',
+  bar: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>',
+  users: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>',
+  cal: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z"/></svg>',
+  out: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>',
+  undo: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 015.5 5.5v0a5.5 5.5 0 01-5.5 5.5H11"/></svg>',
+  chip: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>',
+};
+function icon(name){ return ICONS[name] || ""; }
+
+// ---------- Rendering ----------
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function toHexColor(c){
+  if (!c) return "#888888";
+  if (c[0] === "#") return c;
+  const m = c.match(/\d+/g);
+  if (!m || m.length < 3) return "#888888";
+  return "#" + m.slice(0,3).map(n => Math.max(0,Math.min(255,parseInt(n))).toString(16).padStart(2,"0")).join("");
+}
+function hexDistance(hexA, hexB){
+  const toRgb = (h) => { const c = toHexColor(h).slice(1); return [0,2,4].map(i=>parseInt(c.slice(i,i+2),16)); };
+  const [r1,g1,b1] = toRgb(hexA), [r2,g2,b2] = toRgb(hexB);
+  return Math.sqrt((r1-r2)**2 + (g1-g2)**2 + (b1-b2)**2);
+}
+function nearestChipValue(hex, chipValues){
+  if (!chipValues || !chipValues.length) return null;
+  let best = null, bestDist = Infinity;
+  chipValues.forEach(cv => {
+    const dist = hexDistance(hex, cv.color);
+    if (dist < bestDist) { bestDist = dist; best = cv; }
+  });
+  return bestDist < 70 ? best : null;
+}
+function fmtTime(ts){ if(!ts) return ""; const d = new Date(ts); return d.toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'}); }
+
+// ---------- Screen names (for talking about the app together, and shown in the header) ----------
+const SCREEN_NAMES = {
+  home: "מסך הבית",
+  community: "מסך הקבוצה",
+  table: "מסך השולחן"
+};
+
+function render(){
+  const app = document.getElementById("app");
+  let html = "";
+  if (nav.screen === "home") html = renderHome();
+  else if (nav.screen === "community") html = renderCommunity(nav.communityId);
+  else if (nav.screen === "table") html = renderTable(nav.gameId);
+  const screenTag = `<div class="screen-tag">${esc(SCREEN_NAMES[nav.screen] || nav.screen)}</div>`;
+  html = screenTag + html;
+  if (modal) html += renderModal(modal);
+  app.innerHTML = html;
+  attachHandlers();
+}
+
+function renderHome(){
+  let cards = state.communities.map(c => `
+    <div class="card" data-open-community="${c.id}">
+      <div class="flex1">
+        <div class="name serif">${esc(c.name)}</div>
+        <div class="meta">${icon('users')} נוצרה ע"י ${esc(c.createdByName || "לא ידוע")}</div>
+      </div>
+      ${c.createdBy && c.createdBy === myIdentity.id ? `<button class="icon-btn danger" data-delete-community="${c.id}">${icon('trash')}</button>` : ""}
+      <button class="icon-btn gold" data-open-chip-setup="${c.id}" title="הגדרת ציפים">${icon('chip')}</button>
+      <div class="chev">${icon('chev')}</div>
+    </div>`).join("");
+  if (!cards) cards = `<div class="empty">עדיין אין קבוצות - צרו את הקבוצה הראשונה שלכם</div>`;
+  return `
+    <div class="top">
+      <h1 class="serif">הקבוצות שלי</h1>
+      <div class="sub">בחרו קבוצה כדי לנהל שחקנים וערבי משחק</div>
+    </div>
+    <div class="px5" style="margin-bottom:80px;">${cards}</div>
+    <div class="bottom-bar">
+      <button class="btn btn-primary btn-block" data-new-community>${icon('plus')} קבוצה חדשה</button>
+    </div>
+  `;
+}
+
+function renderCommunity(communityId){
+  const c = getCommunity(communityId);
+  if (!c) return `<div class="empty">קבוצה לא נמצאה</div>`;
+  const games = gamesForCommunity(communityId);
+  const gamesHtml = games.length ? games.map(g => `
+    <div class="card ${g.closed?"":"card-open"}" data-open-game="${g.id}">
+      <div class="row flex1"><span style="color:#6ee7b7">${icon('cal')}</span><span style="font-weight:600">${esc(g.date)}</span>${g.closed?"":`<span class="open-badge">בעיצומו</span>`}</div>
+      <button class="icon-btn danger" data-delete-game="${g.id}">${icon('trash')}</button>
+      <div class="chev">${icon('chev')}</div>
+    </div>`).join("") : `<div class="empty">עדיין אין ערבי משחק בקבוצה הזו</div>`;
+
+  return `
+    <div class="top row" style="padding-bottom:10px;">
+      <button class="back-arrow" data-back-home>${icon('back')}</button>
+      <h1 class="serif sm flex1">${esc(c.name)}</h1>
+      <button class="btn btn-ghost btn-sm" data-show-roster style="display:flex;align-items:center;gap:6px;">${icon('users')} שחקנים (${c.roster.length})</button>
+    </div>
+    <div class="section-title">ערבי משחק</div>
+    <div class="px5" style="margin-bottom:80px;">${gamesHtml}</div>
+    <div class="bottom-bar">
+      <button class="btn btn-primary btn-block" data-new-game ${c.roster.length===0 ? "disabled":""}>${icon('plus')} ${c.roster.length===0 ? "הוסיפו שחקנים תחילה" : "ערב משחק חדש"}</button>
+    </div>
+  `;
+}
+
+function renderTable(gameId){
+  const SEAT_POS = [
+    [50,8],[78,18],[93,43],[88,71],[65,90],[35,90],[12,71],[7,43],[22,18],[2,90]
+  ];
+  const g = getGame(gameId);
+  if (!g) return `<div class="empty">משחק לא נמצא</div>`;
+  const c = getCommunity(g.communityId) || {name:"קבוצה", roster:[]};
+  const seats = g.seats || new Array(9).fill(null);
+  const buyinTotals = {};
+  g.buyins.forEach(b => { buyinTotals[b.playerId] = (buyinTotals[b.playerId]||0) + b.amount; });
+  const liveChips = g.liveChips || {};
+
+  const seatsHtml = seats.map((pid, i) => {
+    const [x,y] = SEAT_POS[i];
+    if (!pid) {
+      if (i === 9) return ""; // the 10th slot's empty state is handled by the dedicated "add extra player" button instead
+      return `<div class="seat-wrap" style="left:${x}%;top:${y}%;" data-seat="${i}"><div class="seat-circle empty">+</div></div>`;
+    }
+    const p = g.players.find(pl => pl.id === pid);
+    const name = p ? p.name : "?";
+    const cashedOut = pid in g.cashouts;
+    const buyin = buyinTotals[pid] || 0;
+    const chips = liveChips[pid] || 0;
+    let caption = `קנייה ₪${buyin}<br>ציפים ₪${chips}`;
+    if (cashedOut) {
+      const profit = chips - buyin;
+      const sign = profit > 0 ? "+" : "";
+      const profitColor = profit > 0.5 ? "#6ee7b7" : (profit < -0.5 ? "#fda4af" : "inherit");
+      caption = `<span style="color:${profitColor};font-weight:700;">${sign}₪${Math.round(profit)}</span>`;
+    }
+    return `<div class="seat-wrap" style="left:${x}%;top:${y}%;" data-seat="${i}">
+      <div class="seat-circle filled ${cashedOut?'cashed-out':''}">${esc((name||"?").slice(0,2))}</div>
+      <div class="seat-name">${esc(name)}</div>
+      <div class="seat-caption">${caption}</div>
+    </div>`;
+  }).join("");
+
+  const totalBuyinAll = Object.values(buyinTotals).reduce((s,v)=>s+v,0);
+  const totalChipsAll = Object.values(liveChips).reduce((s,v)=>s+v,0);
+  const diff = totalChipsAll - totalBuyinAll;
+  const diffLabel = diff > 0.5 ? "קופה בחוסר" : (diff < -0.5 ? "קופה בעודף" : "קופה מאוזנת");
+  const diffColor = diff > 0.5 ? "#fda4af" : (diff < -0.5 ? "#6ee7b7" : "var(--muted)");
+
+  return `
+    <div class="top row" style="padding-bottom:10px;">
+      <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
+      <div class="flex1">
+        <h1 class="serif sm" style="color:var(--gold);">${esc(c.name)}</h1>
+        <div class="meta" style="color:#6ee7b7;font-size:12px;display:flex;align-items:center;gap:5px;">${icon('cal')}${esc(g.date)}</div>
+      </div>
+    </div>
+    <div class="poker-table-wrap">
+      <div class="poker-table-felt"></div>
+      ${seatsHtml}
+      <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;z-index:3;">
+        <div style="color:var(--muted);font-size:12px;">סה"כ קנייה ₪${totalBuyinAll}</div>
+        <div style="color:var(--muted);font-size:12px;">סה"כ ציפים ₪${totalChipsAll}</div>
+        <div style="color:${diffColor};font-weight:700;font-size:13px;margin-top:4px;">${diffLabel}${Math.abs(diff)>=0.5?` ₪${Math.abs(Math.round(diff))}`:""}</div>
+      </div>
+      ${(seats.slice(0,9).filter(Boolean).length >= 9 && seats[9] == null) ? `
+        <div style="position:absolute;left:2%;top:${SEAT_POS[5][1]}%;transform:translateY(-50%);">
+          <button class="icon-btn gold" data-add-extra-player title="הוסף שחקן נוסף" style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.08);display:inline-flex;align-items:center;justify-content:center;">${icon('plus')}</button>
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
+function renderModal(m){
+  let body = "";
+  let title = "";
+  if (m.type === "chipPhotoCount") {
+    title = "ספירת ציפים מתמונה";
+    const c = getCommunity(m.communityId);
+    const stackRow = (s) => {
+      const hasCalibration = c.chipValues && c.chipValues.length;
+      const matched = hasCalibration && s.matchedValue != null;
+      return `
+        <div class="roster-row">
+          <div style="width:20px;height:20px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:${esc(s.color||'#888888')};flex-shrink:0;"></div>
+          <input type="number" inputmode="numeric" data-stack-count="${s.id}" value="${s.count}" style="width:76px;height:40px;font-size:16px;text-align:center;">
+          <span style="color:var(--muted);font-size:12px;">×</span>
+          ${hasCalibration ? `
+            <select data-stack-value-select="${s.id}" style="flex:1;">
+              ${c.chipValues.map(cv => `<option value="${cv.value}" style="color:${esc(toHexColor(cv.color))};" ${matched && s.matchedValue===cv.value ? "selected":""}>⬤ ₪${cv.value}</option>`).join("")}
+              <option value="custom" ${!matched?"selected":""}>אחר (הזן ידנית)</option>
+            </select>
+            <input type="number" inputmode="decimal" data-stack-value="${s.id}" value="${matched?'':(s.matchedValue!=null?s.matchedValue:'')}" placeholder="ערך" style="flex:1;${matched?"display:none;":""}">
+          ` : `
+            <input type="number" inputmode="decimal" data-stack-value="${s.id}" value="${s.matchedValue!=null?s.matchedValue:''}" placeholder="ערך" style="flex:1;">
+          `}
+          <span data-stack-subtotal="${s.id}" style="font-weight:700;font-size:13px;min-width:52px;text-align:left;">₪0</span>
+          <button class="icon-btn" data-duplicate-stack="${s.id}" title="הוסף מגדל זהה">${icon('plus')}</button>
+          <button class="icon-btn danger" data-remove-stack="${s.id}">${icon('trash')}</button>
+        </div>`;
+    };
+    const pickButtons = `
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <div style="position:relative;flex:1;">
+          <button type="button" class="btn btn-ghost btn-block" style="pointer-events:none;">${icon('plus')} צלם</button>
+          <input type="file" accept="image/*" capture="environment" id="chip-count-camera-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
+        </div>
+        <div style="position:relative;flex:1;">
+          <button type="button" class="btn btn-primary btn-block" style="pointer-events:none;">${icon('plus')} העלה תמונה</button>
+          <input type="file" accept="image/*" id="chip-count-upload-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
+        </div>
+      </div>
+    `;
+    if (m.noPhoto) {
+      body = `
+        <div class="scroll-list" style="margin:10px 0;">${m.stacks.map(stackRow).join("")}</div>
+        <div class="roster-row" style="font-weight:700;"><span class="flex1">סה"כ</span><span data-stack-grand-total>₪0</span></div>
+        <button class="btn btn-primary btn-block" data-confirm-chip-count>אשר</button>
+      `;
+    } else if (!m.imageSrc) {
+      body = `
+        <p style="color:var(--muted);font-size:13px;">צלמו/העלו תמונה של כל מגדלי הציפים של השחקן, עומדים זקוף - Claude יזהה צבע וכמות בשבילכם (הערכה - כדאי לבדוק ולתקן).</p>
+        ${pickButtons}
+      `;
+    } else if (m.analyzing) {
+      body = `
+        <div style="width:100%;margin-bottom:10px;"><img src="${m.imageSrc}" style="width:100%;border-radius:12px;display:block;opacity:.5;"></div>
+        <p style="color:var(--muted);font-size:13px;text-align:center;">מנתח את התמונה...</p>
+      `;
+    } else if (!m.stacks.length) {
+      body = `
+        <div style="width:100%;margin-bottom:10px;"><img src="${m.imageSrc}" style="width:100%;border-radius:12px;display:block;"></div>
+        ${m.analyzeError ? `<p style="color:#fda4af;font-size:12px;">${esc(m.analyzeError)}</p>` : ""}
+        <button class="btn btn-primary btn-block" style="margin-bottom:10px;" data-analyze-chip-stacks>${icon('chip')} נתח כמות ציפים</button>
+        <button class="btn btn-ghost btn-block" data-retake-chip-photo>${icon('plus')} תמונה אחרת</button>
+      `;
+    } else {
+      body = `
+        <div style="width:100%;margin-bottom:10px;"><img src="${m.imageSrc}" style="width:100%;border-radius:12px;display:block;"></div>
+        <div class="scroll-list" style="margin:10px 0;">${m.stacks.map(stackRow).join("")}</div>
+        <div class="roster-row" style="font-weight:700;"><span class="flex1">סה"כ</span><span data-stack-grand-total>₪0</span></div>
+        <p style="color:var(--muted);font-size:11px;margin:6px 0 14px;">הכמות היא הערכה של Claude - בדקו ותקנו אם צריך.</p>
+        <button class="btn btn-primary btn-block" data-confirm-chip-count>אשר</button>
+      `;
+    }
+  } else if (m.type === "chipSetup") {
+    const c = getCommunity(m.communityId);
+    title = `הגדרת ציפים — ${esc(c.name)}`;
+    const editableList = m.points.length ? `
+      <div class="section-title" style="padding:0;margin:0 0 6px;">צבעים וערכים</div>
+      <div class="scroll-list" style="margin-bottom:14px;">
+        ${m.points.map(pt => `
+          <div class="roster-row">
+            <input type="color" value="${esc(toHexColor(pt.color))}" data-point-color="${pt.id}" style="width:32px;height:32px;padding:0;border:none;border-radius:8px;flex-shrink:0;">
+            <input type="number" inputmode="decimal" placeholder="ערך (למשל 100)" value="${esc(pt.value||'')}" data-chip-value-input="${pt.id}" style="flex:1;">
+            <button class="icon-btn danger" data-remove-chip-point="${pt.id}">${icon('trash')}</button>
+          </div>
+        `).join("")}
+      </div>
+    ` : "";
+    const pickButtons = `
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <div style="position:relative;flex:1;">
+          <button type="button" class="btn btn-ghost btn-block" style="pointer-events:none;">${icon('plus')} צלם</button>
+          <input type="file" accept="image/*" capture="environment" id="chip-camera-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
+        </div>
+        <div style="position:relative;flex:1;">
+          <button type="button" class="btn btn-primary btn-block" style="pointer-events:none;">${icon('plus')} העלה תמונה</button>
+          <input type="file" accept="image/*" id="chip-upload-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
+        </div>
+      </div>
+    `;
+    if (!m.imageSrc) {
+      body = `
+        ${editableList}
+        <p style="color:var(--muted);font-size:13px;">כדי להוסיף עוד צבעים: צלמו/העלו שורה עם זוטון אחד מכל צבע - Claude יזהה את הצבעים בשבילכם. או, הוסיפו צבע ידנית בלי תמונה בכלל.</p>
+        ${pickButtons}
+        <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-add-chip-manual>${icon('plus')} הוסף צבע ידנית</button>
+        ${m.points.length ? `<button class="btn btn-primary btn-block" data-save-chip-values>שמור שינויים</button>` : ""}
+      `;
+    } else if (m.analyzing) {
+      body = `
+        <div style="width:100%;margin-bottom:10px;"><img src="${m.imageSrc}" style="width:100%;border-radius:12px;display:block;opacity:.5;"></div>
+        <p style="color:var(--muted);font-size:13px;text-align:center;">מנתח את התמונה...</p>
+      `;
+    } else if (!m.points.length) {
+      body = `
+        <div style="width:100%;margin-bottom:10px;"><img src="${m.imageSrc}" style="width:100%;border-radius:12px;display:block;"></div>
+        ${m.analyzeError ? `<p style="color:#fda4af;font-size:12px;">${esc(m.analyzeError)}</p>` : ""}
+        <button class="btn btn-primary btn-block" style="margin-bottom:10px;" data-analyze-chip-colors>${icon('chip')} נתח צבעים בתמונה</button>
+        <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-retake-photo>${icon('plus')} תמונה אחרת</button>
+        <button class="btn btn-ghost btn-block" data-add-chip-manual>${icon('plus')} הוסף צבע ידנית</button>
+      `;
+    } else {
+      body = `
+        ${editableList}
+        <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-add-chip-manual>${icon('plus')} הוסף צבע ידנית</button>
+        <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-retake-photo>${icon('plus')} תמונה אחרת</button>
+        <button class="btn btn-primary btn-block" data-save-chip-values ${m.points.length===0?"disabled":""}>שמור הגדרות ציפים</button>
+      `;
+    }
+  } else if (m.type === "newCommunity") {
+    title = "קבוצה חדשה";
+    body = `
+      <div style="margin-bottom:12px;">
+        <label style="display:block;color:#059669;font-size:11px;margin-bottom:4px;">שם הקבוצה</label>
+        <input type="text" id="new-community-name" placeholder="לדוגמה: טקסס בישראל" style="width:100%;" autofocus>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;color:#059669;font-size:11px;margin-bottom:4px;">השם שלך (יוצג כיוצר הקבוצה, וישמש לזיהוי הרשאת המחיקה)</label>
+        <input type="text" id="new-community-creator" value="${esc(myIdentity.name || '')}" placeholder="השם שלך" style="width:100%;">
+      </div>
+      <button class="btn btn-primary btn-block" data-confirm-new-community>צור קבוצה</button>
+    `;
+  } else if (m.type === "deleteCommunity") {
+    const c = getCommunity(m.communityId);
+    const gameCount = gamesForCommunity(m.communityId).length;
+    title = "מחיקת קבוצה";
+    body = `
+      <p style="color:#6ee7b7;font-size:13px;">למחוק לגמרי את הקבוצה <b>${esc(c.name)}</b>?${gameCount ? ` יימחקו גם ${gameCount} ערבי המשחק שלה.` : ""} הפעולה בלתי הפיכה.</p>
+      <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-delete-community>מחק קבוצה</button>
+    `;
+  } else if (m.type === "roster") {
+    const c = getCommunity(m.communityId);
+    title = `שחקנים ב${esc(c.name)}`;
+    const rows = c.roster.map(p => {
+      if (m.editingId === p.id) {
+        return `<div class="roster-row">
+          <input type="text" id="edit-name-input" value="${esc(p.name)}" style="flex:1;margin-left:8px;" autofocus>
+          <div class="row" style="gap:4px;">
+            <button class="icon-btn ok" data-save-edit="${p.id}">${icon('check')}</button>
+            <button class="icon-btn" data-cancel-edit>${icon('x')}</button>
+          </div>
+        </div>`;
+      }
+      return `<div class="roster-row">
+        <div class="row" style="gap:8px;"><span>${esc(p.name)}</span>${netBadge(playerNetProfit(m.communityId, p.id))}</div>
+        <div class="row" style="gap:4px;">
+          <button class="icon-btn gold" data-view-stats="${p.id}">${icon('bar')}</button>
+          <button class="icon-btn" data-edit-player="${p.id}">${icon('pencil')}</button>
+          <button class="icon-btn danger" data-remove-player="${p.id}">${icon('trash')}</button>
+        </div>
+      </div>`;
+    }).join("");
+    body = `
+      <div class="scroll-list" style="margin-bottom:16px;">${rows || '<div class="empty" style="padding:10px 0;">אין עדיין שחקנים ברשימה</div>'}</div>
+      <div class="row">
+        <input type="text" id="new-roster-name" placeholder="שם שחקן חדש" style="flex:1;">
+        <button class="btn btn-primary" data-add-roster style="padding:11px 16px;">${icon('plus')}</button>
+      </div>
+    `;
+  } else if (m.type === "stats") {
+    const c = getCommunity(m.communityId);
+    const player = c.roster.find(p=>p.id===m.playerId);
+    title = `סטטיסטיקות — ${esc(player.name)}`;
+    const allGames = gamesForCommunity(m.communityId);
+    const totalCommunityGames = allGames.length;
+    const participatedGames = allGames.filter(g => g.players.some(p=>p.id===player.id));
+    const profits = [];
+    let best=null, worst=null;
+    participatedGames.forEach(g => {
+      const co = g.cashouts[player.id];
+      if (!co) return;
+      const buyins = g.buyins.filter(b=>b.playerId===player.id).reduce((s,b)=>s+b.amount,0);
+      const profit = co.amount - buyins;
+      profits.push(profit);
+      if (!best || profit > best.profit) best = {date:g.date, profit};
+      if (!worst || profit < worst.profit) worst = {date:g.date, profit};
+    });
+    const net = profits.reduce((s,p)=>s+p,0);
+    const wins = profits.filter(p=>p>0);
+    const losses = profits.filter(p=>p<0);
+    const avgWin = wins.length ? wins.reduce((s,p)=>s+p,0)/wins.length : null;
+    const avgLoss = losses.length ? losses.reduce((s,p)=>s+p,0)/losses.length : null;
+    const avgOverall = profits.length ? net/profits.length : null;
+    if (profits.length === 0) {
+      body = `<div class="empty" style="padding:20px 0;">${esc(player.name)} עדיין לא סיים אף ערב משחק.</div>`;
+    } else {
+      body = `
+        <div class="stats-net ${net>=0?'pos':'neg'}"><div class="pot-label">מאזן כולל</div><div class="val">${net>=0?"+":""}₪${Math.round(net)}</div></div>
+        <div class="stats-grid" style="margin-bottom:10px;">
+          <div class="box"><div class="l">ערבים ששוחקו (בקבוצה)</div><div class="v">${totalCommunityGames}</div></div>
+          <div class="box"><div class="l">סה"כ ערבים שהשתתף בהם</div><div class="v">${participatedGames.length}</div></div>
+          <div class="box"><div class="l">ממוצע נצחונות</div><div class="v" style="color:#6ee7b7;">${avgWin!=null?`+₪${Math.round(avgWin)}`:"—"}</div></div>
+          <div class="box"><div class="l">ממוצע הפסדים</div><div class="v" style="color:#fda4af;">${avgLoss!=null?`₪${Math.round(avgLoss)}`:"—"}</div></div>
+        </div>
+        <div class="roster-row"><span>ממוצע כללי למשחק</span><span style="font-weight:700;">${avgOverall>=0?"+":""}₪${Math.round(avgOverall)}</span></div>
+        ${renderBarChart(computeProfitBuckets(profits))}
+        ${best?`<div class="roster-row"><span style="color:#059669;font-size:12px;">הערב הכי טוב (${esc(best.date)})</span><span style="color:#6ee7b7;font-weight:700;">+₪${Math.round(best.profit)}</span></div>`:""}
+        ${worst?`<div class="roster-row"><span style="color:#059669;font-size:12px;">הערב הכי גרוע (${esc(worst.date)})</span><span style="color:#fda4af;font-weight:700;">₪${Math.round(worst.profit)}</span></div>`:""}
+      `;
+    }
+  } else if (m.type === "newGame") {
+    title = "ערב משחק חדש";
+    body = `
+      <div class="field"><label>תאריך</label><input type="date" id="new-game-date" value="${m.date}"></div>
+      <p style="color:var(--muted);font-size:12px;margin-top:-6px;">אחרי היצירה תוכלו להושיב שחקנים סביב השולחן.</p>
+      <button class="btn btn-primary btn-block" data-create-game>פתח שולחן</button>
+    `;
+  } else if (m.type === "editCashout") {
+    const g = getGame(m.gameId);
+    const p = g.players.find(pl=>pl.id===m.playerId);
+    const co = g.cashouts[m.playerId];
+    title = `תיקון סכום — ${esc(p.name)}`;
+    body = `
+      <div class="field"><label>סכום סופי מתוקן בשקלים</label><input type="number" inputmode="decimal" id="edit-cashout-amount" value="${co.amount}" autofocus></div>
+      <button class="btn btn-primary btn-block" data-confirm-edit-cashout>שמור תיקון</button>
+    `;
+  } else if (m.type === "removeFromGame") {
+    const g = getGame(m.gameId);
+    const p = g.players.find(pl=>pl.id===m.playerId);
+    const buyins = g.buyins.filter(b=>b.playerId===m.playerId);
+    const hasCashout = m.playerId in g.cashouts;
+    const referencedBy = Object.entries(g.cashouts).filter(([id,co]) => id !== m.playerId && co.arrangedWith && co.arrangedWith.includes(m.playerId)).map(([id]) => (g.players.find(pl=>pl.id===id)||{}).name).filter(Boolean);
+    title = `הסרת ${esc(p.name)} מהערב`;
+    body = `
+      <p style="color:#6ee7b7;font-size:13px;">${esc(p.name)} יוסר לגמרי מהערב הזה. ${buyins.length ? `${buyins.length} התשלומים שהכניס ${hasCashout ? "והיציאה שלו " : ""}יימחקו.` : ""}</p>
+      ${referencedBy.length ? `<p style="color:#fda4af;font-size:12px;">שים לב: ${referencedBy.map(esc).join(", ")} סידרו תשלום מולו — הסידור הזה יימחק גם הוא.</p>` : ""}
+      <p style="color:#fda4af;font-size:12px;">הפעולה הזאת בלתי הפיכה.</p>
+      <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-remove-from-game>הסר מהערב</button>
+    `;
+  } else if (m.type === "deleteGame") {
+    const g = getGame(m.gameId);
+    title = "מחיקת ערב משחק";
+    body = `
+      <p style="color:#6ee7b7;font-size:13px;">למחוק לגמרי את הערב מתאריך <b>${esc(g.date)}</b>? כל התשלומים והנתונים שלו יימחקו. הפעולה בלתי הפיכה.</p>
+      <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-delete-game>מחק ערב</button>
+    `;
+  } else if (m.type === "deleteBuyin") {
+    const g = getGame(m.gameId);
+    const p = g.players.find(pl=>pl.id===m.playerId);
+    const b = g.buyins.find(bi=>bi.id===m.buyinId);
+    title = "ביטול תשלום";
+    body = `
+      <p style="color:#6ee7b7;font-size:13px;">לבטל את התשלום של <b>${esc(p.name)}</b> על סך <b>₪${b?b.amount:""}</b>? התשלום יימחק לגמרי מהרישום.</p>
+      <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-delete-buyin>בטל תשלום</button>
+    `;
+  } else if (m.type === "deletePaybox") {
+    const g = getGame(m.gameId);
+    const p = g.players.find(pl=>pl.id===m.playerId);
+    const b = (g.payboxPayments||[]).find(bi=>bi.id===m.paymentId);
+    title = "ביטול העברה לפייבוקס";
+    body = `
+      <p style="color:#6ee7b7;font-size:13px;">לבטל את ההעברה של <b>${esc(p.name)}</b> לקבוצת פייבוקס על סך <b>₪${b?b.amount:""}</b>? ההעברה תימחק לגמרי מהרישום.</p>
+      <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-delete-paybox>בטל העברה</button>
+    `;
+  } else if (m.type === "addExisting") {
+    const g = getGame(m.gameId);
+    const c = getCommunity(g.communityId);
+    const avail = c.roster.filter(p => !g.players.some(gp=>gp.id===p.id));
+    title = "הוספת שחקן למשחק";
+    body = avail.map(p => `<div class="card" data-add-to-game="${p.id}"><span class="flex1">${esc(p.name)}</span>${netBadge(playerNetProfit(c.id, p.id))}<span style="color:var(--gold)">${icon('plus')}</span></div>`).join("");
+  } else if (m.type === "buyin") {
+    const g = getGame(m.gameId);
+    const p = g.players.find(pl=>pl.id===m.playerId);
+    title = `תשלום עבור ${esc(p.name)}`;
+    body = `
+      <div class="field"><label>סכום בשקלים</label><input type="number" inputmode="decimal" id="buyin-amount" value="${m.amount||''}" placeholder="50" autofocus></div>
+      <div class="chip-row">
+        ${[50,80,100,200].map(v=>`<button class="chip-btn" data-chip="${v}">₪${v}</button>`).join("")}
+      </div>
+      <button class="btn btn-primary btn-block" data-confirm-buyin>הוסף תשלום</button>
+    `;
+  } else if (m.type === "bulkBuyin") {
+    const g = getGame(m.gameId);
+    const active = g.players.filter(p => !(p.id in g.cashouts));
+    title = "תשלום קבוצתי";
+    body = `
+      <div class="field"><label>סכום בשקלים לכל שחקן שנבחר</label><input type="number" inputmode="decimal" id="bulk-buyin-amount" value="${m.amount||''}" placeholder="50" autofocus></div>
+      <div class="chip-row">
+        ${[50,80,100,200].map(v=>`<button class="chip-btn" data-bulk-chip="${v}">₪${v}</button>`).join("")}
+      </div>
+      <div class="field"><label>למי מהשחקנים הפעילים?</label>
+        <div class="scroll-list">
+          ${active.map(p => `<div class="checkbox-row"><input type="checkbox" data-bulk-select="${p.id}" ${m.selected[p.id]?"checked":""}><span class="flex1">${esc(p.name)}</span>${netBadge(playerNetProfit(g.communityId, p.id))}</div>`).join("")}
+        </div>
+      </div>
+      <button class="btn btn-primary btn-block" data-confirm-bulk-buyin ${Object.values(m.selected).every(v=>!v)?"disabled":""}>הוסף תשלום לכולם</button>
+    `;
+  } else if (m.type === "paybox") {
+    const g = getGame(m.gameId);
+    title = "העברה לקבוצת פייבוקס";
+    body = `
+      <div class="field"><label>מי העביר?</label>
+        <select id="paybox-player" class="select-input">
+          ${g.players.map(p=>`<option value="${p.id}" ${m.playerId===p.id?"selected":""}>${esc(p.name)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field"><label>סכום בשקלים</label><input type="number" inputmode="decimal" id="paybox-amount" value="${m.amount||''}" placeholder="50" autofocus></div>
+      <div class="chip-row">
+        ${[50,80,100,200].map(v=>`<button class="chip-btn" data-paybox-chip="${v}">₪${v}</button>`).join("")}
+      </div>
+      <button class="btn btn-primary btn-block" data-confirm-paybox>שמור העברה</button>
+    `;
+  } else if (m.type === "pickSeat") {
+    const g = getGame(m.gameId);
+    const c = getCommunity(g.communityId);
+    const seated = new Set((g.seats||[]).filter(Boolean));
+    const avail = c.roster.filter(p => !seated.has(p.id));
+    title = `מי יושב במקום ${m.seatIndex+1}?`;
+    body = avail.length ? `
+      <div class="scroll-list">
+        ${avail.map(p => `<div class="checkbox-row" data-pick-player="${p.id}"><span class="flex1">${esc(p.name)}</span></div>`).join("")}
+      </div>
+    ` : `<div class="empty" style="padding:12px 0;">כל השחקנים בקבוצה כבר יושבים בשולחן.</div>`;
+  } else if (m.type === "seatDetail") {
+    const g = getGame(m.gameId);
+    const p = g.players.find(pl=>pl.id===m.playerId);
+    const buyinTotal = g.buyins.filter(b=>b.playerId===m.playerId).reduce((s,b)=>s+b.amount,0);
+    const chips = (g.liveChips||{})[m.playerId] || 0;
+    const cashedOut = m.playerId in g.cashouts;
+    title = esc(p ? p.name : "שחקן");
+    body = `
+      <div class="roster-row"><span>סה"כ קנייה</span><span style="font-weight:700;">₪${buyinTotal}</span></div>
+      <label style="display:block;color:#059669;font-size:11px;margin-bottom:4px;">סכום קנייה</label>
+      ${!m.otherOpen ? `
+        <div class="chip-row">
+          ${[50,80,100,200].map(v=>`<button class="chip-btn" data-seat-instant-chip="${v}">₪${v}</button>`).join("")}
+          <button class="chip-btn" data-seat-other-toggle>אחר</button>
+        </div>
+      ` : `
+        <div class="field"><input type="number" inputmode="decimal" id="seat-buyin-amount" placeholder="הסכום" autofocus></div>
+        <button class="btn btn-ghost btn-block" data-confirm-seat-buyin style="margin-bottom:14px;">${icon('plus')} הוסף קנייה</button>
+      `}
+      <button class="btn btn-ghost btn-block" data-seat-history style="margin-bottom:14px;">${icon('bar')} היסטוריית קניות הערב</button>
+      <div style="display:flex;align-items:flex-end;gap:8px;margin-bottom:10px;">
+        <div class="field" style="flex:1;margin-bottom:0;"><label>כמות ציפים נוכחית</label><input type="number" inputmode="decimal" id="seat-chips" value="${chips}"></div>
+        <button class="btn btn-ghost" data-confirm-seat-chips style="height:46px;flex-shrink:0;">עדכן ציפים</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <button class="btn btn-ghost flex1" data-open-chip-photo style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('chip')} חשב ציפים מתמונה</button>
+        <button class="btn btn-ghost flex1" data-open-chip-manual style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('chip')} הזן לפי צבעי הקבוצה</button>
+      </div>
+      ${cashedOut ? `
+        <p style="color:var(--muted);font-size:12px;">השחקן כבר יצא מהמשחק.</p>
+        <button class="btn btn-ghost btn-block" data-return-to-game="${m.playerId}" style="margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('undo')} החזר למשחק</button>
+      ` : `
+        <button class="btn btn-block" style="background:#57534e;color:#f5f5f4;margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:6px;" data-quick-end="${m.playerId}">${icon('out')} סיים ערב</button>
+      `}
+      <button class="btn btn-block" style="background:#be123c;color:#fff;" data-clear-seat>הסר מהשולחן</button>
+    `;
+  } else if (m.type === "leave") {
+    const g = getGame(m.gameId);
+    const p = g.players.find(pl=>pl.id===m.playerId);
+    title = `${esc(p.name)} יוצא מהמשחק`;
+    body = `
+      <p style="color:#6ee7b7;font-size:13px;margin-top:0;">כמה כסף יש ביד עכשיו?</p>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <label style="font-size:13px;font-weight:600;color:var(--muted);margin:0;">מכפיל ציפים</label>
+        <input type="number" inputmode="numeric" id="leave-multiplier" min="1" max="99" maxlength="2" step="1" value="${m.multiplier || 1}" style="width:52px;flex:none;text-align:center;padding:8px;">
+      </div>
+      <div class="field"><label>סכום ביציאה בשקלים</label><input type="number" inputmode="decimal" id="leave-amount" value="${m.amount||''}" placeholder="0" autofocus></div>
+      <button class="btn btn-primary btn-block" data-confirm-leave>אישור יציאה</button>
+    `;
+  } else if (m.type === "endNight") {
+    const g = getGame(m.gameId);
+    const active = g.players.filter(p => !(p.id in g.cashouts));
+    title = "סיום ערב";
+    if (active.length === 0) {
+      const balances = computeBalances(g);
+      const totalBuyins = g.buyins.reduce((s,b)=>s+b.amount,0);
+      const totalCashouts = Object.values(g.cashouts).reduce((s,co)=>s+co.amount,0);
+      const balanced = Math.abs(totalBuyins-totalCashouts) < 0.5;
+      body = `
+        <div class="stats-net ${balanced?'pos':'neg'}" style="text-align:right;padding:12px 16px;font-size:13px;font-weight:700;">${balanced?"הסכומים מאוזנים ✓":"שימו לב: הסכומים לא מאוזנים במדויק — כדאי לבדוק לפני הסיום"}</div>
+        <button class="btn btn-primary btn-block" data-confirm-end style="margin-top:14px;">סיים ערב וחשב סיכום</button>
+      `;
+    } else {
+      const totalBuyins = g.buyins.reduce((s,b)=>s+b.amount,0);
+      const alreadyOut = Object.values(g.cashouts).reduce((s,co)=>s+co.amount,0);
+      const buyinTotals = {};
+      g.buyins.forEach(b => { buyinTotals[b.playerId] = (buyinTotals[b.playerId]||0) + b.amount; });
+      const paidTotals = {};
+      (g.payboxPayments||[]).forEach(pp => { paidTotals[pp.playerId] = (paidTotals[pp.playerId]||0) + pp.amount; });
+      body = `
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+          <label style="font-size:13px;font-weight:600;color:var(--muted);margin:0;">מכפיל ציפים</label>
+          <input type="number" inputmode="numeric" id="chip-multiplier" min="1" max="99" maxlength="2" step="1" value="${m.multiplier || 1}" style="width:52px;flex:none;text-align:center;padding:8px;">
+        </div>
+        <div id="live-balance-box" class="pot-box" style="margin:0 0 14px;" data-total-buyins="${totalBuyins}" data-already-out="${alreadyOut}"></div>
+        ${active.map(p => `
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <b style="white-space:nowrap;font-size:13px;">${esc(p.name)}</b>
+            <input type="number" inputmode="decimal" data-end-amount="${p.id}" placeholder="0" style="width:80px;flex:none;text-align:center;" value="${m.amounts && m.amounts[p.id] !== undefined ? m.amounts[p.id] : ''}">
+            <span style="color:var(--muted);font-size:11px;flex:1;min-width:0;">· קנה ₪${buyinTotals[p.id]||0}${paidTotals[p.id]?` · העביר ₪${paidTotals[p.id]}`:""}</span>
+          </div>
+        `).join("")}
+        <button class="btn btn-primary btn-block" data-confirm-end-bulk style="margin-top:6px;">סיים ערב וחשב סיכום</button>
+      `;
+    }
+  } else if (m.type === "summary") {
+    const g = getGame(m.gameId);
+    const finalBalances = computeFinalBalances(g);
+    const alreadyPaid = {};
+    (g.payboxPayments||[]).forEach(pp => { alreadyPaid[pp.playerId] = (alreadyPaid[pp.playerId]||0) + pp.amount; });
+    const buyinTotals = {};
+    g.buyins.forEach(b => { buyinTotals[b.playerId] = (buyinTotals[b.playerId]||0) + b.amount; });
+    const rows = Object.entries(finalBalances)
+      .map(([id,b]) => ({ id, name: (g.players.find(pl=>pl.id===id)||{}).name || "?", remaining: b.profit + (alreadyPaid[id]||0), buyin: buyinTotals[id]||0, paid: alreadyPaid[id]||0 }))
+      .filter(r => Math.abs(r.remaining) > 0.005)
+      .sort((a,b) => b.remaining - a.remaining);
+    title = "סיכום תשלומים לקבוצת פייבוקס";
+    body = "";
+    if (rows.length === 0) {
+      body += `<div class="empty" style="padding:20px 0;">✓ הכל מאוזן — אין תשלומים נדרשים.</div>`;
+    } else {
+      body += rows.map(r => `
+        <div class="roster-row">
+          <span><span style="font-weight:700;">${esc(r.name)}</span> <span style="color:var(--muted);font-size:11px;">קנה ₪${r.buyin}${r.paid?` · העביר ₪${r.paid}`:""}</span></span>
+          <span style="font-weight:700;color:${r.remaining>0?'#6ee7b7':'#fda4af'};">${r.remaining>0?"+":"-"}₪${Math.round(Math.abs(r.remaining)*100)/100}</span>
+        </div>
+      `).join("");
+    }
+    body += `<div class="note">* ירוק = מקבל מקבוצת פייבוקס, אדום = מעביר לקבוצת פייבוקס.${Object.keys(alreadyPaid).length ? " הסכומים שכבר הועברו לפייבוקס במהלך הערב כבר נלקחו בחשבון." : ""}</div>`;
+  } else if (m.type === "history") {
+    const g = getGame(m.gameId);
+    const p = g.players.find(pl=>pl.id===m.playerId);
+    title = `היסטוריה — ${esc(p.name)}`;
+    const buyins = g.buyins.filter(b=>b.playerId===m.playerId);
+    const totalBuyin = buyins.reduce((s,b)=>s+b.amount,0);
+    let rows = `<div class="roster-row"><span>מספר תשלומים שהכניס</span><span style="font-weight:700;">${buyins.length}</span></div>`;
+    rows += `<div class="roster-row"><span>סה"כ הכניס</span><span style="font-weight:700;">₪${totalBuyin}</span></div>`;
+    if (buyins.length) {
+      rows += `<div class="section-title" style="padding:0;margin:10px 0 6px;">פירוט התשלומים</div>`;
+      rows += buyins.map((b,i) => `<div class="roster-row"><span>תשלום ${i+1}${b.ts?` · ${fmtTime(b.ts)}`:""}</span><span style="display:flex;align-items:center;gap:10px;">₪${b.amount}<button class="icon-btn" style="color:#fda4af;" data-delete-buyin="${b.id}" title="ביטול תשלום">${icon('trash')}</button></span></div>`).join("");
+    }
+    const paybox = (g.payboxPayments||[]).filter(b=>b.playerId===m.playerId);
+    if (paybox.length) {
+      rows += `<div class="section-title" style="padding:0;margin:14px 0 6px;">העברות לקבוצת פייבוקס</div>`;
+      rows += paybox.map((b,i) => `<div class="roster-row"><span>העברה ${i+1}${b.ts?` · ${fmtTime(b.ts)}`:""}</span><span style="display:flex;align-items:center;gap:10px;">₪${b.amount}<button class="icon-btn" style="color:#fda4af;" data-delete-paybox="${b.id}" title="ביטול העברה">${icon('trash')}</button></span></div>`).join("");
+    }
+    const myOut = g.cashouts[m.playerId];
+    if (myOut) {
+      rows += `<div class="section-title" style="padding:0;margin:14px 0 6px;">יציאה מהמשחק</div>`;
+      rows += `<div class="roster-row"><span>יצא עם${myOut.ts?` (בשעה ${fmtTime(myOut.ts)})`:""}</span><span style="font-weight:700;">₪${myOut.amount}</span></div>`;
+      if (myOut.arrangedWith && myOut.arrangedWith.length) {
+        const myProfit = computeArrangementAdjustments(g).adjusted[m.playerId];
+        const share = Math.round((myProfit / myOut.arrangedWith.length) * 100) / 100;
+        rows += myOut.arrangedWith.map(id => {
+          const name = (g.players.find(pl=>pl.id===id)||{}).name || "?";
+          return `<div class="roster-row"><span>${share>=0 ? "קיבל מ-" : "העביר ל-"}${esc(name)}</span><span style="font-weight:700;">₪${Math.abs(share)}</span></div>`;
+        }).join("");
+      }
+    }
+    // incoming arrangements: other players who left and named this player as their counterpart
+    const adj = computeArrangementAdjustments(g).adjusted;
+    const incoming = [];
+    Object.entries(g.cashouts).forEach(([otherId, co]) => {
+      if (otherId === m.playerId) return;
+      if (!co.arrangedWith || !co.arrangedWith.includes(m.playerId)) return;
+      const otherName = (g.players.find(pl=>pl.id===otherId)||{}).name || "?";
+      const otherProfit = adj[otherId];
+      const share = Math.round((Math.abs(otherProfit) / co.arrangedWith.length) * 100) / 100;
+      incoming.push({ otherName, received: otherProfit < 0, share }); // if the other player owed money, this player received from them
+    });
+    if (incoming.length) {
+      rows += `<div class="section-title" style="padding:0;margin:14px 0 6px;">סידורים עם שחקנים שיצאו</div>`;
+      rows += incoming.map(x => `<div class="roster-row"><span>${x.received ? "קיבל מ-" : "העביר ל-"}${esc(x.otherName)}</span><span style="font-weight:700;">₪${x.share}</span></div>`).join("");
+    }
+    if (g.closed) {
+      const finalBalances = computeFinalBalances(g);
+      const alreadyPaid = (g.payboxPayments||[]).filter(pp=>pp.playerId===m.playerId).reduce((s,pp)=>s+pp.amount,0);
+      const fb = finalBalances[m.playerId];
+      rows += `<div class="section-title" style="padding:0;margin:14px 0 6px;">חלק בסיכום הסופי</div>`;
+      if (!fb) {
+        rows += `<div class="roster-row"><span>לא נכלל בסיכום הסופי (סודר ישירות עם שחקן אחר)</span></div>`;
+      } else {
+        const remaining = fb.profit + alreadyPaid;
+        if (Math.abs(remaining) < 0.005) {
+          rows += `<div class="roster-row"><span>מאוזן — אין תשלום נדרש לקבוצת פייבוקס</span></div>`;
+        } else {
+          rows += `<div class="roster-row"><span>${remaining>0?"מקבל מקבוצת פייבוקס":"מעביר לקבוצת פייבוקס"}</span><span style="font-weight:700;color:${remaining>0?'#6ee7b7':'#fda4af'};">₪${Math.round(Math.abs(remaining)*100)/100}</span></div>`;
+        }
+      }
+    }
+    body = rows;
+  }
+
+  return `
+    <div class="overlay" data-close-overlay>
+      <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-head"><h3 class="serif">${title}</h3><button class="close-x" data-close-modal>${icon('x')}</button></div>
+        ${body}
+      </div>
+    </div>
+  `;
+}
+
+// ---------- Event handling (delegated) ----------
+function attachHandlers(){
+  const app = document.getElementById("app");
+
+  app.querySelectorAll("[data-open-community]").forEach(el => el.onclick = () => go("community", {communityId: el.dataset.openCommunity}));
+  app.querySelectorAll("[data-delete-community]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type:"deleteCommunity", communityId: el.dataset.deleteCommunity}); });
+  app.querySelectorAll("[data-open-chip-setup]").forEach(el => el.onclick = (e) => {
+    e.stopPropagation();
+    const c = getCommunity(el.dataset.openChipSetup);
+    const existing = (c.chipValues||[]).map(cv => ({id: uid(), name: cv.name, color: cv.color, value: String(cv.value)}));
+    openModal({type:"chipSetup", communityId: el.dataset.openChipSetup, imageSrc: null, points: existing});
+  });
+  const newCommunityBtn = app.querySelector("[data-new-community]");
+  if (newCommunityBtn) newCommunityBtn.onclick = () => openModal({type:"newCommunity"});
+  app.querySelectorAll("[data-open-game]").forEach(el => el.onclick = () => go("table", {gameId: el.dataset.openGame, communityId: getGame(el.dataset.openGame).communityId}));
+  app.querySelectorAll("[data-delete-game]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type:"deleteGame", gameId: el.dataset.deleteGame}); });
+  const backHome = app.querySelector("[data-back-home]"); if (backHome) backHome.onclick = () => go("home");
+  const backCommunity = app.querySelector("[data-back-community]"); if (backCommunity) backCommunity.onclick = () => go("community", {communityId: backCommunity.dataset.backCommunity});
+
+  const showRoster = app.querySelector("[data-show-roster]");
+  if (showRoster) showRoster.onclick = () => openModal({type:"roster", communityId: nav.communityId, editingId:null});
+
+  const newGameBtn = app.querySelector("[data-new-game]");
+  if (newGameBtn) newGameBtn.onclick = () => {
+    openModal({type:"newGame", communityId: nav.communityId, date: new Date().toISOString().slice(0,10)});
+  };
+
+  app.querySelectorAll("[data-buyin]").forEach(el => el.onclick = () => openModal({type:"buyin", gameId: nav.gameId, playerId: el.dataset.buyin, amount:""}));
+  app.querySelectorAll("[data-leave]").forEach(el => el.onclick = () => openModal({type:"leave", gameId: nav.gameId, playerId: el.dataset.leave, amount:""}));
+  app.querySelectorAll("[data-history]").forEach(el => el.onclick = () => openModal({type:"history", gameId: nav.gameId, playerId: el.dataset.history}));
+  app.querySelectorAll("[data-edit-cashout]").forEach(el => el.onclick = () => openModal({type:"editCashout", gameId: nav.gameId, playerId: el.dataset.editCashout}));
+  app.querySelectorAll("[data-return-to-game]").forEach(el => el.onclick = () => {
+    const g = getGame(nav.gameId);
+    delete g.cashouts[el.dataset.returnToGame];
+    if (g.closed) g.closed = false; // a night with an active player again can't stay "closed"
+    saveState();
+    closeModal();
+  });
+  app.querySelectorAll("[data-remove-from-game]").forEach(el => el.onclick = () => openModal({type:"removeFromGame", gameId: nav.gameId, playerId: el.dataset.removeFromGame}));
+
+  const endNightBtn = app.querySelector("[data-end-night]");
+  if (endNightBtn) endNightBtn.onclick = () => openModal({type:"endNight", gameId: nav.gameId, amounts:{}});
+  const viewSummaryBtn = app.querySelector("[data-view-summary]");
+  if (viewSummaryBtn) viewSummaryBtn.onclick = () => openModal({type:"summary", gameId: nav.gameId});
+  const addExistingBtn = app.querySelector("[data-add-existing]");
+  if (addExistingBtn) addExistingBtn.onclick = () => openModal({type:"addExisting", gameId: nav.gameId});
+  const bulkBuyinBtn = app.querySelector("[data-bulk-buyin]");
+  if (bulkBuyinBtn) bulkBuyinBtn.onclick = () => {
+    const g = getGame(nav.gameId);
+    const active = g.players.filter(p => !(p.id in g.cashouts));
+    const selected = {};
+    active.forEach(p => { selected[p.id] = true; });
+    openModal({type:"bulkBuyin", gameId: nav.gameId, amount:"", selected});
+  };
+  const payboxBtn = app.querySelector("[data-paybox-transfer]");
+  if (payboxBtn) payboxBtn.onclick = () => {
+    const g = getGame(nav.gameId);
+    const active = g.players.filter(p => !(p.id in g.cashouts));
+    openModal({type:"paybox", gameId: nav.gameId, playerId: (active[0]||g.players[0]||{}).id, amount:""});
+  };
+
+  const addExtraBtn = app.querySelector("[data-add-extra-player]");
+  if (addExtraBtn) addExtraBtn.onclick = () => openModal({type:"addExisting", gameId: nav.gameId});
+
+  app.querySelectorAll("[data-seat]").forEach(el => {
+    let drag = null;
+    el.addEventListener("pointerdown", (e) => {
+      const g = getGame(nav.gameId);
+      const seats = g.seats || new Array(9).fill(null);
+      const idx = parseInt(el.dataset.seat);
+      if (!seats[idx]) return; // only occupied seats can be dragged
+      drag = { fromIdx: idx, startX: e.clientX, startY: e.clientY, moved: false };
+      el.setPointerCapture(e.pointerId);
+    });
+    el.addEventListener("pointermove", (e) => {
+      if (!drag) return;
+      const dx = e.clientX - drag.startX;
+      const dy = e.clientY - drag.startY;
+      if (Math.abs(dx) > 6 || Math.abs(dy) > 6) drag.moved = true;
+      if (drag.moved) {
+        el.style.transform = `translate(-50%,-50%) translate(${dx}px, ${dy}px)`;
+        el.style.zIndex = "50";
+        el.style.opacity = "0.85";
+      }
+    });
+    el.addEventListener("pointerup", (e) => {
+      if (!drag) return;
+      const wasMoved = drag.moved;
+      const fromIdx = drag.fromIdx;
+      el.style.transform = "";
+      el.style.zIndex = "";
+      el.style.opacity = "";
+      drag = null;
+      if (wasMoved) {
+        el.style.pointerEvents = "none";
+        const under = document.elementFromPoint(e.clientX, e.clientY);
+        el.style.pointerEvents = "";
+        const targetEl = under ? under.closest("[data-seat]") : null;
+        if (targetEl) {
+          const toIdx = parseInt(targetEl.dataset.seat);
+          if (toIdx !== fromIdx) {
+            const g = getGame(nav.gameId);
+            if (!g.seats) g.seats = new Array(9).fill(null);
+            const tmp = g.seats[toIdx];
+            g.seats[toIdx] = g.seats[fromIdx];
+            g.seats[fromIdx] = tmp;
+            saveState();
+            render();
+          }
+        }
+        return;
+      }
+      const g = getGame(nav.gameId);
+      const seats = g.seats || new Array(9).fill(null);
+      const pid = seats[fromIdx];
+      if (pid) openModal({type:"seatDetail", gameId: nav.gameId, playerId: pid, seatIndex: fromIdx});
+    });
+    el.addEventListener("pointercancel", () => {
+      el.style.transform = "";
+      el.style.zIndex = "";
+      el.style.opacity = "";
+      drag = null;
+    });
+    el.onclick = () => {
+      const g = getGame(nav.gameId);
+      const idx = parseInt(el.dataset.seat);
+      const seats = g.seats || new Array(9).fill(null);
+      if (!seats[idx]) openModal({type:"pickSeat", gameId: nav.gameId, seatIndex: idx});
+    };
+  });
+
+  // modal-level handlers
+  const overlay = app.querySelector("[data-close-overlay]");
+  if (overlay) overlay.onclick = () => closeModal();
+  const closeBtn = app.querySelector("[data-close-modal]");
+  if (closeBtn) closeBtn.onclick = () => closeModal();
+
+  if (modal && modal.type === "roster") {
+    app.querySelectorAll("[data-view-stats]").forEach(el => el.onclick = () => openModal({type:"stats", communityId: modal.communityId, playerId: el.dataset.viewStats}));
+    app.querySelectorAll("[data-edit-player]").forEach(el => el.onclick = () => updateModal({editingId: el.dataset.editPlayer}));
+    app.querySelectorAll("[data-remove-player]").forEach(el => el.onclick = () => {
+      const c = getCommunity(modal.communityId);
+      c.roster = c.roster.filter(p => p.id !== el.dataset.removePlayer);
+      saveState();
+      updateModal({});
+    });
+    const cancelEdit = app.querySelector("[data-cancel-edit]");
+    if (cancelEdit) cancelEdit.onclick = () => updateModal({editingId:null});
+    const saveEdit = app.querySelector("[data-save-edit]");
+    if (saveEdit) saveEdit.onclick = () => {
+      const input = document.getElementById("edit-name-input");
+      const name = input.value.trim();
+      if (name) {
+        const c = getCommunity(modal.communityId);
+        const p = c.roster.find(pl=>pl.id===saveEdit.dataset.saveEdit);
+        p.name = name; saveState();
+      }
+      updateModal({editingId:null});
+    };
+    const addRosterBtn = app.querySelector("[data-add-roster]");
+    if (addRosterBtn) addRosterBtn.onclick = () => {
+      const input = document.getElementById("new-roster-name");
+      const name = input.value.trim();
+      if (name) {
+        const c = getCommunity(modal.communityId);
+        c.roster.push({id:uid(), name});
+        saveState();
+      }
+      updateModal({});
+    };
+  }
+
+  if (modal && modal.type === "newGame") {
+    const dateInput = document.getElementById("new-game-date");
+    if (dateInput) dateInput.onchange = (e) => { modal.date = e.target.value; };
+    const createBtn = app.querySelector("[data-create-game]");
+    if (createBtn) createBtn.onclick = () => {
+      const c = getCommunity(modal.communityId);
+      const dateVal = document.getElementById("new-game-date").value || modal.date;
+      const g = {id:uid(), communityId:c.id, date:dateVal, players: [], buyins:[], cashouts:{}, payboxPayments:[], seats:new Array(9).fill(null), liveChips:{}, closed:false};
+      state.games.push(g);
+      saveState();
+      go("table", {gameId:g.id, communityId:c.id});
+    };
+  }
+
+  if (modal && modal.type === "editCashout") {
+    const confirmEdit = app.querySelector("[data-confirm-edit-cashout]");
+    if (confirmEdit) confirmEdit.onclick = () => {
+      const amt = parseFloat(document.getElementById("edit-cashout-amount").value);
+      if (isNaN(amt) || amt < 0) return;
+      const g = getGame(modal.gameId);
+      g.cashouts[modal.playerId].amount = amt;
+      saveState();
+      closeModal();
+    };
+  }
+
+  if (modal && modal.type === "removeFromGame") {
+    const confirmRemove = app.querySelector("[data-confirm-remove-from-game]");
+    if (confirmRemove) confirmRemove.onclick = () => {
+      const g = getGame(modal.gameId);
+      g.players = g.players.filter(p => p.id !== modal.playerId);
+      g.buyins = g.buyins.filter(b => b.playerId !== modal.playerId);
+      if (g.payboxPayments) g.payboxPayments = g.payboxPayments.filter(b => b.playerId !== modal.playerId);
+      delete g.cashouts[modal.playerId];
+      if (g.seats) { const si = g.seats.indexOf(modal.playerId); if (si !== -1) g.seats[si] = null; }
+      if (g.liveChips) delete g.liveChips[modal.playerId];
+      // clean up any other player's arrangement that pointed at this player
+      Object.values(g.cashouts).forEach(co => {
+        if (co.arrangedWith) co.arrangedWith = co.arrangedWith.filter(id => id !== modal.playerId);
+      });
+      if (g.closed && g.players.some(p => !(p.id in g.cashouts))) g.closed = false;
+      maybeAutoCloseNight(g);
+      saveState();
+      closeModal();
+    };
+  }
+
+  if (modal && modal.type === "chipPhotoCount") {
+    const readStackValue = (s) => {
+      const selectInp = document.querySelector(`[data-stack-value-select="${s.id}"]`);
+      const manualInp = document.querySelector(`[data-stack-value="${s.id}"]`);
+      if (selectInp && selectInp.value !== "custom") return parseFloat(selectInp.value);
+      return manualInp ? parseFloat(manualInp.value) : NaN;
+    };
+    const recalcChipTotals = () => {
+      let grand = 0;
+      modal.stacks.forEach(s => {
+        const countInp = document.querySelector(`[data-stack-count="${s.id}"]`);
+        const cnt = countInp ? parseFloat(countInp.value) : NaN;
+        const val = readStackValue(s);
+        const subtotal = (!isNaN(cnt) && !isNaN(val)) ? cnt*val : 0;
+        const subtotalEl = document.querySelector(`[data-stack-subtotal="${s.id}"]`);
+        if (subtotalEl) subtotalEl.textContent = "₪" + (Math.round(subtotal*100)/100);
+        grand += subtotal;
+      });
+      const grandEl = app.querySelector("[data-stack-grand-total]");
+      if (grandEl) grandEl.textContent = "₪" + (Math.round(grand*100)/100);
+    };
+    const handleChipCountFile = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        updateModal({imageSrc: reader.result, stacks: [], analyzing: false, analyzeError: null});
+      };
+      reader.readAsDataURL(file);
+    };
+    const cameraInput = app.querySelector("#chip-count-camera-input");
+    if (cameraInput) cameraInput.onchange = handleChipCountFile;
+    const uploadInput = app.querySelector("#chip-count-upload-input");
+    if (uploadInput) uploadInput.onchange = handleChipCountFile;
+    const analyzeStacksBtn = app.querySelector("[data-analyze-chip-stacks]");
+    if (analyzeStacksBtn) analyzeStacksBtn.onclick = async () => {
+      updateModal({analyzing: true, analyzeError: null});
+      try {
+        const c0 = getCommunity(modal.communityId);
+        const known = (c0.chipValues||[]).map(cv=>cv.name).filter(Boolean);
+        const allowed = known.length ? known : CHIP_COLOR_OPTIONS;
+        const prompt = `זו תמונה של מגדלי ציפי פוקר של שחקן אחד, עומדים זקוף. לכל מגדל נראה לעין בתמונה: זהו את הצבע (רק מתוך הרשימה: ${allowed.join(", ")}; אם אף אחד לא מתאים - "unknown") ותנו גם צבע hex משוער, וספרו כמה ציפים יש במגדל לפי הפסים/החלוקות הנראות. החזירו תשובה בפורמט JSON בלבד, בלי טקסט נוסף ובלי markdown, במבנה הזה בדיוק: [{"color":"<name or unknown>","hex":"#rrggbb","count":<integer>}]`;
+        const result = await callClaudeVision(modal.imageSrc, prompt);
+        const c = getCommunity(modal.communityId);
+        const stacks = (result||[]).filter(r => r && r.count).map(r => {
+          const hex = (r.hex && /^#[0-9a-fA-F]{6}$/.test(r.hex)) ? r.hex : "#888888";
+          let match = (c.chipValues||[]).find(cv => cv.name && cv.name === r.color);
+          if (!match) match = nearestChipValue(hex, c.chipValues);
+          return {id: uid(), name: r.color, color: match ? toHexColor(match.color) : hex, count: r.count, matchedValue: match ? match.value : null};
+        });
+        if (!stacks.length) throw new Error("no stacks found");
+        updateModal({stacks, analyzing: false});
+      } catch(e) {
+        console.error(e);
+        updateModal({analyzing: false, analyzeError: "הניתוח נכשל - נסו שוב, או הוסיפו מגדל ידנית."});
+      }
+    };
+    app.querySelectorAll("[data-duplicate-stack]").forEach(el => el.onclick = () => {
+      const src = modal.stacks.find(s => s.id === el.dataset.duplicateStack);
+      if (!src) return;
+      const copy = {id: uid(), name: src.name, color: src.color, count: 1, matchedValue: src.matchedValue};
+      const idx = modal.stacks.findIndex(s => s.id === src.id);
+      const stacks = modal.stacks.slice();
+      stacks.splice(idx+1, 0, copy);
+      updateModal({stacks});
+    });
+    app.querySelectorAll("[data-remove-stack]").forEach(el => el.onclick = () => {
+      updateModal({stacks: modal.stacks.filter(s => s.id !== el.dataset.removeStack)});
+    });
+    app.querySelectorAll("[data-stack-value-select]").forEach(el => el.onchange = () => {
+      const manualInp = document.querySelector(`[data-stack-value="${el.dataset.stackValueSelect}"]`);
+      if (manualInp) manualInp.style.display = el.value === "custom" ? "" : "none";
+      recalcChipTotals();
+    });
+    app.querySelectorAll("[data-stack-count],[data-stack-value]").forEach(el => el.oninput = recalcChipTotals);
+    if (modal.stacks.length) recalcChipTotals();
+    const retakeChipPhotoBtn = app.querySelector("[data-retake-chip-photo]");
+    if (retakeChipPhotoBtn) retakeChipPhotoBtn.onclick = () => updateModal({imageSrc: null, analyzing:false, analyzeError:null, stacks: []});
+    const confirmChipCount = app.querySelector("[data-confirm-chip-count]");
+    if (confirmChipCount) confirmChipCount.onclick = () => {
+      let total = 0;
+      modal.stacks.forEach(s => {
+        const countInp = document.querySelector(`[data-stack-count="${s.id}"]`);
+        const cnt = countInp ? parseFloat(countInp.value) : NaN;
+        const val = readStackValue(s);
+        if (!isNaN(cnt) && !isNaN(val)) total += cnt * val;
+      });
+      const g = getGame(modal.gameId);
+      if (!g.liveChips) g.liveChips = {};
+      g.liveChips[modal.playerId] = Math.round(total * 100) / 100;
+      saveState();
+      openModal({type:"seatDetail", gameId: modal.gameId, playerId: modal.playerId});
+    };
+  }
+
+  if (modal && modal.type === "chipSetup") {
+    const handleChipSetupFile = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => { updateModal({imageSrc: reader.result, points: modal.points, analyzeError: null}); };
+      reader.readAsDataURL(file);
+    };
+    const cameraInput = app.querySelector("#chip-camera-input");
+    if (cameraInput) cameraInput.onchange = handleChipSetupFile;
+    const uploadInput = app.querySelector("#chip-upload-input");
+    if (uploadInput) uploadInput.onchange = handleChipSetupFile;
+    const analyzeBtn = app.querySelector("[data-analyze-chip-colors]");
+    if (analyzeBtn) analyzeBtn.onclick = async () => {
+      updateModal({analyzing: true, analyzeError: null});
+      try {
+        const prompt = `זו תמונה של ציפי פוקר, ציפ אחד מכל צבע. זהה כל צבע ציפ מובחן בתמונה. השתמשו רק בשמות האלה (באנגלית, בדיוק כמו שכתובים): ${CHIP_COLOR_OPTIONS.join(", ")}. החזירו תשובה בפורמט JSON בלבד, בלי טקסט נוסף ובלי markdown, במבנה הזה בדיוק: [{"color":"<one of the allowed names>","hex":"#rrggbb"}]. כל צבע רק פעם אחת.`;
+        const result = await callClaudeVision(modal.imageSrc, prompt);
+        const points = (result||[]).filter(r => r && r.color).map(r => ({id: uid(), name: r.color, color: r.hex || "#888888", value: ""}));
+        if (!points.length) throw new Error("no colors found");
+        updateModal({points, analyzing: false});
+      } catch(e) {
+        console.error(e);
+        updateModal({analyzing: false, analyzeError: "הניתוח נכשל - נסו שוב, או הוסיפו צבע ידנית."});
+      }
+    };
+    app.querySelectorAll("[data-point-color]").forEach(el => el.oninput = () => {
+      // Direct DOM update only - avoid re-render so other rows' unsaved edits aren't lost mid-typing.
+    });
+    app.querySelectorAll("[data-remove-chip-point]").forEach(el => el.onclick = () => {
+      updateModal({points: modal.points.filter(pt => pt.id !== el.dataset.removeChipPoint)});
+    });
+    const addManualBtn = app.querySelector("[data-add-chip-manual]");
+    if (addManualBtn) addManualBtn.onclick = () => {
+      updateModal({points: modal.points.concat([{id: uid(), name: null, color: "#888888", value: ""}])});
+    };
+    const retakeBtn = app.querySelector("[data-retake-photo]");
+    if (retakeBtn) retakeBtn.onclick = () => updateModal({imageSrc: null, analyzing:false, analyzeError:null});
+    const saveBtn = app.querySelector("[data-save-chip-values]");
+    if (saveBtn) saveBtn.onclick = () => {
+      const c = getCommunity(modal.communityId);
+      const values = [];
+      modal.points.forEach(pt => {
+        const valInp = document.querySelector(`[data-chip-value-input="${pt.id}"]`);
+        const colorInp = document.querySelector(`[data-point-color="${pt.id}"]`);
+        const v = valInp ? parseFloat(valInp.value) : NaN;
+        const colorHex = colorInp ? colorInp.value : pt.color;
+        if (!isNaN(v) && v >= 0) values.push({name: pt.name, color: colorHex, value: v});
+      });
+      if (!values.length) { alert("צריך להזין ערך לפחות לצבע אחד."); return; }
+      c.chipValues = values;
+      saveState();
+      closeModal();
+    };
+  }
+
+  if (modal && modal.type === "newCommunity") {
+    const confirmBtn = app.querySelector("[data-confirm-new-community]");
+    if (confirmBtn) confirmBtn.onclick = async () => {
+      const name = document.getElementById("new-community-name").value.trim();
+      const creatorName = document.getElementById("new-community-creator").value.trim();
+      if (!name) { alert("צריך להזין שם לקבוצה."); return; }
+      if (!creatorName) { alert("צריך להזין את השם שלך."); return; }
+      myIdentity.name = creatorName;
+      saveIdentity();
+      state.communities.push({ id: uid(), name, roster: [], createdBy: myIdentity.id, createdByName: creatorName });
+      saveState();
+      closeModal();
+    };
+  }
+
+  if (modal && modal.type === "deleteCommunity") {
+    const confirmBtn = app.querySelector("[data-confirm-delete-community]");
+    if (confirmBtn) confirmBtn.onclick = () => {
+      state.games = state.games.filter(g => g.communityId !== modal.communityId);
+      state.communities = state.communities.filter(c => c.id !== modal.communityId);
+      saveState();
+      go("home");
+    };
+  }
+
+  if (modal && modal.type === "deleteGame") {
+    const confirmDel = app.querySelector("[data-confirm-delete-game]");
+    if (confirmDel) confirmDel.onclick = () => {
+      const g = getGame(modal.gameId);
+      const communityId = g.communityId;
+      state.games = state.games.filter(gm => gm.id !== modal.gameId);
+      saveState();
+      go("community", {communityId});
+    };
+  }
+
+  if (modal && modal.type === "history") {
+    app.querySelectorAll("[data-delete-buyin]").forEach(el => el.onclick = () => {
+      openModal({type:"deleteBuyin", gameId: modal.gameId, playerId: modal.playerId, buyinId: el.dataset.deleteBuyin, returnTo: modal});
+    });
+    app.querySelectorAll("[data-delete-paybox]").forEach(el => el.onclick = () => {
+      openModal({type:"deletePaybox", gameId: modal.gameId, playerId: modal.playerId, paymentId: el.dataset.deletePaybox, returnTo: modal});
+    });
+  }
+
+  if (modal && modal.type === "deleteBuyin") {
+    const confirmDelBuyin = app.querySelector("[data-confirm-delete-buyin]");
+    if (confirmDelBuyin) confirmDelBuyin.onclick = () => {
+      const g = getGame(modal.gameId);
+      g.buyins = g.buyins.filter(b => b.id !== modal.buyinId);
+      saveState();
+      openModal(modal.returnTo);
+    };
+  }
+
+  if (modal && modal.type === "deletePaybox") {
+    const confirmDelPaybox = app.querySelector("[data-confirm-delete-paybox]");
+    if (confirmDelPaybox) confirmDelPaybox.onclick = () => {
+      const g = getGame(modal.gameId);
+      g.payboxPayments = (g.payboxPayments||[]).filter(b => b.id !== modal.paymentId);
+      saveState();
+      openModal(modal.returnTo);
+    };
+  }
+
+  if (modal && modal.type === "addExisting") {
+    app.querySelectorAll("[data-add-to-game]").forEach(el => el.onclick = () => {
+      const g = getGame(modal.gameId);
+      const c = getCommunity(g.communityId);
+      const p = c.roster.find(pl=>pl.id===el.dataset.addToGame);
+      if (p && !g.players.some(gp=>gp.id===p.id)) {
+        g.players.push({id:p.id, name:p.name});
+        if (!g.seats) g.seats = new Array(9).fill(null);
+        while (g.seats.length < 10) g.seats.push(null);
+        if (g.seats[9] == null) g.seats[9] = p.id;
+      }
+      saveState();
+      closeModal();
+    });
+  }
+
+  if (modal && modal.type === "buyin") {
+    app.querySelectorAll("[data-chip]").forEach(el => el.onclick = () => { document.getElementById("buyin-amount").value = el.dataset.chip; });
+    const confirmBtn = app.querySelector("[data-confirm-buyin]");
+    if (confirmBtn) confirmBtn.onclick = () => {
+      const amt = parseFloat(document.getElementById("buyin-amount").value);
+      if (!amt || amt <= 0) return;
+      const g = getGame(modal.gameId);
+      g.buyins.push({id:uid(), playerId: modal.playerId, amount: amt, ts: Date.now()});
+      saveState();
+      closeModal();
+    };
+  }
+
+  if (modal && modal.type === "paybox") {
+    app.querySelectorAll("[data-paybox-chip]").forEach(el => el.onclick = () => { document.getElementById("paybox-amount").value = el.dataset.payboxChip; });
+    const confirmPaybox = app.querySelector("[data-confirm-paybox]");
+    if (confirmPaybox) confirmPaybox.onclick = () => {
+      const amt = parseFloat(document.getElementById("paybox-amount").value);
+      const playerId = document.getElementById("paybox-player").value;
+      if (!amt || amt <= 0 || !playerId) return;
+      const g = getGame(modal.gameId);
+      if (!g.payboxPayments) g.payboxPayments = [];
+      g.payboxPayments.push({id:uid(), playerId, amount: amt, ts: Date.now()});
+      saveState();
+      closeModal();
+    };
+  }
+
+  if (modal && modal.type === "pickSeat") {
+    app.querySelectorAll("[data-pick-player]").forEach(el => el.onclick = () => {
+      const g = getGame(modal.gameId);
+      const c = getCommunity(g.communityId);
+      const p = c.roster.find(pl => pl.id === el.dataset.pickPlayer);
+      if (!p) return;
+      if (!g.seats) g.seats = new Array(9).fill(null);
+      g.seats[modal.seatIndex] = p.id;
+      if (!g.players.some(gp => gp.id === p.id)) g.players.push({id:p.id, name:p.name});
+      if (!g.liveChips) g.liveChips = {};
+      if (g.liveChips[p.id] === undefined) g.liveChips[p.id] = 0;
+      saveState();
+      closeModal();
+    });
+  }
+
+  if (modal && modal.type === "seatDetail") {
+    const openChipPhoto = app.querySelector("[data-open-chip-photo]");
+    if (openChipPhoto) openChipPhoto.onclick = () => {
+      const g = getGame(modal.gameId);
+      openModal({type:"chipPhotoCount", gameId: modal.gameId, playerId: modal.playerId, communityId: g.communityId, imageSrc: null, stacks: [], analyzing: false, analyzeError: null, noPhoto: false});
+    };
+    const openChipManual = app.querySelector("[data-open-chip-manual]");
+    if (openChipManual) openChipManual.onclick = () => {
+      const g = getGame(modal.gameId);
+      const c = getCommunity(g.communityId);
+      const stacks = (c.chipValues||[]).map(cv => ({id: uid(), name: cv.name, color: toHexColor(cv.color), count: "", matchedValue: cv.value}));
+      if (!stacks.length) { alert("אין עדיין הגדרת ציפים לקבוצה הזו - הגדירו קודם ממסך הבית."); return; }
+      openModal({type:"chipPhotoCount", gameId: modal.gameId, playerId: modal.playerId, communityId: g.communityId, imageSrc: null, stacks, analyzing: false, analyzeError: null, noPhoto: true});
+    };
+    app.querySelectorAll("[data-seat-instant-chip]").forEach(el => el.onclick = () => {
+      const amt = parseFloat(el.dataset.seatInstantChip);
+      const g = getGame(modal.gameId);
+      g.buyins.push({id:uid(), playerId: modal.playerId, amount: amt, ts: Date.now()});
+      saveState();
+      closeModal();
+    });
+    const otherToggle = app.querySelector("[data-seat-other-toggle]");
+    if (otherToggle) otherToggle.onclick = () => {
+      updateModal({otherOpen: true});
+      const inp = document.getElementById("seat-buyin-amount");
+      if (inp) inp.focus();
+    };
+    const confirmSeatBuyin = app.querySelector("[data-confirm-seat-buyin]");
+    if (confirmSeatBuyin) confirmSeatBuyin.onclick = () => {
+      const amt = parseFloat(document.getElementById("seat-buyin-amount").value);
+      if (!amt || amt <= 0) return;
+      const g = getGame(modal.gameId);
+      g.buyins.push({id:uid(), playerId: modal.playerId, amount: amt, ts: Date.now()});
+      saveState();
+      closeModal();
+    };
+    const seatHistoryBtn = app.querySelector("[data-seat-history]");
+    if (seatHistoryBtn) seatHistoryBtn.onclick = () => openModal({type:"history", gameId: modal.gameId, playerId: modal.playerId});
+    const quickEndBtn = app.querySelector("[data-quick-end]");
+    if (quickEndBtn) quickEndBtn.onclick = () => {
+      const g = getGame(modal.gameId);
+      const chips = (g.liveChips||{})[modal.playerId] || 0;
+      g.cashouts[modal.playerId] = {amount: chips, ts: Date.now(), arrangedWith: []};
+      maybeAutoCloseNight(g);
+      saveState();
+      closeModal();
+    };
+    const confirmChips = app.querySelector("[data-confirm-seat-chips]");
+    if (confirmChips) confirmChips.onclick = () => {
+      const v = parseFloat(document.getElementById("seat-chips").value);
+      if (isNaN(v) || v < 0) return;
+      const g = getGame(modal.gameId);
+      if (!g.liveChips) g.liveChips = {};
+      g.liveChips[modal.playerId] = v;
+      saveState();
+      closeModal();
+    };
+    const clearSeat = app.querySelector("[data-clear-seat]");
+    if (clearSeat) clearSeat.onclick = () => {
+      const g = getGame(modal.gameId);
+      if (g.seats) {
+        const idx = g.seats.indexOf(modal.playerId);
+        if (idx !== -1) g.seats[idx] = null;
+      }
+      saveState();
+      closeModal();
+    };
+  }
+
+  if (modal && modal.type === "bulkBuyin") {
+    app.querySelectorAll("[data-bulk-chip]").forEach(el => el.onclick = () => { document.getElementById("bulk-buyin-amount").value = el.dataset.bulkChip; });
+    app.querySelectorAll("[data-bulk-select]").forEach(el => el.onclick = () => {
+      const sel = Object.assign({}, modal.selected);
+      sel[el.dataset.bulkSelect] = !sel[el.dataset.bulkSelect];
+      updateModal({selected: sel});
+    });
+    const confirmBulkBuyin = app.querySelector("[data-confirm-bulk-buyin]");
+    if (confirmBulkBuyin) confirmBulkBuyin.onclick = () => {
+      const amt = parseFloat(document.getElementById("bulk-buyin-amount").value);
+      if (!amt || amt <= 0) return;
+      const g = getGame(modal.gameId);
+      const ids = Object.keys(modal.selected).filter(k => modal.selected[k]);
+      const now = Date.now();
+      ids.forEach(pid => { g.buyins.push({id:uid(), playerId: pid, amount: amt, ts: now}); });
+      saveState();
+      closeModal();
+    };
+  }
+
+  if (modal && modal.type === "leave") {
+    const confirmBtn = app.querySelector("[data-confirm-leave]");
+    if (confirmBtn) confirmBtn.onclick = () => {
+      const raw = parseFloat(document.getElementById("leave-amount").value);
+      if (isNaN(raw) || raw < 0) return;
+      const multEl = document.getElementById("leave-multiplier");
+      const multRaw = multEl ? parseInt(multEl.value) : 1;
+      const multiplier = (!multRaw || multRaw < 1) ? 1 : (multRaw > 99 ? 99 : multRaw);
+      const amt = Math.round((raw / multiplier) * 100) / 100;
+      const g = getGame(modal.gameId);
+      g.cashouts[modal.playerId] = {amount: amt, ts: Date.now(), arrangedWith: []};
+      if (!g.liveChips) g.liveChips = {};
+      g.liveChips[modal.playerId] = amt;
+      maybeAutoCloseNight(g);
+      saveState();
+      closeModal();
+    };
+  }
+
+  if (modal && modal.type === "endNight") {
+    function getMultiplier(){
+      const el = document.getElementById("chip-multiplier");
+      const v = el ? parseInt(el.value) : 1;
+      return (!v || v < 1) ? 1 : (v > 99 ? 99 : v);
+    }
+    function updateLiveBalance(){
+      const box = document.getElementById("live-balance-box");
+      if (!box) return;
+      const totalBuyins = parseFloat(box.dataset.totalBuyins) || 0;
+      const alreadyOut = parseFloat(box.dataset.alreadyOut) || 0;
+      const multiplier = getMultiplier();
+      let enteredSum = 0, allFilled = true;
+      app.querySelectorAll("[data-end-amount]").forEach(inp => {
+        const v = parseFloat(inp.value);
+        if (isNaN(v)) allFilled = false; else enteredSum += v / multiplier;
+      });
+      const totalOut = alreadyOut + enteredSum;
+      const diff = Math.round((totalBuyins - totalOut) * 100) / 100;
+      const balancedNow = allFilled && Math.abs(diff) < 0.5;
+      box.innerHTML = `
+        <div class="row-between" style="flex-wrap:wrap;gap:10px 16px;">
+          <div><div class="pot-label">סה"כ הכנסות</div><div class="pot-val">₪${totalBuyins}</div></div>
+          <div style="text-align:center;"><div class="pot-label">סה"כ ציפים בשולחן</div><div class="pot-val">₪${Math.round(totalOut*100)/100}</div></div>
+          <div style="text-align:left;"><div class="pot-label">נשאר לשלם</div><div class="pot-val">₪${diff}</div></div>
+          ${allFilled ? `<div class="badge ${balancedNow?'badge-ok':'badge-bad'}" style="width:100%;text-align:center;">${balancedNow?'מאוזן ✓':'לא מאוזן'}</div>` : ""}
+        </div>
+      `;
+    }
+    const multiplierInput = document.getElementById("chip-multiplier");
+    if (multiplierInput) multiplierInput.oninput = () => { modal.multiplier = getMultiplier(); updateLiveBalance(); };
+    app.querySelectorAll("[data-end-amount]").forEach(el => el.oninput = (e) => {
+      modal.amounts = modal.amounts || {};
+      modal.amounts[el.dataset.endAmount] = e.target.value;
+      updateLiveBalance();
+    });
+    updateLiveBalance();
+    const confirmBulkBtn = app.querySelector("[data-confirm-end-bulk]");
+    if (confirmBulkBtn) confirmBulkBtn.onclick = () => {
+      const g = getGame(modal.gameId);
+      const active = g.players.filter(p => !(p.id in g.cashouts));
+      const multiplier = getMultiplier();
+      const inputs = app.querySelectorAll("[data-end-amount]");
+      let allFilled = true;
+      const values = {};
+      inputs.forEach(inp => {
+        const v = parseFloat(inp.value);
+        if (isNaN(v) || v < 0) allFilled = false;
+        values[inp.dataset.endAmount] = v / multiplier;
+      });
+      if (!allFilled) { alert("צריך למלא סכום תקין לכל שחקן פעיל."); return; }
+      if (!g.liveChips) g.liveChips = {};
+      active.forEach(p => {
+        const amt = Math.round(values[p.id]*100)/100;
+        g.cashouts[p.id] = {amount: amt, ts: Date.now(), arrangedWith: []};
+        g.liveChips[p.id] = amt;
+      });
+      g.closed = true;
+      const c = getCommunity(g.communityId);
+      c.lastParticipants = g.players.map(p=>p.id);
+      saveState();
+      openModal({type:"summary", gameId: g.id});
+    };
+    const confirmBtn = app.querySelector("[data-confirm-end]");
+    if (confirmBtn) confirmBtn.onclick = () => {
+      const g = getGame(modal.gameId);
+      g.closed = true;
+      const c = getCommunity(g.communityId);
+      c.lastParticipants = g.players.map(p=>p.id);
+      saveState();
+      openModal({type:"summary", gameId: g.id});
+    };
+  }
+}
+
+(async function init(){
+  document.getElementById("app").innerHTML =
+    '<div style="padding:60px 20px;text-align:center;color:#a8a29e;font-size:14px;">טוען נתונים משותפים...</div>';
+  [state, myIdentity] = await Promise.all([loadState(), loadIdentity()]);
+  // One-time cleanup: remove legacy communities that weren't created via the "new community"
+  // button (they have no createdBy - e.g. the two starter communities from an earlier version
+  // of this app), along with any of their games.
+  const keepIds = new Set(state.communities.filter(c => c.createdBy).map(c => c.id));
+  const hadLegacy = keepIds.size !== state.communities.length;
+  state.communities = state.communities.filter(c => c.createdBy);
+  state.games = state.games.filter(g => keepIds.has(g.communityId));
+  if (hadLegacy) saveState();
+  render();
+})();
+</script>
+</body>
+</html>
