@@ -1729,8 +1729,17 @@ function attachHandlers(){
       canvas.height = photoEl.naturalHeight;
       const ctx = canvas.getContext("2d");
       ctx.drawImage(photoEl, 0, 0);
-      const [r,g,b] = ctx.getImageData(px, py, 1, 1).data;
-      const hex = "#" + [r,g,b].map(v => v.toString(16).padStart(2,"0")).join("");
+      // Average a small neighborhood instead of one pixel - a single pixel is too easily
+      // thrown off by JPEG noise, chip texture, or a glare/shadow highlight.
+      const half = 10;
+      const sx = Math.max(0, px - half);
+      const sy = Math.max(0, py - half);
+      const sw = Math.min(canvas.width, px + half) - sx;
+      const sh = Math.min(canvas.height, py + half) - sy;
+      const data = ctx.getImageData(sx, sy, sw, sh).data;
+      let rSum=0, gSum=0, bSum=0, n=0;
+      for (let i=0; i<data.length; i+=4) { rSum+=data[i]; gSum+=data[i+1]; bSum+=data[i+2]; n++; }
+      const hex = "#" + [rSum,gSum,bSum].map(sum => Math.round(sum/n).toString(16).padStart(2,"0")).join("");
       updateModal({points: modal.points.concat([{id: uid(), name: null, color: hex, value: ""}])});
     };
     app.querySelectorAll("[data-point-color]").forEach(el => el.oninput = () => {
