@@ -88,10 +88,11 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .poker-table-wrap{position:relative;width:100%;padding-top:118%;margin:8px 0 18px;}
 .poker-table-felt{position:absolute;inset:9%;border-radius:50%;background:radial-gradient(ellipse at 50% 40%, #0f6b48, #073826 75%);border:7px solid #3d2412;box-shadow:inset 0 0 34px rgba(0,0,0,.45);}
 .seat-wrap{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;width:78px;touch-action:none;}
-.seat-circle{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;}
+.seat-circle{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;touch-action:none;}
 .seat-circle.empty{border:2px dashed rgba(255,255,255,.35);color:var(--muted);background:rgba(255,255,255,.05);font-size:20px;}
 .seat-circle.filled{background:var(--gold);color:var(--gold-text);border:2px solid var(--gold);}
 .seat-circle.filled.cashed-out{background:#57534e;border-color:#57534e;}
+.seat-info{display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;padding:2px 0;}
 .seat-name{font-size:11px;font-weight:700;color:var(--text);text-align:center;white-space:nowrap;max-width:78px;overflow:hidden;text-overflow:ellipsis;}
 .seat-caption{font-size:9.5px;color:#a7f3d0;text-align:center;line-height:1.35;white-space:nowrap;}
 .player-name{font-weight:600;}
@@ -241,7 +242,8 @@ function updateModal(partial){
 function getCommunity(id){ return state.communities.find(c => c.id === id); }
 function getGame(id){ return state.games.find(g => g.id === id); }
 function maybeAutoCloseNight(g){
-  if (g.players.length > 0 && g.players.every(p => p.id in g.cashouts)) g.closed = true;
+  const seated = (g.seats || []).filter(Boolean);
+  if (g.players.length > 0 && seated.every(pid => pid in g.cashouts)) g.closed = true;
 }
 function gamesForCommunity(id){ return state.games.filter(g => g.communityId === id).sort((a,b)=> a.date < b.date ? 1 : -1); }
 
@@ -496,13 +498,16 @@ function renderTable(gameId){
     }
     return `<div class="seat-wrap" style="left:${x}%;top:${y}%;" data-seat="${i}">
       <div class="seat-circle filled ${cashedOut?'cashed-out':''}">${esc((name||"?").slice(0,2))}</div>
-      <div class="seat-name">${esc(name)}</div>
-      <div class="seat-caption">${caption}</div>
+      <div class="seat-info" data-seat-info>
+        <div class="seat-name">${esc(name)}</div>
+        <div class="seat-caption">${caption}</div>
+      </div>
     </div>`;
   }).join("");
 
-  const totalBuyinAll = Object.values(buyinTotals).reduce((s,v)=>s+v,0);
-  const totalChipsAll = Object.values(liveChips).reduce((s,v)=>s+v,0);
+  const seatedIds = seats.filter(Boolean);
+  const totalBuyinAll = seatedIds.reduce((s,pid)=>s+(buyinTotals[pid]||0),0);
+  const totalChipsAll = seatedIds.reduce((s,pid)=>s+(liveChips[pid]||0),0);
   const diff = totalChipsAll - totalBuyinAll;
   const diffLabel = diff > 0.5 ? "קופה בחוסר" : (diff < -0.5 ? "קופה בעודף" : "קופה מאוזנת");
   const diffColor = diff > 0.5 ? "#fda4af" : (diff < -0.5 ? "#6ee7b7" : "var(--muted)");
@@ -536,7 +541,7 @@ function renderModal(m){
   let body = "";
   let title = "";
   if (m.type === "chipPhotoCount") {
-    title = "ספירת ציפים מתמונה";
+    title = m.noPhoto ? "ספירת ציפים ידנית" : "ספירת ציפים מתמונה";
     const c = getCommunity(m.communityId);
     const stackRow = (s) => {
       const hasCalibration = c.chipValues && c.chipValues.length;
@@ -613,7 +618,7 @@ function renderModal(m){
         ${m.points.map(pt => `
           <div class="roster-row">
             <input type="color" value="${esc(toHexColor(pt.color))}" data-point-color="${pt.id}" style="width:32px;height:32px;padding:0;border:none;border-radius:8px;flex-shrink:0;">
-            <input type="number" inputmode="decimal" placeholder="ערך (למשל 100)" value="${esc(pt.value||'')}" data-chip-value-input="${pt.id}" style="flex:1;">
+            <input type="number" inputmode="decimal" placeholder="ערך (למשל 10)" value="${esc(pt.value||'')}" data-chip-value-input="${pt.id}" style="flex:1;">
             <button class="icon-btn danger" data-remove-chip-point="${pt.id}">${icon('trash')}</button>
           </div>
         `).join("")}
@@ -634,29 +639,18 @@ function renderModal(m){
     if (!m.imageSrc) {
       body = `
         ${editableList}
-        <p style="color:var(--muted);font-size:13px;">כדי להוסיף עוד צבעים: צלמו/העלו שורה עם זוטון אחד מכל צבע - Claude יזהה את הצבעים בשבילכם. או, הוסיפו צבע ידנית בלי תמונה בכלל.</p>
+        <p style="color:var(--muted);font-size:13px;">כדי להוסיף עוד צבעים: צלמו/העלו תמונה עם זיטון אחד מכל צבע, ואז הקישו על כל זיטון בתמונה כדי לבחור את הצבע שלו. או, הוסיפו צבע ידנית בלי תמונה בכלל.</p>
         ${pickButtons}
         <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-add-chip-manual>${icon('plus')} הוסף צבע ידנית</button>
         ${m.points.length ? `<button class="btn btn-primary btn-block" data-save-chip-values>שמור שינויים</button>` : ""}
       `;
-    } else if (m.analyzing) {
-      body = `
-        <div style="width:100%;margin-bottom:10px;"><img src="${m.imageSrc}" style="width:100%;border-radius:12px;display:block;opacity:.5;"></div>
-        <p style="color:var(--muted);font-size:13px;text-align:center;">מנתח את התמונה...</p>
-      `;
-    } else if (!m.points.length) {
-      body = `
-        <div style="width:100%;margin-bottom:10px;"><img src="${m.imageSrc}" style="width:100%;border-radius:12px;display:block;"></div>
-        ${m.analyzeError ? `<p style="color:#fda4af;font-size:12px;">${esc(m.analyzeError)}</p>` : ""}
-        <button class="btn btn-primary btn-block" style="margin-bottom:10px;" data-analyze-chip-colors>${icon('chip')} נתח צבעים בתמונה</button>
-        <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-retake-photo>${icon('plus')} תמונה אחרת</button>
-        <button class="btn btn-ghost btn-block" data-add-chip-manual>${icon('plus')} הוסף צבע ידנית</button>
-      `;
     } else {
       body = `
+        <div style="width:100%;margin-bottom:10px;"><img src="${m.imageSrc}" data-chip-photo style="width:100%;border-radius:12px;display:block;cursor:crosshair;"></div>
+        <p style="color:var(--muted);font-size:12px;margin-top:0;">הקישו על זיטון בתמונה כדי להוסיף את הצבע שלו - אפשר להקיש על כמה זיטונים באותה תמונה.</p>
         ${editableList}
-        <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-add-chip-manual>${icon('plus')} הוסף צבע ידנית</button>
         <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-retake-photo>${icon('plus')} תמונה אחרת</button>
+        <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-add-chip-manual>${icon('plus')} הוסף צבע ידנית</button>
         <button class="btn btn-primary btn-block" data-save-chip-values ${m.points.length===0?"disabled":""}>שמור הגדרות ציפים</button>
       `;
     }
@@ -864,12 +858,23 @@ function renderModal(m){
         ${avail.map(p => `<div class="checkbox-row" data-pick-player="${p.id}"><span class="flex1">${esc(p.name)}</span></div>`).join("")}
       </div>
     ` : `<div class="empty" style="padding:12px 0;">כל השחקנים בקבוצה כבר יושבים בשולחן.</div>`;
-  } else if (m.type === "seatDetail") {
+  } else if (m.type === "seatMenu") {
+    const g = getGame(m.gameId);
+    const p = g.players.find(pl=>pl.id===m.playerId);
+    const cashedOut = m.playerId in g.cashouts;
+    title = esc(p ? p.name : "שחקן");
+    body = cashedOut ? `
+      <button class="btn btn-ghost btn-block" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-menu-summary>${icon('bar')} סיכום</button>
+      <button class="btn btn-ghost btn-block" data-return-to-game="${m.playerId}" style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('undo')} החזר למשחק</button>
+    ` : `
+      <button class="btn btn-primary btn-block" style="margin-bottom:10px;" data-menu-buyins>${icon('plus')} קנייה</button>
+      <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-menu-chips>${icon('out')} סיים ערב</button>
+      <button class="btn btn-block" style="background:#be123c;color:#fff;" data-menu-remove>${icon('trash')} הסר מהשולחן</button>
+    `;
+  } else if (m.type === "seatBuyins") {
     const g = getGame(m.gameId);
     const p = g.players.find(pl=>pl.id===m.playerId);
     const buyinTotal = g.buyins.filter(b=>b.playerId===m.playerId).reduce((s,b)=>s+b.amount,0);
-    const chips = (g.liveChips||{})[m.playerId] || 0;
-    const cashedOut = m.playerId in g.cashouts;
     title = esc(p ? p.name : "שחקן");
     body = `
       <div class="roster-row"><span>סה"כ קנייה</span><span style="font-weight:700;">₪${buyinTotal}</span></div>
@@ -884,21 +889,33 @@ function renderModal(m){
         <button class="btn btn-ghost btn-block" data-confirm-seat-buyin style="margin-bottom:14px;">${icon('plus')} הוסף קנייה</button>
       `}
       <button class="btn btn-ghost btn-block" data-seat-history style="margin-bottom:14px;">${icon('bar')} היסטוריית קניות הערב</button>
-      <div style="display:flex;align-items:flex-end;gap:8px;margin-bottom:10px;">
-        <div class="field" style="flex:1;margin-bottom:0;"><label>כמות ציפים נוכחית</label><input type="number" inputmode="decimal" id="seat-chips" value="${chips}"></div>
-        <button class="btn btn-ghost" data-confirm-seat-chips style="height:46px;flex-shrink:0;">עדכן ציפים</button>
-      </div>
+    `;
+  } else if (m.type === "seatChips") {
+    const g = getGame(m.gameId);
+    const p = g.players.find(pl=>pl.id===m.playerId);
+    const chips = (g.liveChips||{})[m.playerId] || 0;
+    const cashedOut = m.playerId in g.cashouts;
+    title = esc(p ? p.name : "שחקן");
+    body = `
+      <div class="field"><label>כמות ציפים נוכחית</label><input type="number" inputmode="decimal" id="seat-chips" value="${chips}"></div>
       <div style="display:flex;gap:8px;margin-bottom:10px;">
         <button class="btn btn-ghost flex1" data-open-chip-photo style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('chip')} חשב ציפים מתמונה</button>
-        <button class="btn btn-ghost flex1" data-open-chip-manual style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('chip')} הזן לפי צבעי הקבוצה</button>
+        <button class="btn btn-ghost flex1" data-open-chip-manual style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('chip')} הזן לפי כמויות ציפים</button>
       </div>
       ${cashedOut ? `
         <p style="color:var(--muted);font-size:12px;">השחקן כבר יצא מהמשחק.</p>
         <button class="btn btn-ghost btn-block" data-return-to-game="${m.playerId}" style="margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('undo')} החזר למשחק</button>
       ` : `
-        <button class="btn btn-block" style="background:#57534e;color:#f5f5f4;margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:6px;" data-quick-end="${m.playerId}">${icon('out')} סיים ערב</button>
+        <button class="btn btn-block" style="background:#57534e;color:#f5f5f4;display:flex;align-items:center;justify-content:center;gap:6px;" data-quick-end="${m.playerId}">${icon('out')} סיים ערב</button>
       `}
-      <button class="btn btn-block" style="background:#be123c;color:#fff;" data-clear-seat>הסר מהשולחן</button>
+    `;
+  } else if (m.type === "removeSeat") {
+    const g = getGame(m.gameId);
+    const p = g.players.find(pl=>pl.id===m.playerId);
+    title = "הסרה מהשולחן";
+    body = `
+      <p style="color:#6ee7b7;font-size:13px;">להסיר את <b>${esc(p?p.name:"")}</b> מהשולחן?</p>
+      <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-clear-seat>הסר מהשולחן</button>
     `;
   } else if (m.type === "leave") {
     const g = getGame(m.gameId);
@@ -1112,27 +1129,28 @@ function attachHandlers(){
   if (addExtraBtn) addExtraBtn.onclick = () => openModal({type:"addExisting", gameId: nav.gameId});
 
   app.querySelectorAll("[data-seat]").forEach(el => {
+    const dragHandle = el.querySelector(".seat-circle") || el;
     let drag = null;
-    el.addEventListener("pointerdown", (e) => {
+    dragHandle.addEventListener("pointerdown", (e) => {
       const g = getGame(nav.gameId);
       const seats = g.seats || new Array(9).fill(null);
       const idx = parseInt(el.dataset.seat);
       if (!seats[idx]) return; // only occupied seats can be dragged
       drag = { fromIdx: idx, startX: e.clientX, startY: e.clientY, moved: false };
-      el.setPointerCapture(e.pointerId);
+      dragHandle.setPointerCapture(e.pointerId);
     });
-    el.addEventListener("pointermove", (e) => {
+    dragHandle.addEventListener("pointermove", (e) => {
       if (!drag) return;
       const dx = e.clientX - drag.startX;
       const dy = e.clientY - drag.startY;
-      if (Math.abs(dx) > 6 || Math.abs(dy) > 6) drag.moved = true;
+      if (Math.abs(dx) > 14 || Math.abs(dy) > 14) drag.moved = true;
       if (drag.moved) {
         el.style.transform = `translate(-50%,-50%) translate(${dx}px, ${dy}px)`;
         el.style.zIndex = "50";
         el.style.opacity = "0.85";
       }
     });
-    el.addEventListener("pointerup", (e) => {
+    dragHandle.addEventListener("pointerup", (e) => {
       if (!drag) return;
       const wasMoved = drag.moved;
       const fromIdx = drag.fromIdx;
@@ -1140,31 +1158,25 @@ function attachHandlers(){
       el.style.zIndex = "";
       el.style.opacity = "";
       drag = null;
-      if (wasMoved) {
-        el.style.pointerEvents = "none";
-        const under = document.elementFromPoint(e.clientX, e.clientY);
-        el.style.pointerEvents = "";
-        const targetEl = under ? under.closest("[data-seat]") : null;
-        if (targetEl) {
-          const toIdx = parseInt(targetEl.dataset.seat);
-          if (toIdx !== fromIdx) {
-            const g = getGame(nav.gameId);
-            if (!g.seats) g.seats = new Array(9).fill(null);
-            const tmp = g.seats[toIdx];
-            g.seats[toIdx] = g.seats[fromIdx];
-            g.seats[fromIdx] = tmp;
-            saveState();
-            render();
-          }
+      if (!wasMoved) return; // a plain tap on the circle does nothing - the info text below opens the menu
+      el.style.pointerEvents = "none";
+      const under = document.elementFromPoint(e.clientX, e.clientY);
+      el.style.pointerEvents = "";
+      const targetEl = under ? under.closest("[data-seat]") : null;
+      if (targetEl) {
+        const toIdx = parseInt(targetEl.dataset.seat);
+        if (toIdx !== fromIdx) {
+          const g = getGame(nav.gameId);
+          if (!g.seats) g.seats = new Array(9).fill(null);
+          const tmp = g.seats[toIdx];
+          g.seats[toIdx] = g.seats[fromIdx];
+          g.seats[fromIdx] = tmp;
+          saveState();
+          render();
         }
-        return;
       }
-      const g = getGame(nav.gameId);
-      const seats = g.seats || new Array(9).fill(null);
-      const pid = seats[fromIdx];
-      if (pid) openModal({type:"seatDetail", gameId: nav.gameId, playerId: pid, seatIndex: fromIdx});
     });
-    el.addEventListener("pointercancel", () => {
+    dragHandle.addEventListener("pointercancel", () => {
       el.style.transform = "";
       el.style.zIndex = "";
       el.style.opacity = "";
@@ -1176,13 +1188,26 @@ function attachHandlers(){
       const seats = g.seats || new Array(9).fill(null);
       if (!seats[idx]) openModal({type:"pickSeat", gameId: nav.gameId, seatIndex: idx});
     };
+    const infoEl = el.querySelector("[data-seat-info]");
+    if (infoEl) infoEl.onclick = (e) => {
+      e.stopPropagation();
+      const g = getGame(nav.gameId);
+      const idx = parseInt(el.dataset.seat);
+      const seats = g.seats || new Array(9).fill(null);
+      const pid = seats[idx];
+      if (pid) openModal({type:"seatMenu", gameId: nav.gameId, playerId: pid, seatIndex: idx});
+    };
   });
 
   // modal-level handlers
+  const closeModalOrBack = () => {
+    if (modal && modal.type === "chipPhotoCount") openModal({type:"seatChips", gameId: modal.gameId, playerId: modal.playerId});
+    else closeModal();
+  };
   const overlay = app.querySelector("[data-close-overlay]");
-  if (overlay) overlay.onclick = () => closeModal();
+  if (overlay) overlay.onclick = closeModalOrBack;
   const closeBtn = app.querySelector("[data-close-modal]");
-  if (closeBtn) closeBtn.onclick = () => closeModal();
+  if (closeBtn) closeBtn.onclick = closeModalOrBack;
 
   if (modal && modal.type === "roster") {
     app.querySelectorAll("[data-view-stats]").forEach(el => el.onclick = () => openModal({type:"stats", communityId: modal.communityId, playerId: el.dataset.viewStats}));
@@ -1357,7 +1382,7 @@ function attachHandlers(){
       if (!g.liveChips) g.liveChips = {};
       g.liveChips[modal.playerId] = Math.round(total * 100) / 100;
       saveState();
-      openModal({type:"seatDetail", gameId: modal.gameId, playerId: modal.playerId});
+      openModal({type:"seatChips", gameId: modal.gameId, playerId: modal.playerId});
     };
   }
 
@@ -1366,26 +1391,28 @@ function attachHandlers(){
       const file = e.target.files[0];
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = () => { updateModal({imageSrc: reader.result, points: modal.points, analyzeError: null}); };
+      reader.onload = () => { updateModal({imageSrc: reader.result, points: modal.points}); };
       reader.readAsDataURL(file);
     };
     const cameraInput = app.querySelector("#chip-camera-input");
     if (cameraInput) cameraInput.onchange = handleChipSetupFile;
     const uploadInput = app.querySelector("#chip-upload-input");
     if (uploadInput) uploadInput.onchange = handleChipSetupFile;
-    const analyzeBtn = app.querySelector("[data-analyze-chip-colors]");
-    if (analyzeBtn) analyzeBtn.onclick = async () => {
-      updateModal({analyzing: true, analyzeError: null});
-      try {
-        const prompt = `זו תמונה של ציפי פוקר, ציפ אחד מכל צבע. זהה כל צבע ציפ מובחן בתמונה. השתמשו רק בשמות האלה (באנגלית, בדיוק כמו שכתובים): ${CHIP_COLOR_OPTIONS.join(", ")}. החזירו תשובה בפורמט JSON בלבד, בלי טקסט נוסף ובלי markdown, במבנה הזה בדיוק: [{"color":"<one of the allowed names>","hex":"#rrggbb"}]. כל צבע רק פעם אחת.`;
-        const result = await callClaudeVision(modal.imageSrc, prompt);
-        const points = (result||[]).filter(r => r && r.color).map(r => ({id: uid(), name: r.color, color: r.hex || "#888888", value: ""}));
-        if (!points.length) throw new Error("no colors found");
-        updateModal({points, analyzing: false});
-      } catch(e) {
-        console.error(e);
-        updateModal({analyzing: false, analyzeError: "הניתוח נכשל - נסו שוב, או הוסיפו צבע ידנית."});
-      }
+    const photoEl = app.querySelector("[data-chip-photo]");
+    if (photoEl) photoEl.onclick = (e) => {
+      const rect = photoEl.getBoundingClientRect();
+      const scaleX = photoEl.naturalWidth / rect.width;
+      const scaleY = photoEl.naturalHeight / rect.height;
+      const px = Math.floor((e.clientX - rect.left) * scaleX);
+      const py = Math.floor((e.clientY - rect.top) * scaleY);
+      const canvas = document.createElement("canvas");
+      canvas.width = photoEl.naturalWidth;
+      canvas.height = photoEl.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(photoEl, 0, 0);
+      const [r,g,b] = ctx.getImageData(px, py, 1, 1).data;
+      const hex = "#" + [r,g,b].map(v => v.toString(16).padStart(2,"0")).join("");
+      updateModal({points: modal.points.concat([{id: uid(), name: null, color: hex, value: ""}])});
     };
     app.querySelectorAll("[data-point-color]").forEach(el => el.oninput = () => {
       // Direct DOM update only - avoid re-render so other rows' unsaved edits aren't lost mid-typing.
@@ -1398,7 +1425,7 @@ function attachHandlers(){
       updateModal({points: modal.points.concat([{id: uid(), name: null, color: "#888888", value: ""}])});
     };
     const retakeBtn = app.querySelector("[data-retake-photo]");
-    if (retakeBtn) retakeBtn.onclick = () => updateModal({imageSrc: null, analyzing:false, analyzeError:null});
+    if (retakeBtn) retakeBtn.onclick = () => updateModal({imageSrc: null});
     const saveBtn = app.querySelector("[data-save-chip-values]");
     if (saveBtn) saveBtn.onclick = () => {
       const c = getCommunity(modal.communityId);
@@ -1542,20 +1569,32 @@ function attachHandlers(){
     });
   }
 
-  if (modal && modal.type === "seatDetail") {
-    const openChipPhoto = app.querySelector("[data-open-chip-photo]");
-    if (openChipPhoto) openChipPhoto.onclick = () => {
+  if (modal && modal.type === "seatMenu") {
+    const menuBuyins = app.querySelector("[data-menu-buyins]");
+    if (menuBuyins) menuBuyins.onclick = () => openModal({type:"seatBuyins", gameId: modal.gameId, playerId: modal.playerId});
+    const menuChips = app.querySelector("[data-menu-chips]");
+    if (menuChips) menuChips.onclick = () => openModal({type:"seatChips", gameId: modal.gameId, playerId: modal.playerId});
+    const menuRemove = app.querySelector("[data-menu-remove]");
+    if (menuRemove) menuRemove.onclick = () => openModal({type:"removeSeat", gameId: modal.gameId, playerId: modal.playerId});
+    const menuSummary = app.querySelector("[data-menu-summary]");
+    if (menuSummary) menuSummary.onclick = () => openModal({type:"history", gameId: modal.gameId, playerId: modal.playerId});
+  }
+
+  if (modal && modal.type === "removeSeat") {
+    const confirmClear = app.querySelector("[data-confirm-clear-seat]");
+    if (confirmClear) confirmClear.onclick = () => {
       const g = getGame(modal.gameId);
-      openModal({type:"chipPhotoCount", gameId: modal.gameId, playerId: modal.playerId, communityId: g.communityId, imageSrc: null, stacks: [], analyzing: false, analyzeError: null, noPhoto: false});
+      if (g.seats) {
+        const idx = g.seats.indexOf(modal.playerId);
+        if (idx !== -1) g.seats[idx] = null;
+      }
+      maybeAutoCloseNight(g);
+      saveState();
+      closeModal();
     };
-    const openChipManual = app.querySelector("[data-open-chip-manual]");
-    if (openChipManual) openChipManual.onclick = () => {
-      const g = getGame(modal.gameId);
-      const c = getCommunity(g.communityId);
-      const stacks = (c.chipValues||[]).map(cv => ({id: uid(), name: cv.name, color: toHexColor(cv.color), count: "", matchedValue: cv.value}));
-      if (!stacks.length) { alert("אין עדיין הגדרת ציפים לקבוצה הזו - הגדירו קודם ממסך הבית."); return; }
-      openModal({type:"chipPhotoCount", gameId: modal.gameId, playerId: modal.playerId, communityId: g.communityId, imageSrc: null, stacks, analyzing: false, analyzeError: null, noPhoto: true});
-    };
+  }
+
+  if (modal && modal.type === "seatBuyins") {
     app.querySelectorAll("[data-seat-instant-chip]").forEach(el => el.onclick = () => {
       const amt = parseFloat(el.dataset.seatInstantChip);
       const g = getGame(modal.gameId);
@@ -1580,32 +1619,32 @@ function attachHandlers(){
     };
     const seatHistoryBtn = app.querySelector("[data-seat-history]");
     if (seatHistoryBtn) seatHistoryBtn.onclick = () => openModal({type:"history", gameId: modal.gameId, playerId: modal.playerId});
+  }
+
+  if (modal && modal.type === "seatChips") {
+    const openChipPhoto = app.querySelector("[data-open-chip-photo]");
+    if (openChipPhoto) openChipPhoto.onclick = () => {
+      const g = getGame(modal.gameId);
+      openModal({type:"chipPhotoCount", gameId: modal.gameId, playerId: modal.playerId, communityId: g.communityId, imageSrc: null, stacks: [], analyzing: false, analyzeError: null, noPhoto: false});
+    };
+    const openChipManual = app.querySelector("[data-open-chip-manual]");
+    if (openChipManual) openChipManual.onclick = () => {
+      const g = getGame(modal.gameId);
+      const c = getCommunity(g.communityId);
+      const stacks = (c.chipValues||[]).map(cv => ({id: uid(), name: cv.name, color: toHexColor(cv.color), count: "", matchedValue: cv.value}));
+      if (!stacks.length) { alert("אין עדיין הגדרת ציפים לקבוצה הזו - הגדירו קודם ממסך הבית."); return; }
+      openModal({type:"chipPhotoCount", gameId: modal.gameId, playerId: modal.playerId, communityId: g.communityId, imageSrc: null, stacks, analyzing: false, analyzeError: null, noPhoto: true});
+    };
     const quickEndBtn = app.querySelector("[data-quick-end]");
     if (quickEndBtn) quickEndBtn.onclick = () => {
       const g = getGame(modal.gameId);
-      const chips = (g.liveChips||{})[modal.playerId] || 0;
+      const inputEl = document.getElementById("seat-chips");
+      const v = inputEl ? parseFloat(inputEl.value) : NaN;
+      const chips = (!isNaN(v) && v >= 0) ? v : ((g.liveChips||{})[modal.playerId] || 0);
+      if (!g.liveChips) g.liveChips = {};
+      g.liveChips[modal.playerId] = chips;
       g.cashouts[modal.playerId] = {amount: chips, ts: Date.now(), arrangedWith: []};
       maybeAutoCloseNight(g);
-      saveState();
-      closeModal();
-    };
-    const confirmChips = app.querySelector("[data-confirm-seat-chips]");
-    if (confirmChips) confirmChips.onclick = () => {
-      const v = parseFloat(document.getElementById("seat-chips").value);
-      if (isNaN(v) || v < 0) return;
-      const g = getGame(modal.gameId);
-      if (!g.liveChips) g.liveChips = {};
-      g.liveChips[modal.playerId] = v;
-      saveState();
-      closeModal();
-    };
-    const clearSeat = app.querySelector("[data-clear-seat]");
-    if (clearSeat) clearSeat.onclick = () => {
-      const g = getGame(modal.gameId);
-      if (g.seats) {
-        const idx = g.seats.indexOf(modal.playerId);
-        if (idx !== -1) g.seats[idx] = null;
-      }
       saveState();
       closeModal();
     };
