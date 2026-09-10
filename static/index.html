@@ -158,6 +158,23 @@ async function callClaudeVision(dataUrl, promptText){
   if (!response.ok) throw new Error("vision request failed");
   return await response.json();
 }
+// Resize to Claude's own vision cap before sending, so any pixel coordinates it
+// returns line up exactly with the image we display (no separate resize on their end).
+function resizeImageDataUrl(dataUrl, maxDim, callback){
+  const img = new Image();
+  img.onload = () => {
+    let w = img.naturalWidth, h = img.naturalHeight;
+    if (Math.max(w,h) > maxDim) {
+      const scale = maxDim / Math.max(w,h);
+      w = Math.round(w*scale); h = Math.round(h*scale);
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+    callback(canvas.toDataURL("image/jpeg", 0.85), w, h);
+  };
+  img.src = dataUrl;
+}
 
 function defaultState(){
   return { communities: [], games: [] };
@@ -796,8 +813,17 @@ function renderModal(m){
         <button class="btn btn-ghost btn-block" data-retake-chip-photo>${icon('plus')} תמונה אחרת</button>
       `;
     } else {
+      const overlays = (m.imageW && m.imageH) ? m.stacks.filter(s => s.box).map(s => {
+        const [x1,y1,x2,y2] = s.box;
+        const leftPct = ((x1+x2)/2 / m.imageW) * 100;
+        const topPct = ((y1+y2)/2 / m.imageH) * 100;
+        return `<div style="position:absolute;left:${leftPct}%;top:${topPct}%;transform:translate(-50%,-50%);background:rgba(0,0,0,.75);color:#fff;font-size:11px;font-weight:700;padding:2px 7px;border-radius:8px;white-space:nowrap;pointer-events:none;">${s.count}${s.matchedValue!=null?` · ₪${s.matchedValue}`:''}</div>`;
+      }).join("") : "";
       body = `
-        <div style="width:100%;margin-bottom:10px;"><img src="${m.imageSrc}" style="width:100%;border-radius:12px;display:block;"></div>
+        <div style="width:100%;margin-bottom:10px;position:relative;">
+          <img src="${m.imageSrc}" style="width:100%;border-radius:12px;display:block;">
+          ${overlays}
+        </div>
         <div class="scroll-list" style="margin:10px 0;">${m.stacks.map(stackRow).join("")}</div>
         <div class="roster-row" style="font-weight:700;"><span class="flex1">סה"כ</span><span data-stack-grand-total>₪0</span></div>
         <p style="color:var(--muted);font-size:11px;margin:6px 0 14px;">הכמות היא הערכה של Claude - בדקו ותקנו אם צריך.</p>
@@ -1561,7 +1587,9 @@ function attachHandlers(){
       if (!file) return;
       const reader = new FileReader();
       reader.onload = () => {
-        updateModal({imageSrc: reader.result, stacks: [], analyzing: false, analyzeError: null});
+        resizeImageDataUrl(reader.result, 1568, (resized, w, h) => {
+          updateModal({imageSrc: resized, imageW: w, imageH: h, stacks: [], analyzing: false, analyzeError: null});
+        });
       };
       reader.readAsDataURL(file);
     };
@@ -1576,14 +1604,15 @@ function attachHandlers(){
         const c0 = getCommunity(modal.communityId);
         const known = (c0.chipValues||[]).map(cv=>cv.name).filter(Boolean);
         const allowed = known.length ? known : CHIP_COLOR_OPTIONS;
-        const prompt = `זו תמונה של מגדלי ציפי פוקר של שחקן אחד, עומדים זקוף. לכל מגדל נראה לעין בתמונה: זהו את הצבע (רק מתוך הרשימה: ${allowed.join(", ")}; אם אף אחד לא מתאים - "unknown") ותנו גם צבע hex משוער, וספרו כמה ציפים יש במגדל לפי הפסים/החלוקות הנראות. החזירו תשובה בפורמט JSON בלבד, בלי טקסט נוסף ובלי markdown, במבנה הזה בדיוק: [{"color":"<name or unknown>","hex":"#rrggbb","count":<integer>}]`;
+        const prompt = `זו תמונה של מגדלי ציפי פוקר של שחקן אחד, עומדים זקוף. לכל מגדל נראה לעין בתמונה: זהו את הצבע (רק מתוך הרשימה: ${allowed.join(", ")}; אם אף אחד לא מתאים - "unknown") ותנו גם צבע hex משוער, וספרו כמה ציפים יש במגדל לפי הפסים/החלוקות הנראות. תנו גם תיבה תוחמת (bounding box) בפיקסלים מוחלטים יחסית לתמונה כפי שהיא (רוחב ${modal.imageW}, גובה ${modal.imageH}), בפורמט [x1,y1,x2,y2] - פינה שמאלית-עליונה ופינה ימנית-תחתונה. החזירו תשובה בפורמט JSON בלבד, בלי טקסט נוסף ובלי markdown, במבנה הזה בדיוק: [{"color":"<name or unknown>","hex":"#rrggbb","count":<integer>,"box":[x1,y1,x2,y2]}]`;
         const result = await callClaudeVision(modal.imageSrc, prompt);
         const c = getCommunity(modal.communityId);
         const stacks = (result||[]).filter(r => r && r.count).map(r => {
           const hex = (r.hex && /^#[0-9a-fA-F]{6}$/.test(r.hex)) ? r.hex : "#888888";
           let match = (c.chipValues||[]).find(cv => cv.name && cv.name === r.color);
           if (!match) match = nearestChipValue(hex, c.chipValues);
-          return {id: uid(), name: r.color, color: match ? toHexColor(match.color) : hex, count: r.count, matchedValue: match ? match.value : null};
+          const box = Array.isArray(r.box) && r.box.length === 4 && r.box.every(n => typeof n === "number") ? r.box : null;
+          return {id: uid(), name: r.color, color: match ? toHexColor(match.color) : hex, count: r.count, matchedValue: match ? match.value : null, box};
         });
         if (!stacks.length) throw new Error("no stacks found");
         updateModal({stacks, analyzing: false});
