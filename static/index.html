@@ -88,10 +88,10 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .poker-table-wrap{position:relative;width:100%;padding-top:118%;margin:8px 0 18px;}
 .poker-table-felt{position:absolute;inset:9%;border-radius:50%;background:radial-gradient(ellipse at 50% 40%, #0f6b48, #073826 75%);border:7px solid #3d2412;box-shadow:inset 0 0 34px rgba(0,0,0,.45);}
 .seat-wrap{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;width:78px;touch-action:none;}
-.seat-circle{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;touch-action:none;}
+.seat-circle{position:relative;width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;touch-action:none;}
 .seat-circle.empty{border:2px dashed rgba(255,255,255,.35);color:var(--muted);background:rgba(255,255,255,.05);font-size:20px;}
 .seat-circle.filled{background:var(--gold);color:var(--gold-text);border:2px solid var(--gold);}
-.seat-circle.filled.cashed-out{background:#57534e;border-color:#57534e;}
+.seat-circle.filled.cashed-out{background:#57534e;border-color:#57534e;color:#fda4af;}
 .seat-info{display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;padding:2px 0;}
 .seat-name{font-size:11px;font-weight:700;color:var(--text);text-align:center;white-space:nowrap;max-width:78px;overflow:hidden;text-overflow:ellipsis;}
 .seat-caption{font-size:9.5px;color:#a7f3d0;text-align:center;line-height:1.35;white-space:nowrap;}
@@ -219,6 +219,7 @@ let myIdentity = { id: uid(), name: null };
 // ---------- Navigation (not persisted - always starts at home) ----------
 let nav = { screen: "home", communityId: null, gameId: null };
 let modal = null; // {type, ...}
+let hideEmptySeats = false; // UI-only toggle, not persisted
 
 function go(screen, extra){ nav = Object.assign({screen}, extra||{}); modal = null; render(); }
 function openModal(m){ modal = m; render(); }
@@ -412,6 +413,8 @@ const ICONS = {
   out: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>',
   undo: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 015.5 5.5v0a5.5 5.5 0 01-5.5 5.5H11"/></svg>',
   chip: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>',
+  eye: '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
+  eyeOff: '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0112 20c-7 0-10-8-10-8a18.5 18.5 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 10 8 10 8a18.5 18.5 0 01-2.16 3.19M14.12 14.12a3 3 0 11-4.24-4.24M1 1l22 22"/></svg>',
 };
 function icon(name){ return ICONS[name] || ""; }
 
@@ -525,6 +528,7 @@ function renderTable(gameId){
     const [x,y] = SEAT_POS[i];
     if (!pid) {
       if (i === 9) return ""; // the 10th slot's empty state is handled by the dedicated "add extra player" button instead
+      if (hideEmptySeats) return "";
       return `<div class="seat-wrap" style="left:${x}%;top:${y}%;" data-seat="${i}"><div class="seat-circle empty">+</div></div>`;
     }
     const p = g.players.find(pl => pl.id === pid);
@@ -541,9 +545,11 @@ function renderTable(gameId){
       const profitColor = profit > 0.5 ? "#6ee7b7" : (profit < -0.5 ? "#fda4af" : "inherit");
       caption = `<span style="color:${profitColor};font-weight:700;">${sign}₪${Math.round(profit)}</span>`;
     }
-    const circleStyle = photo ? ` style="background-image:url('${photo}');background-size:cover;background-position:center;${cashedOut?'opacity:.5;':''}"` : "";
+    const circleStyle = (photo && !cashedOut) ? ` style="background-image:url('${photo}');background-size:cover;background-position:center;"` : "";
+    const doorIconBig = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>';
+    const circleInner = cashedOut ? doorIconBig : (photo ? "" : esc((name||"?").slice(0,2)));
     return `<div class="seat-wrap" style="left:${x}%;top:${y}%;" data-seat="${i}">
-      <div class="seat-circle filled ${cashedOut?'cashed-out':''}"${circleStyle}>${photo?'':esc((name||"?").slice(0,2))}</div>
+      <div class="seat-circle filled ${cashedOut?'cashed-out':''}"${circleStyle}>${circleInner}</div>
       <div class="seat-info" data-seat-info>
         <div class="seat-name">${esc(name)}</div>
         <div class="seat-caption">${caption}</div>
@@ -577,6 +583,11 @@ function renderTable(gameId){
       ${(seats.slice(0,9).filter(Boolean).length >= 9 && seats[9] == null) ? `
         <div style="position:absolute;left:2%;top:${SEAT_POS[5][1]}%;transform:translateY(-50%);">
           <button class="icon-btn gold" data-add-extra-player title="הוסף שחקן נוסף" style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.08);display:inline-flex;align-items:center;justify-content:center;">${icon('plus')}</button>
+        </div>
+      ` : ""}
+      ${seats.slice(0,9).some(s=>!s) ? `
+        <div style="position:absolute;right:6%;top:0%;">
+          <button class="icon-btn" data-toggle-empty-seats title="${hideEmptySeats?'הצג מקומות פנויים':'הסתר מקומות פנויים'}" style="width:68px;height:68px;border-radius:50%;background:rgba(255,255,255,.05);color:var(--muted);opacity:.6;display:inline-flex;align-items:center;justify-content:center;">${icon(hideEmptySeats?'eyeOff':'eye')}</button>
         </div>
       ` : ""}
     </div>
@@ -1173,6 +1184,9 @@ function attachHandlers(){
 
   const addExtraBtn = app.querySelector("[data-add-extra-player]");
   if (addExtraBtn) addExtraBtn.onclick = () => openModal({type:"addExisting", gameId: nav.gameId});
+
+  const toggleEmptyBtn = app.querySelector("[data-toggle-empty-seats]");
+  if (toggleEmptyBtn) toggleEmptyBtn.onclick = () => { hideEmptySeats = !hideEmptySeats; render(); };
 
   app.querySelectorAll("[data-seat]").forEach(el => {
     const dragHandle = el.querySelector(".seat-circle") || el;
