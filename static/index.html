@@ -798,6 +798,12 @@ function renderModal(m){
     } else if (!m.imageSrc) {
       body = `
         <p style="color:var(--muted);font-size:13px;">צלמו/העלו תמונה של כל מגדלי הציפים של השחקן, עומדים זקוף - Claude יזהה צבע וכמות בשבילכם (הערכה - כדאי לבדוק ולתקן).</p>
+        <div style="background:rgba(255,255,255,.05);border-radius:10px;padding:10px 12px;margin-bottom:12px;">
+          <p style="color:var(--muted);font-size:11px;font-weight:700;margin:0 0 4px;">לספירה מדויקת יותר:</p>
+          <p style="color:var(--muted);font-size:11px;margin:0 0 2px;">• עד 10 ציפים במגדל</p>
+          <p style="color:var(--muted);font-size:11px;margin:0 0 2px;">• אם יש כמה מגדלים באותו צבע, רק אחד מהם לא מלא</p>
+          <p style="color:var(--muted);font-size:11px;margin:0;">• מגדלים באותו צבע - זה לצד זה</p>
+        </div>
         ${pickButtons}
       `;
     } else if (m.analyzing) {
@@ -1604,7 +1610,7 @@ function attachHandlers(){
         const c0 = getCommunity(modal.communityId);
         const known = (c0.chipValues||[]).map(cv=>cv.name).filter(Boolean);
         const allowed = known.length ? known : CHIP_COLOR_OPTIONS;
-        const prompt = `זו תמונה של מגדלי ציפי פוקר של שחקן אחד, עומדים זקוף. לכל מגדל נראה לעין בתמונה: זהו את הצבע (רק מתוך הרשימה: ${allowed.join(", ")}; אם אף אחד לא מתאים - "unknown") ותנו גם צבע hex משוער, וספרו כמה ציפים יש במגדל לפי הפסים/החלוקות הנראות. תנו גם תיבה תוחמת (bounding box) בפיקסלים מוחלטים יחסית לתמונה כפי שהיא (רוחב ${modal.imageW}, גובה ${modal.imageH}), בפורמט [x1,y1,x2,y2] - פינה שמאלית-עליונה ופינה ימנית-תחתונה. החזירו תשובה בפורמט JSON בלבד, בלי טקסט נוסף ובלי markdown, במבנה הזה בדיוק: [{"color":"<name or unknown>","hex":"#rrggbb","count":<integer>,"box":[x1,y1,x2,y2]}]`;
+        const prompt = `זו תמונה של מגדלי ציפי פוקר של שחקן אחד, עומדים זקוף. חוקים שיעזרו לכם לספור בדיוק: (1) בכל מגדל יש לכל היותר 10 ציפים - לעולם לא יותר. (2) אם יש כמה מגדלים באותו צבע, לכל היותר מגדל אחד מהם קטן מ-10 - כל השאר מלאים, כלומר בדיוק 10; אז אם מגדל נראה כמעט מלא ביחס למגדלים אחרים באותו צבע, כנראה שהוא בדיוק 10. (3) מגדלים באותו צבע תמיד ממוקמים אחד ליד השני בתמונה - השתמשו בזה כדי לא לבלבל בין צבעים דומים. לכל מגדל נראה לעין בתמונה: זהו את הצבע (רק מתוך הרשימה: ${allowed.join(", ")}; אם אף אחד לא מתאים - "unknown") ותנו גם צבע hex משוער, וספרו כמה ציפים יש במגדל לפי הפסים/החלוקות הנראות, תוך שימוש בחוקים לעיל. תנו גם תיבה תוחמת (bounding box) בפיקסלים מוחלטים יחסית לתמונה כפי שהיא (רוחב ${modal.imageW}, גובה ${modal.imageH}), בפורמט [x1,y1,x2,y2] - פינה שמאלית-עליונה ופינה ימנית-תחתונה. החזירו תשובה בפורמט JSON בלבד, בלי טקסט נוסף ובלי markdown, במבנה הזה בדיוק: [{"color":"<name or unknown>","hex":"#rrggbb","count":<integer>,"box":[x1,y1,x2,y2]}]`;
         const result = await callClaudeVision(modal.imageSrc, prompt);
         const c = getCommunity(modal.communityId);
         const stacks = (result||[]).filter(r => r && r.count).map(r => {
