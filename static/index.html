@@ -85,7 +85,7 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .coin.pos{border-color:#34d399;color:#6ee7b7;}
 .coin.neg{border-color:#fb7185;color:#fda4af;}
 .player-card{display:flex;align-items:center;gap:12px;background:var(--input);border:1px solid #14532d;border-radius:16px;padding:14px;margin-bottom:8px;}
-.poker-table-wrap{position:relative;width:100%;padding-top:118%;margin:8px 0 18px;}
+.poker-table-wrap{position:relative;width:100%;padding-top:95%;margin:4px 0 18px;}
 .poker-table-felt{position:absolute;inset:9%;border-radius:50%;background:radial-gradient(ellipse at 50% 40%, #0f6b48, #073826 75%);border:7px solid #3d2412;box-shadow:inset 0 0 34px rgba(0,0,0,.45);}
 .seat-wrap{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;width:78px;touch-action:none;}
 .seat-circle{position:relative;width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;touch-action:none;}
@@ -643,7 +643,7 @@ function renderCommunity(communityId){
 
 function renderTable(gameId){
   const SEAT_POS = [
-    [50,8],[78,18],[93,43],[88,71],[65,90],[35,90],[12,71],[7,43],[22,18],[2,90]
+    [50,8],[74,18],[85,43],[80,71],[65,90],[35,90],[12,71],[7,43],[22,18],[2,90]
   ];
   const g = getGame(gameId);
   if (!g) return `<div class="empty">משחק לא נמצא</div>`;
@@ -695,11 +695,14 @@ function renderTable(gameId){
   const diffColor = diff > 0.5 ? "#fda4af" : (diff < -0.5 ? "#6ee7b7" : "var(--muted)");
 
   return `
-    <div class="top row" style="padding-bottom:10px;">
+    <div class="top row" style="padding-top:14px;padding-bottom:6px;">
       <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
       <div class="flex1">
         <h1 class="serif sm" style="color:var(--gold);">${esc(c.name)}</h1>
         <div class="meta" style="color:#6ee7b7;font-size:12px;display:flex;align-items:center;gap:5px;">${icon('cal')}${esc(g.date)}</div>
+        ${seats.slice(0,9).some(s=>!s) ? `
+          <button class="icon-btn" data-toggle-empty-seats title="${hideEmptySeats?'הצג מקומות פנויים':'הסתר מקומות פנויים'}" style="margin-top:6px;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.05);color:var(--muted);opacity:.6;display:inline-flex;align-items:center;justify-content:center;">${icon(hideEmptySeats?'eyeOff':'eye')}</button>
+        ` : ""}
       </div>
     </div>
     <div class="poker-table-wrap">
@@ -713,11 +716,6 @@ function renderTable(gameId){
       ${(seats.slice(0,9).filter(Boolean).length >= 9 && seats[9] == null) ? `
         <div style="position:absolute;left:2%;top:${SEAT_POS[5][1]}%;transform:translateY(-50%);">
           <button class="icon-btn gold" data-add-extra-player title="הוסף שחקן נוסף" style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.08);display:inline-flex;align-items:center;justify-content:center;">${icon('plus')}</button>
-        </div>
-      ` : ""}
-      ${seats.slice(0,9).some(s=>!s) ? `
-        <div style="position:absolute;right:6%;top:0%;">
-          <button class="icon-btn" data-toggle-empty-seats title="${hideEmptySeats?'הצג מקומות פנויים':'הסתר מקומות פנויים'}" style="width:68px;height:68px;border-radius:50%;background:rgba(255,255,255,.05);color:var(--muted);opacity:.6;display:inline-flex;align-items:center;justify-content:center;">${icon(hideEmptySeats?'eyeOff':'eye')}</button>
         </div>
       ` : ""}
     </div>
