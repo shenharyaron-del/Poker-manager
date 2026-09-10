@@ -309,6 +309,135 @@ function computeProfitBuckets(profits){
     count: profits.filter(p => p > b.min && p <= b.max).length
   }));
 }
+
+// ---------- Fun end-of-night feedback (shown when a player finishes, unless disabled per-player) ----------
+const FUN_MESSAGES = {
+  zero: [
+    "🤝 יצאתם בתיקו - הרווחתם בחברה טובה.",
+    "😄 לא הרווחתם ולא הפסדתם - ניצחתם בכיף.",
+    "🍻 מאופס, אבל הערב היה שווה.",
+    "⚖️ איזון מושלם - זה גם הישג.",
+    "🎈 יצאתם אותו דבר שנכנסתם - וזה בסדר גמור.",
+    "🧘 שקט, איזון, ואפס לחץ - נדיר בפוקר.",
+    "🃏 לא הפסדתם - וזה כבר ניצחון.",
+    "🤗 החברה היא הקופה האמיתית, קלישאה אבל נכון.",
+    "🎶 מאופס בכיס, מלא בזיכרונות.",
+    "😶 שום דבר לא קרה הערב, כלכלית. רגשית - סיפור אחר.",
+  ],
+  tinyProfit: [
+    "💸 רווח שבקושי כיסה את החניה.",
+    "😏 ניצחתם... בערך במחיר פלאפל.",
+    "🤏 רווח כל כך קטן שהוא כמעט מתבייש.",
+    "🪙 יצאתם עם סכום שגם קבצן היה מזלזל בו.",
+    "🫡 קיבלתם טיפ, לא בונוס.",
+    "😅 רווח שאפילו לא שווה לספר עליו בעבודה.",
+    "🧃 בדיוק מספיק למיץ בדרך הביתה.",
+    "🤔 רווח? כן. מרשים? נדבר על זה.",
+    "🐜 ניצחון בגודל נמלה, אבל ניצחון.",
+    "🎈 בקושי הרגשתם את זה בכיס.",
+  ],
+  smallProfit: [
+    "🙂 כל שקל נחשב - רווח זה רווח.",
+    "🍕 בדיוק מספיק לפיצה בדרך הביתה.",
+    "🥤 שילמתם על הבירה מהערב - נחשב.",
+    "🧢 רווח צנוע, אבל ראש מורם.",
+    "🚕 מספיק למונית הביתה, לא למונית לשדה התעופה.",
+    "😎 לא הופכים לעשירים, אבל גם לא בוכים.",
+    "👍 ניצחון צנוע אבל ניצחון.",
+    "🌱 התחלה טובה לערב הבא.",
+    "🙌 יציאה בפלוס - תמיד כיף.",
+    "🎯 פגעתם במטרה, בלי להתאמץ יותר מדי.",
+  ],
+  bigProfit: [
+    "🎆 זיקוקים! ערב מהאגדות.",
+    "👑 אלוף הערב! תרימו את הראש.",
+    "🏆 מלך השולחן הערב!",
+    "🔥 על אש! ניצחון מוחץ.",
+    "🎉 מסיבה בכיס - כל הכבוד!",
+    "⭐ כוכב הערב, בלי ספק.",
+    "😏 עכשיו מותר לזלזל בכולם עד השבוע הבא.",
+    "🍾 שווה לפתוח משהו מבעבע הערב.",
+    "🎩 בלאף הגון אחד, אתם הבעלים של הערב.",
+    "💪 מישהו חיפש בגוגל 'איך משחקים פוקר'? כן, זה עבד.",
+  ],
+  hugeProfit: [
+    "🚀 טסתם לירח הערב!",
+    "💎 ידיים של יהלום הערב.",
+    "🥇 מקום ראשון בלי עוררין!",
+    "🏦 תתקשרו לבנק, הם רוצים לדעת מה קרה.",
+    "😳 אפילו אתם לא מאמינים לזה.",
+    "🤑 תתחילו לתכנן איפה קוברים את הכסף.",
+    "🦈 כריש השולחן הרשמי הערב.",
+    "🎰 ניצחתם כאילו הפוקר חייב לכם כסף אישית.",
+    "👀 כל הקבוצה כבר מקנאה, תודו.",
+    "📈 התיק שלכם עלה, לפחות להיום.",
+  ],
+  tinyLoss: [
+    "🤷 הפסד כל כך קטן שאפשר להתעלם ממנו.",
+    "😅 שילמתם על כניסה לערב חברתי, בגדול.",
+    "🍿 עלה לכם כמו סרט בקולנוע.",
+    "🫠 כמעט יצאתם בשלום. כמעט.",
+    "🪫 סוללה קצת ריקה, כלום נורא.",
+    "😐 הפסד בגודל שאפילו אמא לא תשים לב.",
+    "🧊 קריר, רגוע, כמעט בלי הפסד.",
+    "🙃 הפסדתם קצת - זה גם סוג של ניצחון.",
+    "🐌 הפסד בקצב שבלולים.",
+    "😶‍🌫️ היה כאן, נעלם, לא נורא.",
+  ],
+  smallLoss: [
+    "📚 מכל הפסד לומדים משהו.",
+    "🎲 היום לא, מחר כן.",
+    "💪 קמים וממשיכים.",
+    "🌧️ יש ימים כאלה - קדימה הלאה.",
+    "😬 עלה קצת יותר מארוחת ערב, לא נורא.",
+    "🚌 מספיק כדי לחשוב פעמיים לפני הקנייה הבאה.",
+    "🎓 עוד שיעור בדרך לגדולה.",
+    "🤝 ההפסד הכי טוב הוא זה שלומדים ממנו.",
+    "🔄 הפעם הבאה תהיה אחרת.",
+    "🍀 המזל ישתנה, סבלנות.",
+  ],
+  mediumLoss: [
+    "🧠 לקח יקר, מחיר סביר.",
+    "⚡ נפילה קטנה, קימה גדולה.",
+    "😤 הערב הזה נכנס להיסטוריה - לא בדרך הטובה.",
+    "🏧 כדאי לבדוק את המסלול הביתה, ליד כספומט.",
+    "🥲 הארנק צריך חיבוק הערב.",
+    "📉 גרף שלא הייתם רוצים להראות לאף אחד.",
+    "🎭 חייכתם החוצה, בכיתם בפנים.",
+    "🫥 שיהיה ברור - זה היה בגלל הקלפים, לא בגללכם.",
+    "🧯 שריפה קטנה בתקציב, כלום שלא ייפתר בשינה.",
+    "🐢 לאט לאט, אבל לא קדימה הערב.",
+  ],
+  hugeLoss: [
+    "💀 זה היה קרב, ואתם הפסדתם בגדול.",
+    "🩹 שווה לשים פלסטר על הארנק.",
+    "🏚️ המשכנתא תצטרך לחכות עוד קצת.",
+    "😭 אפשר לבכות, זו זכות שמורה.",
+    "🚨 אזעקה: מצב חירום כלכלי-פוקרי.",
+    "🧾 שווה לשמור את הקבלה הזו לדורות הבאים.",
+    "🎢 רכבת הרים שנגמרה למטה, הרחק למטה.",
+    "🫡 כבוד על ההתמדה. הכסף - פחות.",
+    "🌪️ נשטפתם. תרתי משמע.",
+    "📵 אולי כדאי לא לספר לבית הערב.",
+  ],
+};
+function randomFunMessage(profit){
+  let bucket;
+  if (Math.abs(profit) < 1) bucket = FUN_MESSAGES.zero;
+  else if (profit > 0) {
+    bucket = profit >= 300 ? FUN_MESSAGES.hugeProfit
+      : profit >= 100 ? FUN_MESSAGES.bigProfit
+      : profit >= 30 ? FUN_MESSAGES.smallProfit
+      : FUN_MESSAGES.tinyProfit;
+  } else {
+    const loss = -profit;
+    bucket = loss >= 300 ? FUN_MESSAGES.hugeLoss
+      : loss >= 100 ? FUN_MESSAGES.mediumLoss
+      : loss >= 30 ? FUN_MESSAGES.smallLoss
+      : FUN_MESSAGES.tinyLoss;
+  }
+  return bucket[Math.floor(Math.random() * bucket.length)];
+}
 function renderBarChart(buckets){
   const max = Math.max(1, ...buckets.map(b=>b.count));
   const bars = buckets.map(b => `
@@ -543,7 +672,8 @@ function renderTable(gameId){
       const profit = chips - buyin;
       const sign = profit > 0 ? "+" : "";
       const profitColor = profit > 0.5 ? "#6ee7b7" : (profit < -0.5 ? "#fda4af" : "inherit");
-      caption = `<span style="color:${profitColor};font-weight:700;">${sign}₪${Math.round(profit)}</span>`;
+      const settled = !!(g.cashouts[pid] && g.cashouts[pid].settled);
+      caption = `<span style="color:${profitColor};font-weight:700;">${sign}₪${Math.round(profit)}</span><br><span data-toggle-settled="${pid}" style="cursor:pointer;font-size:9px;color:${settled?'#6ee7b7':'#fbbf24'};">${settled?'✓ הוסדר':'ממתין להסדר'}</span>`;
     }
     const circleStyle = (photo && !cashedOut) ? ` style="background-image:url('${photo}');background-size:cover;background-position:center;"` : "";
     const doorIconBig = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>';
@@ -745,9 +875,11 @@ function renderModal(m){
           </div>
         </div>`;
       }
+      const funOn = p.funMessages !== false;
       return `<div class="roster-row">
         <div class="row" style="gap:8px;"><span>${esc(p.name)}</span>${netBadge(playerNetProfit(m.communityId, p.id))}</div>
         <div class="row" style="gap:4px;">
+          <button class="icon-btn ${funOn?'gold':''}" data-toggle-fun="${p.id}" title="${funOn?'משוב מצחיק בסיום ערב - פעיל':'משוב מצחיק בסיום ערב - כבוי'}" style="opacity:${funOn?1:.4};">🎉</button>
           <button class="icon-btn gold" data-view-stats="${p.id}">${icon('bar')}</button>
           <button class="icon-btn" data-edit-player="${p.id}">${icon('pencil')}</button>
           <button class="icon-btn danger" data-remove-player="${p.id}">${icon('trash')}</button>
@@ -973,6 +1105,12 @@ function renderModal(m){
     body = `
       <p style="color:#6ee7b7;font-size:13px;">להסיר את <b>${esc(p?p.name:"")}</b> מהשולחן?</p>
       <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-clear-seat>הסר מהשולחן</button>
+    `;
+  } else if (m.type === "funFeedback") {
+    title = esc(m.playerName || "");
+    body = `
+      <p style="font-size:22px;text-align:center;line-height:1.6;margin:10px 0 16px;">${esc(m.message)}</p>
+      <button class="btn btn-primary btn-block" data-close-fun-feedback>סגור</button>
     `;
   } else if (m.type === "leave") {
     const g = getGame(m.gameId);
@@ -1265,6 +1403,13 @@ function attachHandlers(){
       const pid = seats[idx];
       if (pid) openModal({type:"seatMenu", gameId: nav.gameId, playerId: pid, seatIndex: idx});
     };
+    const settledEl = el.querySelector("[data-toggle-settled]");
+    if (settledEl) settledEl.onclick = (e) => {
+      e.stopPropagation();
+      const g = getGame(nav.gameId);
+      const co = g.cashouts[settledEl.dataset.toggleSettled];
+      if (co) { co.settled = !co.settled; saveState(); render(); }
+    };
   });
 
   // modal-level handlers
@@ -1276,8 +1421,15 @@ function attachHandlers(){
   if (overlay) overlay.onclick = closeModalOrBack;
   const closeBtn = app.querySelector("[data-close-modal]");
   if (closeBtn) closeBtn.onclick = closeModalOrBack;
+  const closeFunBtn = app.querySelector("[data-close-fun-feedback]");
+  if (closeFunBtn) closeFunBtn.onclick = () => closeModal();
 
   if (modal && modal.type === "roster") {
+    app.querySelectorAll("[data-toggle-fun]").forEach(el => el.onclick = () => {
+      const c = getCommunity(modal.communityId);
+      const p = c.roster.find(pl => pl.id === el.dataset.toggleFun);
+      if (p) { p.funMessages = p.funMessages === false ? true : false; saveState(); updateModal({}); }
+    });
     app.querySelectorAll("[data-view-stats]").forEach(el => el.onclick = () => openModal({type:"stats", communityId: modal.communityId, playerId: el.dataset.viewStats}));
     app.querySelectorAll("[data-edit-player]").forEach(el => el.onclick = () => updateModal({editingId: el.dataset.editPlayer}));
     app.querySelectorAll("[data-remove-player]").forEach(el => el.onclick = () => {
@@ -1714,7 +1866,16 @@ function attachHandlers(){
       g.cashouts[modal.playerId] = {amount: chips, ts: Date.now(), arrangedWith: []};
       maybeAutoCloseNight(g);
       saveState();
-      closeModal();
+      const c = getCommunity(g.communityId);
+      const rp = c && c.roster.find(pl => pl.id === modal.playerId);
+      if (rp && rp.funMessages !== false) {
+        const buyinTotal = g.buyins.filter(b=>b.playerId===modal.playerId).reduce((s,b)=>s+b.amount,0);
+        const profit = chips - buyinTotal;
+        const p = g.players.find(pl=>pl.id===modal.playerId);
+        openModal({type:"funFeedback", playerName: p?p.name:"", message: randomFunMessage(profit)});
+      } else {
+        closeModal();
+      }
     };
   }
 
