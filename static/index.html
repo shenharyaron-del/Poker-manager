@@ -748,33 +748,16 @@ function renderModal(m){
     title = m.noPhoto ? "ספירת ציפים ידנית" : "ספירת ציפים מתמונה";
     const c = getCommunity(m.communityId);
     const stackRow = (s) => {
-      const hasCalibration = c.chipValues && c.chipValues.length;
-      const matched = hasCalibration && s.matchedValue != null;
+      const value = s.matchedValue != null ? s.matchedValue : "";
       return `
-        <div class="roster-row" style="flex-direction:column;align-items:stretch;gap:0;">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-            <div style="width:24px;height:24px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:${esc(s.color||'#888888')};flex-shrink:0;"></div>
-            <div class="row" style="gap:4px;">
-              <button class="icon-btn" data-duplicate-stack="${s.id}" title="הוסף מגדל זהה">${icon('plus')}</button>
-              <button class="icon-btn danger" data-remove-stack="${s.id}">${icon('trash')}</button>
-            </div>
+        <div class="roster-row">
+          <div class="row" style="gap:10px;">
+            <div style="width:20px;height:20px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:${esc(s.color||'#888888')};flex-shrink:0;"></div>
+            <input type="number" inputmode="numeric" data-stack-count="${s.id}" value="${s.count}" placeholder="0" style="width:56px;height:34px;font-size:15px;text-align:center;">
+            <span>ציפים × ₪${value}</span>
+            <input type="hidden" data-stack-value="${s.id}" value="${value}">
           </div>
-          <label style="display:block;color:#059669;font-size:11px;margin-bottom:4px;">כמות</label>
-          <input type="number" inputmode="numeric" data-stack-count="${s.id}" value="${s.count}" style="width:100%;height:40px;font-size:16px;text-align:center;margin-bottom:10px;">
-          <label style="display:block;color:#059669;font-size:11px;margin-bottom:4px;">ערך וצבע שזוהו</label>
-          ${hasCalibration ? `
-            <select data-stack-value-select="${s.id}" style="width:100%;margin-bottom:${matched?'10px':'6px'};">
-              ${c.chipValues.map(cv => `<option value="${cv.value}" style="color:${esc(toHexColor(cv.color))};" ${matched && s.matchedValue===cv.value ? "selected":""}>⬤ ₪${cv.value}</option>`).join("")}
-              <option value="custom" ${!matched?"selected":""}>אחר (הזן ידנית)</option>
-            </select>
-            <input type="number" inputmode="decimal" data-stack-value="${s.id}" value="${matched?'':(s.matchedValue!=null?s.matchedValue:'')}" placeholder="ערך" style="width:100%;margin-bottom:10px;${matched?"display:none;":""}">
-          ` : `
-            <input type="number" inputmode="decimal" data-stack-value="${s.id}" value="${s.matchedValue!=null?s.matchedValue:''}" placeholder="ערך" style="width:100%;margin-bottom:10px;">
-          `}
-          <label style="display:block;color:#059669;font-size:11px;margin-bottom:4px;">סה"כ (כמות × ערך)</label>
-          <div style="background:rgba(0,0,0,.18);border-radius:8px;padding:8px 12px;text-align:center;">
-            <span data-stack-subtotal="${s.id}" style="font-weight:700;font-size:16px;">₪0</span>
-          </div>
+          <span data-stack-subtotal="${s.id}" style="font-weight:700;">₪0</span>
         </div>`;
     };
     const pickButtons = `
@@ -1598,10 +1581,8 @@ function attachHandlers(){
 
   if (modal && modal.type === "chipPhotoCount") {
     const readStackValue = (s) => {
-      const selectInp = document.querySelector(`[data-stack-value-select="${s.id}"]`);
-      const manualInp = document.querySelector(`[data-stack-value="${s.id}"]`);
-      if (selectInp && selectInp.value !== "custom") return parseFloat(selectInp.value);
-      return manualInp ? parseFloat(manualInp.value) : NaN;
+      const inp = document.querySelector(`[data-stack-value="${s.id}"]`);
+      return inp ? parseFloat(inp.value) : NaN;
     };
     const recalcChipTotals = () => {
       let grand = 0;
@@ -1667,23 +1648,6 @@ function attachHandlers(){
         updateModal({analyzing: false, analyzeError: "הניתוח נכשל - נסו שוב, או הוסיפו מגדל ידנית."});
       }
     };
-    app.querySelectorAll("[data-duplicate-stack]").forEach(el => el.onclick = () => {
-      const src = modal.stacks.find(s => s.id === el.dataset.duplicateStack);
-      if (!src) return;
-      const copy = {id: uid(), name: src.name, color: src.color, count: 1, matchedValue: src.matchedValue};
-      const idx = modal.stacks.findIndex(s => s.id === src.id);
-      const stacks = modal.stacks.slice();
-      stacks.splice(idx+1, 0, copy);
-      updateModal({stacks});
-    });
-    app.querySelectorAll("[data-remove-stack]").forEach(el => el.onclick = () => {
-      updateModal({stacks: modal.stacks.filter(s => s.id !== el.dataset.removeStack)});
-    });
-    app.querySelectorAll("[data-stack-value-select]").forEach(el => el.onchange = () => {
-      const manualInp = document.querySelector(`[data-stack-value="${el.dataset.stackValueSelect}"]`);
-      if (manualInp) manualInp.style.display = el.value === "custom" ? "" : "none";
-      recalcChipTotals();
-    });
     app.querySelectorAll("[data-stack-count],[data-stack-value]").forEach(el => el.oninput = recalcChipTotals);
     if (modal.stacks.length) recalcChipTotals();
     const retakeChipPhotoBtn = app.querySelector("[data-retake-chip-photo]");
