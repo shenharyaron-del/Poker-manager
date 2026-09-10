@@ -544,6 +544,7 @@ const ICONS = {
   chip: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>',
   eye: '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
   eyeOff: '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0112 20c-7 0-10-8-10-8a18.5 18.5 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 10 8 10 8a18.5 18.5 0 01-2.16 3.19M14.12 14.12a3 3 0 11-4.24-4.24M1 1l22 22"/></svg>',
+  share: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>',
 };
 function icon(name){ return ICONS[name] || ""; }
 
@@ -622,7 +623,8 @@ function renderCommunity(communityId){
   const games = gamesForCommunity(communityId);
   const gamesHtml = games.length ? games.map(g => `
     <div class="card ${g.closed?"":"card-open"}" data-open-game="${g.id}">
-      <div class="row flex1"><span style="color:#6ee7b7">${icon('cal')}</span><span style="font-weight:600">${esc(g.date)}</span>${g.closed?"":`<span class="open-badge">בעיצומו</span>`}</div>
+      <div class="row flex1"><span style="color:#6ee7b7">${icon('cal')}</span><span style="font-weight:600">${esc(g.date)}</span>${g.closed?"":`<span class="open-badge">פעיל</span>`}</div>
+      ${g.closed?"":`<button class="icon-btn gold" data-invite-game="${g.id}" title="הזמן שחקן לשולחן">${icon('share')}</button>`}
       <button class="icon-btn danger" data-delete-game="${g.id}">${icon('trash')}</button>
       <div class="chev">${icon('chev')}</div>
     </div>`).join("") : `<div class="empty">עדיין אין ערבי משחק בקבוצה הזו</div>`;
@@ -1273,6 +1275,22 @@ function attachHandlers(){
   if (newCommunityBtn) newCommunityBtn.onclick = () => openModal({type:"newCommunity"});
   app.querySelectorAll("[data-open-game]").forEach(el => el.onclick = () => go("table", {gameId: el.dataset.openGame, communityId: getGame(el.dataset.openGame).communityId}));
   app.querySelectorAll("[data-delete-game]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type:"deleteGame", gameId: el.dataset.deleteGame}); });
+  app.querySelectorAll("[data-invite-game]").forEach(el => el.onclick = async (e) => {
+    e.stopPropagation();
+    const g = getGame(el.dataset.inviteGame);
+    const c = g && getCommunity(g.communityId);
+    if (!g || !c) return;
+    const url = location.origin + location.pathname + "?game=" + encodeURIComponent(g.id);
+    const text = `הצטרפו אליי למשחק פוקר ב${c.name} - ${g.date}`;
+    if (navigator.share) {
+      try { await navigator.share({title: "הזמנה למשחק פוקר", text, url}); } catch(err) { /* user cancelled the share sheet */ }
+    } else if (navigator.clipboard && navigator.clipboard.writeText) {
+      try { await navigator.clipboard.writeText(url); alert("הקישור הועתק! שלחו אותו לשחקן."); }
+      catch(err) { alert(url); }
+    } else {
+      alert(url);
+    }
+  });
   const backHome = app.querySelector("[data-back-home]"); if (backHome) backHome.onclick = () => go("home");
   const backCommunity = app.querySelector("[data-back-community]"); if (backCommunity) backCommunity.onclick = () => go("community", {communityId: backCommunity.dataset.backCommunity});
 
@@ -2003,6 +2021,11 @@ function attachHandlers(){
   state.communities = state.communities.filter(c => c.createdBy);
   state.games = state.games.filter(g => keepIds.has(g.communityId));
   if (hadLegacy) saveState();
+  const inviteGameId = new URLSearchParams(location.search).get("game");
+  if (inviteGameId) {
+    const invitedGame = getGame(inviteGameId);
+    if (invitedGame) nav = { screen: "table", gameId: invitedGame.id, communityId: invitedGame.communityId };
+  }
   render();
 })();
 </script>
