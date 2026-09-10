@@ -247,6 +247,49 @@ function maybeAutoCloseNight(g){
 }
 function gamesForCommunity(id){ return state.games.filter(g => g.communityId === id).sort((a,b)=> a.date < b.date ? 1 : -1); }
 
+// ---------- Player selfie photos (double-tap a seated player's circle) ----------
+let selfieInput = null;
+function processSelfieFile(file, callback){
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const size = 240;
+      const canvas = document.createElement("canvas");
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      const side = Math.min(img.naturalWidth, img.naturalHeight);
+      const sx = (img.naturalWidth - side) / 2;
+      const sy = (img.naturalHeight - side) / 2;
+      ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+      callback(canvas.toDataURL("image/jpeg", 0.75));
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+function openSelfieCapture(communityId, playerId){
+  if (!selfieInput) {
+    selfieInput = document.createElement("input");
+    selfieInput.type = "file";
+    selfieInput.accept = "image/*";
+    selfieInput.capture = "user";
+    selfieInput.style.display = "none";
+    document.body.appendChild(selfieInput);
+  }
+  selfieInput.value = "";
+  selfieInput.onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    processSelfieFile(file, (dataUrl) => {
+      const c = getCommunity(communityId);
+      const rp = c && c.roster.find(pl => pl.id === playerId);
+      if (rp) { rp.photo = dataUrl; saveState(); render(); }
+    });
+  };
+  selfieInput.click();
+}
+
 const PROFIT_BUCKETS = [
   {min:-Infinity, max:-200, label:"-200",     loss:true},
   {min:-200,      max:-150, label:"-200/-150", loss:true},
@@ -489,6 +532,8 @@ function renderTable(gameId){
     const cashedOut = pid in g.cashouts;
     const buyin = buyinTotals[pid] || 0;
     const chips = liveChips[pid] || 0;
+    const rosterP = c.roster.find(rp => rp.id === pid);
+    const photo = rosterP && rosterP.photo;
     let caption = `קנייה ₪${buyin}<br>ציפים ₪${chips}`;
     if (cashedOut) {
       const profit = chips - buyin;
@@ -496,8 +541,9 @@ function renderTable(gameId){
       const profitColor = profit > 0.5 ? "#6ee7b7" : (profit < -0.5 ? "#fda4af" : "inherit");
       caption = `<span style="color:${profitColor};font-weight:700;">${sign}₪${Math.round(profit)}</span>`;
     }
+    const circleStyle = photo ? ` style="background-image:url('${photo}');background-size:cover;background-position:center;${cashedOut?'opacity:.5;':''}"` : "";
     return `<div class="seat-wrap" style="left:${x}%;top:${y}%;" data-seat="${i}">
-      <div class="seat-circle filled ${cashedOut?'cashed-out':''}">${esc((name||"?").slice(0,2))}</div>
+      <div class="seat-circle filled ${cashedOut?'cashed-out':''}"${circleStyle}>${photo?'':esc((name||"?").slice(0,2))}</div>
       <div class="seat-info" data-seat-info>
         <div class="seat-name">${esc(name)}</div>
         <div class="seat-caption">${caption}</div>
@@ -1130,6 +1176,14 @@ function attachHandlers(){
 
   app.querySelectorAll("[data-seat]").forEach(el => {
     const dragHandle = el.querySelector(".seat-circle") || el;
+    dragHandle.ondblclick = (e) => {
+      e.stopPropagation();
+      const g = getGame(nav.gameId);
+      const seats = g.seats || new Array(9).fill(null);
+      const idx = parseInt(el.dataset.seat);
+      const pid = seats[idx];
+      if (pid) openSelfieCapture(g.communityId, pid);
+    };
     let drag = null;
     dragHandle.addEventListener("pointerdown", (e) => {
       const g = getGame(nav.gameId);
