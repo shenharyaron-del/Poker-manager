@@ -606,6 +606,7 @@ function renderHome(){
   if (!cards) cards = `<div class="empty">עדיין אין קבוצות - צרו את הקבוצה הראשונה שלכם</div>`;
   return `
     <div class="top">
+      <div class="hello-name" data-edit-identity-name style="cursor:pointer;color:var(--muted);font-size:12px;margin-bottom:4px;text-decoration:underline;text-underline-offset:3px;">שלום, ${esc(myIdentity.name || '')}</div>
       <h1 class="serif">הקבוצות שלי</h1>
       <div class="sub">בחרו קבוצה כדי לנהל שחקנים וערבי משחק</div>
     </div>
@@ -726,7 +727,16 @@ function renderTable(gameId){
 function renderModal(m){
   let body = "";
   let title = "";
-  if (m.type === "chipPhotoCount") {
+  if (m.type === "identityName") {
+    title = m.forced ? "ברוכים הבאים" : "עדכון שם";
+    body = `
+      ${m.forced ? `<p style="color:var(--muted);font-size:13px;">איך קוראים לך? השם ישמש לזיהוי מי יצר קבוצה, ונשמר רק במכשיר הזה.</p>` : ""}
+      <div style="margin-bottom:12px;">
+        <input type="text" id="identity-name-input" value="${esc(myIdentity.name || '')}" placeholder="השם שלך" style="width:100%;" autofocus>
+      </div>
+      <button class="btn btn-primary btn-block" data-confirm-identity-name>שמור</button>
+    `;
+  } else if (m.type === "chipPhotoCount") {
     title = m.noPhoto ? "ספירת ציפים ידנית" : "ספירת ציפים מתמונה";
     const c = getCommunity(m.communityId);
     const stackRow = (s) => {
@@ -1323,10 +1333,11 @@ function renderModal(m){
     body = rows;
   }
 
+  const dismissable = !(m.type === "identityName" && m.forced);
   return `
-    <div class="overlay" data-close-overlay>
+    <div class="overlay" ${dismissable ? "data-close-overlay" : ""}>
       <div class="modal" onclick="event.stopPropagation()">
-        <div class="modal-head"><h3 class="serif">${title}</h3><button class="close-x" data-close-modal>${icon('x')}</button></div>
+        <div class="modal-head"><h3 class="serif">${title}</h3>${dismissable ? `<button class="close-x" data-close-modal>${icon('x')}</button>` : ""}</div>
         ${body}
       </div>
     </div>
@@ -1337,6 +1348,7 @@ function renderModal(m){
 function attachHandlers(){
   const app = document.getElementById("app");
 
+  app.querySelectorAll("[data-edit-identity-name]").forEach(el => el.onclick = () => openModal({type:"identityName", forced:false}));
   app.querySelectorAll("[data-open-community]").forEach(el => el.onclick = () => go("community", {communityId: el.dataset.openCommunity}));
   app.querySelectorAll("[data-delete-community]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type:"deleteCommunity", communityId: el.dataset.deleteCommunity}); });
   app.querySelectorAll("[data-duplicate-community]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type:"duplicateCommunity", communityId: el.dataset.duplicateCommunity}); });
@@ -1514,6 +1526,17 @@ function attachHandlers(){
   if (closeBtn) closeBtn.onclick = closeModalOrBack;
   const closeFunBtn = app.querySelector("[data-close-fun-feedback]");
   if (closeFunBtn) closeFunBtn.onclick = () => closeModal();
+
+  if (modal && modal.type === "identityName") {
+    const confirmBtn = app.querySelector("[data-confirm-identity-name]");
+    if (confirmBtn) confirmBtn.onclick = () => {
+      const name = document.getElementById("identity-name-input").value.trim();
+      if (!name) { alert("צריך להזין שם."); return; }
+      myIdentity.name = name;
+      saveIdentity();
+      closeModal();
+    };
+  }
 
   if (modal && modal.type === "roster") {
     app.querySelectorAll("[data-toggle-fun]").forEach(el => el.onclick = () => {
@@ -2204,6 +2227,7 @@ function attachHandlers(){
     const invitedGame = getGame(inviteGameId);
     if (invitedGame) nav = { screen: "table", gameId: invitedGame.id, communityId: invitedGame.communityId };
   }
+  if (!myIdentity.name) modal = {type:"identityName", forced:true};
   render();
 })();
 </script>
