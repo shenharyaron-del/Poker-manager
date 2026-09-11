@@ -717,12 +717,13 @@ function renderTable(gameId){
           <button class="icon-btn" data-toggle-empty-seats title="${hideEmptySeats?'הצג מקומות פנויים':'הסתר מקומות פנויים'}" style="margin-top:6px;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.05);color:var(--muted);opacity:.6;display:inline-flex;align-items:center;justify-content:center;">${icon(hideEmptySeats?'eyeOff':'eye')}</button>
         ` : ""}
       </div>
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;opacity:.6;">
+        <img src="/static/logo.png" style="width:20px;height:20px;border-radius:5px;display:block;">
+        <span style="color:var(--muted);font-size:11px;">Poker Manager</span>
+      </div>
     </div>
     <div class="poker-table-wrap">
       <div class="poker-table-felt"></div>
-      <div style="position:absolute;inset:9% 13% 9% 9%;border-radius:50%;overflow:hidden;pointer-events:none;display:flex;align-items:center;justify-content:center;">
-        <img src="/static/logo.png" style="width:42%;opacity:.35;">
-      </div>
       ${seatsHtml}
       <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;z-index:3;">
         <div style="color:var(--muted);font-size:12px;">סה"כ קנייה ₪${totalBuyinAll}</div>
