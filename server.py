@@ -46,6 +46,11 @@ def index():
     return send_from_directory(STATIC_DIR, "index.html")
 
 
+@app.route("/static/<path:filename>")
+def static_files(filename):
+    return send_from_directory(STATIC_DIR, filename)
+
+
 @app.route("/api/state", methods=["GET"])
 def get_state():
     conn = get_db()

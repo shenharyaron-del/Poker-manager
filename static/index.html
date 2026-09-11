@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Poker Manager</title>
+<link rel="icon" type="image/webp" href="/static/logo.webp">
+<link rel="apple-touch-icon" href="/static/logo.webp">
+<meta property="og:title" content="Poker Manager">
+<meta property="og:description" content="ניהול ערבי פוקר, ציפים ומאזנים לקבוצה שלכם">
+<meta property="og:image" content="https://poker-manager-6b3m.onrender.com/static/logo.webp">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://poker-manager-6b3m.onrender.com/static/logo.webp">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@600;700&family=Rubik:wght@400;500;600;700&display=swap');
@@ -598,7 +606,7 @@ function renderHome(){
         <div class="name serif">${esc(c.name)}</div>
         <div class="meta">${icon('users')} נוצרה ע"י ${esc(c.createdByName || "לא ידוע")}</div>
       </div>
-      ${c.createdBy && c.createdBy === myIdentity.id ? `<button class="icon-btn danger" data-delete-community="${c.id}">${icon('trash')}</button>` : ""}
+      ${c.createdByName && myIdentity.name && c.createdByName === myIdentity.name ? `<button class="icon-btn danger" data-delete-community="${c.id}">${icon('trash')}</button>` : ""}
       <button class="icon-btn" data-duplicate-community="${c.id}" title="שכפל קבוצה">${icon('copy')}</button>
       <button class="icon-btn gold" data-open-chip-setup="${c.id}" title="הגדרת ציפים">${icon('chip')}</button>
       <div class="chev">${icon('chev')}</div>
@@ -606,6 +614,7 @@ function renderHome(){
   if (!cards) cards = `<div class="empty">עדיין אין קבוצות - צרו את הקבוצה הראשונה שלכם</div>`;
   return `
     <div class="top">
+      <img src="/static/logo.webp" alt="Poker Manager" style="width:56px;height:56px;border-radius:14px;display:block;margin-bottom:10px;">
       <div class="hello-name" data-edit-identity-name style="cursor:pointer;color:var(--muted);font-size:12px;margin-bottom:4px;text-decoration:underline;text-underline-offset:3px;">שלום, ${esc(myIdentity.name || '')}</div>
       <h1 class="serif">הקבוצות שלי</h1>
       <div class="sub">בחרו קבוצה כדי לנהל שחקנים וערבי משחק</div>
