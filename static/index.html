@@ -176,6 +176,42 @@ function resizeImageDataUrl(dataUrl, maxDim, callback){
   img.src = dataUrl;
 }
 
+// ---------- Color-sampling magnifier loupe (shown above the fingertip while dragging a
+// color-sample marker, since a real finger otherwise covers the exact spot being sampled) ----------
+let colorLoupe = null;
+function ensureColorLoupe(){
+  if (colorLoupe) return colorLoupe;
+  const wrap = document.createElement("div");
+  wrap.style.cssText = "position:fixed;z-index:9999;pointer-events:none;background:#111;border:2px solid #fff;border-radius:10px;padding:6px;box-shadow:0 4px 16px rgba(0,0,0,.5);display:none;flex-direction:column;align-items:center;gap:5px;";
+  const canvas = document.createElement("canvas");
+  canvas.width = 100; canvas.height = 100;
+  canvas.style.cssText = "border-radius:6px;width:100px;height:100px;image-rendering:pixelated;";
+  const swatch = document.createElement("div");
+  swatch.style.cssText = "width:100px;height:18px;border-radius:4px;border:1px solid rgba(255,255,255,.3);";
+  const hexText = document.createElement("div");
+  hexText.style.cssText = "color:#fff;font-family:monospace;font-size:11px;";
+  wrap.appendChild(canvas); wrap.appendChild(swatch); wrap.appendChild(hexText);
+  document.body.appendChild(wrap);
+  colorLoupe = {wrap, canvas, ctx: canvas.getContext("2d"), swatch, hexText};
+  return colorLoupe;
+}
+function showColorLoupe(clientX, clientY, srcCanvas, px, py, size, hex){
+  const l = ensureColorLoupe();
+  l.wrap.style.display = "flex";
+  l.wrap.style.left = Math.round(clientX - 55) + "px";
+  l.wrap.style.top = Math.round(clientY - 150) + "px";
+  const cropSize = Math.max(size, 20);
+  l.ctx.imageSmoothingEnabled = false;
+  l.ctx.clearRect(0,0,100,100);
+  l.ctx.drawImage(srcCanvas, px-cropSize/2, py-cropSize/2, cropSize, cropSize, 0, 0, 100, 100);
+  const boxPx = 100 * (size/cropSize);
+  l.ctx.strokeStyle = "#fff"; l.ctx.lineWidth = 2;
+  l.ctx.strokeRect(50-boxPx/2, 50-boxPx/2, boxPx, boxPx);
+  l.swatch.style.background = hex;
+  l.hexText.textContent = hex.toUpperCase();
+}
+function hideColorLoupe(){ if (colorLoupe) colorLoupe.wrap.style.display = "none"; }
+
 function defaultState(){
   return { communities: [], games: [] };
 }
@@ -857,6 +893,7 @@ function renderModal(m){
         ${m.points.map(pt => `
           <div class="roster-row">
             <input type="color" value="${esc(toHexColor(pt.color))}" data-point-color="${pt.id}" style="width:32px;height:32px;padding:0;border:none;border-radius:8px;flex-shrink:0;">
+            <span data-point-hex="${pt.id}" style="font-family:monospace;font-size:10px;color:var(--muted);min-width:52px;">${esc(toHexColor(pt.color)).toUpperCase()}</span>
             <input type="number" inputmode="decimal" placeholder="ערך (למשל 10)" value="${esc(pt.value||'')}" data-chip-value-input="${pt.id}" style="flex:1;">
             <button class="icon-btn danger" data-remove-chip-point="${pt.id}">${icon('trash')}</button>
           </div>
@@ -892,7 +929,7 @@ function renderModal(m){
         const hPct = (size / m.imageH) * 100;
         return `
           <div data-color-marker="${pt.id}" style="position:absolute;left:${leftPct}%;top:${topPct}%;width:${wPct}%;height:${hPct}%;transform:translate(-50%,-50%);border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.6);cursor:grab;touch-action:none;">
-            <div data-color-marker-resize="${pt.id}" style="position:absolute;right:-7px;bottom:-7px;width:14px;height:14px;background:#fff;border:1px solid #000;border-radius:3px;cursor:nwse-resize;touch-action:none;"></div>
+            <div data-color-marker-resize="${pt.id}" style="position:absolute;right:-9px;bottom:-9px;width:18px;height:18px;cursor:nwse-resize;touch-action:none;display:flex;align-items:center;justify-content:center;"><div style="width:6px;height:6px;border-radius:50%;background:#fff;border:1px solid rgba(0,0,0,.6);"></div></div>
           </div>`;
       }).join("") : "";
       body = `
@@ -1707,12 +1744,15 @@ function attachHandlers(){
     // in a contrasting color right next to the base color, and a mean average gets
     // dragged toward that pattern's color; a median resists it as long as the base
     // color is still the majority of the sampled area.
-    const sampleChipColor = (px, py, size) => {
+    const buildSourceCanvas = () => {
       const canvas = document.createElement("canvas");
       canvas.width = photoEl.naturalWidth;
       canvas.height = photoEl.naturalHeight;
+      canvas.getContext("2d").drawImage(photoEl, 0, 0);
+      return canvas;
+    };
+    const sampleFromCanvas = (canvas, px, py, size) => {
       const ctx = canvas.getContext("2d");
-      ctx.drawImage(photoEl, 0, 0);
       const half = Math.max(1, Math.round(size/2));
       const sx = Math.max(0, px - half);
       const sy = Math.max(0, py - half);
@@ -1723,6 +1763,13 @@ function attachHandlers(){
       for (let i=0; i<data.length; i+=4) { rs.push(data[i]); gs.push(data[i+1]); bs.push(data[i+2]); }
       const median = (arr) => { const s = arr.slice().sort((a,b)=>a-b); return s[Math.floor(s.length/2)]; };
       return "#" + [median(rs),median(gs),median(bs)].map(v => v.toString(16).padStart(2,"0")).join("");
+    };
+    const sampleChipColor = (px, py, size) => sampleFromCanvas(buildSourceCanvas(), px, py, size);
+    const updatePointDisplay = (pt) => {
+      const colorInputEl = document.querySelector(`[data-point-color="${pt.id}"]`);
+      if (colorInputEl) colorInputEl.value = pt.color;
+      const hexEl = document.querySelector(`[data-point-hex="${pt.id}"]`);
+      if (hexEl) hexEl.textContent = pt.color.toUpperCase();
     };
     if (photoEl) photoEl.onclick = (e) => {
       const rect = photoEl.getBoundingClientRect();
@@ -1740,7 +1787,7 @@ function attachHandlers(){
       let drag = null;
       markerEl.addEventListener("pointerdown", (e) => {
         e.stopPropagation();
-        drag = {startX: e.clientX, startY: e.clientY};
+        drag = {canvas: buildSourceCanvas()};
         markerEl.setPointerCapture(e.pointerId);
       });
       markerEl.addEventListener("pointermove", (e) => {
@@ -1753,20 +1800,20 @@ function attachHandlers(){
         const py = Math.round((e.clientY - rect.top) * scaleY);
         pt.x = Math.max(0, Math.min(photoEl.naturalWidth, px));
         pt.y = Math.max(0, Math.min(photoEl.naturalHeight, py));
-        pt.color = sampleChipColor(pt.x, pt.y, pt.size || 20);
+        pt.color = sampleFromCanvas(drag.canvas, pt.x, pt.y, pt.size || 20);
         markerEl.style.left = (pt.x/photoEl.naturalWidth*100) + "%";
         markerEl.style.top = (pt.y/photoEl.naturalHeight*100) + "%";
-        const colorInputEl = document.querySelector(`[data-point-color="${pt.id}"]`);
-        if (colorInputEl) colorInputEl.value = pt.color;
+        updatePointDisplay(pt);
+        showColorLoupe(e.clientX, e.clientY, drag.canvas, pt.x, pt.y, pt.size || 20, pt.color);
       });
-      markerEl.addEventListener("pointerup", () => { if (drag) { drag = null; updateModal({}); } });
-      markerEl.addEventListener("pointercancel", () => { drag = null; });
+      markerEl.addEventListener("pointerup", () => { if (drag) { drag = null; hideColorLoupe(); updateModal({}); } });
+      markerEl.addEventListener("pointercancel", () => { drag = null; hideColorLoupe(); });
       const resizeEl = markerEl.querySelector("[data-color-marker-resize]");
       if (resizeEl) {
         let rdrag = null;
         resizeEl.addEventListener("pointerdown", (e) => {
           e.stopPropagation();
-          rdrag = true;
+          rdrag = {canvas: buildSourceCanvas()};
           resizeEl.setPointerCapture(e.pointerId);
         });
         resizeEl.addEventListener("pointermove", (e) => {
@@ -1777,18 +1824,20 @@ function attachHandlers(){
           const px = Math.round((e.clientX - rect.left) * scaleX);
           const newSize = Math.max(8, Math.min(200, Math.round((px - pt.x) * 2)));
           pt.size = newSize;
-          pt.color = sampleChipColor(pt.x, pt.y, pt.size);
+          pt.color = sampleFromCanvas(rdrag.canvas, pt.x, pt.y, pt.size);
           markerEl.style.width = (newSize/photoEl.naturalWidth*100) + "%";
           markerEl.style.height = (newSize/photoEl.naturalHeight*100) + "%";
-          const colorInputEl = document.querySelector(`[data-point-color="${pt.id}"]`);
-          if (colorInputEl) colorInputEl.value = pt.color;
+          updatePointDisplay(pt);
+          showColorLoupe(e.clientX, e.clientY, rdrag.canvas, pt.x, pt.y, pt.size, pt.color);
         });
-        resizeEl.addEventListener("pointerup", () => { if (rdrag) { rdrag = false; updateModal({}); } });
-        resizeEl.addEventListener("pointercancel", () => { rdrag = false; });
+        resizeEl.addEventListener("pointerup", () => { if (rdrag) { rdrag = null; hideColorLoupe(); updateModal({}); } });
+        resizeEl.addEventListener("pointercancel", () => { rdrag = null; hideColorLoupe(); });
       }
     });
     app.querySelectorAll("[data-point-color]").forEach(el => el.oninput = () => {
       // Direct DOM update only - avoid re-render so other rows' unsaved edits aren't lost mid-typing.
+      const hexEl = document.querySelector(`[data-point-hex="${el.dataset.pointColor}"]`);
+      if (hexEl) hexEl.textContent = el.value.toUpperCase();
     });
     app.querySelectorAll("[data-remove-chip-point]").forEach(el => el.onclick = () => {
       updateModal({points: modal.points.filter(pt => pt.id !== el.dataset.removeChipPoint)});
