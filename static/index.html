@@ -884,9 +884,23 @@ function renderModal(m){
         ${m.points.length ? `<button class="btn btn-primary btn-block" data-save-chip-values>שמור שינויים</button>` : ""}
       `;
     } else {
+      const markers = (m.imageW && m.imageH) ? m.points.filter(pt => pt.x != null).map(pt => {
+        const size = pt.size || 20;
+        const leftPct = (pt.x / m.imageW) * 100;
+        const topPct = (pt.y / m.imageH) * 100;
+        const wPct = (size / m.imageW) * 100;
+        const hPct = (size / m.imageH) * 100;
+        return `
+          <div data-color-marker="${pt.id}" style="position:absolute;left:${leftPct}%;top:${topPct}%;width:${wPct}%;height:${hPct}%;transform:translate(-50%,-50%);border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.6);cursor:grab;touch-action:none;">
+            <div data-color-marker-resize="${pt.id}" style="position:absolute;right:-7px;bottom:-7px;width:14px;height:14px;background:#fff;border:1px solid #000;border-radius:3px;cursor:nwse-resize;touch-action:none;"></div>
+          </div>`;
+      }).join("") : "";
       body = `
-        <div style="width:100%;margin-bottom:10px;"><img src="${m.imageSrc}" data-chip-photo style="width:100%;border-radius:12px;display:block;cursor:crosshair;"></div>
-        <p style="color:var(--muted);font-size:12px;margin-top:0;">הקישו על זיטון בתמונה כדי להוסיף את הצבע שלו - אפשר להקיש על כמה זיטונים באותה תמונה.</p>
+        <div style="width:100%;margin-bottom:10px;position:relative;">
+          <img src="${m.imageSrc}" data-chip-photo style="width:100%;border-radius:12px;display:block;cursor:crosshair;">
+          ${markers}
+        </div>
+        <p style="color:var(--muted);font-size:12px;margin-top:0;">הקישו על זיטון בתמונה כדי להוסיף נקודת דגימה - אפשר לגרור אותה למיקום מדויק, ולגרור את הפינה הלבנה כדי לשנות את הגודל. הצבע בטבלה מתעדכן תוך כדי הגרירה.</p>
         ${editableList}
         <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-retake-photo>${icon('plus')} תמונה אחרת</button>
         <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-add-chip-manual>${icon('plus')} הוסף צבע ידנית</button>
@@ -1674,7 +1688,13 @@ function attachHandlers(){
       const file = e.target.files[0];
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = () => { updateModal({imageSrc: reader.result, points: modal.points}); };
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          updateModal({imageSrc: reader.result, imageW: img.naturalWidth, imageH: img.naturalHeight, points: modal.points});
+        };
+        img.src = reader.result;
+      };
       reader.readAsDataURL(file);
     };
     const cameraInput = app.querySelector("#chip-camera-input");
@@ -1682,30 +1702,91 @@ function attachHandlers(){
     const uploadInput = app.querySelector("#chip-upload-input");
     if (uploadInput) uploadInput.onchange = handleChipSetupFile;
     const photoEl = app.querySelector("[data-chip-photo]");
-    if (photoEl) photoEl.onclick = (e) => {
-      const rect = photoEl.getBoundingClientRect();
-      const scaleX = photoEl.naturalWidth / rect.width;
-      const scaleY = photoEl.naturalHeight / rect.height;
-      const px = Math.floor((e.clientX - rect.left) * scaleX);
-      const py = Math.floor((e.clientY - rect.top) * scaleY);
+    // Sample a small neighborhood around (px,py) and take the per-channel MEDIAN (not
+    // the mean) - chip photos often have a decorative pattern (crowns, edge stripes)
+    // in a contrasting color right next to the base color, and a mean average gets
+    // dragged toward that pattern's color; a median resists it as long as the base
+    // color is still the majority of the sampled area.
+    const sampleChipColor = (px, py, size) => {
       const canvas = document.createElement("canvas");
       canvas.width = photoEl.naturalWidth;
       canvas.height = photoEl.naturalHeight;
       const ctx = canvas.getContext("2d");
       ctx.drawImage(photoEl, 0, 0);
-      // Average a small neighborhood instead of one pixel - a single pixel is too easily
-      // thrown off by JPEG noise, chip texture, or a glare/shadow highlight.
-      const half = 10;
+      const half = Math.max(1, Math.round(size/2));
       const sx = Math.max(0, px - half);
       const sy = Math.max(0, py - half);
       const sw = Math.min(canvas.width, px + half) - sx;
       const sh = Math.min(canvas.height, py + half) - sy;
       const data = ctx.getImageData(sx, sy, sw, sh).data;
-      let rSum=0, gSum=0, bSum=0, n=0;
-      for (let i=0; i<data.length; i+=4) { rSum+=data[i]; gSum+=data[i+1]; bSum+=data[i+2]; n++; }
-      const hex = "#" + [rSum,gSum,bSum].map(sum => Math.round(sum/n).toString(16).padStart(2,"0")).join("");
-      updateModal({points: modal.points.concat([{id: uid(), name: null, color: hex, value: ""}])});
+      const rs=[], gs=[], bs=[];
+      for (let i=0; i<data.length; i+=4) { rs.push(data[i]); gs.push(data[i+1]); bs.push(data[i+2]); }
+      const median = (arr) => { const s = arr.slice().sort((a,b)=>a-b); return s[Math.floor(s.length/2)]; };
+      return "#" + [median(rs),median(gs),median(bs)].map(v => v.toString(16).padStart(2,"0")).join("");
     };
+    if (photoEl) photoEl.onclick = (e) => {
+      const rect = photoEl.getBoundingClientRect();
+      const scaleX = photoEl.naturalWidth / rect.width;
+      const scaleY = photoEl.naturalHeight / rect.height;
+      const px = Math.round((e.clientX - rect.left) * scaleX);
+      const py = Math.round((e.clientY - rect.top) * scaleY);
+      const hex = sampleChipColor(px, py, 20);
+      updateModal({points: modal.points.concat([{id: uid(), name: null, color: hex, value: "", x: px, y: py, size: 20}])});
+    };
+    app.querySelectorAll("[data-color-marker]").forEach(markerEl => {
+      const ptId = markerEl.dataset.colorMarker;
+      const pt = modal.points.find(p => p.id === ptId);
+      if (!pt) return;
+      let drag = null;
+      markerEl.addEventListener("pointerdown", (e) => {
+        e.stopPropagation();
+        drag = {startX: e.clientX, startY: e.clientY};
+        markerEl.setPointerCapture(e.pointerId);
+      });
+      markerEl.addEventListener("pointermove", (e) => {
+        if (!drag) return;
+        e.stopPropagation();
+        const rect = photoEl.getBoundingClientRect();
+        const scaleX = photoEl.naturalWidth / rect.width;
+        const scaleY = photoEl.naturalHeight / rect.height;
+        const px = Math.round((e.clientX - rect.left) * scaleX);
+        const py = Math.round((e.clientY - rect.top) * scaleY);
+        pt.x = Math.max(0, Math.min(photoEl.naturalWidth, px));
+        pt.y = Math.max(0, Math.min(photoEl.naturalHeight, py));
+        pt.color = sampleChipColor(pt.x, pt.y, pt.size || 20);
+        markerEl.style.left = (pt.x/photoEl.naturalWidth*100) + "%";
+        markerEl.style.top = (pt.y/photoEl.naturalHeight*100) + "%";
+        const colorInputEl = document.querySelector(`[data-point-color="${pt.id}"]`);
+        if (colorInputEl) colorInputEl.value = pt.color;
+      });
+      markerEl.addEventListener("pointerup", () => { if (drag) { drag = null; updateModal({}); } });
+      markerEl.addEventListener("pointercancel", () => { drag = null; });
+      const resizeEl = markerEl.querySelector("[data-color-marker-resize]");
+      if (resizeEl) {
+        let rdrag = null;
+        resizeEl.addEventListener("pointerdown", (e) => {
+          e.stopPropagation();
+          rdrag = true;
+          resizeEl.setPointerCapture(e.pointerId);
+        });
+        resizeEl.addEventListener("pointermove", (e) => {
+          if (!rdrag) return;
+          e.stopPropagation();
+          const rect = photoEl.getBoundingClientRect();
+          const scaleX = photoEl.naturalWidth / rect.width;
+          const px = Math.round((e.clientX - rect.left) * scaleX);
+          const newSize = Math.max(8, Math.min(200, Math.round((px - pt.x) * 2)));
+          pt.size = newSize;
+          pt.color = sampleChipColor(pt.x, pt.y, pt.size);
+          markerEl.style.width = (newSize/photoEl.naturalWidth*100) + "%";
+          markerEl.style.height = (newSize/photoEl.naturalHeight*100) + "%";
+          const colorInputEl = document.querySelector(`[data-point-color="${pt.id}"]`);
+          if (colorInputEl) colorInputEl.value = pt.color;
+        });
+        resizeEl.addEventListener("pointerup", () => { if (rdrag) { rdrag = false; updateModal({}); } });
+        resizeEl.addEventListener("pointercancel", () => { rdrag = false; });
+      }
+    });
     app.querySelectorAll("[data-point-color]").forEach(el => el.oninput = () => {
       // Direct DOM update only - avoid re-render so other rows' unsaved edits aren't lost mid-typing.
     });
