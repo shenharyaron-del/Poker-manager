@@ -175,33 +175,6 @@ function resizeImageDataUrl(dataUrl, maxDim, callback){
   img.src = dataUrl;
 }
 
-// ---------- Chip-crop magnifier loupe (shown above the fingertip while dragging a
-// chip reference square, since a real finger otherwise covers the exact spot being cropped) ----------
-let cropLoupe = null;
-function ensureCropLoupe(){
-  if (cropLoupe) return cropLoupe;
-  const wrap = document.createElement("div");
-  wrap.style.cssText = "position:fixed;z-index:9999;pointer-events:none;background:#111;border:2px solid #fff;border-radius:10px;padding:6px;box-shadow:0 4px 16px rgba(0,0,0,.5);display:none;";
-  const canvas = document.createElement("canvas");
-  canvas.width = 120; canvas.height = 120;
-  canvas.style.cssText = "border-radius:6px;width:120px;height:120px;image-rendering:pixelated;display:block;";
-  wrap.appendChild(canvas);
-  document.body.appendChild(wrap);
-  cropLoupe = {wrap, canvas, ctx: canvas.getContext("2d")};
-  return cropLoupe;
-}
-function showCropLoupe(clientX, clientY, srcCanvas, px, py, size){
-  const l = ensureCropLoupe();
-  l.wrap.style.display = "block";
-  l.wrap.style.left = Math.round(clientX - 65) + "px";
-  l.wrap.style.top = Math.round(clientY - 170) + "px";
-  const cropSize = size;
-  l.ctx.imageSmoothingEnabled = false;
-  l.ctx.clearRect(0,0,120,120);
-  l.ctx.drawImage(srcCanvas, px-cropSize/2, py-cropSize/2, cropSize, cropSize, 0, 0, 120, 120);
-}
-function hideCropLoupe(){ if (cropLoupe) cropLoupe.wrap.style.display = "none"; }
-
 function defaultState(){
   return { communities: [], games: [] };
 }
@@ -1771,10 +1744,9 @@ function attachHandlers(){
         markerEl.style.left = (pt.x/photoEl.naturalWidth*100) + "%";
         markerEl.style.top = (pt.y/photoEl.naturalHeight*100) + "%";
         updatePointDisplay(pt);
-        showCropLoupe(e.clientX, e.clientY, drag.canvas, pt.x, pt.y, pt.size || 20);
       });
-      markerEl.addEventListener("pointerup", () => { if (drag) { drag = null; hideCropLoupe(); updateModal({}); } });
-      markerEl.addEventListener("pointercancel", () => { drag = null; hideCropLoupe(); });
+      markerEl.addEventListener("pointerup", () => { if (drag) { drag = null; updateModal({}); } });
+      markerEl.addEventListener("pointercancel", () => { drag = null; });
       const resizeEl = markerEl.querySelector("[data-color-marker-resize]");
       if (resizeEl) {
         let rdrag = null;
@@ -1795,10 +1767,9 @@ function attachHandlers(){
           markerEl.style.width = (newSize/photoEl.naturalWidth*100) + "%";
           markerEl.style.height = (newSize/photoEl.naturalHeight*100) + "%";
           updatePointDisplay(pt);
-          showCropLoupe(e.clientX, e.clientY, rdrag.canvas, pt.x, pt.y, pt.size);
         });
-        resizeEl.addEventListener("pointerup", () => { if (rdrag) { rdrag = null; hideCropLoupe(); updateModal({}); } });
-        resizeEl.addEventListener("pointercancel", () => { rdrag = null; hideCropLoupe(); });
+        resizeEl.addEventListener("pointerup", () => { if (rdrag) { rdrag = null; updateModal({}); } });
+        resizeEl.addEventListener("pointercancel", () => { rdrag = null; });
       }
     });
     app.querySelectorAll("[data-remove-chip-point]").forEach(el => el.onclick = () => {
