@@ -725,9 +725,9 @@ function renderTable(gameId){
     </div>
     <div class="poker-table-wrap">
       <div class="poker-table-felt"></div>
-      <img src="/static/logo-watermark.png" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:64%;opacity:.6;pointer-events:none;">
+      <img src="/static/logo-watermark.png" style="position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);width:38%;opacity:.6;pointer-events:none;">
       ${seatsHtml}
-      <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;z-index:3;">
+      <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) translateY(70px);text-align:center;z-index:3;">
         <div style="color:var(--muted);font-size:12px;">סה"כ קנייה ₪${totalBuyinAll}</div>
         <div style="color:var(--muted);font-size:12px;">סה"כ ציפים ₪${totalChipsAll}</div>
         <div style="color:${diffColor};font-weight:700;font-size:13px;margin-top:4px;">${diffLabel}${Math.abs(diff)>=0.5?` ₪${Math.abs(Math.round(diff))}`:""}</div>
