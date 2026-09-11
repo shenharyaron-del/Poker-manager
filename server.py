@@ -107,12 +107,29 @@ def save_identity():
 @app.route("/api/vision", methods=["POST"])
 def vision():
     body = request.get_json(force=True) or {}
-    data_url = body.get("dataUrl", "")
+    data_urls = body.get("dataUrls")
+    if not data_urls:
+        single = body.get("dataUrl", "")
+        data_urls = [single] if single else []
     prompt_text = body.get("promptText", "")
-    match = DATA_URL_RE.match(data_url)
-    if not match:
+    if not data_urls:
         return jsonify({"error": "unsupported image data"}), 400
-    media_type, b64data = match.group(1), match.group(2)
+
+    content = []
+    for data_url in data_urls:
+        match = DATA_URL_RE.match(data_url)
+        if not match:
+            return jsonify({"error": "unsupported image data"}), 400
+        media_type, b64data = match.group(1), match.group(2)
+        content.append({
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": media_type,
+                "data": b64data,
+            },
+        })
+    content.append({"type": "text", "text": prompt_text})
 
     client = anthropic.Anthropic()
     try:
@@ -120,22 +137,7 @@ def vision():
             model="claude-sonnet-5",
             max_tokens=1000,
             output_config={"effort": "low"},
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": media_type,
-                                "data": b64data,
-                            },
-                        },
-                        {"type": "text", "text": prompt_text},
-                    ],
-                }
-            ],
+            messages=[{"role": "user", "content": content}],
         )
     except anthropic.RateLimitError:
         return jsonify({"error": "rate limited, try again shortly"}), 429
