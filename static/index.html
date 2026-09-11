@@ -558,6 +558,7 @@ const ICONS = {
   out: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>',
   undo: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 015.5 5.5v0a5.5 5.5 0 01-5.5 5.5H11"/></svg>',
   chip: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>',
+  copy: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>',
   up: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg>',
   down: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
   eye: '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
@@ -598,6 +599,7 @@ function renderHome(){
         <div class="meta">${icon('users')} נוצרה ע"י ${esc(c.createdByName || "לא ידוע")}</div>
       </div>
       ${c.createdBy && c.createdBy === myIdentity.id ? `<button class="icon-btn danger" data-delete-community="${c.id}">${icon('trash')}</button>` : ""}
+      <button class="icon-btn" data-duplicate-community="${c.id}" title="שכפל קבוצה">${icon('copy')}</button>
       <button class="icon-btn gold" data-open-chip-setup="${c.id}" title="הגדרת ציפים">${icon('chip')}</button>
       <div class="chev">${icon('chev')}</div>
     </div>`).join("");
@@ -910,6 +912,21 @@ function renderModal(m){
         <input type="text" id="new-community-creator" value="${esc(myIdentity.name || '')}" placeholder="השם שלך" style="width:100%;">
       </div>
       <button class="btn btn-primary btn-block" data-confirm-new-community>צור קבוצה</button>
+    `;
+  } else if (m.type === "duplicateCommunity") {
+    const c = getCommunity(m.communityId);
+    title = "שכפול קבוצה";
+    body = `
+      <p style="color:var(--muted);font-size:13px;">תיווצר קבוצה חדשה עם עותק של השחקנים וההגדרות של הזוטונים מ-<b>${esc(c.name)}</b>. ערבי משחק לא ישוכפלו.</p>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;color:#059669;font-size:11px;margin-bottom:4px;">שם הקבוצה החדשה</label>
+        <input type="text" id="duplicate-community-name" value="${esc(c.name)} - עותק" style="width:100%;" autofocus>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;color:#059669;font-size:11px;margin-bottom:4px;">השם שלך (יוצג כיוצר הקבוצה, וישמש לזיהוי הרשאת המחיקה)</label>
+        <input type="text" id="duplicate-community-creator" value="${esc(myIdentity.name || '')}" placeholder="השם שלך" style="width:100%;">
+      </div>
+      <button class="btn btn-primary btn-block" data-confirm-duplicate-community>שכפל קבוצה</button>
     `;
   } else if (m.type === "deleteCommunity") {
     const c = getCommunity(m.communityId);
@@ -1322,6 +1339,7 @@ function attachHandlers(){
 
   app.querySelectorAll("[data-open-community]").forEach(el => el.onclick = () => go("community", {communityId: el.dataset.openCommunity}));
   app.querySelectorAll("[data-delete-community]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type:"deleteCommunity", communityId: el.dataset.deleteCommunity}); });
+  app.querySelectorAll("[data-duplicate-community]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type:"duplicateCommunity", communityId: el.dataset.duplicateCommunity}); });
   app.querySelectorAll("[data-open-chip-setup]").forEach(el => el.onclick = (e) => {
     e.stopPropagation();
     const c = getCommunity(el.dataset.openChipSetup);
@@ -1832,6 +1850,24 @@ function attachHandlers(){
       myIdentity.name = creatorName;
       saveIdentity();
       state.communities.push({ id: uid(), name, roster: [], createdBy: myIdentity.id, createdByName: creatorName });
+      saveState();
+      closeModal();
+    };
+  }
+
+  if (modal && modal.type === "duplicateCommunity") {
+    const confirmBtn = app.querySelector("[data-confirm-duplicate-community]");
+    if (confirmBtn) confirmBtn.onclick = () => {
+      const name = document.getElementById("duplicate-community-name").value.trim();
+      const creatorName = document.getElementById("duplicate-community-creator").value.trim();
+      if (!name) { alert("צריך להזין שם לקבוצה."); return; }
+      if (!creatorName) { alert("צריך להזין את השם שלך."); return; }
+      myIdentity.name = creatorName;
+      saveIdentity();
+      const src = getCommunity(modal.communityId);
+      const roster = (src.roster||[]).map(p => ({...p, id: uid()}));
+      const chipValues = (src.chipValues||[]).map(cv => ({...cv, id: uid()}));
+      state.communities.push({ id: uid(), name, roster, chipValues, createdBy: myIdentity.id, createdByName: creatorName });
       saveState();
       closeModal();
     };
