@@ -7,6 +7,7 @@
 <link rel="icon" type="image/png" href="/static/logo.png">
 <link rel="apple-touch-icon" href="/static/logo.png">
 <meta property="og:title" content="Poker Manager">
+<meta property="og:url" content="https://poker-manager-6b3m.onrender.com/">
 <meta property="og:description" content="ניהול ערבי פוקר, ציפים ומאזנים לקבוצה שלכם">
 <meta property="og:image" content="https://poker-manager-6b3m.onrender.com/static/logo.png">
 <meta property="og:image:type" content="image/png">
@@ -724,6 +725,7 @@ function renderTable(gameId){
     </div>
     <div class="poker-table-wrap">
       <div class="poker-table-felt"></div>
+      <img src="/static/logo-watermark.png" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:64%;opacity:.6;pointer-events:none;">
       ${seatsHtml}
       <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;z-index:3;">
         <div style="color:var(--muted);font-size:12px;">סה"כ קנייה ₪${totalBuyinAll}</div>
@@ -1455,6 +1457,7 @@ function attachHandlers(){
       if (pid) openSelfieCapture(g.communityId, pid);
     };
     let drag = null;
+    let seatClickTimer = null;
     dragHandle.addEventListener("pointerdown", (e) => {
       const g = getGame(nav.gameId);
       const seats = g.seats || new Array(9).fill(null);
@@ -1482,7 +1485,19 @@ function attachHandlers(){
       el.style.zIndex = "";
       el.style.opacity = "";
       drag = null;
-      if (!wasMoved) return; // a plain tap on the circle does nothing - the info text below opens the menu
+      if (!wasMoved) {
+        // A plain tap opens the seat menu, same as tapping the info text below - but
+        // delay it briefly in case this is the first click of a double-click (selfie capture).
+        if (seatClickTimer) { clearTimeout(seatClickTimer); seatClickTimer = null; return; }
+        seatClickTimer = setTimeout(() => {
+          seatClickTimer = null;
+          const g = getGame(nav.gameId);
+          const seats = g.seats || new Array(9).fill(null);
+          const pid = seats[fromIdx];
+          if (pid) openModal({type:"seatMenu", gameId: nav.gameId, playerId: pid, seatIndex: fromIdx});
+        }, 280);
+        return;
+      }
       el.style.pointerEvents = "none";
       const under = document.elementFromPoint(e.clientX, e.clientY);
       el.style.pointerEvents = "";
