@@ -718,10 +718,6 @@ function renderTable(gameId){
           <button class="icon-btn" data-toggle-empty-seats title="${hideEmptySeats?'הצג מקומות פנויים':'הסתר מקומות פנויים'}" style="margin-top:6px;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.05);color:var(--muted);opacity:.6;display:inline-flex;align-items:center;justify-content:center;">${icon(hideEmptySeats?'eyeOff':'eye')}</button>
         ` : ""}
       </div>
-      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;opacity:.6;">
-        <img src="/static/logo.png" style="width:20px;height:20px;border-radius:5px;display:block;">
-        <span style="color:var(--muted);font-size:11px;">Poker Manager</span>
-      </div>
     </div>
     <div class="poker-table-wrap">
       <div class="poker-table-felt"></div>
@@ -1092,7 +1088,7 @@ function renderModal(m){
   } else if (m.type === "addExisting") {
     const g = getGame(m.gameId);
     const c = getCommunity(g.communityId);
-    const avail = c.roster.filter(p => !g.players.some(gp=>gp.id===p.id));
+    const avail = c.roster.filter(p => !g.players.some(gp=>gp.id===p.id)).sort((a,b) => a.name.localeCompare(b.name, 'he'));
     title = "הוספת שחקן למשחק";
     body = avail.map(p => `<div class="card" data-add-to-game="${p.id}"><span class="flex1">${esc(p.name)}</span>${netBadge(playerNetProfit(c.id, p.id))}<span style="color:var(--gold)">${icon('plus')}</span></div>`).join("");
   } else if (m.type === "buyin") {
@@ -1141,7 +1137,7 @@ function renderModal(m){
     const g = getGame(m.gameId);
     const c = getCommunity(g.communityId);
     const seated = new Set((g.seats||[]).filter(Boolean));
-    const avail = c.roster.filter(p => !seated.has(p.id));
+    const avail = c.roster.filter(p => !seated.has(p.id)).sort((a,b) => a.name.localeCompare(b.name, 'he'));
     title = `מי יושב במקום ${m.seatIndex+1}?`;
     body = avail.length ? `
       <div class="scroll-list">
