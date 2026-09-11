@@ -4,14 +4,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Poker Manager</title>
-<link rel="icon" type="image/webp" href="/static/logo.webp">
-<link rel="apple-touch-icon" href="/static/logo.webp">
+<link rel="icon" type="image/png" href="/static/logo.png">
+<link rel="apple-touch-icon" href="/static/logo.png">
 <meta property="og:title" content="Poker Manager">
 <meta property="og:description" content="ניהול ערבי פוקר, ציפים ומאזנים לקבוצה שלכם">
-<meta property="og:image" content="https://poker-manager-6b3m.onrender.com/static/logo.webp">
+<meta property="og:image" content="https://poker-manager-6b3m.onrender.com/static/logo.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="801">
+<meta property="og:image:height" content="799">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="https://poker-manager-6b3m.onrender.com/static/logo.webp">
+<meta name="twitter:image" content="https://poker-manager-6b3m.onrender.com/static/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@600;700&family=Rubik:wght@400;500;600;700&display=swap');
@@ -614,7 +617,6 @@ function renderHome(){
   if (!cards) cards = `<div class="empty">עדיין אין קבוצות - צרו את הקבוצה הראשונה שלכם</div>`;
   return `
     <div class="top">
-      <img src="/static/logo.webp" alt="Poker Manager" style="width:56px;height:56px;border-radius:14px;display:block;margin-bottom:10px;">
       <div class="hello-name" data-edit-identity-name style="cursor:pointer;color:var(--muted);font-size:12px;margin-bottom:4px;text-decoration:underline;text-underline-offset:3px;">שלום, ${esc(myIdentity.name || '')}</div>
       <h1 class="serif">הקבוצות שלי</h1>
       <div class="sub">בחרו קבוצה כדי לנהל שחקנים וערבי משחק</div>
@@ -718,6 +720,9 @@ function renderTable(gameId){
     </div>
     <div class="poker-table-wrap">
       <div class="poker-table-felt"></div>
+      <div style="position:absolute;inset:9% 13% 9% 9%;border-radius:50%;overflow:hidden;pointer-events:none;display:flex;align-items:center;justify-content:center;">
+        <img src="/static/logo.png" style="width:42%;opacity:.35;">
+      </div>
       ${seatsHtml}
       <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;z-index:3;">
         <div style="color:var(--muted);font-size:12px;">סה"כ קנייה ₪${totalBuyinAll}</div>
