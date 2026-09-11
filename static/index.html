@@ -558,6 +558,8 @@ const ICONS = {
   out: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>',
   undo: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 015.5 5.5v0a5.5 5.5 0 01-5.5 5.5H11"/></svg>',
   chip: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>',
+  up: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg>',
+  down: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
   eye: '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
   eyeOff: '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0112 20c-7 0-10-8-10-8a18.5 18.5 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 10 8 10 8a18.5 18.5 0 01-2.16 3.19M14.12 14.12a3 3 0 11-4.24-4.24M1 1l22 22"/></svg>',
   share: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>',
@@ -837,8 +839,12 @@ function renderModal(m){
     const editableList = m.points.length ? `
       <div class="section-title" style="padding:0;margin:0 0 6px;">זוטונים וערכים</div>
       <div class="scroll-list" style="margin-bottom:14px;">
-        ${m.points.map(pt => `
+        ${m.points.map((pt,i) => `
           <div class="roster-row">
+            <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0;">
+              <button class="icon-btn" data-move-chip-up="${pt.id}" ${i===0?"disabled":""} style="width:22px;height:18px;padding:0;align-items:center;justify-content:center;${i===0?"opacity:.35;":""}">${icon('up')}</button>
+              <button class="icon-btn" data-move-chip-down="${pt.id}" ${i===m.points.length-1?"disabled":""} style="width:22px;height:18px;padding:0;align-items:center;justify-content:center;${i===m.points.length-1?"opacity:.35;":""}">${icon('down')}</button>
+            </div>
             ${pt.image
               ? `<img data-point-image="${pt.id}" src="${pt.image}" style="width:40px;height:40px;object-fit:cover;border-radius:8px;flex-shrink:0;border:1px solid rgba(255,255,255,.2);">`
               : `<div data-point-image="${pt.id}" style="width:40px;height:40px;border-radius:8px;flex-shrink:0;border:1px dashed var(--muted);"></div>`}
@@ -1761,7 +1767,7 @@ function attachHandlers(){
           const rect = photoEl.getBoundingClientRect();
           const scaleX = photoEl.naturalWidth / rect.width;
           const px = Math.round((e.clientX - rect.left) * scaleX);
-          const newSize = Math.max(8, Math.min(400, Math.round((px - pt.x) * 2)));
+          const newSize = Math.max(8, Math.round((px - pt.x) * 2));
           pt.size = newSize;
           pt.image = cropChipImage(rdrag.canvas, pt.x, pt.y, pt.size);
           markerEl.style.width = (newSize/photoEl.naturalWidth*100) + "%";
@@ -1772,8 +1778,27 @@ function attachHandlers(){
         resizeEl.addEventListener("pointercancel", () => { rdrag = null; });
       }
     });
+    const syncChipPointValues = () => {
+      modal.points.forEach(pt => {
+        const inp = document.querySelector(`[data-chip-value-input="${pt.id}"]`);
+        if (inp && inp.value !== "") pt.value = inp.value;
+      });
+    };
     app.querySelectorAll("[data-remove-chip-point]").forEach(el => el.onclick = () => {
+      syncChipPointValues();
       updateModal({points: modal.points.filter(pt => pt.id !== el.dataset.removeChipPoint)});
+    });
+    app.querySelectorAll("[data-move-chip-up]").forEach(el => el.onclick = () => {
+      syncChipPointValues();
+      const points = modal.points.slice();
+      const i = points.findIndex(pt => pt.id === el.dataset.moveChipUp);
+      if (i > 0) { [points[i-1], points[i]] = [points[i], points[i-1]]; updateModal({points}); }
+    });
+    app.querySelectorAll("[data-move-chip-down]").forEach(el => el.onclick = () => {
+      syncChipPointValues();
+      const points = modal.points.slice();
+      const i = points.findIndex(pt => pt.id === el.dataset.moveChipDown);
+      if (i >= 0 && i < points.length - 1) { [points[i], points[i+1]] = [points[i+1], points[i]]; updateModal({points}); }
     });
     const addManualBtn = app.querySelector("[data-add-chip-manual]");
     if (addManualBtn) addManualBtn.onclick = () => {
