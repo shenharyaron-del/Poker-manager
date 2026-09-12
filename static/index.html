@@ -216,6 +216,25 @@ async function saveState(){
   return saveInFlight;
 }
 
+// ---------- Keep the shared data fresh without the user having to do anything ----------
+// There's no live push/socket sync - other people's changes (buy-ins, new joiners, seat
+// moves) only show up on this device once it re-fetches. Poll quietly in the background;
+// skip a tick whenever a modal is open so we never yank away something someone's mid-typing.
+// render() re-draws whatever nav/modal already are, so this never navigates anyone away
+// from the screen (e.g. table) they're currently looking at.
+function startAutoRefresh(){
+  setInterval(async () => {
+    if (modal) return;
+    try {
+      const fresh = await loadState();
+      state = fresh;
+      const scrollY = window.scrollY;
+      render();
+      window.scrollTo(0, scrollY);
+    } catch(e) { /* offline or a hiccup - next tick will retry */ }
+  }, 6000);
+}
+
 // ---------- "Who am I" - private per-browser identity, used only to tag who created a community ----------
 // Not a real login: it's a name each user types once, remembered for their own browser via
 // a per-device id. It lets us show/allow "delete" only to the creator, but someone could
@@ -2752,6 +2771,7 @@ window.addEventListener("popstate", () => {
   }
   if (!myIdentity.name) modal = {type:"identityName", forced:true};
   render();
+  startAutoRefresh();
 })();
 </script>
 </body>
