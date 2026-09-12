@@ -355,6 +355,22 @@ const AVATAR_CATEGORIES = [
   {folder:"celebs", label:"ידוענים וספורטאים", items:["מסי","קריסטיאנו","אבדיה","לברון","אמבפה","סינדי","בר רפאלי","בלה","נעמי","ג'יג'י"]},
   {folder:"cartoons", label:"מצוירים", items:["פיראט","חייזר","חנון","צפרדע נסיך","ג'לי סגול","רובוט","חזיר שף","מפלצת בפאניקה","קוסם","קוף"]}
 ];
+// Admin-created avatars (state.customAvatars: {id, name, category, image}) merge into these
+// built-in groups by matching category label, or form new groups of their own.
+function getAvatarGroups(){
+  const groups = AVATAR_CATEGORIES.map(cat => ({
+    label: cat.label,
+    items: cat.items.map((name,i) => ({name, pickKey: "builtin:" + cat.folder + "/" + (i+1), src: `/static/avatars/${cat.folder}/${i+1}.jpg`}))
+  }));
+  (state.customAvatars||[]).forEach(av => {
+    let grp = groups.find(g => g.label === av.category);
+    if (!grp) { grp = {label: av.category, items: []}; groups.push(grp); }
+    grp.items.push({name: av.name, pickKey: "custom:" + av.id, src: av.image});
+  });
+  return groups;
+}
+const SUPER_ADMIN_NAME = "ירון שנהר";
+function isSuperAdmin(){ return myIdentity.name === SUPER_ADMIN_NAME; }
 
 const PROFIT_BUCKETS = [
   {min:-Infinity, max:-200, label:"-200",     loss:true},
@@ -795,12 +811,72 @@ function renderModal(m){
     `;
   } else if (m.type === "avatarPicker") {
     title = "בחר אווטר";
-    body = AVATAR_CATEGORIES.map(cat => `
-      <div class="section-title" style="padding:0;margin:10px 0 6px;">${esc(cat.label)}</div>
+    body = (isSuperAdmin() ? `
+      <button class="btn btn-ghost btn-block" style="margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:6px;" data-open-avatar-creator>${icon('plus')} יצירת אווטרים חדשים</button>
+    ` : "") + getAvatarGroups().map(grp => `
+      <div class="section-title" style="padding:0;margin:10px 0 6px;">${esc(grp.label)}</div>
       <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:6px;">
-        ${cat.items.map((name,i) => `<img src="/static/avatars/${cat.folder}/${i+1}.jpg" data-pick-avatar="${cat.folder}/${i+1}" title="${esc(name)}" style="width:100%;aspect-ratio:1;border-radius:50%;cursor:pointer;border:2px solid transparent;object-fit:cover;">`).join("")}
+        ${grp.items.map(it => `<img src="${it.src}" data-pick-avatar="${it.pickKey}" title="${esc(it.name)}" style="width:100%;aspect-ratio:1;border-radius:50%;cursor:pointer;border:2px solid transparent;object-fit:cover;">`).join("")}
       </div>
     `).join("");
+  } else if (m.type === "avatarCreator") {
+    title = "יצירת אווטרים";
+    const pickButtons = `
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <div style="position:relative;flex:1;">
+          <button type="button" class="btn btn-ghost btn-block" style="pointer-events:none;">${icon('plus')} צלם</button>
+          <input type="file" accept="image/*" capture="environment" id="avatar-camera-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
+        </div>
+        <div style="position:relative;flex:1;">
+          <button type="button" class="btn btn-primary btn-block" style="pointer-events:none;">${icon('plus')} העלה תמונה</button>
+          <input type="file" accept="image/*" id="avatar-upload-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
+        </div>
+      </div>
+    `;
+    if (!m.imageSrc) {
+      body = `
+        <p style="color:var(--muted);font-size:13px;">העלו תמונה עם כמה אווטרים (כמו הגליונות שכבר קיימים), ואז הקישו על כל אווטר כדי לסמן עיגול סביבו - אפשר לגרור למקם במדויק ולגרור את הנקודה כדי לשנות גודל.</p>
+        ${pickButtons}
+      `;
+    } else {
+      const markers = (m.imageW && m.imageH) ? m.points.filter(pt => pt.x != null).map(pt => {
+        const size = pt.size || 20;
+        const leftPct = (pt.x / m.imageW) * 100;
+        const topPct = (pt.y / m.imageH) * 100;
+        const wPct = (size / m.imageW) * 100;
+        const hPct = (size / m.imageH) * 100;
+        return `
+          <div data-avatar-marker="${pt.id}" style="position:absolute;left:${leftPct}%;top:${topPct}%;width:${wPct}%;height:${hPct}%;transform:translate(-50%,-50%);border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.6);cursor:grab;touch-action:none;">
+            <div data-avatar-marker-resize="${pt.id}" style="position:absolute;right:-9px;bottom:-9px;width:18px;height:18px;cursor:nwse-resize;touch-action:none;display:flex;align-items:center;justify-content:center;"><div style="width:6px;height:6px;border-radius:50%;background:#fff;border:1px solid rgba(0,0,0,.6);"></div></div>
+          </div>`;
+      }).join("") : "";
+      const existingCategories = Array.from(new Set(getAvatarGroups().map(g => g.label)));
+      const editableList = m.points.length ? `
+        <div class="scroll-list" style="margin:12px 0;">
+          ${m.points.map(pt => `
+            <div class="roster-row">
+              ${pt.image
+                ? `<img data-avatar-point-image="${pt.id}" src="${pt.image}" style="width:40px;height:40px;object-fit:cover;border-radius:50%;flex-shrink:0;border:1px solid rgba(255,255,255,.2);">`
+                : `<div data-avatar-point-image="${pt.id}" style="width:40px;height:40px;border-radius:50%;flex-shrink:0;border:1px dashed var(--muted);"></div>`}
+              <input type="text" placeholder="שם" value="${esc(pt.name||'')}" data-avatar-name-input="${pt.id}" style="flex:1;">
+              <input type="text" placeholder="קטגוריה" value="${esc(pt.category||'')}" data-avatar-category-input="${pt.id}" list="avatar-category-options" style="flex:1;">
+              <button class="icon-btn danger" data-remove-avatar-point="${pt.id}">${icon('trash')}</button>
+            </div>
+          `).join("")}
+        </div>
+        <datalist id="avatar-category-options">${existingCategories.map(c => `<option value="${esc(c)}">`).join("")}</datalist>
+      ` : "";
+      body = `
+        <div style="width:100%;margin-bottom:10px;position:relative;">
+          <img src="${m.imageSrc}" data-avatar-photo style="width:100%;border-radius:12px;display:block;cursor:crosshair;">
+          ${markers}
+        </div>
+        <p style="color:var(--muted);font-size:12px;margin-top:0;">הקישו על אווטר בתמונה כדי לסמן עיגול - גררו למקם במדויק ואת הנקודה כדי לשנות גודל. תנו שם וקטגוריה לכל אווטר.</p>
+        ${editableList}
+        <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-retake-avatar-photo>${icon('plus')} תמונה אחרת</button>
+        <button class="btn btn-primary btn-block" data-save-avatars ${m.points.length===0?"disabled":""}>שמור אווטרים</button>
+      `;
+    }
   } else if (m.type === "chipPhotoCount") {
     title = m.noPhoto ? "ספירת ציפים ידנית" : "ספירת ציפים מתמונה";
     const c = getCommunity(m.communityId);
@@ -1629,9 +1705,18 @@ function attachHandlers(){
     app.querySelectorAll("[data-pick-avatar]").forEach(el => el.onclick = () => {
       const c = getCommunity(modal.communityId);
       const rp = c && c.roster.find(pl => pl.id === modal.playerId);
-      if (rp) { rp.photo = "/static/avatars/" + el.dataset.pickAvatar + ".jpg"; saveState(); }
+      const key = el.dataset.pickAvatar;
+      let photo = null;
+      if (key.startsWith("builtin:")) photo = "/static/avatars/" + key.slice(8) + ".jpg";
+      else if (key.startsWith("custom:")) {
+        const av = (state.customAvatars||[]).find(a => a.id === key.slice(7));
+        photo = av ? av.image : null;
+      }
+      if (rp && photo) { rp.photo = photo; saveState(); }
       closeModal();
     });
+    const openCreatorBtn = app.querySelector("[data-open-avatar-creator]");
+    if (openCreatorBtn) openCreatorBtn.onclick = () => openModal({type:"avatarCreator", communityId: modal.communityId, playerId: modal.playerId, imageSrc: null, points: []});
   }
 
   if (modal && modal.type === "roster") {
@@ -1956,6 +2041,142 @@ function attachHandlers(){
       c.chipValues = values;
       saveState();
       closeModal();
+    };
+  }
+
+  if (modal && modal.type === "avatarCreator") {
+    const handleAvatarFile = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          updateModal({imageSrc: reader.result, imageW: img.naturalWidth, imageH: img.naturalHeight, points: modal.points});
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    };
+    const avatarCameraInput = app.querySelector("#avatar-camera-input");
+    if (avatarCameraInput) avatarCameraInput.onchange = handleAvatarFile;
+    const avatarUploadInput = app.querySelector("#avatar-upload-input");
+    if (avatarUploadInput) avatarUploadInput.onchange = handleAvatarFile;
+    const avatarPhotoEl = app.querySelector("[data-avatar-photo]");
+    const buildAvatarSourceCanvas = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = avatarPhotoEl.naturalWidth;
+      canvas.height = avatarPhotoEl.naturalHeight;
+      canvas.getContext("2d").drawImage(avatarPhotoEl, 0, 0);
+      return canvas;
+    };
+    const cropAvatarImage = (canvas, px, py, size) => {
+      const half = Math.max(1, Math.round(size/2));
+      const sx = Math.max(0, px - half);
+      const sy = Math.max(0, py - half);
+      const sw = Math.min(canvas.width, px + half) - sx;
+      const sh = Math.min(canvas.height, py + half) - sy;
+      const out = document.createElement("canvas");
+      const outSize = 160;
+      out.width = outSize; out.height = outSize;
+      out.getContext("2d").drawImage(canvas, sx, sy, sw, sh, 0, 0, outSize, outSize);
+      return out.toDataURL("image/jpeg", 0.85);
+    };
+    const updateAvatarPointDisplay = (pt) => {
+      const imgEl = document.querySelector(`[data-avatar-point-image="${pt.id}"]`);
+      if (imgEl && pt.image) imgEl.src = pt.image;
+    };
+    if (avatarPhotoEl) avatarPhotoEl.onclick = (e) => {
+      const rect = avatarPhotoEl.getBoundingClientRect();
+      const scaleX = avatarPhotoEl.naturalWidth / rect.width;
+      const scaleY = avatarPhotoEl.naturalHeight / rect.height;
+      const px = Math.round((e.clientX - rect.left) * scaleX);
+      const py = Math.round((e.clientY - rect.top) * scaleY);
+      const targetDisplayPx = 1.5 * 37.795; // ~1.5cm on the user's screen
+      const defaultSize = Math.round(targetDisplayPx * scaleX);
+      const image = cropAvatarImage(buildAvatarSourceCanvas(), px, py, defaultSize);
+      updateModal({points: modal.points.concat([{id: uid(), name: "", category: "", x: px, y: py, size: defaultSize, image}])});
+    };
+    app.querySelectorAll("[data-avatar-marker]").forEach(markerEl => {
+      const ptId = markerEl.dataset.avatarMarker;
+      const pt = modal.points.find(p => p.id === ptId);
+      if (!pt) return;
+      let drag = null;
+      markerEl.addEventListener("pointerdown", (e) => {
+        e.stopPropagation();
+        drag = {canvas: buildAvatarSourceCanvas()};
+        markerEl.setPointerCapture(e.pointerId);
+      });
+      markerEl.addEventListener("pointermove", (e) => {
+        if (!drag) return;
+        e.stopPropagation();
+        const rect = avatarPhotoEl.getBoundingClientRect();
+        const scaleX = avatarPhotoEl.naturalWidth / rect.width;
+        const scaleY = avatarPhotoEl.naturalHeight / rect.height;
+        const px = Math.round((e.clientX - rect.left) * scaleX);
+        const py = Math.round((e.clientY - rect.top) * scaleY);
+        pt.x = Math.max(0, Math.min(avatarPhotoEl.naturalWidth, px));
+        pt.y = Math.max(0, Math.min(avatarPhotoEl.naturalHeight, py));
+        pt.image = cropAvatarImage(drag.canvas, pt.x, pt.y, pt.size || 20);
+        markerEl.style.left = (pt.x/avatarPhotoEl.naturalWidth*100) + "%";
+        markerEl.style.top = (pt.y/avatarPhotoEl.naturalHeight*100) + "%";
+        updateAvatarPointDisplay(pt);
+      });
+      markerEl.addEventListener("pointerup", () => { if (drag) { drag = null; updateModal({}); } });
+      markerEl.addEventListener("pointercancel", () => { drag = null; });
+      const resizeEl = markerEl.querySelector("[data-avatar-marker-resize]");
+      if (resizeEl) {
+        let rdrag = null;
+        resizeEl.addEventListener("pointerdown", (e) => {
+          e.stopPropagation();
+          rdrag = {canvas: buildAvatarSourceCanvas()};
+          resizeEl.setPointerCapture(e.pointerId);
+        });
+        resizeEl.addEventListener("pointermove", (e) => {
+          if (!rdrag) return;
+          e.stopPropagation();
+          const rect = avatarPhotoEl.getBoundingClientRect();
+          const scaleX = avatarPhotoEl.naturalWidth / rect.width;
+          const px = Math.round((e.clientX - rect.left) * scaleX);
+          const newSize = Math.max(8, Math.round((px - pt.x) * 2));
+          pt.size = newSize;
+          pt.image = cropAvatarImage(rdrag.canvas, pt.x, pt.y, pt.size);
+          markerEl.style.width = (newSize/avatarPhotoEl.naturalWidth*100) + "%";
+          markerEl.style.height = (newSize/avatarPhotoEl.naturalHeight*100) + "%";
+          updateAvatarPointDisplay(pt);
+        });
+        resizeEl.addEventListener("pointerup", () => { if (rdrag) { rdrag = null; updateModal({}); } });
+        resizeEl.addEventListener("pointercancel", () => { rdrag = null; });
+      }
+    });
+    const syncAvatarPointFields = () => {
+      modal.points.forEach(pt => {
+        const nameInp = document.querySelector(`[data-avatar-name-input="${pt.id}"]`);
+        if (nameInp) pt.name = nameInp.value;
+        const catInp = document.querySelector(`[data-avatar-category-input="${pt.id}"]`);
+        if (catInp) pt.category = catInp.value;
+      });
+    };
+    app.querySelectorAll("[data-remove-avatar-point]").forEach(el => el.onclick = () => {
+      syncAvatarPointFields();
+      updateModal({points: modal.points.filter(pt => pt.id !== el.dataset.removeAvatarPoint)});
+    });
+    const retakeAvatarBtn = app.querySelector("[data-retake-avatar-photo]");
+    if (retakeAvatarBtn) retakeAvatarBtn.onclick = () => updateModal({imageSrc: null});
+    const saveAvatarsBtn = app.querySelector("[data-save-avatars]");
+    if (saveAvatarsBtn) saveAvatarsBtn.onclick = () => {
+      syncAvatarPointFields();
+      const newAvatars = [];
+      for (const pt of modal.points) {
+        const name = (pt.name||"").trim();
+        const category = (pt.category||"").trim();
+        if (!name || !category) { alert("צריך להזין שם וקטגוריה לכל אווטר."); return; }
+        newAvatars.push({id: uid(), name, category, image: pt.image});
+      }
+      if (!newAvatars.length) { alert("צריך לסמן לפחות אווטר אחד."); return; }
+      state.customAvatars = (state.customAvatars||[]).concat(newAvatars);
+      saveState();
+      openModal({type:"avatarPicker", communityId: modal.communityId, playerId: modal.playerId});
     };
   }
 
