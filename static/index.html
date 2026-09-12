@@ -785,9 +785,11 @@ function renderTable(gameId){
     if (cashedOut) {
       const profit = chips - buyin;
       const sign = profit > 0 ? "+" : "";
+      const isZero = Math.abs(profit) < 0.5;
       const profitColor = profit > 0.5 ? "#6ee7b7" : (profit < -0.5 ? "#fda4af" : "inherit");
       const settled = !!(g.cashouts[pid] && g.cashouts[pid].settled);
-      caption = `<span style="color:${profitColor};font-weight:700;">${sign}₪${Math.round(profit)}</span><br><span data-toggle-settled="${pid}" style="cursor:pointer;font-size:9px;color:${settled?'#6ee7b7':'#fbbf24'};">${settled?'✓ הוסדר':'ממתין להסדר'}</span>`;
+      caption = `<span style="color:${profitColor};font-weight:700;">${sign}₪${Math.round(profit)}</span>` +
+        (isZero ? "" : `<br><span data-toggle-settled="${pid}" style="cursor:pointer;font-size:9px;color:${settled?'#6ee7b7':'#fbbf24'};">${settled?'✓ הוסדר':'ממתין להסדר'}</span>`);
     }
     const circleStyle = (photo && !cashedOut) ? ` style="background-image:url('${photo}');background-size:cover;background-position:center;"` : "";
     const doorIconBig = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>';
