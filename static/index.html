@@ -354,9 +354,6 @@ function processSelfieFile(file, callback){
   };
   reader.readAsDataURL(file);
 }
-function openSelfieCapture(communityId, playerId){
-  openModal({type:"photoSource", communityId, playerId});
-}
 function openFilePicker(communityId, playerId, useCamera){
   if (!selfieInput) {
     selfieInput = document.createElement("input");
@@ -784,7 +781,7 @@ function renderTable(gameId){
     const chips = liveChips[pid] || 0;
     const rosterP = c.roster.find(rp => rp.id === pid);
     const photo = rosterP && rosterP.photo;
-    let caption = `קנייה ₪${buyin}<br>ציפים ₪${chips}`;
+    let caption = `קנייה ₪${buyin}`;
     if (cashedOut) {
       const profit = chips - buyin;
       const sign = profit > 0 ? "+" : "";
@@ -1366,7 +1363,8 @@ function renderModal(m){
     ` : `
       <button class="btn btn-primary btn-block" style="margin-bottom:10px;" data-menu-buyins>${icon('plus')} קנייה</button>
       <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-menu-chips>${icon('out')} סיים ערב</button>
-      <button class="btn btn-block" style="background:#be123c;color:#fff;" data-menu-remove>${icon('trash')} הסר מהשולחן</button>
+      <button class="btn btn-block" style="background:#be123c;color:#fff;margin-bottom:10px;" data-menu-remove>${icon('trash')} הסר מהשולחן</button>
+      <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-menu-change-avatar>${icon('pencil')} שינוי אבאטר</button>
     `;
   } else if (m.type === "seatBuyins") {
     const g = getGame(m.gameId);
@@ -1656,8 +1654,6 @@ function attachHandlers(){
   app.querySelectorAll("[data-seat]").forEach(el => {
     const dragHandle = el.querySelector(".seat-circle") || el;
     let drag = null;
-    let seatClickTimer = null;
-    let lastTapTime = 0;
     dragHandle.addEventListener("pointerdown", (e) => {
       const g = getGame(nav.gameId);
       const seats = g.seats || new Array(9).fill(null);
@@ -1686,29 +1682,11 @@ function attachHandlers(){
       el.style.opacity = "";
       drag = null;
       if (!wasMoved) {
-        // A plain tap opens the seat menu, same as tapping the info text below; two
-        // quick taps open the profile-photo picker instead. Detected manually (not via
-        // the native dblclick event) since touch-action:none on this element - needed
-        // for the drag-to-swap above - stops real phones from ever firing a synthetic
-        // dblclick for a double-tap.
-        const now = Date.now();
-        const isDoubleTap = (now - lastTapTime) < 400;
-        lastTapTime = isDoubleTap ? 0 : now;
-        if (seatClickTimer) { clearTimeout(seatClickTimer); seatClickTimer = null; }
-        if (isDoubleTap) {
-          const g = getGame(nav.gameId);
-          const seats = g.seats || new Array(9).fill(null);
-          const pid = seats[fromIdx];
-          if (pid) openSelfieCapture(g.communityId, pid);
-          return;
-        }
-        seatClickTimer = setTimeout(() => {
-          seatClickTimer = null;
-          const g = getGame(nav.gameId);
-          const seats = g.seats || new Array(9).fill(null);
-          const pid = seats[fromIdx];
-          if (pid) openModal({type:"seatMenu", gameId: nav.gameId, playerId: pid, seatIndex: fromIdx});
-        }, 400);
+        // A plain tap opens the seat menu, same as tapping the info text below.
+        const g = getGame(nav.gameId);
+        const seats = g.seats || new Array(9).fill(null);
+        const pid = seats[fromIdx];
+        if (pid) openModal({type:"seatMenu", gameId: nav.gameId, playerId: pid, seatIndex: fromIdx});
         return;
       }
       el.style.pointerEvents = "none";
@@ -2514,6 +2492,11 @@ function attachHandlers(){
     if (menuChips) menuChips.onclick = () => openModal({type:"seatChips", gameId: modal.gameId, playerId: modal.playerId});
     const menuRemove = app.querySelector("[data-menu-remove]");
     if (menuRemove) menuRemove.onclick = () => openModal({type:"removeSeat", gameId: modal.gameId, playerId: modal.playerId});
+    const menuChangeAvatar = app.querySelector("[data-menu-change-avatar]");
+    if (menuChangeAvatar) menuChangeAvatar.onclick = () => {
+      const g = getGame(modal.gameId);
+      openModal({type:"photoSource", communityId: g.communityId, playerId: modal.playerId});
+    };
     const menuSummary = app.querySelector("[data-menu-summary]");
     if (menuSummary) menuSummary.onclick = () => openModal({type:"history", gameId: modal.gameId, playerId: modal.playerId});
   }
