@@ -249,7 +249,33 @@ let nav = { screen: "home", communityId: null, gameId: null };
 let modal = null; // {type, ...}
 let hideEmptySeats = false; // UI-only toggle, not persisted
 
-function go(screen, extra){ nav = Object.assign({screen}, extra||{}); modal = null; render(); }
+function go(screen, extra){
+  nav = Object.assign({screen}, extra||{});
+  modal = null;
+  if (screen === "table" && nav.gameId) autoSeatSelf(nav.gameId);
+  render();
+}
+// If this device is remembered as a specific roster player in this game's community
+// (see data-pick-player below), and that player isn't seated yet in this game, seat
+// them automatically - so returning players don't have to pick their name every night.
+function autoSeatSelf(gameId){
+  const g = getGame(gameId);
+  if (!g || g.closed) return;
+  const playerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+  if (!playerId) return;
+  const c = getCommunity(g.communityId);
+  const p = c && c.roster.find(pl => pl.id === playerId);
+  if (!p) return;
+  if (!g.seats) g.seats = new Array(9).fill(null);
+  if (g.seats.includes(playerId)) return;
+  const emptyIdx = g.seats.findIndex((s,i) => i < 9 && !s);
+  if (emptyIdx === -1) return;
+  g.seats[emptyIdx] = playerId;
+  if (!g.players.some(gp => gp.id === playerId)) g.players.push({id:p.id, name:p.name});
+  if (!g.liveChips) g.liveChips = {};
+  if (g.liveChips[playerId] === undefined) g.liveChips[playerId] = 0;
+  saveState();
+}
 function openModal(m){ modal = m; render(); }
 function closeModal(){ modal = null; render(); }
 function updateModal(partial){
@@ -2071,6 +2097,9 @@ function attachHandlers(){
       if (!g.players.some(gp => gp.id === p.id)) g.players.push({id:p.id, name:p.name});
       if (!g.liveChips) g.liveChips = {};
       if (g.liveChips[p.id] === undefined) g.liveChips[p.id] = 0;
+      if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
+      myIdentity.myPlayers[g.communityId] = p.id;
+      saveIdentity();
       saveState();
       closeModal();
     });
@@ -2295,7 +2324,10 @@ function attachHandlers(){
   const inviteGameId = new URLSearchParams(location.search).get("game");
   if (inviteGameId) {
     const invitedGame = getGame(inviteGameId);
-    if (invitedGame) nav = { screen: "table", gameId: invitedGame.id, communityId: invitedGame.communityId };
+    if (invitedGame) {
+      nav = { screen: "table", gameId: invitedGame.id, communityId: invitedGame.communityId };
+      autoSeatSelf(invitedGame.id);
+    }
   }
   if (!myIdentity.name) modal = {type:"identityName", forced:true};
   render();
