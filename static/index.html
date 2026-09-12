@@ -222,9 +222,14 @@ async function saveState(){
 // skip a tick whenever a modal is open so we never yank away something someone's mid-typing.
 // render() re-draws whatever nav/modal already are, so this never navigates anyone away
 // from the screen (e.g. table) they're currently looking at.
-function startAutoRefresh(){
-  setInterval(async () => {
-    if (modal) return;
+// Interval itself lives in shared state (refreshIntervalSec) so Super Admin can change it
+// from any device and every other device picks up the new cadence on its next tick.
+function scheduleAutoRefresh(){
+  const sec = (state.refreshIntervalSec > 0) ? state.refreshIntervalSec : 6;
+  setTimeout(tickAutoRefresh, sec * 1000);
+}
+async function tickAutoRefresh(){
+  if (!modal) {
     try {
       const fresh = await loadState();
       state = fresh;
@@ -232,7 +237,8 @@ function startAutoRefresh(){
       render();
       window.scrollTo(0, scrollY);
     } catch(e) { /* offline or a hiccup - next tick will retry */ }
-  }, 6000);
+  }
+  scheduleAutoRefresh();
 }
 
 // ---------- "Who am I" - private per-browser identity, used only to tag who created a community ----------
@@ -460,134 +466,6 @@ function computeProfitBuckets(profits){
   }));
 }
 
-// ---------- Fun end-of-night feedback (shown when a player finishes, unless disabled per-player) ----------
-const FUN_MESSAGES = {
-  zero: [
-    "🤝 יצאתם בתיקו - הרווחתם בחברה טובה.",
-    "😄 לא הרווחתם ולא הפסדתם - ניצחתם בכיף.",
-    "🍻 מאופס, אבל הערב היה שווה.",
-    "⚖️ איזון מושלם - זה גם הישג.",
-    "🎈 יצאתם אותו דבר שנכנסתם - וזה בסדר גמור.",
-    "🧘 שקט, איזון, ואפס לחץ - נדיר בפוקר.",
-    "🃏 לא הפסדתם - וזה כבר ניצחון.",
-    "🤗 החברה היא הקופה האמיתית, קלישאה אבל נכון.",
-    "🎶 מאופס בכיס, מלא בזיכרונות.",
-    "😶 שום דבר לא קרה הערב, כלכלית. רגשית - סיפור אחר.",
-  ],
-  tinyProfit: [
-    "💸 רווח שבקושי כיסה את החניה.",
-    "😏 ניצחתם... בערך במחיר פלאפל.",
-    "🤏 רווח כל כך קטן שהוא כמעט מתבייש.",
-    "🪙 יצאתם עם סכום שגם קבצן היה מזלזל בו.",
-    "🫡 קיבלתם טיפ, לא בונוס.",
-    "😅 רווח שאפילו לא שווה לספר עליו בעבודה.",
-    "🧃 בדיוק מספיק למיץ בדרך הביתה.",
-    "🤔 רווח? כן. מרשים? נדבר על זה.",
-    "🐜 ניצחון בגודל נמלה, אבל ניצחון.",
-    "🎈 בקושי הרגשתם את זה בכיס.",
-  ],
-  smallProfit: [
-    "🙂 כל שקל נחשב - רווח זה רווח.",
-    "🍕 בדיוק מספיק לפיצה בדרך הביתה.",
-    "🥤 שילמתם על הבירה מהערב - נחשב.",
-    "🧢 רווח צנוע, אבל ראש מורם.",
-    "🚕 מספיק למונית הביתה, לא למונית לשדה התעופה.",
-    "😎 לא הופכים לעשירים, אבל גם לא בוכים.",
-    "👍 ניצחון צנוע אבל ניצחון.",
-    "🌱 התחלה טובה לערב הבא.",
-    "🙌 יציאה בפלוס - תמיד כיף.",
-    "🎯 פגעתם במטרה, בלי להתאמץ יותר מדי.",
-  ],
-  bigProfit: [
-    "🎆 זיקוקים! ערב מהאגדות.",
-    "👑 אלוף הערב! תרימו את הראש.",
-    "🏆 מלך השולחן הערב!",
-    "🔥 על אש! ניצחון מוחץ.",
-    "🎉 מסיבה בכיס - כל הכבוד!",
-    "⭐ כוכב הערב, בלי ספק.",
-    "😏 עכשיו מותר לזלזל בכולם עד השבוע הבא.",
-    "🍾 שווה לפתוח משהו מבעבע הערב.",
-    "🎩 בלאף הגון אחד, אתם הבעלים של הערב.",
-    "💪 מישהו חיפש בגוגל 'איך משחקים פוקר'? כן, זה עבד.",
-  ],
-  hugeProfit: [
-    "🚀 טסתם לירח הערב!",
-    "💎 ידיים של יהלום הערב.",
-    "🥇 מקום ראשון בלי עוררין!",
-    "🏦 תתקשרו לבנק, הם רוצים לדעת מה קרה.",
-    "😳 אפילו אתם לא מאמינים לזה.",
-    "🤑 תתחילו לתכנן איפה קוברים את הכסף.",
-    "🦈 כריש השולחן הרשמי הערב.",
-    "🎰 ניצחתם כאילו הפוקר חייב לכם כסף אישית.",
-    "👀 כל הקבוצה כבר מקנאה, תודו.",
-    "📈 התיק שלכם עלה, לפחות להיום.",
-  ],
-  tinyLoss: [
-    "🤷 הפסד כל כך קטן שאפשר להתעלם ממנו.",
-    "😅 שילמתם על כניסה לערב חברתי, בגדול.",
-    "🍿 עלה לכם כמו סרט בקולנוע.",
-    "🫠 כמעט יצאתם בשלום. כמעט.",
-    "🪫 סוללה קצת ריקה, כלום נורא.",
-    "😐 הפסד בגודל שאפילו אמא לא תשים לב.",
-    "🧊 קריר, רגוע, כמעט בלי הפסד.",
-    "🙃 הפסדתם קצת - זה גם סוג של ניצחון.",
-    "🐌 הפסד בקצב שבלולים.",
-    "😶‍🌫️ היה כאן, נעלם, לא נורא.",
-  ],
-  smallLoss: [
-    "📚 מכל הפסד לומדים משהו.",
-    "🎲 היום לא, מחר כן.",
-    "💪 קמים וממשיכים.",
-    "🌧️ יש ימים כאלה - קדימה הלאה.",
-    "😬 עלה קצת יותר מארוחת ערב, לא נורא.",
-    "🚌 מספיק כדי לחשוב פעמיים לפני הקנייה הבאה.",
-    "🎓 עוד שיעור בדרך לגדולה.",
-    "🤝 ההפסד הכי טוב הוא זה שלומדים ממנו.",
-    "🔄 הפעם הבאה תהיה אחרת.",
-    "🍀 המזל ישתנה, סבלנות.",
-  ],
-  mediumLoss: [
-    "🧠 לקח יקר, מחיר סביר.",
-    "⚡ נפילה קטנה, קימה גדולה.",
-    "😤 הערב הזה נכנס להיסטוריה - לא בדרך הטובה.",
-    "🏧 כדאי לבדוק את המסלול הביתה, ליד כספומט.",
-    "🥲 הארנק צריך חיבוק הערב.",
-    "📉 גרף שלא הייתם רוצים להראות לאף אחד.",
-    "🎭 חייכתם החוצה, בכיתם בפנים.",
-    "🫥 שיהיה ברור - זה היה בגלל הקלפים, לא בגללכם.",
-    "🧯 שריפה קטנה בתקציב, כלום שלא ייפתר בשינה.",
-    "🐢 לאט לאט, אבל לא קדימה הערב.",
-  ],
-  hugeLoss: [
-    "💀 זה היה קרב, ואתם הפסדתם בגדול.",
-    "🩹 שווה לשים פלסטר על הארנק.",
-    "🏚️ המשכנתא תצטרך לחכות עוד קצת.",
-    "😭 אפשר לבכות, זו זכות שמורה.",
-    "🚨 אזעקה: מצב חירום כלכלי-פוקרי.",
-    "🧾 שווה לשמור את הקבלה הזו לדורות הבאים.",
-    "🎢 רכבת הרים שנגמרה למטה, הרחק למטה.",
-    "🫡 כבוד על ההתמדה. הכסף - פחות.",
-    "🌪️ נשטפתם. תרתי משמע.",
-    "📵 אולי כדאי לא לספר לבית הערב.",
-  ],
-};
-function randomFunMessage(profit){
-  let bucket;
-  if (Math.abs(profit) < 1) bucket = FUN_MESSAGES.zero;
-  else if (profit > 0) {
-    bucket = profit >= 300 ? FUN_MESSAGES.hugeProfit
-      : profit >= 100 ? FUN_MESSAGES.bigProfit
-      : profit >= 30 ? FUN_MESSAGES.smallProfit
-      : FUN_MESSAGES.tinyProfit;
-  } else {
-    const loss = -profit;
-    bucket = loss >= 300 ? FUN_MESSAGES.hugeLoss
-      : loss >= 100 ? FUN_MESSAGES.mediumLoss
-      : loss >= 30 ? FUN_MESSAGES.smallLoss
-      : FUN_MESSAGES.tinyLoss;
-  }
-  return bucket[Math.floor(Math.random() * bucket.length)];
-}
 function renderBarChart(buckets){
   const max = Math.max(1, ...buckets.map(b=>b.count));
   const bars = buckets.map(b => `
@@ -701,6 +579,7 @@ const ICONS = {
   eye: '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
   eyeOff: '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0112 20c-7 0-10-8-10-8a18.5 18.5 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 10 8 10 8a18.5 18.5 0 01-2.16 3.19M14.12 14.12a3 3 0 11-4.24-4.24M1 1l22 22"/></svg>',
   share: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>',
+  gear: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>',
 };
 function icon(name){ return ICONS[name] || ""; }
 
@@ -743,7 +622,10 @@ function renderHome(){
   if (!cards) cards = `<div class="empty">עדיין אין קבוצות - צרו את הקבוצה הראשונה שלכם</div>`;
   return `
     <div class="top">
-      <div class="hello-name" data-edit-identity-name style="cursor:pointer;color:var(--muted);font-size:12px;margin-bottom:4px;text-decoration:underline;text-underline-offset:3px;">שלום, ${esc(myIdentity.name || '')}</div>
+      <div class="row" style="gap:8px;align-items:center;">
+        <div class="hello-name" data-edit-identity-name style="cursor:pointer;color:var(--muted);font-size:12px;margin-bottom:4px;text-decoration:underline;text-underline-offset:3px;">שלום, ${esc(myIdentity.name || '')}</div>
+        ${isSuperAdmin() ? `<button class="icon-btn" data-open-admin-settings title="הגדרות">${icon('gear')}</button>` : ""}
+      </div>
       <h1 class="serif">הקבוצות שלי</h1>
       <div class="sub">בחרו קבוצה כדי לנהל שחקנים וערבי משחק</div>
     </div>
@@ -887,12 +769,6 @@ function renderModal(m){
         <button class="btn btn-primary btn-block" data-photo-camera>${icon('plus')} צלם</button>
         <button class="btn btn-ghost btn-block" data-photo-gallery>${icon('plus')} בחר מהגלריה</button>
       </div>
-      ${admin ? `
-        <div style="display:flex;gap:8px;margin-bottom:12px;">
-          <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-open-avatar-creator>${icon('plus')} יצירת אווטרים חדשים</button>
-          <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-open-avatar-manage>${icon('pencil')} ניהול</button>
-        </div>
-      ` : ""}
     ` + getAvatarGroups().map(grp => `
       <div class="section-title" style="padding:0;margin:10px 0 6px;">${esc(grp.label)}</div>
       <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:6px;">
@@ -905,6 +781,21 @@ function renderModal(m){
         `).join("")}
       </div>
     `).join("");
+  } else if (m.type === "adminSettings") {
+    title = "הגדרות";
+    body = `
+      <div class="section-title" style="padding:0;margin:0 0 8px;">אווטרים</div>
+      <div style="display:flex;gap:8px;margin-bottom:18px;">
+        <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-open-avatar-creator>${icon('plus')} יצירת אווטרים חדשים</button>
+        <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-open-avatar-manage>${icon('pencil')} ניהול</button>
+      </div>
+      <div class="section-title" style="padding:0;margin:0 0 8px;">קצב רענון אוטומטי</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <input type="number" min="2" step="1" id="refresh-interval-input" value="${state.refreshIntervalSec || 6}" style="width:80px;">
+        <span style="color:var(--muted);font-size:13px;">שניות</span>
+      </div>
+      <button class="btn btn-primary btn-block" data-save-admin-settings>שמור</button>
+    `;
   } else if (m.type === "avatarManage") {
     title = "ניהול אווטרים";
     const groups = getAvatarGroups();
@@ -1210,11 +1101,9 @@ function renderModal(m){
           </div>
         </div>`;
       }
-      const funOn = p.funMessages !== false;
       return `<div class="roster-row">
         <div class="row" style="gap:8px;"><span>${esc(p.name)}</span>${netBadge(playerNetProfit(m.communityId, p.id))}</div>
         <div class="row" style="gap:4px;">
-          <button class="icon-btn ${funOn?'gold':''}" data-toggle-fun="${p.id}" title="${funOn?'משוב מצחיק בסיום ערב - פעיל':'משוב מצחיק בסיום ערב - כבוי'}" style="opacity:${funOn?1:.4};">🎉</button>
           <button class="icon-btn gold" data-view-stats="${p.id}">${icon('bar')}</button>
           <button class="icon-btn" data-edit-player="${p.id}">${icon('pencil')}</button>
           <button class="icon-btn danger" data-remove-player="${p.id}">${icon('trash')}</button>
@@ -1443,12 +1332,6 @@ function renderModal(m){
       <p style="color:#6ee7b7;font-size:13px;">להסיר את <b>${esc(p?p.name:"")}</b> מהשולחן?</p>
       <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-clear-seat>הסר מהשולחן</button>
     `;
-  } else if (m.type === "funFeedback") {
-    title = esc(m.playerName || "");
-    body = `
-      <p style="font-size:22px;text-align:center;line-height:1.6;margin:10px 0 16px;">${esc(m.message)}</p>
-      <button class="btn btn-primary btn-block" data-close-fun-feedback>סגור</button>
-    `;
   } else if (m.type === "leave") {
     const g = getGame(m.gameId);
     const p = g.players.find(pl=>pl.id===m.playerId);
@@ -1602,6 +1485,7 @@ function attachHandlers(){
   const app = document.getElementById("app");
 
   app.querySelectorAll("[data-edit-identity-name]").forEach(el => el.onclick = () => openModal({type:"identityName", forced:false}));
+  app.querySelectorAll("[data-open-admin-settings]").forEach(el => el.onclick = () => openModal({type:"adminSettings"}));
   app.querySelectorAll("[data-open-community]").forEach(el => el.onclick = () => go("community", {communityId: el.dataset.openCommunity}));
   app.querySelectorAll("[data-delete-community]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type:"deleteCommunity", communityId: el.dataset.deleteCommunity}); });
   app.querySelectorAll("[data-duplicate-community]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type:"duplicateCommunity", communityId: el.dataset.duplicateCommunity}); });
@@ -1777,8 +1661,6 @@ function attachHandlers(){
   };
   const closeBtn = app.querySelector("[data-close-modal]");
   if (closeBtn) closeBtn.onclick = closeModalOrBack;
-  const closeFunBtn = app.querySelector("[data-close-fun-feedback]");
-  if (closeFunBtn) closeFunBtn.onclick = () => closeModal();
 
   if (modal && modal.type === "identityName") {
     const confirmBtn = app.querySelector("[data-confirm-identity-name]");
@@ -1812,10 +1694,6 @@ function attachHandlers(){
       if (rp && photo) { rp.photo = photo; saveState(); }
       closeModal();
     });
-    const openCreatorBtn = app.querySelector("[data-open-avatar-creator]");
-    if (openCreatorBtn) openCreatorBtn.onclick = () => openModal({type:"avatarCreator", communityId: modal.communityId, playerId: modal.playerId, imageSrc: null, points: []});
-    const openManageBtn = app.querySelector("[data-open-avatar-manage]");
-    if (openManageBtn) openManageBtn.onclick = () => openModal({type:"avatarManage", communityId: modal.communityId, playerId: modal.playerId});
     app.querySelectorAll("[data-delete-avatar]").forEach(el => el.onclick = (e) => {
       e.stopPropagation();
       const key = el.dataset.deleteAvatar;
@@ -1830,6 +1708,21 @@ function attachHandlers(){
       saveState();
       render();
     });
+  }
+
+  if (modal && modal.type === "adminSettings") {
+    const openCreatorBtn = app.querySelector("[data-open-avatar-creator]");
+    if (openCreatorBtn) openCreatorBtn.onclick = () => openModal({type:"avatarCreator", imageSrc: null, points: []});
+    const openManageBtn = app.querySelector("[data-open-avatar-manage]");
+    if (openManageBtn) openManageBtn.onclick = () => openModal({type:"avatarManage"});
+    const saveSettingsBtn = app.querySelector("[data-save-admin-settings]");
+    if (saveSettingsBtn) saveSettingsBtn.onclick = () => {
+      const v = parseInt(document.getElementById("refresh-interval-input").value, 10);
+      if (!v || v < 2) { alert("קצב הרענון צריך להיות לפחות 2 שניות."); return; }
+      state.refreshIntervalSec = v;
+      saveState();
+      closeModal();
+    };
   }
 
   if (modal && modal.type === "avatarManage") {
@@ -1889,16 +1782,12 @@ function attachHandlers(){
         });
       });
       saveState();
-      openModal({type:"photoSource", communityId: modal.communityId, playerId: modal.playerId});
+      if (modal.communityId) openModal({type:"photoSource", communityId: modal.communityId, playerId: modal.playerId});
+      else openModal({type:"adminSettings"});
     };
   }
 
   if (modal && modal.type === "roster") {
-    app.querySelectorAll("[data-toggle-fun]").forEach(el => el.onclick = () => {
-      const c = getCommunity(modal.communityId);
-      const p = c.roster.find(pl => pl.id === el.dataset.toggleFun);
-      if (p) { p.funMessages = p.funMessages === false ? true : false; saveState(); updateModal({}); }
-    });
     app.querySelectorAll("[data-view-stats]").forEach(el => el.onclick = () => openModal({type:"stats", communityId: modal.communityId, playerId: el.dataset.viewStats}));
     app.querySelectorAll("[data-edit-player]").forEach(el => el.onclick = () => updateModal({editingId: el.dataset.editPlayer}));
     app.querySelectorAll("[data-remove-player]").forEach(el => el.onclick = () => {
@@ -2369,7 +2258,8 @@ function attachHandlers(){
       if (!newAvatars.length) { alert("צריך לסמן לפחות אווטר אחד."); return; }
       state.customAvatars = (state.customAvatars||[]).concat(newAvatars);
       saveState();
-      openModal({type:"photoSource", communityId: modal.communityId, playerId: modal.playerId});
+      if (modal.communityId) openModal({type:"photoSource", communityId: modal.communityId, playerId: modal.playerId});
+      else openModal({type:"adminSettings"});
     };
   }
 
@@ -2600,16 +2490,7 @@ function attachHandlers(){
       g.cashouts[modal.playerId] = {amount: chips, ts: Date.now(), arrangedWith: []};
       maybeAutoCloseNight(g);
       saveState();
-      const c = getCommunity(g.communityId);
-      const rp = c && c.roster.find(pl => pl.id === modal.playerId);
-      if (rp && rp.funMessages !== false) {
-        const buyinTotal = g.buyins.filter(b=>b.playerId===modal.playerId).reduce((s,b)=>s+b.amount,0);
-        const profit = chips - buyinTotal;
-        const p = g.players.find(pl=>pl.id===modal.playerId);
-        openModal({type:"funFeedback", playerName: p?p.name:"", message: randomFunMessage(profit)});
-      } else {
-        closeModal();
-      }
+      closeModal();
     };
   }
 
@@ -2771,7 +2652,7 @@ window.addEventListener("popstate", () => {
   }
   if (!myIdentity.name) modal = {type:"identityName", forced:true};
   render();
-  startAutoRefresh();
+  scheduleAutoRefresh();
 })();
 </script>
 </body>
