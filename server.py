@@ -174,8 +174,8 @@ def ask():
     try:
         response = client.messages.create(
             model="claude-sonnet-5",
-            max_tokens=1000,
-            output_config={"effort": "low"},
+            max_tokens=2000,
+            output_config={"effort": "high"},
             messages=messages,
         )
     except anthropic.RateLimitError:
