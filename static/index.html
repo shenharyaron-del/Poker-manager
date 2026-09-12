@@ -1632,16 +1632,9 @@ function attachHandlers(){
 
   app.querySelectorAll("[data-seat]").forEach(el => {
     const dragHandle = el.querySelector(".seat-circle") || el;
-    dragHandle.ondblclick = (e) => {
-      e.stopPropagation();
-      const g = getGame(nav.gameId);
-      const seats = g.seats || new Array(9).fill(null);
-      const idx = parseInt(el.dataset.seat);
-      const pid = seats[idx];
-      if (pid) openSelfieCapture(g.communityId, pid);
-    };
     let drag = null;
     let seatClickTimer = null;
+    let lastTapTime = 0;
     dragHandle.addEventListener("pointerdown", (e) => {
       const g = getGame(nav.gameId);
       const seats = g.seats || new Array(9).fill(null);
@@ -1670,16 +1663,29 @@ function attachHandlers(){
       el.style.opacity = "";
       drag = null;
       if (!wasMoved) {
-        // A plain tap opens the seat menu, same as tapping the info text below - but
-        // delay it briefly in case this is the first click of a double-click (selfie capture).
-        if (seatClickTimer) { clearTimeout(seatClickTimer); seatClickTimer = null; return; }
+        // A plain tap opens the seat menu, same as tapping the info text below; two
+        // quick taps open the profile-photo picker instead. Detected manually (not via
+        // the native dblclick event) since touch-action:none on this element - needed
+        // for the drag-to-swap above - stops real phones from ever firing a synthetic
+        // dblclick for a double-tap.
+        const now = Date.now();
+        const isDoubleTap = (now - lastTapTime) < 400;
+        lastTapTime = isDoubleTap ? 0 : now;
+        if (seatClickTimer) { clearTimeout(seatClickTimer); seatClickTimer = null; }
+        if (isDoubleTap) {
+          const g = getGame(nav.gameId);
+          const seats = g.seats || new Array(9).fill(null);
+          const pid = seats[fromIdx];
+          if (pid) openSelfieCapture(g.communityId, pid);
+          return;
+        }
         seatClickTimer = setTimeout(() => {
           seatClickTimer = null;
           const g = getGame(nav.gameId);
           const seats = g.seats || new Array(9).fill(null);
           const pid = seats[fromIdx];
           if (pid) openModal({type:"seatMenu", gameId: nav.gameId, playerId: pid, seatIndex: fromIdx});
-        }, 280);
+        }, 400);
         return;
       }
       el.style.pointerEvents = "none";
