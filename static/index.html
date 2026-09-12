@@ -1370,8 +1370,9 @@ function renderModal(m){
       <button class="btn btn-ghost btn-block" data-return-to-game="${m.playerId}" style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('undo')} החזר למשחק</button>
     ` : `
       <button class="btn btn-primary btn-block" style="margin-bottom:10px;" data-menu-buyins>${icon('plus')} קנייה</button>
-      <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-menu-chips>${icon('out')} סיים ערב</button>
+      <button class="btn btn-block" style="background:#57534e;color:#f5f5f4;margin-bottom:10px;" data-menu-chips>${icon('out')} סיים ערב</button>
       <button class="btn btn-block" style="background:#be123c;color:#fff;margin-bottom:10px;" data-menu-remove>${icon('trash')} הסר מהשולחן</button>
+      <button class="btn btn-ghost btn-block" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-menu-history>${icon('bar')} היסטוריית קניות</button>
       <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-menu-change-avatar>${icon('pencil')} שינוי אווטר</button>
     `;
   } else if (m.type === "seatBuyins") {
@@ -2505,6 +2506,8 @@ function attachHandlers(){
       const g = getGame(modal.gameId);
       openModal({type:"photoSource", communityId: g.communityId, playerId: modal.playerId});
     };
+    const menuHistory = app.querySelector("[data-menu-history]");
+    if (menuHistory) menuHistory.onclick = () => openModal({type:"history", gameId: modal.gameId, playerId: modal.playerId});
     const menuSummary = app.querySelector("[data-menu-summary]");
     if (menuSummary) menuSummary.onclick = () => openModal({type:"history", gameId: modal.gameId, playerId: modal.playerId});
   }
