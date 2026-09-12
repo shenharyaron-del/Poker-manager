@@ -808,17 +808,16 @@ function renderModal(m){
     `;
   } else if (m.type === "photoSource") {
     title = "תמונת פרופיל";
-    body = `
-      <button class="btn btn-primary btn-block" style="margin-bottom:10px;" data-photo-camera>${icon('plus')} צלם</button>
-      <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-photo-gallery>${icon('plus')} בחר מהגלריה</button>
-      <button class="btn btn-ghost btn-block" data-photo-avatar>${icon('plus')} בחר אווטר</button>
-    `;
-  } else if (m.type === "avatarPicker") {
-    title = "בחר אווטר";
     const admin = isSuperAdmin();
-    body = (admin ? `
-      <button class="btn btn-ghost btn-block" style="margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:6px;" data-open-avatar-creator>${icon('plus')} יצירת אווטרים חדשים</button>
-    ` : "") + getAvatarGroups().map(grp => `
+    body = `
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        <button class="btn btn-primary btn-block" data-photo-camera>${icon('plus')} צלם</button>
+        <button class="btn btn-ghost btn-block" data-photo-gallery>${icon('plus')} בחר מהגלריה</button>
+      </div>
+      ${admin ? `
+        <button class="btn btn-ghost btn-block" style="margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:6px;" data-open-avatar-creator>${icon('plus')} יצירת אווטרים חדשים</button>
+      ` : ""}
+    ` + getAvatarGroups().map(grp => `
       <div class="section-title" style="padding:0;margin:10px 0 6px;">${esc(grp.label)}</div>
       <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:6px;">
         ${grp.items.map(it => `
@@ -869,9 +868,9 @@ function renderModal(m){
                 <button class="icon-btn danger" data-remove-avatar-point="${pt.id}">${icon('trash')}</button>
               </div>
               <div data-avatar-nudge-row="${pt.id}" style="display:${pt.name && pt.name.trim() ? 'none':'flex'};gap:6px;justify-content:center;align-items:center;background:rgba(255,255,255,.05);border-radius:10px;padding:6px;">
-                ${nudgeBtn(pt,'left','left')}
-                <div style="display:flex;flex-direction:column;gap:4px;">${nudgeBtn(pt,'up','up')}${nudgeBtn(pt,'down','down')}</div>
                 ${nudgeBtn(pt,'right','right')}
+                <div style="display:flex;flex-direction:column;gap:4px;">${nudgeBtn(pt,'up','up')}${nudgeBtn(pt,'down','down')}</div>
+                ${nudgeBtn(pt,'left','left')}
                 <div style="width:1px;align-self:stretch;background:rgba(255,255,255,.15);margin:0 4px;"></div>
                 ${nudgeBtn(pt,'minus','minus')}
                 ${nudgeBtn(pt,'plus','plus')}
@@ -1713,11 +1712,6 @@ function attachHandlers(){
     if (camBtn) camBtn.onclick = () => openFilePicker(modal.communityId, modal.playerId, true);
     const galBtn = app.querySelector("[data-photo-gallery]");
     if (galBtn) galBtn.onclick = () => openFilePicker(modal.communityId, modal.playerId, false);
-    const avatarBtn = app.querySelector("[data-photo-avatar]");
-    if (avatarBtn) avatarBtn.onclick = () => openModal({type:"avatarPicker", communityId: modal.communityId, playerId: modal.playerId});
-  }
-
-  if (modal && modal.type === "avatarPicker") {
     app.querySelectorAll("[data-pick-avatar]").forEach(el => el.onclick = () => {
       const c = getCommunity(modal.communityId);
       const rp = c && c.roster.find(pl => pl.id === modal.playerId);
@@ -2225,7 +2219,7 @@ function attachHandlers(){
       if (!newAvatars.length) { alert("צריך לסמן לפחות אווטר אחד."); return; }
       state.customAvatars = (state.customAvatars||[]).concat(newAvatars);
       saveState();
-      openModal({type:"avatarPicker", communityId: modal.communityId, playerId: modal.playerId});
+      openModal({type:"photoSource", communityId: modal.communityId, playerId: modal.playerId});
     };
   }
 
