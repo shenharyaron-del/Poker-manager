@@ -1149,10 +1149,6 @@ function renderModal(m){
         <label style="display:block;color:#059669;font-size:11px;margin-bottom:4px;">שם הקבוצה</label>
         <input type="text" id="new-community-name" placeholder="לדוגמה: טקסס בישראל" style="width:100%;" autofocus>
       </div>
-      <div style="margin-bottom:12px;">
-        <label style="display:block;color:#059669;font-size:11px;margin-bottom:4px;">השם שלך (יוצג כיוצר הקבוצה, וישמש לזיהוי הרשאת המחיקה)</label>
-        <input type="text" id="new-community-creator" value="${esc(myIdentity.name || '')}" placeholder="השם שלך" style="width:100%;">
-      </div>
       <button class="btn btn-primary btn-block" data-confirm-new-community>צור קבוצה</button>
     `;
   } else if (m.type === "duplicateCommunity") {
@@ -1163,10 +1159,6 @@ function renderModal(m){
       <div style="margin-bottom:12px;">
         <label style="display:block;color:#059669;font-size:11px;margin-bottom:4px;">שם הקבוצה החדשה</label>
         <input type="text" id="duplicate-community-name" value="${esc(c.name)} - עותק" style="width:100%;" autofocus>
-      </div>
-      <div style="margin-bottom:12px;">
-        <label style="display:block;color:#059669;font-size:11px;margin-bottom:4px;">השם שלך (יוצג כיוצר הקבוצה, וישמש לזיהוי הרשאת המחיקה)</label>
-        <input type="text" id="duplicate-community-creator" value="${esc(myIdentity.name || '')}" placeholder="השם שלך" style="width:100%;">
       </div>
       <button class="btn btn-primary btn-block" data-confirm-duplicate-community>שכפל קבוצה</button>
     `;
@@ -2376,12 +2368,13 @@ function attachHandlers(){
     const confirmBtn = app.querySelector("[data-confirm-new-community]");
     if (confirmBtn) confirmBtn.onclick = async () => {
       const name = document.getElementById("new-community-name").value.trim();
-      const creatorName = document.getElementById("new-community-creator").value.trim();
       if (!name) { alert("צריך להזין שם לקבוצה."); return; }
-      if (!creatorName) { alert("צריך להזין את השם שלך."); return; }
-      myIdentity.name = creatorName;
+      const communityId = uid();
+      const creatorPlayer = {id: uid(), name: myIdentity.name};
+      if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
+      myIdentity.myPlayers[communityId] = creatorPlayer.id;
       saveIdentity();
-      state.communities.push({ id: uid(), name, roster: [], createdBy: myIdentity.id, createdByName: creatorName });
+      state.communities.push({ id: communityId, name, roster: [creatorPlayer], createdBy: myIdentity.id, createdByName: myIdentity.name });
       saveState();
       closeModal();
     };
@@ -2391,15 +2384,11 @@ function attachHandlers(){
     const confirmBtn = app.querySelector("[data-confirm-duplicate-community]");
     if (confirmBtn) confirmBtn.onclick = () => {
       const name = document.getElementById("duplicate-community-name").value.trim();
-      const creatorName = document.getElementById("duplicate-community-creator").value.trim();
       if (!name) { alert("צריך להזין שם לקבוצה."); return; }
-      if (!creatorName) { alert("צריך להזין את השם שלך."); return; }
-      myIdentity.name = creatorName;
-      saveIdentity();
       const src = getCommunity(modal.communityId);
       const roster = (src.roster||[]).map(p => ({...p, id: uid()}));
       const chipValues = (src.chipValues||[]).map(cv => ({...cv, id: uid()}));
-      state.communities.push({ id: uid(), name, roster, chipValues, createdBy: myIdentity.id, createdByName: creatorName });
+      state.communities.push({ id: uid(), name, roster, chipValues, createdBy: myIdentity.id, createdByName: myIdentity.name });
       saveState();
       closeModal();
     };
