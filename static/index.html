@@ -298,14 +298,17 @@ function processSelfieFile(file, callback){
   reader.readAsDataURL(file);
 }
 function openSelfieCapture(communityId, playerId){
+  openModal({type:"photoSource", communityId, playerId});
+}
+function openFilePicker(communityId, playerId, useCamera){
   if (!selfieInput) {
     selfieInput = document.createElement("input");
     selfieInput.type = "file";
     selfieInput.accept = "image/*";
-    selfieInput.capture = "user";
     selfieInput.style.display = "none";
     document.body.appendChild(selfieInput);
   }
+  if (useCamera) selfieInput.capture = "user"; else selfieInput.removeAttribute("capture");
   selfieInput.value = "";
   selfieInput.onchange = (e) => {
     const file = e.target.files[0];
@@ -317,7 +320,15 @@ function openSelfieCapture(communityId, playerId){
     });
   };
   selfieInput.click();
+  closeModal();
 }
+
+// ---------- Built-in avatar gallery (no camera/AI needed) ----------
+const AVATAR_CATEGORIES = [
+  {folder:"legends", label:"מפורסמים", items:["איינשטיין","גולדה מאיר","בן גוריון","משה דיין","הרצל","דניאל נגרהאנו","פיל אייבי","דויל ברנסון","פיל הלמות'","סטו אונגר"]},
+  {folder:"celebs", label:"ידוענים וספורטאים", items:["מסי","קריסטיאנו","אבדיה","לברון","אמבפה","סינדי","בר רפאלי","בלה","נעמי","ג'יג'י"]},
+  {folder:"cartoons", label:"מצוירים", items:["פיראט","חייזר","חנון","צפרדע נסיך","ג'לי סגול","רובוט","חזיר שף","מפלצת בפאניקה","קוסם","קוף"]}
+];
 
 const PROFIT_BUCKETS = [
   {min:-Infinity, max:-200, label:"-200",     loss:true},
@@ -749,6 +760,21 @@ function renderModal(m){
       </div>
       <button class="btn btn-primary btn-block" data-confirm-identity-name>שמור</button>
     `;
+  } else if (m.type === "photoSource") {
+    title = "תמונת פרופיל";
+    body = `
+      <button class="btn btn-primary btn-block" style="margin-bottom:10px;" data-photo-camera>${icon('plus')} צלם</button>
+      <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-photo-gallery>${icon('plus')} בחר מהגלריה</button>
+      <button class="btn btn-ghost btn-block" data-photo-avatar>${icon('plus')} בחר אווטר</button>
+    `;
+  } else if (m.type === "avatarPicker") {
+    title = "בחר אווטר";
+    body = AVATAR_CATEGORIES.map(cat => `
+      <div class="section-title" style="padding:0;margin:10px 0 6px;">${esc(cat.label)}</div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:6px;">
+        ${cat.items.map((name,i) => `<img src="/static/avatars/${cat.folder}/${i+1}.jpg" data-pick-avatar="${cat.folder}/${i+1}" title="${esc(name)}" style="width:100%;aspect-ratio:1;border-radius:50%;cursor:pointer;border:2px solid transparent;object-fit:cover;">`).join("")}
+      </div>
+    `).join("");
   } else if (m.type === "chipPhotoCount") {
     title = m.noPhoto ? "ספירת ציפים ידנית" : "ספירת ציפים מתמונה";
     const c = getCommunity(m.communityId);
@@ -1562,6 +1588,24 @@ function attachHandlers(){
       saveIdentity();
       closeModal();
     };
+  }
+
+  if (modal && modal.type === "photoSource") {
+    const camBtn = app.querySelector("[data-photo-camera]");
+    if (camBtn) camBtn.onclick = () => openFilePicker(modal.communityId, modal.playerId, true);
+    const galBtn = app.querySelector("[data-photo-gallery]");
+    if (galBtn) galBtn.onclick = () => openFilePicker(modal.communityId, modal.playerId, false);
+    const avatarBtn = app.querySelector("[data-photo-avatar]");
+    if (avatarBtn) avatarBtn.onclick = () => openModal({type:"avatarPicker", communityId: modal.communityId, playerId: modal.playerId});
+  }
+
+  if (modal && modal.type === "avatarPicker") {
+    app.querySelectorAll("[data-pick-avatar]").forEach(el => el.onclick = () => {
+      const c = getCommunity(modal.communityId);
+      const rp = c && c.roster.find(pl => pl.id === modal.playerId);
+      if (rp) { rp.photo = "/static/avatars/" + el.dataset.pickAvatar + ".jpg"; saveState(); }
+      closeModal();
+    });
   }
 
   if (modal && modal.type === "roster") {
