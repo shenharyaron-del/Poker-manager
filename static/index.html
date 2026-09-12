@@ -169,22 +169,133 @@ async function callClaudeVisionMulti(dataUrls, promptText){
   if (!response.ok) throw new Error("vision request failed");
   return await response.json();
 }
-// Free-text multi-turn Q&A (used by the "odds" helper) - client keeps the full
-// conversation (including the image, sent once) and resends it each follow-up.
-async function askClaude(messages){
-  const response = await fetch("/api/ask", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages })
-  });
-  const result = await response.json();
-  if (!response.ok) throw new Error(result.error || "ask request failed");
-  return result;
+// ---------- Poker equity calculator (exact deck simulation - no LLM math involved) ----------
+// Claude's only job for this feature is reading the cards off the photo into structured
+// JSON (fast, reliable - the same kind of task the chip-counting feature already does).
+// The actual percentages come from dealing the unknown cards thousands of times here and
+// tallying outcomes - deterministic, instant, and always correct, unlike asking an LLM to
+// reason through combinatorics (which proved slow and unreliable in practice).
+const CARD_RANKS = "23456789TJQKA";
+function parsePokerCard(s){
+  const rank = CARD_RANKS.indexOf(s[0].toUpperCase()) + 2;
+  const suit = s[1].toLowerCase();
+  return {rank, suit};
 }
-function dataUrlToImageBlock(dataUrl){
-  const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(dataUrl);
-  if (!match) return null;
-  return { type: "image", source: { type: "base64", media_type: match[1], data: match[2] } };
+function fullPokerDeck(){
+  const deck = [];
+  for (let r = 2; r <= 14; r++) for (const s of "cdhs") deck.push({rank:r, suit:s});
+  return deck;
+}
+function pokerCardKey(c){ return c.rank + c.suit; }
+function evaluate5(cards){
+  const ranks = cards.map(c=>c.rank).sort((a,b)=>b-a);
+  const suits = cards.map(c=>c.suit);
+  const isFlush = new Set(suits).size === 1;
+  const uniqueRanks = Array.from(new Set(ranks)).sort((a,b)=>b-a);
+  let isStraight = false, straightHigh = null;
+  if (uniqueRanks.length === 5) {
+    if (uniqueRanks[0]-uniqueRanks[4] === 4) { isStraight = true; straightHigh = uniqueRanks[0]; }
+    else if (uniqueRanks.join(",") === "14,5,4,3,2") { isStraight = true; straightHigh = 5; }
+  }
+  const counts = {};
+  ranks.forEach(r => counts[r] = (counts[r]||0)+1);
+  const countItems = Object.entries(counts).map(([r,c])=>[Number(r),c]).sort((a,b)=> b[1]-a[1] || b[0]-a[0]);
+  const pattern = countItems.map(x=>x[1]).join(",");
+  const orderedRanks = countItems.map(x=>x[0]);
+
+  if (isStraight && isFlush) return [8, straightHigh];
+  if (pattern === "4,1") return [7, orderedRanks[0], orderedRanks[1]];
+  if (pattern === "3,2") return [6, orderedRanks[0], orderedRanks[1]];
+  if (isFlush) return [5, ...ranks];
+  if (isStraight) return [4, straightHigh];
+  if (pattern === "3,1,1") return [3, orderedRanks[0], ...orderedRanks.slice(1)];
+  if (pattern === "2,2,1") return [2, orderedRanks[0], orderedRanks[1], orderedRanks[2]];
+  if (pattern === "2,1,1,1") return [1, orderedRanks[0], ...orderedRanks.slice(1)];
+  return [0, ...ranks];
+}
+function compareHandRank(a, b){
+  for (let i=0;i<Math.max(a.length,b.length);i++){
+    const av = a[i]===undefined?-1:a[i], bv = b[i]===undefined?-1:b[i];
+    if (av !== bv) return av - bv;
+  }
+  return 0;
+}
+function kCombinations5(arr){
+  // all 5-card subsets of a 6 or 7 card array
+  const results = [];
+  function helper(start, combo){
+    if (combo.length === 5) { results.push(combo.slice()); return; }
+    for (let i=start;i<arr.length;i++){ combo.push(arr[i]); helper(i+1, combo); combo.pop(); }
+  }
+  helper(0, []);
+  return results;
+}
+function bestHandRank(cards){
+  let best = null;
+  for (const combo of kCombinations5(cards)) {
+    const r = evaluate5(combo);
+    if (best === null || compareHandRank(r, best) > 0) best = r;
+  }
+  return best;
+}
+function simulatePokerOdds(hands, board, iterations){
+  const parsedHands = hands.map(h => h.map(parsePokerCard));
+  const parsedBoard = board.map(parsePokerCard);
+  const usedKeys = new Set([...parsedBoard, ...parsedHands.flat()].map(pokerCardKey));
+  const remaining = fullPokerDeck().filter(c => !usedKeys.has(pokerCardKey(c)));
+  const needed = 5 - parsedBoard.length;
+  const n = parsedHands.length;
+
+  const winCount = new Array(n).fill(0);
+  const tieCount = new Array(n).fill(0);
+  const bothRunsCount = new Array(n).fill(0);
+  const oneRunCount = new Array(n).fill(0);
+  const neitherRunCount = new Array(n).fill(0);
+
+  function sampleCards(deck, k){
+    const arr = deck.slice();
+    for (let i=0;i<k;i++){
+      const j = i + Math.floor(Math.random()*(arr.length-i));
+      [arr[i],arr[j]] = [arr[j],arr[i]];
+    }
+    return arr.slice(0,k);
+  }
+  function resolveRun(boardExtra){
+    const fullBoard = parsedBoard.concat(boardExtra);
+    const ranks = parsedHands.map(h => bestHandRank(h.concat(fullBoard)));
+    let best = ranks[0];
+    for (let i=1;i<n;i++) if (compareHandRank(ranks[i], best) > 0) best = ranks[i];
+    const winners = [];
+    for (let i=0;i<n;i++) if (compareHandRank(ranks[i], best) === 0) winners.push(i);
+    return winners;
+  }
+
+  for (let iter=0; iter<iterations; iter++){
+    const sample = needed > 0 ? sampleCards(remaining, needed*2) : [];
+    const run1Extra = sample.slice(0, needed);
+    const run2Extra = sample.slice(needed, needed*2);
+
+    const winners1 = resolveRun(run1Extra);
+    if (winners1.length === 1) winCount[winners1[0]]++;
+    else winners1.forEach(i => tieCount[i]++);
+
+    const winners2 = resolveRun(run2Extra);
+    const set1 = new Set(winners1), set2 = new Set(winners2);
+    for (let i=0;i<n;i++){
+      const w1 = set1.has(i), w2 = set2.has(i);
+      if (w1 && w2) bothRunsCount[i]++;
+      else if (w1 || w2) oneRunCount[i]++;
+      else neitherRunCount[i]++;
+    }
+  }
+
+  return parsedHands.map((h,i) => ({
+    winPct: winCount[i]/iterations*100,
+    tiePct: tieCount[i]/iterations*100,
+    bothRunsPct: bothRunsCount[i]/iterations*100,
+    oneRunPct: oneRunCount[i]/iterations*100,
+    neitherRunPct: neitherRunCount[i]/iterations*100,
+  }));
 }
 // Resize to Claude's own vision cap before sending, so any pixel coordinates it
 // returns line up exactly with the image we display (no separate resize on their end).
@@ -927,20 +1038,36 @@ function renderModal(m){
         </div>
       `;
     } else {
+      const suitSymbols = {c:'♣',d:'♦',h:'♥',s:'♠'};
+      const formatCard = (cardStr) => {
+        const rank = cardStr[0].toUpperCase();
+        const suit = cardStr[1].toLowerCase();
+        const red = (suit==='d'||suit==='h');
+        return `<span style="color:${red?'#fda4af':'inherit'};">${rank}${suitSymbols[suit]||''}</span>`;
+      };
       body = `
         <img src="${m.imageSrc}" style="width:100%;aspect-ratio:16/9;object-fit:contain;background:rgba(255,255,255,.05);border-radius:12px;margin-bottom:12px;display:block;">
-        <div class="scroll-list" style="margin-bottom:12px;">
-          ${m.thread.map(t => t.role === "question"
-            ? `<p style="font-weight:700;margin:12px 0 4px;white-space:pre-wrap;">${esc(t.text)}</p>`
-            : `<p style="margin:0 0 4px;white-space:pre-wrap;color:var(--muted2);">${esc(t.text)}</p>`
-          ).join("")}
-          ${m.asking ? `<p style="color:var(--muted);">חושב...</p>` : ""}
-          ${m.error ? `<p style="color:#fda4af;">${esc(m.error)}</p>` : ""}
-        </div>
-        <div style="display:flex;gap:8px;">
-          <input type="text" id="odds-followup-input" placeholder="שאלו עוד שאלה..." style="flex:1;" ${m.asking?"disabled":""}>
-          <button class="btn btn-primary" data-ask-odds-followup ${m.asking?"disabled":""}>שלח</button>
-        </div>
+        ${m.reading ? `<p style="color:var(--muted);text-align:center;">קורא קלפים...</p>` : ""}
+        ${m.error ? `<p style="color:#fda4af;text-align:center;">${esc(m.error)}</p>` : ""}
+        ${m.results ? `
+          <div style="font-size:12px;color:var(--muted);margin-bottom:10px;text-align:center;">
+            ${m.board.length ? `בורד: ${m.board.map(formatCard).join(" ")}` : "אין קלפי קהילה (פרה-פלופ)"}
+          </div>
+          <div class="scroll-list">
+            ${m.results.map((r,i) => `
+              <div style="background:rgba(255,255,255,.05);border-radius:10px;padding:10px 12px;margin-bottom:8px;">
+                <div style="font-weight:700;margin-bottom:6px;font-size:16px;">${m.hands[i].map(formatCard).join(" ")}</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px 10px;font-size:13px;color:var(--muted2);">
+                  <div>ניצחון: <b>${r.winPct.toFixed(1)}%</b></div>
+                  <div>תיקו: <b>${r.tiePct.toFixed(1)}%</b></div>
+                  <div>ריצה כפולה - שתי הריצות: <b>${r.bothRunsPct.toFixed(1)}%</b></div>
+                  <div>ריצה כפולה - ריצה אחת: <b>${r.oneRunPct.toFixed(1)}%</b></div>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        ` : ""}
+        <button class="btn btn-ghost btn-block" style="margin-top:8px;" data-retake-odds-photo>${icon('plus')} תמונה אחרת</button>
       `;
     }
   } else if (m.type === "chipPhotoCount") {
@@ -1624,7 +1751,7 @@ function attachHandlers(){
   if (toggleEmptyBtn) toggleEmptyBtn.onclick = () => { hideEmptySeats = !hideEmptySeats; render(); };
 
   const openOddsBtn = app.querySelector("[data-open-poker-odds]");
-  if (openOddsBtn) openOddsBtn.onclick = () => openModal({type:"pokerOdds", imageSrc: null, thread: [], messages: [], asking: false, error: null});
+  if (openOddsBtn) openOddsBtn.onclick = () => openModal({type:"pokerOdds", imageSrc: null, reading: false, error: null, results: null, hands: null, board: null});
 
   app.querySelectorAll("[data-seat]").forEach(el => {
     const dragHandle = el.querySelector(".seat-circle") || el;
@@ -1930,25 +2057,21 @@ function attachHandlers(){
   }
 
   if (modal && modal.type === "pokerOdds") {
-    const ODDS_QUESTION = "חשב עבור כל יד שבתמונה:\n1. מה ההסתברות לניצחון ולתיקו (Split)\n2. בריצה כפולה, מה ההסתברות לכל יד לנצח בשתי הריצות\n3. בריצה כפולה, מה ההסתברות לנצח פעם ולהפסיד פעם\n\nאל תתאר מה אתה רואה בתמונה ואל תסביר את אופן החישוב - החזר רק את האחוזים הסופיים לכל יד, בקצרה.";
-    const askOdds = async (questionText, imageBlock, imageSrc) => {
-      const userContent = imageBlock ? [imageBlock, {type:"text", text: questionText}] : questionText;
-      const newMessages = modal.messages.concat([{role:"user", content: userContent}]);
-      const newThread = modal.thread.concat([{role:"question", text: questionText}]);
-      const partial = {messages: newMessages, thread: newThread, asking: true, error: null};
-      if (imageSrc) partial.imageSrc = imageSrc;
-      updateModal(partial);
+    const CARD_READ_PROMPT = "בתמונה יש קלפי פוקר. למעלה יש קלפי יד של שחקנים - 2 קלפים לכל שחקן, יכולים להיות 2 שחקנים או יותר. למטה (אם יש) יש קלפי קהילה משותפים (פלופ/טרן) - 3 או 4 קלפים, ששייכים לכולם ולא לשחקן ספציפי. זהה את כל הקלפים בבירור והחזירו רק JSON בפורמט הבא, בלי טקסט נוסף ובלי markdown: {\"hands\": [[\"Kd\",\"Ks\"], [\"8c\",\"Th\"]], \"board\": [\"9h\",\"7s\",\"8d\"]} - כל קלף מיוצג כדרגה (2-9,T,J,Q,K,A) ואות צבע קטנה (c=תלתן, d=יהלום, h=לב, s=עלה), למשל Kd=מלך יהלום, Th=עשר לב.";
+    const processOddsPhoto = async (resizedDataUrl) => {
+      updateModal({imageSrc: resizedDataUrl, reading:true, error:null, results:null, hands:null, board:null});
       try {
-        const result = await askClaude(newMessages);
-        const answerText = result.text || "";
-        updateModal({
-          messages: newMessages.concat([{role:"assistant", content: answerText}]),
-          thread: newThread.concat([{role:"answer", text: answerText}]),
-          asking: false
-        });
+        const parsed = await callClaudeVisionMulti([resizedDataUrl], CARD_READ_PROMPT);
+        const hands = parsed && parsed.hands;
+        const board = (parsed && parsed.board) || [];
+        if (!Array.isArray(hands) || hands.length < 2 || !hands.every(h => Array.isArray(h) && h.length === 2) || ![0,3,4,5].includes(board.length)) {
+          throw new Error("unclear card recognition");
+        }
+        const results = simulatePokerOdds(hands, board, 12000);
+        updateModal({reading:false, results, hands, board});
       } catch(e) {
         console.error(e);
-        updateModal({asking:false, error:"השאלה נכשלה - נסו שוב. (" + (e.message || e) + ")"});
+        updateModal({reading:false, error:"לא הצלחתי לזהות את הקלפים בבירור - נסו תמונה ברורה וישרה יותר."});
       }
     };
     const oddsCameraInput = app.querySelector("#odds-camera-input");
@@ -1957,20 +2080,12 @@ function attachHandlers(){
       if (!file) return;
       const reader = new FileReader();
       reader.onload = () => {
-        resizeImageDataUrl(reader.result, 1568, (resized) => {
-          askOdds(ODDS_QUESTION, dataUrlToImageBlock(resized), resized);
-        });
+        resizeImageDataUrl(reader.result, 1568, (resized) => processOddsPhoto(resized));
       };
       reader.readAsDataURL(file);
     };
-    const oddsFollowupBtn = app.querySelector("[data-ask-odds-followup]");
-    if (oddsFollowupBtn) oddsFollowupBtn.onclick = () => {
-      const input = document.getElementById("odds-followup-input");
-      const text = input.value.trim();
-      if (!text) return;
-      input.value = "";
-      askOdds(text, null, null);
-    };
+    const retakeOddsBtn = app.querySelector("[data-retake-odds-photo]");
+    if (retakeOddsBtn) retakeOddsBtn.onclick = () => updateModal({imageSrc:null, reading:false, error:null, results:null, hands:null, board:null});
   }
 
   if (modal && modal.type === "chipPhotoCount") {
