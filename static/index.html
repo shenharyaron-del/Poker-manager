@@ -289,7 +289,12 @@ function autoSeatSelf(gameId){
 // linked to a roster player in this community, find one by matching name (so the same
 // person re-clicking a link doesn't get duplicated) or create a new roster entry for
 // them, then seat them - up to the table's 10-seat capacity.
-function autoJoinViaInvite(gameId){
+async function autoJoinViaInvite(gameId){
+  // Re-fetch the latest shared state right before mutating and saving, to shrink the
+  // window for a lost-update race against a concurrent save from another device (e.g.
+  // the community admin's own phone saving a snapshot from before this join happened,
+  // silently wiping the new roster entry/seat back out on the shared blob).
+  try { state = await loadState(); } catch(e) { /* fall back to what's already in memory */ }
   const g = getGame(gameId);
   if (!g || g.closed) return;
   const c = getCommunity(g.communityId);
@@ -305,7 +310,8 @@ function autoJoinViaInvite(gameId){
     saveIdentity();
   }
   seatPlayerIfRoom(g, p.id, p);
-  saveState();
+  await saveState();
+  render();
 }
 function openModal(m){ modal = m; render(); }
 function closeModal(){ modal = null; render(); }
@@ -1366,7 +1372,7 @@ function renderModal(m){
       <button class="btn btn-primary btn-block" style="margin-bottom:10px;" data-menu-buyins>${icon('plus')} קנייה</button>
       <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-menu-chips>${icon('out')} סיים ערב</button>
       <button class="btn btn-block" style="background:#be123c;color:#fff;margin-bottom:10px;" data-menu-remove>${icon('trash')} הסר מהשולחן</button>
-      <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-menu-change-avatar>${icon('pencil')} שינוי אבאטר</button>
+      <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-menu-change-avatar>${icon('pencil')} שינוי אווטר</button>
     `;
   } else if (m.type === "seatBuyins") {
     const g = getGame(m.gameId);
@@ -1753,14 +1759,14 @@ function attachHandlers(){
 
   if (modal && modal.type === "identityName") {
     const confirmBtn = app.querySelector("[data-confirm-identity-name]");
-    if (confirmBtn) confirmBtn.onclick = () => {
+    if (confirmBtn) confirmBtn.onclick = async () => {
       const name = document.getElementById("identity-name-input").value.trim();
       if (!name) { alert("צריך להזין שם."); return; }
       myIdentity.name = name;
       saveIdentity();
       // A first-time visitor via an invite link has no name yet when autoJoinViaInvite
       // first runs in init(), so it bails out - retry now that we have one.
-      if (nav.screen === "table" && nav.gameId) autoJoinViaInvite(nav.gameId);
+      if (nav.screen === "table" && nav.gameId) await autoJoinViaInvite(nav.gameId);
       closeModal();
     };
   }
@@ -2723,7 +2729,7 @@ window.addEventListener("popstate", () => {
     const invitedGame = getGame(inviteGameId);
     if (invitedGame) {
       nav = { screen: "table", gameId: invitedGame.id, communityId: invitedGame.communityId };
-      autoJoinViaInvite(invitedGame.id);
+      await autoJoinViaInvite(invitedGame.id);
     }
   }
   if (!myIdentity.name) modal = {type:"identityName", forced:true};
