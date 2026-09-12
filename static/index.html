@@ -255,6 +255,23 @@ function go(screen, extra){
   if (screen === "table" && nav.gameId) autoSeatSelf(nav.gameId);
   render();
 }
+// Seat a player into the first open slot (main 9, then the 10th overflow slot),
+// growing g.seats to hold it if needed. Shared by autoSeatSelf and autoJoinViaInvite.
+function seatPlayerIfRoom(g, playerId, p){
+  if (!g.seats) g.seats = new Array(9).fill(null);
+  if (g.seats.includes(playerId)) return true;
+  let emptyIdx = g.seats.findIndex((s,i) => i < 9 && !s);
+  if (emptyIdx === -1) {
+    while (g.seats.length < 10) g.seats.push(null);
+    if (g.seats[9] == null) emptyIdx = 9;
+  }
+  if (emptyIdx === -1) return false; // table full (10/10)
+  g.seats[emptyIdx] = playerId;
+  if (!g.players.some(gp => gp.id === playerId)) g.players.push({id:p.id, name:p.name});
+  if (!g.liveChips) g.liveChips = {};
+  if (g.liveChips[playerId] === undefined) g.liveChips[playerId] = 0;
+  return true;
+}
 // If this device is remembered as a specific roster player in this game's community
 // (see data-pick-player below), and that player isn't seated yet in this game, seat
 // them automatically - so returning players don't have to pick their name every night.
@@ -266,14 +283,28 @@ function autoSeatSelf(gameId){
   const c = getCommunity(g.communityId);
   const p = c && c.roster.find(pl => pl.id === playerId);
   if (!p) return;
-  if (!g.seats) g.seats = new Array(9).fill(null);
-  if (g.seats.includes(playerId)) return;
-  const emptyIdx = g.seats.findIndex((s,i) => i < 9 && !s);
-  if (emptyIdx === -1) return;
-  g.seats[emptyIdx] = playerId;
-  if (!g.players.some(gp => gp.id === playerId)) g.players.push({id:p.id, name:p.name});
-  if (!g.liveChips) g.liveChips = {};
-  if (g.liveChips[playerId] === undefined) g.liveChips[playerId] = 0;
+  if (seatPlayerIfRoom(g, playerId, p)) saveState();
+}
+// For someone opening a game via a shared invite link: if this device isn't already
+// linked to a roster player in this community, find one by matching name (so the same
+// person re-clicking a link doesn't get duplicated) or create a new roster entry for
+// them, then seat them - up to the table's 10-seat capacity.
+function autoJoinViaInvite(gameId){
+  const g = getGame(gameId);
+  if (!g || g.closed) return;
+  const c = getCommunity(g.communityId);
+  if (!c) return;
+  let playerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+  let p = playerId ? c.roster.find(pl => pl.id === playerId) : null;
+  if (!p) {
+    if (!myIdentity.name) return; // no name yet to identify/create with (forced onboarding will ask, then retry)
+    p = c.roster.find(pl => pl.name === myIdentity.name);
+    if (!p) { p = {id: uid(), name: myIdentity.name}; c.roster.push(p); }
+    if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
+    myIdentity.myPlayers[g.communityId] = p.id;
+    saveIdentity();
+  }
+  seatPlayerIfRoom(g, p.id, p);
   saveState();
 }
 function openModal(m){ modal = m; render(); }
@@ -1755,6 +1786,9 @@ function attachHandlers(){
       if (!name) { alert("צריך להזין שם."); return; }
       myIdentity.name = name;
       saveIdentity();
+      // A first-time visitor via an invite link has no name yet when autoJoinViaInvite
+      // first runs in init(), so it bails out - retry now that we have one.
+      if (nav.screen === "table" && nav.gameId) autoJoinViaInvite(nav.gameId);
       closeModal();
     };
   }
@@ -2715,7 +2749,7 @@ window.addEventListener("popstate", () => {
     const invitedGame = getGame(inviteGameId);
     if (invitedGame) {
       nav = { screen: "table", gameId: invitedGame.id, communityId: invitedGame.communityId };
-      autoSeatSelf(invitedGame.id);
+      autoJoinViaInvite(invitedGame.id);
     }
   }
   if (!myIdentity.name) modal = {type:"identityName", forced:true};
