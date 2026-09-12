@@ -358,16 +358,17 @@ const AVATAR_CATEGORIES = [
 // Admin-created avatars (state.customAvatars: {id, name, category, image}) merge into these
 // built-in groups by matching category label, or form new groups of their own.
 function getAvatarGroups(){
+  const hidden = new Set(state.hiddenAvatarKeys||[]);
   const groups = AVATAR_CATEGORIES.map(cat => ({
     label: cat.label,
-    items: cat.items.map((name,i) => ({name, pickKey: "builtin:" + cat.folder + "/" + (i+1), src: `/static/avatars/${cat.folder}/${i+1}.jpg`}))
+    items: cat.items.map((name,i) => ({name, pickKey: "builtin:" + cat.folder + "/" + (i+1), src: `/static/avatars/${cat.folder}/${i+1}.jpg`})).filter(it => !hidden.has(it.pickKey))
   }));
   (state.customAvatars||[]).forEach(av => {
     let grp = groups.find(g => g.label === av.category);
     if (!grp) { grp = {label: av.category, items: []}; groups.push(grp); }
     grp.items.push({name: av.name, pickKey: "custom:" + av.id, src: av.image});
   });
-  return groups;
+  return groups.filter(g => g.items.length);
 }
 const SUPER_ADMIN_NAME = "ירון שנהר";
 function isSuperAdmin(){ return myIdentity.name === SUPER_ADMIN_NAME; }
@@ -626,6 +627,9 @@ const ICONS = {
   copy: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>',
   up: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg>',
   down: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
+  left: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
+  right: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>',
+  minus: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14"/></svg>',
   eye: '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
   eyeOff: '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0112 20c-7 0-10-8-10-8a18.5 18.5 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 10 8 10 8a18.5 18.5 0 01-2.16 3.19M14.12 14.12a3 3 0 11-4.24-4.24M1 1l22 22"/></svg>',
   share: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>',
@@ -811,26 +815,26 @@ function renderModal(m){
     `;
   } else if (m.type === "avatarPicker") {
     title = "בחר אווטר";
-    body = (isSuperAdmin() ? `
+    const admin = isSuperAdmin();
+    body = (admin ? `
       <button class="btn btn-ghost btn-block" style="margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:6px;" data-open-avatar-creator>${icon('plus')} יצירת אווטרים חדשים</button>
     ` : "") + getAvatarGroups().map(grp => `
       <div class="section-title" style="padding:0;margin:10px 0 6px;">${esc(grp.label)}</div>
       <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:6px;">
-        ${grp.items.map(it => `<img src="${it.src}" data-pick-avatar="${it.pickKey}" title="${esc(it.name)}" style="width:100%;aspect-ratio:1;border-radius:50%;cursor:pointer;border:2px solid transparent;object-fit:cover;">`).join("")}
+        ${grp.items.map(it => `
+          <div style="position:relative;">
+            <img src="${it.src}" data-pick-avatar="${it.pickKey}" title="${esc(it.name)}" style="width:100%;aspect-ratio:1;border-radius:50%;cursor:pointer;border:2px solid transparent;object-fit:cover;display:block;">
+            ${admin ? `<button class="icon-btn danger" data-delete-avatar="${it.pickKey}" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;padding:0;display:flex;align-items:center;justify-content:center;border-radius:50%;">${icon('x')}</button>` : ""}
+          </div>
+        `).join("")}
       </div>
     `).join("");
   } else if (m.type === "avatarCreator") {
     title = "יצירת אווטרים";
     const pickButtons = `
-      <div style="display:flex;gap:8px;margin-bottom:10px;">
-        <div style="position:relative;flex:1;">
-          <button type="button" class="btn btn-ghost btn-block" style="pointer-events:none;">${icon('plus')} צלם</button>
-          <input type="file" accept="image/*" capture="environment" id="avatar-camera-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
-        </div>
-        <div style="position:relative;flex:1;">
-          <button type="button" class="btn btn-primary btn-block" style="pointer-events:none;">${icon('plus')} העלה תמונה</button>
-          <input type="file" accept="image/*" id="avatar-upload-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
-        </div>
+      <div style="position:relative;margin-bottom:10px;">
+        <button type="button" class="btn btn-primary btn-block" style="pointer-events:none;">${icon('plus')} העלה תמונה</button>
+        <input type="file" accept="image/*" id="avatar-upload-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
       </div>
     `;
     if (!m.imageSrc) {
@@ -851,16 +855,27 @@ function renderModal(m){
           </div>`;
       }).join("") : "";
       const existingCategories = Array.from(new Set(getAvatarGroups().map(g => g.label)));
+      const nudgeBtn = (pt, dir, icn) => `<button type="button" class="icon-btn" data-avatar-nudge="${pt.id}:${dir}" style="width:28px;height:28px;padding:0;display:flex;align-items:center;justify-content:center;">${icon(icn)}</button>`;
       const editableList = m.points.length ? `
         <div class="scroll-list" style="margin:12px 0;">
           ${m.points.map(pt => `
-            <div class="roster-row">
-              ${pt.image
-                ? `<img data-avatar-point-image="${pt.id}" src="${pt.image}" style="width:40px;height:40px;object-fit:cover;border-radius:50%;flex-shrink:0;border:1px solid rgba(255,255,255,.2);">`
-                : `<div data-avatar-point-image="${pt.id}" style="width:40px;height:40px;border-radius:50%;flex-shrink:0;border:1px dashed var(--muted);"></div>`}
-              <input type="text" placeholder="שם" value="${esc(pt.name||'')}" data-avatar-name-input="${pt.id}" style="flex:1;">
-              <input type="text" placeholder="קטגוריה" value="${esc(pt.category||'')}" data-avatar-category-input="${pt.id}" list="avatar-category-options" style="flex:1;">
-              <button class="icon-btn danger" data-remove-avatar-point="${pt.id}">${icon('trash')}</button>
+            <div class="roster-row" style="flex-direction:column;align-items:stretch;gap:8px;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                ${pt.image
+                  ? `<img data-avatar-point-image="${pt.id}" src="${pt.image}" style="width:40px;height:40px;object-fit:cover;border-radius:50%;flex-shrink:0;border:1px solid rgba(255,255,255,.2);">`
+                  : `<div data-avatar-point-image="${pt.id}" style="width:40px;height:40px;border-radius:50%;flex-shrink:0;border:1px dashed var(--muted);"></div>`}
+                <input type="text" placeholder="שם" value="${esc(pt.name||'')}" data-avatar-name-input="${pt.id}" style="flex:1;">
+                <input type="text" placeholder="קטגוריה" value="${esc(pt.category||'')}" data-avatar-category-input="${pt.id}" list="avatar-category-options" style="flex:1;">
+                <button class="icon-btn danger" data-remove-avatar-point="${pt.id}">${icon('trash')}</button>
+              </div>
+              <div data-avatar-nudge-row="${pt.id}" style="display:${pt.name && pt.name.trim() ? 'none':'flex'};gap:6px;justify-content:center;align-items:center;background:rgba(255,255,255,.05);border-radius:10px;padding:6px;">
+                ${nudgeBtn(pt,'left','left')}
+                <div style="display:flex;flex-direction:column;gap:4px;">${nudgeBtn(pt,'up','up')}${nudgeBtn(pt,'down','down')}</div>
+                ${nudgeBtn(pt,'right','right')}
+                <div style="width:1px;align-self:stretch;background:rgba(255,255,255,.15);margin:0 4px;"></div>
+                ${nudgeBtn(pt,'minus','minus')}
+                ${nudgeBtn(pt,'plus','plus')}
+              </div>
             </div>
           `).join("")}
         </div>
@@ -1476,7 +1491,7 @@ function renderModal(m){
 
   const dismissable = !(m.type === "identityName" && m.forced);
   return `
-    <div class="overlay" ${dismissable ? "data-close-overlay" : ""}>
+    <div class="overlay">
       <div class="modal" onclick="event.stopPropagation()">
         <div class="modal-head"><h3 class="serif">${title}</h3>${dismissable ? `<button class="close-x" data-close-modal>${icon('x')}</button>` : ""}</div>
         ${body}
@@ -1670,12 +1685,13 @@ function attachHandlers(){
   });
 
   // modal-level handlers
+  // Clicking the dark overlay behind a modal does nothing on purpose - it was too
+  // easy to accidentally dismiss a modal (and lose in-progress input) with a stray
+  // tap near its edge. Only the explicit X button closes/backs out of a modal.
   const closeModalOrBack = () => {
     if (modal && modal.type === "chipPhotoCount") openModal({type:"seatChips", gameId: modal.gameId, playerId: modal.playerId});
     else closeModal();
   };
-  const overlay = app.querySelector("[data-close-overlay]");
-  if (overlay) overlay.onclick = closeModalOrBack;
   const closeBtn = app.querySelector("[data-close-modal]");
   if (closeBtn) closeBtn.onclick = closeModalOrBack;
   const closeFunBtn = app.querySelector("[data-close-fun-feedback]");
@@ -1717,6 +1733,20 @@ function attachHandlers(){
     });
     const openCreatorBtn = app.querySelector("[data-open-avatar-creator]");
     if (openCreatorBtn) openCreatorBtn.onclick = () => openModal({type:"avatarCreator", communityId: modal.communityId, playerId: modal.playerId, imageSrc: null, points: []});
+    app.querySelectorAll("[data-delete-avatar]").forEach(el => el.onclick = (e) => {
+      e.stopPropagation();
+      const key = el.dataset.deleteAvatar;
+      if (!confirm("למחוק את האווטר?")) return;
+      if (key.startsWith("custom:")) {
+        const id = key.slice(7);
+        state.customAvatars = (state.customAvatars||[]).filter(a => a.id !== id);
+      } else {
+        if (!state.hiddenAvatarKeys) state.hiddenAvatarKeys = [];
+        if (!state.hiddenAvatarKeys.includes(key)) state.hiddenAvatarKeys.push(key);
+      }
+      saveState();
+      render();
+    });
   }
 
   if (modal && modal.type === "roster") {
@@ -2058,8 +2088,6 @@ function attachHandlers(){
       };
       reader.readAsDataURL(file);
     };
-    const avatarCameraInput = app.querySelector("#avatar-camera-input");
-    if (avatarCameraInput) avatarCameraInput.onchange = handleAvatarFile;
     const avatarUploadInput = app.querySelector("#avatar-upload-input");
     if (avatarUploadInput) avatarUploadInput.onchange = handleAvatarFile;
     const avatarPhotoEl = app.querySelector("[data-avatar-photo]");
@@ -2157,6 +2185,27 @@ function attachHandlers(){
         if (catInp) pt.category = catInp.value;
       });
     };
+    app.querySelectorAll("[data-avatar-name-input]").forEach(el => el.oninput = () => {
+      const pt = modal.points.find(p => p.id === el.dataset.avatarNameInput);
+      if (pt) pt.name = el.value;
+      const nudgeRow = document.querySelector(`[data-avatar-nudge-row="${el.dataset.avatarNameInput}"]`);
+      if (nudgeRow) nudgeRow.style.display = el.value.trim() ? "none" : "flex";
+    });
+    app.querySelectorAll("[data-avatar-nudge]").forEach(el => el.onclick = () => {
+      const [ptId, dir] = el.dataset.avatarNudge.split(":");
+      const pt = modal.points.find(p => p.id === ptId);
+      if (!pt || !avatarPhotoEl) return;
+      const canvas = buildAvatarSourceCanvas();
+      const step = Math.max(3, Math.round((pt.size||20) * 0.06));
+      if (dir === "left") pt.x = Math.max(0, pt.x - step);
+      else if (dir === "right") pt.x = Math.min(avatarPhotoEl.naturalWidth, pt.x + step);
+      else if (dir === "up") pt.y = Math.max(0, pt.y - step);
+      else if (dir === "down") pt.y = Math.min(avatarPhotoEl.naturalHeight, pt.y + step);
+      else if (dir === "plus") pt.size = pt.size + step;
+      else if (dir === "minus") pt.size = Math.max(8, pt.size - step);
+      pt.image = cropAvatarImage(canvas, pt.x, pt.y, pt.size);
+      updateModal({});
+    });
     app.querySelectorAll("[data-remove-avatar-point]").forEach(el => el.onclick = () => {
       syncAvatarPointFields();
       updateModal({points: modal.points.filter(pt => pt.id !== el.dataset.removeAvatarPoint)});
@@ -2529,6 +2578,16 @@ function attachHandlers(){
     };
   }
 }
+
+// ---------- Guard against accidentally leaving the app via the browser/device back button ----------
+history.pushState({pokerManagerGuard: true}, "");
+window.addEventListener("popstate", () => {
+  if (confirm("לצאת מהאפליקציה?")) {
+    history.back();
+  } else {
+    history.pushState({pokerManagerGuard: true}, "");
+  }
+});
 
 (async function init(){
   document.getElementById("app").innerHTML =
