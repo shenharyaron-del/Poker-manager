@@ -857,6 +857,9 @@ function renderModal(m){
       </div>
       <button class="btn btn-primary btn-block" data-confirm-identity-name>שמור</button>
     `;
+  } else if (m.type === "inviteGone") {
+    title = "הקישור לא בתוקף";
+    body = `<p style="color:var(--muted);font-size:13px;">ערב המשחק שאליו הוזמנתם כבר לא קיים - כנראה שהמארגן מחק אותו. אפשר לבקש קישור עדכני.</p>`;
   } else if (m.type === "photoSource") {
     title = "תמונת פרופיל";
     const admin = isSuperAdmin();
@@ -2729,10 +2732,22 @@ window.addEventListener("popstate", () => {
   if (hadLegacy) saveState();
   const inviteGameId = new URLSearchParams(location.search).get("game");
   if (inviteGameId) {
-    const invitedGame = getGame(inviteGameId);
+    let invitedGame = getGame(inviteGameId);
+    if (!invitedGame) {
+      // Our initial load may have caught a stale shared-state snapshot (a race with
+      // someone else's concurrent save) and missed a game that genuinely exists -
+      // try once more with a fresh fetch before giving up and falling back to home.
+      state = await loadState();
+      invitedGame = getGame(inviteGameId);
+    }
     if (invitedGame) {
       nav = { screen: "table", gameId: invitedGame.id, communityId: invitedGame.communityId };
       await autoJoinViaInvite(invitedGame.id);
+    } else {
+      // The linked game genuinely doesn't exist (most likely its host deleted that
+      // evening) - say so instead of silently landing on the home screen with no
+      // explanation for why the link didn't work.
+      modal = {type:"inviteGone"};
     }
   }
   if (!myIdentity.name) modal = {type:"identityName", forced:true};
