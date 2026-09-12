@@ -821,8 +821,9 @@ function renderModal(m){
       <div class="section-title" style="padding:0;margin:10px 0 6px;">${esc(grp.label)}</div>
       <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:6px;">
         ${grp.items.map(it => `
-          <div style="position:relative;">
+          <div style="position:relative;text-align:center;">
             <img src="${it.src}" data-pick-avatar="${it.pickKey}" title="${esc(it.name)}" style="width:100%;aspect-ratio:1;border-radius:50%;cursor:pointer;border:2px solid transparent;object-fit:cover;display:block;">
+            <div style="font-size:10px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(it.name)}</div>
             ${admin ? `<button class="icon-btn danger" data-delete-avatar="${it.pickKey}" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;padding:0;display:flex;align-items:center;justify-content:center;border-radius:50%;">${icon('x')}</button>` : ""}
           </div>
         `).join("")}
