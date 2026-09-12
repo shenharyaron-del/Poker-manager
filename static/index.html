@@ -169,6 +169,23 @@ async function callClaudeVisionMulti(dataUrls, promptText){
   if (!response.ok) throw new Error("vision request failed");
   return await response.json();
 }
+// Free-text multi-turn Q&A (used by the "odds" helper) - client keeps the full
+// conversation (including the image, sent once) and resends it each follow-up.
+async function askClaude(messages){
+  const response = await fetch("/api/ask", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages })
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || "ask request failed");
+  return result;
+}
+function dataUrlToImageBlock(dataUrl){
+  const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(dataUrl);
+  if (!match) return null;
+  return { type: "image", source: { type: "base64", media_type: match[1], data: match[2] } };
+}
 // Resize to Claude's own vision cap before sending, so any pixel coordinates it
 // returns line up exactly with the image we display (no separate resize on their end).
 function resizeImageDataUrl(dataUrl, maxDim, callback){
@@ -580,6 +597,7 @@ const ICONS = {
   eyeOff: '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0112 20c-7 0-10-8-10-8a18.5 18.5 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 10 8 10 8a18.5 18.5 0 01-2.16 3.19M14.12 14.12a3 3 0 11-4.24-4.24M1 1l22 22"/></svg>',
   share: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>',
   gear: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>',
+  percent: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>',
 };
 function icon(name){ return ICONS[name] || ""; }
 
@@ -727,6 +745,7 @@ function renderTable(gameId){
           <button class="icon-btn" data-toggle-empty-seats title="${hideEmptySeats?'הצג מקומות פנויים':'הסתר מקומות פנויים'}" style="margin-top:6px;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.05);color:var(--muted);opacity:.6;display:inline-flex;align-items:center;justify-content:center;">${icon(hideEmptySeats?'eyeOff':'eye')}</button>
         ` : ""}
       </div>
+      <button class="icon-btn gold" data-open-poker-odds title="מה הסיכויים שלי" style="flex-shrink:0;width:36px;height:36px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;">${icon('percent')}</button>
     </div>
     <div class="poker-table-wrap">
       <div class="poker-table-felt"></div>
@@ -763,7 +782,6 @@ function renderModal(m){
     body = `<p style="color:var(--muted);font-size:13px;">ערב המשחק שאליו הוזמנתם כבר לא קיים - כנראה שהמארגן מחק אותו. אפשר לבקש קישור עדכני.</p>`;
   } else if (m.type === "photoSource") {
     title = "תמונת פרופיל";
-    const admin = isSuperAdmin();
     body = `
       <div style="display:flex;gap:8px;margin-bottom:14px;">
         <button class="btn btn-primary btn-block" data-photo-camera>${icon('plus')} צלם</button>
@@ -776,7 +794,6 @@ function renderModal(m){
           <div style="position:relative;text-align:center;">
             <img src="${it.src}" data-pick-avatar="${it.pickKey}" title="${esc(it.name)}" style="width:100%;aspect-ratio:1;border-radius:50%;cursor:pointer;border:2px solid transparent;object-fit:cover;display:block;">
             <div style="font-size:10px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(it.name)}</div>
-            ${admin ? `<button class="icon-btn danger" data-delete-avatar="${it.pickKey}" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;padding:0;display:flex;align-items:center;justify-content:center;border-radius:50%;">${icon('x')}</button>` : ""}
           </div>
         `).join("")}
       </div>
@@ -813,7 +830,10 @@ function renderModal(m){
             <div style="display:flex;flex-wrap:wrap;gap:10px;">
               ${grp.items.map(it => `
                 <div style="width:64px;text-align:center;">
-                  <img src="${it.src}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;display:block;margin-bottom:4px;">
+                  <div style="position:relative;width:64px;height:64px;margin-bottom:4px;">
+                    <img src="${it.src}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;display:block;">
+                    <button class="icon-btn danger" data-delete-avatar="${it.pickKey}" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;padding:0;display:flex;align-items:center;justify-content:center;border-radius:50%;">${icon('x')}</button>
+                  </div>
                   <input type="text" value="${esc(it.name)}" data-avatar-item-name="${it.pickKey}" style="width:100%;font-size:10px;text-align:center;padding:3px 2px;">
                 </div>
               `).join("")}
@@ -884,6 +904,33 @@ function renderModal(m){
         ${editableList}
         <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-retake-avatar-photo>${icon('plus')} תמונה אחרת</button>
         <button class="btn btn-primary btn-block" data-save-avatars ${m.points.length===0?"disabled":""}>שמור אווטרים</button>
+      `;
+    }
+  } else if (m.type === "pokerOdds") {
+    title = "מה הסיכויים שלי";
+    if (!m.imageSrc) {
+      body = `
+        <p style="color:var(--muted);font-size:13px;">צלמו תמונה של מצב האול-אין על השולחן, ונחשב לכם את הסיכויים של כל יד.</p>
+        <div style="position:relative;">
+          <button type="button" class="btn btn-primary btn-block" style="pointer-events:none;">${icon('plus')} צלם תמונה</button>
+          <input type="file" accept="image/*" capture="environment" id="odds-camera-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
+        </div>
+      `;
+    } else {
+      body = `
+        <img src="${m.imageSrc}" style="width:100%;border-radius:12px;margin-bottom:12px;display:block;">
+        <div class="scroll-list" style="margin-bottom:12px;">
+          ${m.thread.map(t => t.role === "question"
+            ? `<p style="font-weight:700;margin:12px 0 4px;">${esc(t.text)}</p>`
+            : `<p style="margin:0 0 4px;white-space:pre-wrap;">${esc(t.text)}</p>`
+          ).join("")}
+          ${m.asking ? `<p style="color:var(--muted);">חושב...</p>` : ""}
+          ${m.error ? `<p style="color:#fda4af;">${esc(m.error)}</p>` : ""}
+        </div>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="odds-followup-input" placeholder="שאלו עוד שאלה..." style="flex:1;" ${m.asking?"disabled":""}>
+          <button class="btn btn-primary" data-ask-odds-followup ${m.asking?"disabled":""}>שלח</button>
+        </div>
       `;
     }
   } else if (m.type === "chipPhotoCount") {
@@ -1566,6 +1613,9 @@ function attachHandlers(){
   const toggleEmptyBtn = app.querySelector("[data-toggle-empty-seats]");
   if (toggleEmptyBtn) toggleEmptyBtn.onclick = () => { hideEmptySeats = !hideEmptySeats; render(); };
 
+  const openOddsBtn = app.querySelector("[data-open-poker-odds]");
+  if (openOddsBtn) openOddsBtn.onclick = () => openModal({type:"pokerOdds", imageSrc: null, thread: [], messages: [], asking: false, error: null});
+
   app.querySelectorAll("[data-seat]").forEach(el => {
     const dragHandle = el.querySelector(".seat-circle") || el;
     let drag = null;
@@ -1694,20 +1744,6 @@ function attachHandlers(){
       if (rp && photo) { rp.photo = photo; saveState(); }
       closeModal();
     });
-    app.querySelectorAll("[data-delete-avatar]").forEach(el => el.onclick = (e) => {
-      e.stopPropagation();
-      const key = el.dataset.deleteAvatar;
-      if (!confirm("למחוק את האווטר?")) return;
-      if (key.startsWith("custom:")) {
-        const id = key.slice(7);
-        state.customAvatars = (state.customAvatars||[]).filter(a => a.id !== id);
-      } else {
-        if (!state.hiddenAvatarKeys) state.hiddenAvatarKeys = [];
-        if (!state.hiddenAvatarKeys.includes(key)) state.hiddenAvatarKeys.push(key);
-      }
-      saveState();
-      render();
-    });
   }
 
   if (modal && modal.type === "adminSettings") {
@@ -1726,6 +1762,20 @@ function attachHandlers(){
   }
 
   if (modal && modal.type === "avatarManage") {
+    app.querySelectorAll("[data-delete-avatar]").forEach(el => el.onclick = (e) => {
+      e.stopPropagation();
+      const key = el.dataset.deleteAvatar;
+      if (!confirm("למחוק את האווטר?")) return;
+      if (key.startsWith("custom:")) {
+        const id = key.slice(7);
+        state.customAvatars = (state.customAvatars||[]).filter(a => a.id !== id);
+      } else {
+        if (!state.hiddenAvatarKeys) state.hiddenAvatarKeys = [];
+        if (!state.hiddenAvatarKeys.includes(key)) state.hiddenAvatarKeys.push(key);
+      }
+      saveState();
+      render();
+    });
     app.querySelectorAll("[data-move-avatar-cat-up]").forEach(el => el.onclick = () => {
       const groups = getAvatarGroups();
       const i = groups.findIndex(g => g.key === el.dataset.moveAvatarCatUp);
@@ -1866,6 +1916,50 @@ function attachHandlers(){
       maybeAutoCloseNight(g);
       saveState();
       closeModal();
+    };
+  }
+
+  if (modal && modal.type === "pokerOdds") {
+    const ODDS_QUESTION = "מה הסיכויים של כל יד לקחת את היד, ומה הסיכוי להתחלק או להרוויח פעמיים בריצה כפולה?";
+    const askOdds = async (questionText, imageBlock, imageSrc) => {
+      const userContent = imageBlock ? [imageBlock, {type:"text", text: questionText}] : questionText;
+      const newMessages = modal.messages.concat([{role:"user", content: userContent}]);
+      const newThread = modal.thread.concat([{role:"question", text: questionText}]);
+      const partial = {messages: newMessages, thread: newThread, asking: true, error: null};
+      if (imageSrc) partial.imageSrc = imageSrc;
+      updateModal(partial);
+      try {
+        const result = await askClaude(newMessages);
+        const answerText = result.text || "";
+        updateModal({
+          messages: newMessages.concat([{role:"assistant", content: answerText}]),
+          thread: newThread.concat([{role:"answer", text: answerText}]),
+          asking: false
+        });
+      } catch(e) {
+        console.error(e);
+        updateModal({asking:false, error:"השאלה נכשלה - נסו שוב."});
+      }
+    };
+    const oddsCameraInput = app.querySelector("#odds-camera-input");
+    if (oddsCameraInput) oddsCameraInput.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        resizeImageDataUrl(reader.result, 1568, (resized) => {
+          askOdds(ODDS_QUESTION, dataUrlToImageBlock(resized), resized);
+        });
+      };
+      reader.readAsDataURL(file);
+    };
+    const oddsFollowupBtn = app.querySelector("[data-ask-odds-followup]");
+    if (oddsFollowupBtn) oddsFollowupBtn.onclick = () => {
+      const input = document.getElementById("odds-followup-input");
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = "";
+      askOdds(text, null, null);
     };
   }
 

@@ -160,6 +160,35 @@ def vision():
     return jsonify(parsed)
 
 
+@app.route("/api/ask", methods=["POST"])
+def ask():
+    body = request.get_json(force=True) or {}
+    messages = body.get("messages")
+    if not isinstance(messages, list) or not messages:
+        return jsonify({"error": "missing messages"}), 400
+    for m in messages:
+        if not isinstance(m, dict) or m.get("role") not in ("user", "assistant") or "content" not in m:
+            return jsonify({"error": "malformed messages"}), 400
+
+    client = anthropic.Anthropic()
+    try:
+        response = client.messages.create(
+            model="claude-sonnet-5",
+            max_tokens=1000,
+            output_config={"effort": "low"},
+            messages=messages,
+        )
+    except anthropic.RateLimitError:
+        return jsonify({"error": "rate limited, try again shortly"}), 429
+    except anthropic.APIStatusError as e:
+        return jsonify({"error": f"Claude API error: {e.status_code}"}), 502
+    except anthropic.APIConnectionError:
+        return jsonify({"error": "could not reach Claude API"}), 502
+
+    text = "\n".join(block.text for block in response.content if block.type == "text")
+    return jsonify({"text": text})
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=os.environ.get("DEBUG") == "1")
