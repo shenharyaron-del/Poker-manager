@@ -812,6 +812,7 @@ function renderModal(m){
         <span style="color:var(--muted);font-size:13px;">שניות</span>
       </div>
       <button class="btn btn-primary btn-block" data-save-admin-settings>שמור</button>
+      <a href="https://console.anthropic.com" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:18px;color:var(--muted);font-size:12px;text-decoration:underline;">console.anthropic.com</a>
     `;
   } else if (m.type === "avatarManage") {
     title = "ניהול אווטרים";
@@ -918,7 +919,7 @@ function renderModal(m){
       `;
     } else {
       body = `
-        <img src="${m.imageSrc}" style="width:100%;border-radius:12px;margin-bottom:12px;display:block;">
+        <img src="${m.imageSrc}" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:12px;margin-bottom:12px;display:block;">
         <div class="scroll-list" style="margin-bottom:12px;">
           ${m.thread.map(t => t.role === "question"
             ? `<p style="font-weight:700;margin:12px 0 4px;white-space:pre-wrap;">${esc(t.text)}</p>`
@@ -1920,7 +1921,7 @@ function attachHandlers(){
   }
 
   if (modal && modal.type === "pokerOdds") {
-    const ODDS_QUESTION = "חשב עבור כל יד:\n1. מה ההסתברות לניצחון ולתיקו (Split)\n2. בריצה כפולה, מה ההסתברות לכל יד לנצח בשתי הריצות\n3. בריצה כפולה, מה ההסתברות לנצח פעם ולהפסיד פעם";
+    const ODDS_QUESTION = "חשב עבור כל יד שבתמונה:\n1. מה ההסתברות לניצחון ולתיקו (Split)\n2. בריצה כפולה, מה ההסתברות לכל יד לנצח בשתי הריצות\n3. בריצה כפולה, מה ההסתברות לנצח פעם ולהפסיד פעם";
     const askOdds = async (questionText, imageBlock, imageSrc) => {
       const userContent = imageBlock ? [imageBlock, {type:"text", text: questionText}] : questionText;
       const newMessages = modal.messages.concat([{role:"user", content: userContent}]);

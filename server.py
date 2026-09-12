@@ -174,7 +174,7 @@ def ask():
     try:
         response = client.messages.create(
             model="claude-sonnet-5",
-            max_tokens=2000,
+            max_tokens=4096,
             output_config={"effort": "high"},
             messages=messages,
         )
@@ -186,6 +186,8 @@ def ask():
         return jsonify({"error": "could not reach Claude API"}), 502
 
     text = "\n".join(block.text for block in response.content if block.type == "text")
+    if not text.strip():
+        return jsonify({"error": f"Claude returned no answer (stop_reason: {response.stop_reason})"}), 502
     return jsonify({"text": text})
 
 
