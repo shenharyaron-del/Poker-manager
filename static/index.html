@@ -314,6 +314,24 @@ function resizeImageDataUrl(dataUrl, maxDim, callback){
   };
   img.src = dataUrl;
 }
+// The poker-odds photo is always laid out wide (hands in a row above the board) - if the
+// phone captured it in portrait, rotate it 90deg so the display and what Claude sees both
+// match that layout instead of showing a tall, mostly-empty box.
+function ensureLandscapeDataUrl(dataUrl, callback){
+  const img = new Image();
+  img.onload = () => {
+    const w = img.naturalWidth, h = img.naturalHeight;
+    if (h <= w) { callback(dataUrl); return; }
+    const canvas = document.createElement("canvas");
+    canvas.width = h; canvas.height = w;
+    const ctx = canvas.getContext("2d");
+    ctx.translate(h, 0);
+    ctx.rotate(Math.PI/2);
+    ctx.drawImage(img, 0, 0, w, h);
+    callback(canvas.toDataURL("image/jpeg", 0.9));
+  };
+  img.src = dataUrl;
+}
 
 function defaultState(){
   return { communities: [], games: [] };
@@ -1043,7 +1061,7 @@ function renderModal(m){
         const rank = cardStr[0].toUpperCase();
         const suit = cardStr[1].toLowerCase();
         const red = (suit==='d'||suit==='h');
-        return `<span style="color:${red?'#fda4af':'inherit'};">${rank}${suitSymbols[suit]||''}</span>`;
+        return `<span style="display:inline-flex;align-items:center;justify-content:center;background:#fff;color:${red?'#dc2626':'#111827'};border-radius:5px;padding:2px 7px;margin-inline-end:4px;font-weight:800;font-size:14px;">${rank}${suitSymbols[suit]||''}</span>`;
       };
       body = `
         <img src="${m.imageSrc}" style="width:100%;aspect-ratio:16/9;object-fit:contain;background:rgba(255,255,255,.05);border-radius:12px;margin-bottom:12px;display:block;">
@@ -1056,18 +1074,21 @@ function renderModal(m){
           <div class="scroll-list">
             ${m.results.map((r,i) => `
               <div style="background:rgba(255,255,255,.05);border-radius:10px;padding:10px 12px;margin-bottom:8px;">
-                <div style="font-weight:700;margin-bottom:6px;font-size:16px;">${m.hands[i].map(formatCard).join(" ")}</div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px 10px;font-size:13px;color:var(--muted2);">
+                <div style="margin-bottom:8px;">${m.hands[i].map(formatCard).join("")}</div>
+                <div style="font-size:11px;color:var(--muted);margin-bottom:3px;">ריצה אחת</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;font-size:13px;color:var(--muted2);margin-bottom:6px;">
                   <div>ניצחון: <b>${r.winPct.toFixed(1)}%</b></div>
                   <div>תיקו: <b>${r.tiePct.toFixed(1)}%</b></div>
-                  <div>ריצה כפולה - שתי הריצות: <b>${r.bothRunsPct.toFixed(1)}%</b></div>
-                  <div>ריצה כפולה - ריצה אחת: <b>${r.oneRunPct.toFixed(1)}%</b></div>
+                </div>
+                <div style="font-size:11px;color:var(--muted);margin-bottom:3px;">ריצה כפולה</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;font-size:13px;color:var(--muted2);">
+                  <div>פעמיים ניצחון: <b>${r.bothRunsPct.toFixed(1)}%</b></div>
+                  <div>חלוקה שווה: <b>${r.oneRunPct.toFixed(1)}%</b></div>
                 </div>
               </div>
             `).join("")}
           </div>
         ` : ""}
-        <button class="btn btn-ghost btn-block" style="margin-top:8px;" data-retake-odds-photo>${icon('plus')} תמונה אחרת</button>
       `;
     }
   } else if (m.type === "chipPhotoCount") {
@@ -2080,12 +2101,12 @@ function attachHandlers(){
       if (!file) return;
       const reader = new FileReader();
       reader.onload = () => {
-        resizeImageDataUrl(reader.result, 1568, (resized) => processOddsPhoto(resized));
+        ensureLandscapeDataUrl(reader.result, (landscapeUrl) => {
+          resizeImageDataUrl(landscapeUrl, 1568, (resized) => processOddsPhoto(resized));
+        });
       };
       reader.readAsDataURL(file);
     };
-    const retakeOddsBtn = app.querySelector("[data-retake-odds-photo]");
-    if (retakeOddsBtn) retakeOddsBtn.onclick = () => updateModal({imageSrc:null, reading:false, error:null, results:null, hands:null, board:null});
   }
 
   if (modal && modal.type === "chipPhotoCount") {
