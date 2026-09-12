@@ -359,16 +359,31 @@ const AVATAR_CATEGORIES = [
 // built-in groups by matching category label, or form new groups of their own.
 function getAvatarGroups(){
   const hidden = new Set(state.hiddenAvatarKeys||[]);
+  const labelOverrides = state.avatarCategoryLabelOverrides || {};
+  const nameOverrides = state.avatarNameOverrides || {};
   const groups = AVATAR_CATEGORIES.map(cat => ({
-    label: cat.label,
-    items: cat.items.map((name,i) => ({name, pickKey: "builtin:" + cat.folder + "/" + (i+1), src: `/static/avatars/${cat.folder}/${i+1}.jpg`})).filter(it => !hidden.has(it.pickKey))
+    key: "builtin-cat:" + cat.folder,
+    label: labelOverrides[cat.folder] || cat.label,
+    items: cat.items.map((name,i) => {
+      const pickKey = "builtin:" + cat.folder + "/" + (i+1);
+      return {name: nameOverrides[pickKey] || name, pickKey, src: `/static/avatars/${cat.folder}/${i+1}.jpg`};
+    }).filter(it => !hidden.has(it.pickKey))
   }));
   (state.customAvatars||[]).forEach(av => {
-    let grp = groups.find(g => g.label === av.category);
-    if (!grp) { grp = {label: av.category, items: []}; groups.push(grp); }
+    const key = "custom-cat:" + av.category;
+    let grp = groups.find(g => g.key === key);
+    if (!grp) { grp = {key, label: av.category, items: []}; groups.push(grp); }
     grp.items.push({name: av.name, pickKey: "custom:" + av.id, src: av.image});
   });
-  return groups.filter(g => g.items.length);
+  const visible = groups.filter(g => g.items.length);
+  const order = state.avatarCategoryOrder;
+  if (order && order.length) {
+    visible.sort((a,b) => {
+      const ia = order.indexOf(a.key); const ib = order.indexOf(b.key);
+      return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+    });
+  }
+  return visible;
 }
 const SUPER_ADMIN_NAME = "ירון שנהר";
 function isSuperAdmin(){ return myIdentity.name === SUPER_ADMIN_NAME; }
@@ -815,7 +830,10 @@ function renderModal(m){
         <button class="btn btn-ghost btn-block" data-photo-gallery>${icon('plus')} בחר מהגלריה</button>
       </div>
       ${admin ? `
-        <button class="btn btn-ghost btn-block" style="margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:6px;" data-open-avatar-creator>${icon('plus')} יצירת אווטרים חדשים</button>
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-open-avatar-creator>${icon('plus')} יצירת אווטרים חדשים</button>
+          <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-open-avatar-manage>${icon('pencil')} ניהול</button>
+        </div>
       ` : ""}
     ` + getAvatarGroups().map(grp => `
       <div class="section-title" style="padding:0;margin:10px 0 6px;">${esc(grp.label)}</div>
@@ -829,6 +847,33 @@ function renderModal(m){
         `).join("")}
       </div>
     `).join("");
+  } else if (m.type === "avatarManage") {
+    title = "ניהול אווטרים";
+    const groups = getAvatarGroups();
+    body = `
+      <div class="scroll-list">
+        ${groups.map((grp, gi) => `
+          <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:10px;margin-bottom:12px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+              <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0;">
+                <button class="icon-btn" data-move-avatar-cat-up="${grp.key}" ${gi===0?"disabled":""} style="width:22px;height:18px;padding:0;align-items:center;justify-content:center;${gi===0?"opacity:.35;":""}">${icon('up')}</button>
+                <button class="icon-btn" data-move-avatar-cat-down="${grp.key}" ${gi===groups.length-1?"disabled":""} style="width:22px;height:18px;padding:0;align-items:center;justify-content:center;${gi===groups.length-1?"opacity:.35;":""}">${icon('down')}</button>
+              </div>
+              <input type="text" value="${esc(grp.label)}" data-avatar-cat-name="${grp.key}" style="flex:1;font-weight:700;">
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:10px;">
+              ${grp.items.map(it => `
+                <div style="width:64px;text-align:center;">
+                  <img src="${it.src}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;display:block;margin-bottom:4px;">
+                  <input type="text" value="${esc(it.name)}" data-avatar-item-name="${it.pickKey}" style="width:100%;font-size:10px;text-align:center;padding:3px 2px;">
+                </div>
+              `).join("")}
+            </div>
+          </div>
+        `).join("")}
+      </div>
+      <button class="btn btn-primary btn-block" data-save-avatar-manage>שמור שינויים</button>
+    `;
   } else if (m.type === "avatarCreator") {
     title = "יצירת אווטרים";
     const pickButtons = `
@@ -1728,6 +1773,8 @@ function attachHandlers(){
     });
     const openCreatorBtn = app.querySelector("[data-open-avatar-creator]");
     if (openCreatorBtn) openCreatorBtn.onclick = () => openModal({type:"avatarCreator", communityId: modal.communityId, playerId: modal.playerId, imageSrc: null, points: []});
+    const openManageBtn = app.querySelector("[data-open-avatar-manage]");
+    if (openManageBtn) openManageBtn.onclick = () => openModal({type:"avatarManage", communityId: modal.communityId, playerId: modal.playerId});
     app.querySelectorAll("[data-delete-avatar]").forEach(el => el.onclick = (e) => {
       e.stopPropagation();
       const key = el.dataset.deleteAvatar;
@@ -1742,6 +1789,67 @@ function attachHandlers(){
       saveState();
       render();
     });
+  }
+
+  if (modal && modal.type === "avatarManage") {
+    app.querySelectorAll("[data-move-avatar-cat-up]").forEach(el => el.onclick = () => {
+      const groups = getAvatarGroups();
+      const i = groups.findIndex(g => g.key === el.dataset.moveAvatarCatUp);
+      if (i > 0) {
+        const order = groups.map(g => g.key);
+        [order[i-1], order[i]] = [order[i], order[i-1]];
+        state.avatarCategoryOrder = order;
+        saveState();
+        render();
+      }
+    });
+    app.querySelectorAll("[data-move-avatar-cat-down]").forEach(el => el.onclick = () => {
+      const groups = getAvatarGroups();
+      const i = groups.findIndex(g => g.key === el.dataset.moveAvatarCatDown);
+      if (i >= 0 && i < groups.length - 1) {
+        const order = groups.map(g => g.key);
+        [order[i], order[i+1]] = [order[i+1], order[i]];
+        state.avatarCategoryOrder = order;
+        saveState();
+        render();
+      }
+    });
+    const saveManageBtn = app.querySelector("[data-save-avatar-manage]");
+    if (saveManageBtn) saveManageBtn.onclick = () => {
+      const groups = getAvatarGroups();
+      groups.forEach(grp => {
+        const nameInp = document.querySelector(`[data-avatar-cat-name="${grp.key}"]`);
+        const newLabel = nameInp ? nameInp.value.trim() : grp.label;
+        if (newLabel && newLabel !== grp.label) {
+          if (grp.key.startsWith("builtin-cat:")) {
+            const folder = grp.key.slice(12);
+            if (!state.avatarCategoryLabelOverrides) state.avatarCategoryLabelOverrides = {};
+            state.avatarCategoryLabelOverrides[folder] = newLabel;
+          } else if (grp.key.startsWith("custom-cat:")) {
+            const oldLabel = grp.key.slice(11);
+            (state.customAvatars||[]).forEach(av => { if (av.category === oldLabel) av.category = newLabel; });
+          }
+        }
+      });
+      groups.forEach(grp => {
+        grp.items.forEach(it => {
+          const inp = document.querySelector(`[data-avatar-item-name="${it.pickKey}"]`);
+          const newName = inp ? inp.value.trim() : it.name;
+          if (newName && newName !== it.name) {
+            if (it.pickKey.startsWith("builtin:")) {
+              if (!state.avatarNameOverrides) state.avatarNameOverrides = {};
+              state.avatarNameOverrides[it.pickKey] = newName;
+            } else if (it.pickKey.startsWith("custom:")) {
+              const id = it.pickKey.slice(7);
+              const av = (state.customAvatars||[]).find(a => a.id === id);
+              if (av) av.name = newName;
+            }
+          }
+        });
+      });
+      saveState();
+      openModal({type:"photoSource", communityId: modal.communityId, playerId: modal.playerId});
+    };
   }
 
   if (modal && modal.type === "roster") {
