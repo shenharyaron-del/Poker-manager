@@ -17,6 +17,9 @@ BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 DATABASE_URL = os.environ["DATABASE_URL"]
 DATA_URL_RE = re.compile(r"^data:(image/[a-zA-Z0-9.+-]+);base64,(.+)$", re.DOTALL)
+# Render sets this automatically to the deployed commit's SHA - lets Settings show
+# exactly which version is live, with no separate manual version number to keep in sync.
+APP_VERSION = os.environ.get("RENDER_GIT_COMMIT", "local")[:7]
 
 app = Flask(__name__, static_folder=None)
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10MB, enough for a chip photo
@@ -49,6 +52,11 @@ def index():
 @app.route("/static/<path:filename>")
 def static_files(filename):
     return send_from_directory(STATIC_DIR, filename)
+
+
+@app.route("/api/version")
+def version():
+    return jsonify({"version": APP_VERSION})
 
 
 @app.route("/api/state", methods=["GET"])

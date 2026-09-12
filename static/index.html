@@ -272,6 +272,13 @@ async function loadIdentity(){
   } catch(e) { /* not set yet */ }
   return { id: uid(), name: null };
 }
+async function loadVersion(){
+  try {
+    const res = await fetch("/api/version");
+    if (res.ok) return (await res.json()).version;
+  } catch(e) { /* not critical - Settings just won't show a version */ }
+  return null;
+}
 async function saveIdentity(){
   try {
     await fetch("/api/identity?clientId=" + encodeURIComponent(getClientId()), {
@@ -285,6 +292,7 @@ async function saveIdentity(){
 
 let state = defaultState();
 let myIdentity = { id: uid(), name: null };
+let appVersion = null; // filled in by init() from /api/version
 
 // ---------- Navigation (not persisted - always starts at home) ----------
 let nav = { screen: "home", communityId: null, gameId: null };
@@ -813,6 +821,7 @@ function renderModal(m){
       </div>
       <button class="btn btn-primary btn-block" data-save-admin-settings>שמור</button>
       <a href="https://console.anthropic.com" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:18px;color:var(--muted);font-size:12px;text-decoration:underline;">console.anthropic.com</a>
+      <div style="text-align:center;margin-top:8px;color:var(--muted);font-size:11px;">גרסה: ${esc(appVersion || "לא ידוע")}</div>
     `;
   } else if (m.type === "avatarManage") {
     title = "ניהול אווטרים";
@@ -2716,7 +2725,7 @@ window.addEventListener("popstate", () => {
 (async function init(){
   document.getElementById("app").innerHTML =
     '<div style="padding:60px 20px;text-align:center;color:#a8a29e;font-size:14px;">טוען נתונים משותפים...</div>';
-  [state, myIdentity] = await Promise.all([loadState(), loadIdentity()]);
+  [state, myIdentity, appVersion] = await Promise.all([loadState(), loadIdentity(), loadVersion()]);
   // One-time cleanup: remove legacy communities that weren't created via the "new community"
   // button (they have no createdBy - e.g. the two starter communities from an earlier version
   // of this app), along with any of their games.
