@@ -1615,7 +1615,10 @@ function renderModal(m){
       body += rows.map(r => `
         <div class="roster-row">
           <span><span style="font-weight:700;">${esc(r.name)}</span> <span style="color:var(--muted);font-size:11px;">קנה ₪${r.buyin}${r.paid?` · העביר ₪${r.paid}`:""}</span></span>
-          <span style="font-weight:700;color:${r.remaining>0?'#6ee7b7':'#fda4af'};">${r.remaining>0?"+":"-"}₪${Math.round(Math.abs(r.remaining)*100)/100}</span>
+          <span style="display:flex;align-items:center;gap:8px;">
+            <span style="font-weight:700;color:${r.remaining>0?'#6ee7b7':'#fda4af'};">${r.remaining>0?"+":"-"}₪${Math.round(Math.abs(r.remaining)*100)/100}</span>
+            ${r.remaining < -0.005 ? `<button class="icon-btn gold" data-open-paybox-row="${r.id}" data-paybox-amount="${Math.round(Math.abs(r.remaining)*100)/100}" title="פתח פייבוקס עם הסכום">${icon('share')}</button>` : ""}
+          </span>
         </div>
       `).join("");
     }
@@ -2568,11 +2571,24 @@ function attachHandlers(){
   }
 
   if (modal && modal.type === "summary") {
+    const g = getGame(modal.gameId);
+    const c = getCommunity(g.communityId);
+    // Guessing "amount" as the query param name - PayBox's link format gives no confirmed
+    // way to pre-fill a sum, so this is untested; if PayBox ignores it the link still opens
+    // fine, just without a pre-filled amount.
+    const openPaybox = (amount) => {
+      if (!c.payboxLink) return false;
+      const url = amount ? c.payboxLink + (c.payboxLink.includes("?") ? "&" : "?") + "amount=" + amount : c.payboxLink;
+      window.open(url, "_blank", "noopener");
+      return true;
+    };
+    app.querySelectorAll("[data-open-paybox-row]").forEach(el => el.onclick = () => {
+      if (openPaybox(el.dataset.payboxAmount)) return;
+      openModal({type:"paybox", gameId: modal.gameId, playerId: el.dataset.openPayboxRow, amount:""});
+    });
     const openPayboxBtn = app.querySelector("[data-open-paybox-from-summary]");
     if (openPayboxBtn) openPayboxBtn.onclick = () => {
-      const g = getGame(modal.gameId);
-      const c = getCommunity(g.communityId);
-      if (c.payboxLink) { window.open(c.payboxLink, "_blank", "noopener"); return; }
+      if (openPaybox(null)) return;
       // no link saved for this community yet - go set one up first
       const alreadyPaid = {};
       (g.payboxPayments||[]).forEach(pp => { alreadyPaid[pp.playerId] = (alreadyPaid[pp.playerId]||0) + pp.amount; });
