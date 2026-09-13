@@ -1620,6 +1620,9 @@ function renderModal(m){
       `).join("");
     }
     body += `<div class="note">* ירוק = מקבל מקבוצת פייבוקס, אדום = מעביר לקבוצת פייבוקס.${Object.keys(alreadyPaid).length ? " הסכומים שכבר הועברו לפייבוקס במהלך הערב כבר נלקחו בחשבון." : ""}</div>`;
+    if (rows.length) {
+      body += `<button class="btn btn-primary btn-block" data-open-paybox-from-summary style="margin-top:14px;">${icon('share')} פייבוקס</button>`;
+    }
   } else if (m.type === "history") {
     const g = getGame(m.gameId);
     const p = g.players.find(pl=>pl.id===m.playerId);
@@ -2564,6 +2567,20 @@ function attachHandlers(){
     };
   }
 
+  if (modal && modal.type === "summary") {
+    const openPayboxBtn = app.querySelector("[data-open-paybox-from-summary]");
+    if (openPayboxBtn) openPayboxBtn.onclick = () => {
+      const g = getGame(modal.gameId);
+      const alreadyPaid = {};
+      (g.payboxPayments||[]).forEach(pp => { alreadyPaid[pp.playerId] = (alreadyPaid[pp.playerId]||0) + pp.amount; });
+      const finalBalances = computeFinalBalances(g);
+      const owing = Object.entries(finalBalances)
+        .map(([id,b]) => ({ id, remaining: b.profit + (alreadyPaid[id]||0) }))
+        .find(r => r.remaining < -0.005);
+      openModal({type:"paybox", gameId: modal.gameId, playerId: owing ? owing.id : (g.players[0]||{}).id, amount:""});
+    };
+  }
+
   if (modal && modal.type === "history") {
     app.querySelectorAll("[data-delete-buyin]").forEach(el => el.onclick = () => {
       openModal({type:"deleteBuyin", gameId: modal.gameId, playerId: modal.playerId, buyinId: el.dataset.deleteBuyin, returnTo: modal});
@@ -2683,7 +2700,7 @@ function attachHandlers(){
     const menuHistory = app.querySelector("[data-menu-history]");
     if (menuHistory) menuHistory.onclick = () => openModal({type:"history", gameId: modal.gameId, playerId: modal.playerId});
     const menuSummary = app.querySelector("[data-menu-summary]");
-    if (menuSummary) menuSummary.onclick = () => openModal({type:"history", gameId: modal.gameId, playerId: modal.playerId});
+    if (menuSummary) menuSummary.onclick = () => openModal({type:"summary", gameId: modal.gameId});
   }
 
   if (modal && modal.type === "removeSeat") {
