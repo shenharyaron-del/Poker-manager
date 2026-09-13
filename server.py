@@ -46,12 +46,19 @@ def get_db():
 
 @app.route("/")
 def index():
-    return send_from_directory(STATIC_DIR, "index.html")
+    # Always revalidate with the server before using a cached copy, so a deploy is picked
+    # up on the next reload instead of a phone browser silently reusing old JS indefinitely.
+    # Flask still sets ETag/Last-Modified, so an unchanged file comes back as a cheap 304.
+    response = send_from_directory(STATIC_DIR, "index.html")
+    response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return response
 
 
 @app.route("/static/<path:filename>")
 def static_files(filename):
-    return send_from_directory(STATIC_DIR, filename)
+    response = send_from_directory(STATIC_DIR, filename)
+    response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return response
 
 
 @app.route("/api/version")
