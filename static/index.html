@@ -1452,8 +1452,18 @@ function renderModal(m){
     `;
   } else if (m.type === "paybox") {
     const g = getGame(m.gameId);
+    const c = getCommunity(g.communityId);
     title = "העברה לקבוצת פייבוקס";
     body = `
+      ${(c.payboxLink && !m.editingPayboxLink) ? `
+        <div style="display:flex;gap:8px;margin-bottom:16px;">
+          <a href="${esc(c.payboxLink)}" target="_blank" rel="noopener" class="btn btn-primary btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} פתח את פייבוקס</a>
+          <button class="icon-btn" data-edit-paybox-link title="שנה קישור" style="flex-shrink:0;">${icon('pencil')}</button>
+        </div>
+      ` : `
+        <div class="field"><label>קישור לקבוצת הפייבוקס</label><input type="text" id="paybox-link-input" value="${esc(c.payboxLink||'')}" placeholder="https://links.payboxapp.com/..." dir="ltr"></div>
+        <button class="btn btn-ghost btn-block" style="margin-bottom:16px;" data-save-paybox-link>שמור קישור</button>
+      `}
       <div class="field"><label>מי העביר?</label>
         <select id="paybox-player" class="select-input">
           ${g.players.map(p=>`<option value="${p.id}" ${m.playerId===p.id?"selected":""}>${esc(p.name)}</option>`).join("")}
@@ -2613,6 +2623,18 @@ function attachHandlers(){
   }
 
   if (modal && modal.type === "paybox") {
+    const editPayboxLinkBtn = app.querySelector("[data-edit-paybox-link]");
+    if (editPayboxLinkBtn) editPayboxLinkBtn.onclick = () => updateModal({editingPayboxLink: true});
+    const savePayboxLinkBtn = app.querySelector("[data-save-paybox-link]");
+    if (savePayboxLinkBtn) savePayboxLinkBtn.onclick = () => {
+      const link = document.getElementById("paybox-link-input").value.trim();
+      if (!link) return;
+      const g = getGame(modal.gameId);
+      const c = getCommunity(g.communityId);
+      c.payboxLink = link;
+      saveState();
+      updateModal({editingPayboxLink: false});
+    };
     app.querySelectorAll("[data-paybox-chip]").forEach(el => el.onclick = () => { document.getElementById("paybox-amount").value = el.dataset.payboxChip; });
     const confirmPaybox = app.querySelector("[data-confirm-paybox]");
     if (confirmPaybox) confirmPaybox.onclick = () => {
