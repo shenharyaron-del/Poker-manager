@@ -511,6 +511,16 @@ function updateModal(partial){
 
 // ---------- Data helpers ----------
 function getCommunity(id){ return state.communities.find(c => c.id === id); }
+// A community can save several PayBox groups (e.g. different sub-groups); exactly one is
+// "active" at a time - this is the single source of truth every paybox-opening button reads.
+// Falls back to the old single-link field so a community set up before this existed keeps working.
+function getActivePayboxLink(c){
+  if (c && c.payboxLinks && c.payboxLinks.length) {
+    const active = c.payboxLinks.find(pl => pl.id === c.activePayboxLinkId) || c.payboxLinks[0];
+    return active ? active.link : null;
+  }
+  return (c && c.payboxLink) || null;
+}
 function getGame(id){ return state.games.find(g => g.id === id); }
 function maybeAutoCloseNight(g){
   const seated = (g.seats || []).filter(Boolean);
@@ -807,6 +817,7 @@ function renderCommunity(communityId){
     <div class="top row" style="padding-bottom:10px;">
       <button class="back-arrow" data-back-home>${icon('back')}</button>
       <h1 class="serif sm flex1">${esc(c.name)}</h1>
+      ${c.createdByName && myIdentity.name && c.createdByName === myIdentity.name ? `<button class="icon-btn gold" data-open-paybox-settings="${c.id}" title="הגדרת פייבוקס">${icon('share')}</button>` : ""}
       <button class="btn btn-ghost btn-sm" data-show-roster style="display:flex;align-items:center;gap:6px;">${icon('users')} שחקנים (${c.roster.length})</button>
     </div>
     <div class="section-title">ערבי משחק</div>
@@ -1453,16 +1464,13 @@ function renderModal(m){
   } else if (m.type === "paybox") {
     const g = getGame(m.gameId);
     const c = getCommunity(g.communityId);
+    const activeLink = getActivePayboxLink(c);
     title = "העברה לקבוצת פייבוקס";
     body = `
-      ${(c.payboxLink && !m.editingPayboxLink) ? `
-        <div style="display:flex;gap:8px;margin-bottom:16px;">
-          <a href="${esc(c.payboxLink)}" target="_blank" rel="noopener" class="btn btn-primary btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} פתח את פייבוקס</a>
-          <button class="icon-btn" data-edit-paybox-link title="שנה קישור" style="flex-shrink:0;">${icon('pencil')}</button>
-        </div>
+      ${activeLink ? `
+        <a href="${esc(activeLink)}" target="_blank" rel="noopener" class="btn btn-primary btn-block" style="margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} פתח את פייבוקס</a>
       ` : `
-        <div class="field"><label>קישור לקבוצת הפייבוקס</label><input type="text" id="paybox-link-input" value="${esc(c.payboxLink||'')}" placeholder="https://links.payboxapp.com/..." dir="ltr"></div>
-        <button class="btn btn-ghost btn-block" style="margin-bottom:16px;" data-save-paybox-link>שמור קישור</button>
+        <p style="color:var(--muted);font-size:12px;margin-bottom:16px;">לא הוגדרה קבוצת פייבוקס - בקשו מיוצר הקבוצה להגדיר אחת ממסך הקבוצה.</p>
       `}
       <div class="field"><label>מי העביר?</label>
         <select id="paybox-player" class="select-input">
@@ -1474,6 +1482,29 @@ function renderModal(m){
         ${[50,80,100,200].map(v=>`<button class="chip-btn" data-paybox-chip="${v}">₪${v}</button>`).join("")}
       </div>
       <button class="btn btn-primary btn-block" data-confirm-paybox>שמור העברה</button>
+    `;
+  } else if (m.type === "payboxSettings") {
+    const c = getCommunity(m.communityId);
+    title = "הגדרת פייבוקס";
+    const links = c.payboxLinks || [];
+    body = `
+      <div class="scroll-list" style="margin-bottom:14px;">
+        ${links.length ? links.map(pl => `
+          <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:10px;margin-bottom:10px;display:flex;gap:8px;align-items:flex-start;">
+            <input type="radio" name="active-paybox" data-select-paybox="${pl.id}" ${c.activePayboxLinkId===pl.id?"checked":""} style="margin-top:12px;flex-shrink:0;width:18px;height:18px;">
+            <div style="flex:1;min-width:0;">
+              <input type="text" value="${esc(pl.name)}" data-paybox-name-input="${pl.id}" placeholder="שם" style="margin-bottom:6px;font-weight:700;">
+              <input type="text" value="${esc(pl.link)}" data-paybox-link-input="${pl.id}" placeholder="קישור" dir="ltr">
+            </div>
+            <button class="icon-btn danger" data-delete-paybox-entry="${pl.id}" style="flex-shrink:0;margin-top:6px;">${icon('trash')}</button>
+          </div>
+        `).join("") : `<div class="empty" style="padding:10px 0;">עדיין לא הוגדרו קבוצות פייבוקס</div>`}
+      </div>
+      ${links.length ? `<button class="btn btn-ghost btn-block" style="margin-bottom:16px;" data-save-paybox-entries>שמור שינויים</button>` : ""}
+      <div class="section-title" style="padding:0;margin:0 0 8px;">הוספת קבוצת פייבוקס</div>
+      <div class="field"><label>שם</label><input type="text" id="new-paybox-name" placeholder="פייבוקס ראשי"></div>
+      <div class="field"><label>קישור</label><input type="text" id="new-paybox-link" placeholder="https://links.payboxapp.com/..." dir="ltr"></div>
+      <button class="btn btn-primary btn-block" data-add-paybox-entry>${icon('plus')} הוסף</button>
     `;
   } else if (m.type === "pickSeat") {
     const g = getGame(m.gameId);
@@ -1491,16 +1522,25 @@ function renderModal(m){
     const p = g.players.find(pl=>pl.id===m.playerId);
     const cashedOut = m.playerId in g.cashouts;
     title = esc(p ? p.name : "שחקן");
-    body = cashedOut ? `
-      <button class="btn btn-ghost btn-block" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-menu-summary>${icon('bar')} סיכום</button>
-      <button class="btn btn-ghost btn-block" data-return-to-game="${m.playerId}" style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('undo')} החזר למשחק</button>
-    ` : `
-      <button class="btn btn-primary btn-block" style="margin-bottom:10px;" data-menu-buyins>${icon('plus')} קנייה</button>
-      <button class="btn btn-block" style="background:#57534e;color:#f5f5f4;margin-bottom:10px;" data-menu-chips>${icon('out')} סיים ערב</button>
-      <button class="btn btn-block" style="background:#be123c;color:#fff;margin-bottom:10px;" data-menu-remove>${icon('trash')} הסר מהשולחן</button>
-      <button class="btn btn-ghost btn-block" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-menu-history>${icon('bar')} היסטוריית קניות</button>
-      <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-menu-change-avatar>${icon('pencil')} שינוי אווטר</button>
-    `;
+    if (cashedOut) {
+      const finalBalances = computeFinalBalances(g);
+      const alreadyPaid = (g.payboxPayments||[]).filter(pp=>pp.playerId===m.playerId).reduce((s,pp)=>s+pp.amount,0);
+      const fb = finalBalances[m.playerId];
+      const owes = fb ? -(fb.profit + alreadyPaid) : 0;
+      body = `
+        <button class="btn btn-ghost btn-block" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-menu-summary>${icon('bar')} סיכום</button>
+        ${owes > 0.005 ? `<button class="btn btn-block" style="background:#0891b2;color:#fff;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-menu-paybox-pay data-paybox-amount="${Math.round(owes*100)/100}">${icon('share')} שלם בפייבוקס (₪${Math.round(owes*100)/100})</button>` : ""}
+        <button class="btn btn-ghost btn-block" data-return-to-game="${m.playerId}" style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('undo')} החזר למשחק</button>
+      `;
+    } else {
+      body = `
+        <button class="btn btn-primary btn-block" style="margin-bottom:10px;" data-menu-buyins>${icon('plus')} קנייה</button>
+        <button class="btn btn-block" style="background:#57534e;color:#f5f5f4;margin-bottom:10px;" data-menu-chips>${icon('out')} סיים ערב</button>
+        <button class="btn btn-block" style="background:#be123c;color:#fff;margin-bottom:10px;" data-menu-remove>${icon('trash')} הסר מהשולחן</button>
+        <button class="btn btn-ghost btn-block" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-menu-history>${icon('bar')} היסטוריית קניות</button>
+        <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-menu-change-avatar>${icon('pencil')} שינוי אווטר</button>
+      `;
+    }
   } else if (m.type === "seatBuyins") {
     const g = getGame(m.gameId);
     const p = g.players.find(pl=>pl.id===m.playerId);
@@ -1741,6 +1781,21 @@ function attachHandlers(){
 
   const showRoster = app.querySelector("[data-show-roster]");
   if (showRoster) showRoster.onclick = () => openModal({type:"roster", communityId: nav.communityId, editingId:null});
+
+  const openPayboxSettings = app.querySelector("[data-open-paybox-settings]");
+  if (openPayboxSettings) openPayboxSettings.onclick = () => {
+    const c = getCommunity(openPayboxSettings.dataset.openPayboxSettings);
+    // First time opening settings for a community still on the old single-link field -
+    // fold it into the new list so it isn't silently lost.
+    if ((!c.payboxLinks || !c.payboxLinks.length) && c.payboxLink) {
+      const entry = {id: uid(), name: "פייבוקס", link: c.payboxLink};
+      c.payboxLinks = [entry];
+      c.activePayboxLinkId = entry.id;
+      delete c.payboxLink;
+      saveState();
+    }
+    openModal({type:"payboxSettings", communityId: openPayboxSettings.dataset.openPayboxSettings});
+  };
 
   const newGameBtn = app.querySelector("[data-new-game]");
   if (newGameBtn) newGameBtn.onclick = () => {
@@ -2543,7 +2598,10 @@ function attachHandlers(){
       const src = getCommunity(modal.communityId);
       const roster = (src.roster||[]).map(p => ({...p, id: uid()}));
       const chipValues = (src.chipValues||[]).map(cv => ({...cv, id: uid()}));
-      state.communities.push({ id: uid(), name, roster, chipValues, createdBy: myIdentity.id, createdByName: myIdentity.name });
+      const idMap = {};
+      const payboxLinks = (src.payboxLinks||[]).map(pl => { const newId = uid(); idMap[pl.id] = newId; return {...pl, id: newId}; });
+      const activePayboxLinkId = src.activePayboxLinkId ? idMap[src.activePayboxLinkId] : undefined;
+      state.communities.push({ id: uid(), name, roster, chipValues, payboxLinks, activePayboxLinkId, payboxLink: src.payboxLink, createdBy: myIdentity.id, createdByName: myIdentity.name });
       saveState();
       closeModal();
     };
@@ -2577,8 +2635,9 @@ function attachHandlers(){
     // way to pre-fill a sum, so this is untested; if PayBox ignores it the link still opens
     // fine, just without a pre-filled amount.
     const openPaybox = (amount) => {
-      if (!c.payboxLink) return false;
-      const url = amount ? c.payboxLink + (c.payboxLink.includes("?") ? "&" : "?") + "amount=" + amount : c.payboxLink;
+      const link = getActivePayboxLink(c);
+      if (!link) return false;
+      const url = amount ? link + (link.includes("?") ? "&" : "?") + "amount=" + amount : link;
       window.open(url, "_blank", "noopener");
       return true;
     };
@@ -2659,18 +2718,6 @@ function attachHandlers(){
   }
 
   if (modal && modal.type === "paybox") {
-    const editPayboxLinkBtn = app.querySelector("[data-edit-paybox-link]");
-    if (editPayboxLinkBtn) editPayboxLinkBtn.onclick = () => updateModal({editingPayboxLink: true});
-    const savePayboxLinkBtn = app.querySelector("[data-save-paybox-link]");
-    if (savePayboxLinkBtn) savePayboxLinkBtn.onclick = () => {
-      const link = document.getElementById("paybox-link-input").value.trim();
-      if (!link) return;
-      const g = getGame(modal.gameId);
-      const c = getCommunity(g.communityId);
-      c.payboxLink = link;
-      saveState();
-      updateModal({editingPayboxLink: false});
-    };
     app.querySelectorAll("[data-paybox-chip]").forEach(el => el.onclick = () => { document.getElementById("paybox-amount").value = el.dataset.payboxChip; });
     const confirmPaybox = app.querySelector("[data-confirm-paybox]");
     if (confirmPaybox) confirmPaybox.onclick = () => {
@@ -2682,6 +2729,49 @@ function attachHandlers(){
       g.payboxPayments.push({id:uid(), playerId, amount: amt, ts: Date.now()});
       saveState();
       closeModal();
+    };
+  }
+
+  if (modal && modal.type === "payboxSettings") {
+    app.querySelectorAll("[data-select-paybox]").forEach(el => el.onclick = () => {
+      const c = getCommunity(modal.communityId);
+      c.activePayboxLinkId = el.dataset.selectPaybox;
+      saveState();
+      render();
+    });
+    app.querySelectorAll("[data-delete-paybox-entry]").forEach(el => el.onclick = () => {
+      if (!confirm("למחוק את קבוצת הפייבוקס הזו?")) return;
+      const c = getCommunity(modal.communityId);
+      const id = el.dataset.deletePayboxEntry;
+      c.payboxLinks = (c.payboxLinks||[]).filter(pl => pl.id !== id);
+      if (c.activePayboxLinkId === id) c.activePayboxLinkId = (c.payboxLinks[0]||{}).id;
+      saveState();
+      render();
+    });
+    const saveEntriesBtn = app.querySelector("[data-save-paybox-entries]");
+    if (saveEntriesBtn) saveEntriesBtn.onclick = () => {
+      const c = getCommunity(modal.communityId);
+      (c.payboxLinks||[]).forEach(pl => {
+        const nameInp = document.querySelector(`[data-paybox-name-input="${pl.id}"]`);
+        const linkInp = document.querySelector(`[data-paybox-link-input="${pl.id}"]`);
+        if (nameInp) pl.name = nameInp.value.trim() || pl.name;
+        if (linkInp) pl.link = linkInp.value.trim() || pl.link;
+      });
+      saveState();
+      render();
+    };
+    const addEntryBtn = app.querySelector("[data-add-paybox-entry]");
+    if (addEntryBtn) addEntryBtn.onclick = () => {
+      const name = document.getElementById("new-paybox-name").value.trim();
+      const link = document.getElementById("new-paybox-link").value.trim();
+      if (!name || !link) return;
+      const c = getCommunity(modal.communityId);
+      if (!c.payboxLinks) c.payboxLinks = [];
+      const newEntry = {id: uid(), name, link};
+      c.payboxLinks.push(newEntry);
+      if (!c.activePayboxLinkId) c.activePayboxLinkId = newEntry.id;
+      saveState();
+      render();
     };
   }
 
@@ -2719,7 +2809,17 @@ function attachHandlers(){
     const menuHistory = app.querySelector("[data-menu-history]");
     if (menuHistory) menuHistory.onclick = () => openModal({type:"history", gameId: modal.gameId, playerId: modal.playerId});
     const menuSummary = app.querySelector("[data-menu-summary]");
-    if (menuSummary) menuSummary.onclick = () => openModal({type:"summary", gameId: modal.gameId});
+    if (menuSummary) menuSummary.onclick = () => openModal({type:"history", gameId: modal.gameId, playerId: modal.playerId});
+    const menuPayboxPay = app.querySelector("[data-menu-paybox-pay]");
+    if (menuPayboxPay) menuPayboxPay.onclick = () => {
+      const g = getGame(modal.gameId);
+      const c = getCommunity(g.communityId);
+      const link = getActivePayboxLink(c);
+      const amount = menuPayboxPay.dataset.payboxAmount;
+      if (!link) { alert("לא הוגדרה קבוצת פייבוקס. בקשו מיוצר הקבוצה להגדיר אחת ממסך הקבוצה."); return; }
+      const url = link + (link.includes("?") ? "&" : "?") + "amount=" + amount;
+      window.open(url, "_blank", "noopener");
+    };
   }
 
   if (modal && modal.type === "removeSeat") {
