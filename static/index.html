@@ -337,12 +337,15 @@ function defaultState(){
   return { communities: [], games: [] };
 }
 
+// Throws on any failure (network error, non-2xx) instead of silently returning empty
+// defaults - a fresh install already gets {communities:[],games:[]} from the server itself
+// (200 OK), so a thrown error here always means the fetch genuinely failed. Every caller
+// must handle that by keeping whatever's already in memory, never by falling back to
+// defaultState() - doing so and then saving would wipe real data with an empty snapshot.
 async function loadState(){
-  try {
-    const res = await fetch("/api/state");
-    if (res.ok) return await res.json();
-  } catch(e) { /* no data saved yet, or fetch failed - fall back to defaults */ }
-  return defaultState();
+  const res = await fetch("/api/state");
+  if (!res.ok) throw new Error("failed to load state: " + res.status);
+  return await res.json();
 }
 
 let saveInFlight = null;
@@ -781,7 +784,6 @@ function renderHome(){
       </div>
       ${c.createdByName && myIdentity.name && c.createdByName === myIdentity.name ? `<button class="icon-btn danger" data-delete-community="${c.id}">${icon('trash')}</button>` : ""}
       <button class="icon-btn" data-duplicate-community="${c.id}" title="שכפל קבוצה">${icon('copy')}</button>
-      <button class="icon-btn gold" data-open-chip-setup="${c.id}" title="הגדרת ציפים">${icon('chip')}</button>
       <div class="chev">${icon('chev')}</div>
     </div>`).join("");
   if (!cards) cards = `<div class="empty">עדיין אין קבוצות - צרו את הקבוצה הראשונה שלכם</div>`;
@@ -818,6 +820,7 @@ function renderCommunity(communityId){
       <button class="back-arrow" data-back-home>${icon('back')}</button>
       <h1 class="serif sm flex1">${esc(c.name)}</h1>
       ${c.createdByName && myIdentity.name && c.createdByName === myIdentity.name ? `<button class="icon-btn gold" data-open-paybox-settings="${c.id}" title="הגדרת פייבוקס">${icon('share')}</button>` : ""}
+      <button class="icon-btn gold" data-open-chip-setup="${c.id}" title="הגדרת ציפים">${icon('chip')}</button>
       <button class="btn btn-ghost btn-sm" data-show-roster style="display:flex;align-items:center;gap:6px;">${icon('users')} שחקנים (${c.roster.length})</button>
     </div>
     <div class="section-title">ערבי משחק</div>
@@ -3019,7 +3022,14 @@ window.addEventListener("popstate", () => {
 (async function init(){
   document.getElementById("app").innerHTML =
     '<div style="padding:60px 20px;text-align:center;color:#a8a29e;font-size:14px;">טוען נתונים משותפים...</div>';
-  [state, myIdentity, appVersion] = await Promise.all([loadState(), loadIdentity(), loadVersion()]);
+  {
+    const [stateResult, identityResult, versionResult] = await Promise.allSettled([loadState(), loadIdentity(), loadVersion()]);
+    // A failed initial load must never be treated as "no data yet" - only fall back to
+    // defaultState() here (the one legitimate use of it), never after a save is possible.
+    state = stateResult.status === "fulfilled" ? stateResult.value : defaultState();
+    myIdentity = identityResult.status === "fulfilled" ? identityResult.value : { id: uid(), name: null };
+    appVersion = versionResult.status === "fulfilled" ? versionResult.value : null;
+  }
   // One-time cleanup: remove legacy communities that weren't created via the "new community"
   // button (they have no createdBy - e.g. the two starter communities from an earlier version
   // of this app), along with any of their games.
@@ -3035,7 +3045,7 @@ window.addEventListener("popstate", () => {
       // Our initial load may have caught a stale shared-state snapshot (a race with
       // someone else's concurrent save) and missed a game that genuinely exists -
       // try once more with a fresh fetch before giving up and falling back to home.
-      state = await loadState();
+      try { state = await loadState(); } catch(e) { /* keep the state we already have */ }
       invitedGame = getGame(inviteGameId);
     }
     if (invitedGame) {
