@@ -380,6 +380,12 @@ function scheduleAutoRefresh(){
 async function tickAutoRefresh(){
   if (!modal) {
     try {
+      // If a save from something the user just did is still in flight, fetching now would
+      // race it - the GET can land before that POST commits and return stale data that
+      // then overwrites the local (correct, newer) state, making the change flicker away
+      // for a few seconds until the next tick catches up. Wait for it to finish first so
+      // the fetch is always at least as fresh as anything already saved.
+      if (saveInFlight) await saveInFlight;
       const fresh = await loadState();
       state = fresh;
       const scrollY = window.scrollY;
