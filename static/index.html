@@ -2571,6 +2571,9 @@ function attachHandlers(){
     const openPayboxBtn = app.querySelector("[data-open-paybox-from-summary]");
     if (openPayboxBtn) openPayboxBtn.onclick = () => {
       const g = getGame(modal.gameId);
+      const c = getCommunity(g.communityId);
+      if (c.payboxLink) { window.open(c.payboxLink, "_blank", "noopener"); return; }
+      // no link saved for this community yet - go set one up first
       const alreadyPaid = {};
       (g.payboxPayments||[]).forEach(pp => { alreadyPaid[pp.playerId] = (alreadyPaid[pp.playerId]||0) + pp.amount; });
       const finalBalances = computeFinalBalances(g);
