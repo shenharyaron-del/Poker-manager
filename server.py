@@ -50,18 +50,33 @@ def _broadcast_state_changed():
 def get_db():
     conn = psycopg2.connect(DATABASE_URL)
     with conn.cursor() as cur:
-        cur.execute(
+        # CREATE TABLE IF NOT EXISTS isn't fully race-safe in Postgres - two connections
+        # can both see "doesn't exist yet" and both try to create it (only happens once,
+        # the first time a table is ever needed, under concurrent requests), and the
+        # loser gets a duplicate-key error on the system catalog instead of silently
+        # doing nothing. That's harmless (the table exists either way) but would
+        # otherwise surface as a real 500 to whoever's request lost the race.
+        for statement in (
             "CREATE TABLE IF NOT EXISTS shared_state ("
             "  id INTEGER PRIMARY KEY CHECK (id = 1),"
             "  data TEXT NOT NULL"
-            ")"
-        )
-        cur.execute(
+            ")",
             "CREATE TABLE IF NOT EXISTS identities ("
             "  client_id TEXT PRIMARY KEY,"
             "  data TEXT NOT NULL"
-            ")"
-        )
+            ")",
+            "CREATE TABLE IF NOT EXISTS state_history ("
+            "  id SERIAL PRIMARY KEY,"
+            "  data TEXT NOT NULL,"
+            "  saved_at TIMESTAMP NOT NULL DEFAULT now()"
+            ")",
+        ):
+            try:
+                cur.execute(statement)
+            except psycopg2.errors.DuplicateTable:
+                conn.rollback()
+            except psycopg2.errors.UniqueViolation:
+                conn.rollback()
     conn.commit()
     return conn
 
@@ -128,6 +143,17 @@ def save_state():
     json.loads(data)  # reject anything that isn't valid JSON before storing it
     conn = get_db()
     with conn.cursor() as cur:
+        # Snapshot whatever was there before this overwrites it, so a bad save (accidental
+        # or a bug) can be rolled back - keep only the last few, this is a safety net for
+        # undoing a recent mistake, not a full audit log.
+        cur.execute("SELECT data FROM shared_state WHERE id = 1")
+        prev = cur.fetchone()
+        if prev:
+            cur.execute("INSERT INTO state_history (data) VALUES (%s)", (prev[0],))
+            cur.execute(
+                "DELETE FROM state_history WHERE id NOT IN "
+                "(SELECT id FROM state_history ORDER BY saved_at DESC LIMIT 3)"
+            )
         cur.execute(
             "INSERT INTO shared_state (id, data) VALUES (1, %s) "
             "ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data",
@@ -137,6 +163,28 @@ def save_state():
     conn.close()
     _broadcast_state_changed()
     return jsonify({"ok": True})
+
+
+@app.route("/api/state/history")
+def get_state_history():
+    conn = get_db()
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, saved_at FROM state_history ORDER BY saved_at DESC")
+        rows = cur.fetchall()
+    conn.close()
+    return jsonify([{"id": r[0], "savedAt": r[1].isoformat()} for r in rows])
+
+
+@app.route("/api/state/history/<int:history_id>", methods=["GET"])
+def get_state_history_entry(history_id):
+    conn = get_db()
+    with conn.cursor() as cur:
+        cur.execute("SELECT data FROM state_history WHERE id = %s", (history_id,))
+        row = cur.fetchone()
+    conn.close()
+    if not row:
+        return jsonify({"error": "not found"}), 404
+    return row[0], 200, {"Content-Type": "application/json"}
 
 
 @app.route("/api/events")
