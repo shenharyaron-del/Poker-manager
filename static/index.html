@@ -779,7 +779,7 @@ const ICONS = {
   share: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>',
   gear: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>',
   percent: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>',
-  paybox: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><g stroke-width="1.8"><circle cx="5" cy="7" r="1.7"/><path d="M2 15.4v-.6a2.6 2.6 0 012.6-2.6h.8a2.6 2.6 0 012.6 2.6v.6"/><circle cx="13" cy="7" r="1.7"/><path d="M10 15.4v-.6a2.6 2.6 0 012.6-2.6h.8a2.6 2.6 0 012.6 2.6v.6"/><circle cx="9" cy="5.6" r="2.1"/><path d="M5.3 16v-1a3.7 3.7 0 013.7-3.5 3.7 3.7 0 013.7 3.5v1"/></g><g stroke-width="2.6" transform="translate(19,19) scale(.42) translate(-12,-12)"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></g></svg>',
+  paybox: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="19" height="19" rx="5"/><circle cx="12" cy="10" r="3.2"/><path d="M6.3 18.6c0-3.3 2.5-5.2 5.7-5.2s5.7 1.9 5.7 5.2"/></svg>',
 };
 function icon(name){ return ICONS[name] || ""; }
 
@@ -1520,11 +1520,11 @@ function renderModal(m){
     `;
   } else if (m.type === "payboxSettings") {
     const c = getCommunity(m.communityId);
-    title = `<div style="display:flex;align-items:center;gap:8px;">
+    title = `<div style="display:flex;align-items:flex-start;gap:8px;">
       <span style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;background:#0891b2;flex-shrink:0;">${icon('paybox')}</span>
-      <div style="display:flex;flex-direction:column;align-items:flex-start;line-height:1.2;">
-        <span style="font-family:system-ui,sans-serif;font-weight:700;font-size:17px;">PayBox</span>
-        <span style="font-family:system-ui,sans-serif;font-weight:400;font-size:10px;opacity:.65;">Setup</span>
+      <div style="display:flex;flex-direction:column;align-items:flex-start;">
+        <span style="font-family:system-ui,sans-serif;font-weight:700;font-size:15px;line-height:1.1;">PayBox</span>
+        <span style="font-family:system-ui,sans-serif;font-weight:400;font-size:10px;line-height:1.1;opacity:.65;">Setup</span>
       </div>
     </div>`;
     const links = c.payboxLinks || [];
