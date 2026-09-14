@@ -1633,7 +1633,7 @@ function renderModal(m){
       const owes = fb ? -(fb.profit + alreadyPaid) : 0;
       body = `
         <button class="btn btn-ghost btn-block" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-menu-summary>${icon('bar')} סיכום</button>
-        ${owes > 0.005 ? `<button class="btn btn-block" style="background:#0891b2;color:#fff;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-menu-paybox-pay data-paybox-amount="${Math.round(owes*100)/100}">${icon('share')} שלם בפייבוקס (₪${Math.round(owes*100)/100})</button>` : ""}
+        ${owes > 0.005 ? `<button class="btn btn-block" style="background:#0891b2;color:#fff;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-menu-paybox-pay data-paybox-amount="${Math.round(owes*100)/100}"><img src="/static/paybox-icon.png" style="height:18px;width:auto;display:block;"> שלם בפייבוקס (₪${Math.round(owes*100)/100})</button>` : ""}
         <button class="btn btn-ghost btn-block" data-return-to-game="${m.playerId}" style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('undo')} החזר למשחק</button>
       `;
     } else {
