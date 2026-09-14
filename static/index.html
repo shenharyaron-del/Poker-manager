@@ -506,6 +506,32 @@ document.addEventListener("visibilitychange", () => {
   if (!document.hidden) doRefreshNow("visibilitychange");
 });
 
+// ---------- Shrinking the multi-device lost-update window ----------
+// The whole shared state is one JSON blob with no per-field merge - every save overwrites
+// the entire thing with whatever this device currently has locally. If phone A saves a
+// buy-in, and phone B (which hasn't refreshed since before that) then adds its own buy-in,
+// B's save serializes its own (stale, missing A's) copy of state and wipes A's change out,
+// not just B's own edit. Waiting for a periodic/SSE refresh isn't enough - the race is
+// between "did I refresh recently enough" and "did the other device save first," which
+// depends on both people's timing, not just one. Calling this right before reading state
+// to apply a mutation (not just before saving, since the mutation itself needs to land on
+// a value that will actually be saved) pulls the freshest known copy first, so the mutation
+// lands on top of whatever's newest - it shrinks the race window to "the round-trip of one
+// extra fetch" instead of "however long since this device's last background refresh," but
+// doesn't eliminate it outright (two people tapping at the exact same instant can still
+// race) - a full fix would need real per-field merging, which is a much bigger change.
+async function syncBeforeMutate(){
+  try {
+    let pending;
+    do {
+      pending = saveInFlight;
+      if (pending) await pending;
+    } while (pending !== saveInFlight);
+    const fresh = await loadState();
+    if (fresh !== null) state = fresh;
+  } catch(e) { /* offline or a hiccup - proceed with what we have rather than block the action */ }
+}
+
 // ---------- "Who am I" - private per-browser identity, used only to tag who created a community ----------
 // Not a real login: it's a name each user types once, remembered for their own browser via
 // a per-device id. It lets us show/allow "delete" only to the creator, but someone could
@@ -1088,7 +1114,7 @@ function renderCommunity(communityId){
           <span style="font-family:system-ui,sans-serif;font-weight:400;font-size:8px;opacity:.8;">Setup</span>
         </span>
       </button>` : ""}
-      <button class="icon-btn gold" data-open-chip-setup="${c.id}" title="הגדרת ציפים">${icon('chip')}</button>
+      ${c.createdByName && myIdentity.name && c.createdByName === myIdentity.name ? `<button class="icon-btn gold" data-open-chip-setup="${c.id}" title="הגדרת ציפים">${icon('chip')}</button>` : ""}
       <button class="btn btn-ghost btn-sm" data-show-roster style="display:flex;align-items:center;gap:6px;">${icon('users')} שחקנים (${c.roster.length})</button>
     </div>
     <div class="section-title">ערבי משחק</div>
@@ -1177,7 +1203,7 @@ function renderTable(gameId){
       <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
       <div class="flex1">
         <h1 class="serif sm" style="color:var(--gold);">${esc(c.name)}</h1>
-        <div class="meta" style="color:#6ee7b7;font-size:12px;display:flex;align-items:center;gap:5px;">${icon('cal')}${esc(g.date)}</div>
+        <div class="meta" style="color:#6ee7b7;font-size:12px;display:flex;align-items:center;gap:5px;">${icon('cal')}${esc(g.date)}${g.createdByName ? ` · נוצר ע"י ${esc(g.createdByName)}` : ""}</div>
         ${seats.slice(0,9).some(s=>!s) ? `
           <button class="icon-btn" data-toggle-empty-seats title="${hideEmptySeats?'הצג מקומות פנויים':'הסתר מקומות פנויים'}" style="margin-top:6px;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.05);color:var(--muted);opacity:.6;display:inline-flex;align-items:center;justify-content:center;">${icon(hideEmptySeats?'eyeOff':'eye')}</button>
         ` : ""}
@@ -1244,7 +1270,7 @@ function renderModal(m){
       </div>
     `).join("");
   } else if (m.type === "adminSettings") {
-    title = "הגדרות";
+    title = "הגדרות מערכת";
     body = `
       <div class="section-title" style="padding:0;margin:0 0 8px;">אווטרים</div>
       <div style="display:flex;gap:8px;margin-bottom:18px;">
@@ -1879,8 +1905,10 @@ function renderModal(m){
     ` : `<div class="empty" style="padding:12px 0;">כל השחקנים בקבוצה כבר יושבים בשולחן.</div>`;
   } else if (m.type === "seatMenu") {
     const g = getGame(m.gameId);
+    const c = getCommunity(g.communityId);
     const p = g.players.find(pl=>pl.id===m.playerId);
     const cashedOut = m.playerId in g.cashouts;
+    const canRemove = myIdentity.name && (myIdentity.name === g.createdByName || myIdentity.name === c.createdByName);
     title = esc(p ? p.name : "שחקן");
     if (cashedOut) {
       const finalBalances = computeFinalBalances(g);
@@ -1898,7 +1926,7 @@ function renderModal(m){
       body = `
         <button class="btn btn-primary btn-block" style="margin-bottom:10px;" data-menu-buyins>${icon('plus')} קנייה</button>
         <button class="btn btn-block" style="background:#57534e;color:#f5f5f4;margin-bottom:10px;" data-menu-chips>${icon('out')} סיים ערב</button>
-        <button class="btn btn-block" style="background:#be123c;color:#fff;margin-bottom:10px;" data-menu-remove>${icon('trash')} הסר מהשולחן</button>
+        ${canRemove ? `<button class="btn btn-block" style="background:#be123c;color:#fff;margin-bottom:10px;" data-menu-remove>${icon('trash')} הסר מהשולחן</button>` : ""}
         <button class="btn btn-ghost btn-block" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-menu-history>${icon('bar')} היסטוריית קניות</button>
         <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-menu-change-avatar>${icon('pencil')} שינוי אווטר</button>
       `;
@@ -2556,7 +2584,7 @@ function attachHandlers(){
     if (createBtn) createBtn.onclick = () => {
       const c = getCommunity(modal.communityId);
       const dateVal = document.getElementById("new-game-date").value || modal.date;
-      const g = {id:uid(), communityId:c.id, date:dateVal, players: [], buyins:[], cashouts:{}, payboxPayments:[], seats:new Array(9).fill(null), liveChips:{}, closed:false};
+      const g = {id:uid(), communityId:c.id, date:dateVal, players: [], buyins:[], cashouts:{}, payboxPayments:[], playerPayments:[], seats:new Array(9).fill(null), liveChips:{}, closed:false, createdByName: myIdentity.name};
       state.games.push(g);
       saveState();
       go("table", {gameId:g.id, communityId:c.id});
@@ -3168,9 +3196,11 @@ function attachHandlers(){
   if (modal && modal.type === "buyin") {
     app.querySelectorAll("[data-chip]").forEach(el => el.onclick = () => { document.getElementById("buyin-amount").value = el.dataset.chip; });
     const confirmBtn = app.querySelector("[data-confirm-buyin]");
-    if (confirmBtn) confirmBtn.onclick = () => {
+    if (confirmBtn) confirmBtn.onclick = async () => {
       const amt = parseFloat(document.getElementById("buyin-amount").value);
       if (!amt || amt <= 0) return;
+      confirmBtn.disabled = true;
+      await syncBeforeMutate();
       const g = getGame(modal.gameId);
       g.buyins.push({id:uid(), playerId: modal.playerId, amount: amt, ts: Date.now()});
       logSync(`buyin confirmed player=${modal.playerId} amt=${amt} -> game now has ${g.buyins.length} buyins`);
@@ -3182,10 +3212,12 @@ function attachHandlers(){
   if (modal && modal.type === "paybox") {
     app.querySelectorAll("[data-paybox-chip]").forEach(el => el.onclick = () => { document.getElementById("paybox-amount").value = el.dataset.payboxChip; });
     const confirmPaybox = app.querySelector("[data-confirm-paybox]");
-    if (confirmPaybox) confirmPaybox.onclick = () => {
+    if (confirmPaybox) confirmPaybox.onclick = async () => {
       const amt = parseFloat(document.getElementById("paybox-amount").value);
       const playerId = document.getElementById("paybox-player").value;
       if (!amt || amt <= 0 || !playerId) return;
+      confirmPaybox.disabled = true;
+      await syncBeforeMutate();
       const g = getGame(modal.gameId);
       if (!g.payboxPayments) g.payboxPayments = [];
       g.payboxPayments.push({id:uid(), playerId, amount: amt, ts: Date.now()});
@@ -3216,8 +3248,10 @@ function attachHandlers(){
       window.open(url, "_blank", "noopener");
     });
     const confirmPayPlayer = app.querySelector("[data-confirm-pay-player]");
-    if (confirmPayPlayer) confirmPayPlayer.onclick = () => {
+    if (confirmPayPlayer) confirmPayPlayer.onclick = async () => {
       if (!modal.toPlayerId) return;
+      confirmPayPlayer.disabled = true;
+      await syncBeforeMutate();
       const g = getGame(modal.gameId);
       if (!g.playerPayments) g.playerPayments = [];
       g.playerPayments.push({id:uid(), fromPlayerId: modal.fromPlayerId, toPlayerId: modal.toPlayerId, amount: modal.amount, ts: Date.now()});
@@ -3270,7 +3304,9 @@ function attachHandlers(){
   }
 
   if (modal && modal.type === "pickSeat") {
-    app.querySelectorAll("[data-pick-player]").forEach(el => el.onclick = () => {
+    app.querySelectorAll("[data-pick-player]").forEach(el => el.onclick = async () => {
+      el.style.pointerEvents = "none";
+      await syncBeforeMutate();
       const g = getGame(modal.gameId);
       const c = getCommunity(g.communityId);
       const p = c.roster.find(pl => pl.id === el.dataset.pickPlayer);
@@ -3322,7 +3358,9 @@ function attachHandlers(){
 
   if (modal && modal.type === "removeSeat") {
     const confirmClear = app.querySelector("[data-confirm-clear-seat]");
-    if (confirmClear) confirmClear.onclick = () => {
+    if (confirmClear) confirmClear.onclick = async () => {
+      confirmClear.disabled = true;
+      await syncBeforeMutate();
       const g = getGame(modal.gameId);
       if (g.seats) {
         const idx = g.seats.indexOf(modal.playerId);
@@ -3335,8 +3373,10 @@ function attachHandlers(){
   }
 
   if (modal && modal.type === "seatBuyins") {
-    app.querySelectorAll("[data-seat-instant-chip]").forEach(el => el.onclick = () => {
+    app.querySelectorAll("[data-seat-instant-chip]").forEach(el => el.onclick = async () => {
       const amt = parseFloat(el.dataset.seatInstantChip);
+      el.disabled = true;
+      await syncBeforeMutate();
       const g = getGame(modal.gameId);
       g.buyins.push({id:uid(), playerId: modal.playerId, amount: amt, ts: Date.now()});
       saveState();
@@ -3349,9 +3389,11 @@ function attachHandlers(){
       if (inp) inp.focus();
     };
     const confirmSeatBuyin = app.querySelector("[data-confirm-seat-buyin]");
-    if (confirmSeatBuyin) confirmSeatBuyin.onclick = () => {
+    if (confirmSeatBuyin) confirmSeatBuyin.onclick = async () => {
       const amt = parseFloat(document.getElementById("seat-buyin-amount").value);
       if (!amt || amt <= 0) return;
+      confirmSeatBuyin.disabled = true;
+      await syncBeforeMutate();
       const g = getGame(modal.gameId);
       g.buyins.push({id:uid(), playerId: modal.playerId, amount: amt, ts: Date.now()});
       saveState();
@@ -3376,10 +3418,12 @@ function attachHandlers(){
       openModal({type:"chipPhotoCount", gameId: modal.gameId, playerId: modal.playerId, communityId: g.communityId, imageSrc: null, stacks, analyzing: false, analyzeError: null, noPhoto: true});
     };
     const quickEndBtn = app.querySelector("[data-quick-end]");
-    if (quickEndBtn) quickEndBtn.onclick = () => {
-      const g = getGame(modal.gameId);
+    if (quickEndBtn) quickEndBtn.onclick = async () => {
       const inputEl = document.getElementById("seat-chips");
       const v = inputEl ? parseFloat(inputEl.value) : NaN;
+      quickEndBtn.disabled = true;
+      await syncBeforeMutate();
+      const g = getGame(modal.gameId);
       const chips = (!isNaN(v) && v >= 0) ? v : ((g.liveChips||{})[modal.playerId] || 0);
       if (!g.liveChips) g.liveChips = {};
       g.liveChips[modal.playerId] = chips;
@@ -3398,9 +3442,11 @@ function attachHandlers(){
       updateModal({selected: sel});
     });
     const confirmBulkBuyin = app.querySelector("[data-confirm-bulk-buyin]");
-    if (confirmBulkBuyin) confirmBulkBuyin.onclick = () => {
+    if (confirmBulkBuyin) confirmBulkBuyin.onclick = async () => {
       const amt = parseFloat(document.getElementById("bulk-buyin-amount").value);
       if (!amt || amt <= 0) return;
+      confirmBulkBuyin.disabled = true;
+      await syncBeforeMutate();
       const g = getGame(modal.gameId);
       const ids = Object.keys(modal.selected).filter(k => modal.selected[k]);
       const now = Date.now();
@@ -3412,13 +3458,15 @@ function attachHandlers(){
 
   if (modal && modal.type === "leave") {
     const confirmBtn = app.querySelector("[data-confirm-leave]");
-    if (confirmBtn) confirmBtn.onclick = () => {
+    if (confirmBtn) confirmBtn.onclick = async () => {
       const raw = parseFloat(document.getElementById("leave-amount").value);
       if (isNaN(raw) || raw < 0) return;
       const multEl = document.getElementById("leave-multiplier");
       const multRaw = multEl ? parseInt(multEl.value) : 1;
       const multiplier = (!multRaw || multRaw < 1) ? 1 : (multRaw > 99 ? 99 : multRaw);
       const amt = Math.round((raw / multiplier) * 100) / 100;
+      confirmBtn.disabled = true;
+      await syncBeforeMutate();
       const g = getGame(modal.gameId);
       g.cashouts[modal.playerId] = {amount: amt, ts: Date.now(), arrangedWith: []};
       if (!g.liveChips) g.liveChips = {};
