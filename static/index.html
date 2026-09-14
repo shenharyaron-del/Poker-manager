@@ -418,39 +418,57 @@ async function saveState(){
 // primary mechanism. Skip a refresh whenever a modal is open so we never yank away
 // something someone's mid-typing; render() re-draws whatever nav/modal already are, so this
 // never navigates anyone away from the screen (e.g. table) they're currently looking at.
+let refreshInProgress = false;
+let refreshQueued = false;
 async function doRefreshNow(source){
   const callId = DEBUG_SYNC ? Math.random().toString(36).slice(2,6) : "";
   logSync(`refresh[${callId}] triggered by ${source}, modal=${!!modal}`);
   if (modal) { logSync(`refresh[${callId}] SKIPPED - modal open`); return; }
+  if (refreshInProgress) {
+    // Another refresh is already running its own GET - don't start a second one
+    // concurrently (two in-flight GETs can resolve out of order, and the one that
+    // happens to land last wins even if it was issued first and is now stale, which
+    // could put a seat/buy-in back the way it was before someone's most recent action
+    // and - if another save happens before anything corrects it - persist it that way).
+    // Just mark that another pass is needed once the current one finishes.
+    refreshQueued = true;
+    logSync(`refresh[${callId}] COALESCED - one already running`);
+    return;
+  }
+  refreshInProgress = true;
   try {
-    // If a save from something the user just did is still in flight, fetching now would
-    // race it - the GET can land before that POST commits and return stale data that then
-    // overwrites the local (correct, newer) state, making the change flicker away for a
-    // few seconds until the next refresh catches up. Wait for it to finish first so the
-    // fetch is always at least as fresh as anything already saved. A single snapshot-and-
-    // await isn't enough: rapid actions (several buy-ins in a row) queue additional saves
-    // onto saveInFlight while we're waiting on an earlier one, and each save's own
-    // completion now triggers this same refresh via SSE (including on the tab that made
-    // it) - so keep re-checking until it's stayed the same across our own wait, meaning
-    // no newer save snuck in while we were watching.
-    let pending;
     do {
-      pending = saveInFlight;
-      if (pending) await pending;
-    } while (pending !== saveInFlight);
-    logSync(`refresh[${callId}] past save-wait, GET start`);
-    const fresh = await loadState();
-    if (fresh === null) {
-      logSync(`refresh[${callId}] 304 not-modified, nothing to apply`);
-      return;
-    }
-    logSync(`refresh[${callId}] GET done, buyins=${(fresh.games||[]).map(g=>g.buyins.length).join(',')}, applying (modal now=${!!modal})`);
-    state = fresh;
-    const scrollY = window.scrollY;
-    render();
-    window.scrollTo(0, scrollY);
-    logSync(`refresh[${callId}] applied+rendered`);
+      refreshQueued = false;
+      // If a save from something the user just did is still in flight, fetching now would
+      // race it - the GET can land before that POST commits and return stale data that then
+      // overwrites the local (correct, newer) state, making the change flicker away for a
+      // few seconds until the next refresh catches up. Wait for it to finish first so the
+      // fetch is always at least as fresh as anything already saved. A single snapshot-and-
+      // await isn't enough: rapid actions (several buy-ins in a row) queue additional saves
+      // onto saveInFlight while we're waiting on an earlier one, and each save's own
+      // completion now triggers this same refresh via SSE (including on the tab that made
+      // it) - so keep re-checking until it's stayed the same across our own wait, meaning
+      // no newer save snuck in while we were watching.
+      let pending;
+      do {
+        pending = saveInFlight;
+        if (pending) await pending;
+      } while (pending !== saveInFlight);
+      logSync(`refresh[${callId}] past save-wait, GET start`);
+      const fresh = await loadState();
+      if (fresh === null) {
+        logSync(`refresh[${callId}] 304 not-modified, nothing to apply`);
+      } else {
+        logSync(`refresh[${callId}] GET done, buyins=${(fresh.games||[]).map(g=>g.buyins.length).join(',')}, applying (modal now=${!!modal})`);
+        state = fresh;
+        const scrollY = window.scrollY;
+        render();
+        window.scrollTo(0, scrollY);
+        logSync(`refresh[${callId}] applied+rendered`);
+      }
+    } while (refreshQueued);
   } catch(e) { logSync(`refresh[${callId}] ERROR ${e}`); /* offline or a hiccup - next refresh will retry */ }
+  finally { refreshInProgress = false; }
 }
 // Interval itself lives in shared state (refreshIntervalSec) so Super Admin can change it
 // from any device and every other device picks up the new cadence on its next tick.
