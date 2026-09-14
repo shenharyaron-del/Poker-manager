@@ -599,18 +599,34 @@ function seatPlayerIfRoom(g, playerId, p){
   if (g.liveChips[playerId] === undefined) g.liveChips[playerId] = 0;
   return true;
 }
-// If this device is remembered as a specific roster player in this game's community
-// (see data-pick-player below), and that player isn't seated yet in this game, seat
-// them automatically - so returning players don't have to pick their name every night.
+// If this device is remembered as a specific roster player in this game's community,
+// and that player isn't seated yet in this game, seat them automatically - so returning
+// players don't have to pick their name every night.
 function autoSeatSelf(gameId){
   const g = getGame(gameId);
   if (!g || g.closed) return;
-  const playerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
-  if (!playerId) return;
   const c = getCommunity(g.communityId);
-  const p = c && c.roster.find(pl => pl.id === playerId);
+  if (!c) return;
+  const playerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+  let p = playerId ? c.roster.find(pl => pl.id === playerId) : null;
+  // Self-healing for devices that got mis-linked by an earlier bug (assigning someone
+  // else to a seat used to overwrite this device's own remembered player): if the
+  // remembered player's name doesn't match this device's own identity name, it's wrong -
+  // look up the right one by name instead of trusting a stale link, and fix it going
+  // forward.
+  if (myIdentity.name && (!p || p.name !== myIdentity.name)) {
+    const byName = c.roster.find(pl => pl.name === myIdentity.name);
+    if (byName) {
+      p = byName;
+      if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
+      myIdentity.myPlayers[g.communityId] = byName.id;
+      saveIdentity();
+    } else {
+      p = null;
+    }
+  }
   if (!p) return;
-  if (seatPlayerIfRoom(g, playerId, p)) saveState();
+  if (seatPlayerIfRoom(g, p.id, p)) saveState();
 }
 // For someone opening a game via a shared invite link: if this device isn't already
 // linked to a roster player in this community, find one by matching name (so the same
