@@ -582,6 +582,36 @@ function go(screen, extra){
   if (screen === "table" && nav.gameId) autoSeatSelf(nav.gameId);
   render();
 }
+// Tags a roster entry as belonging to this device's own identity, once we know that for
+// sure (someone joining via their own phone - an invite link, creating a community, or
+// creating a game). Only these self-identified entries get a shared avatar/phone across
+// every community they're in (state.globalPlayers, keyed by this clientId) - a roster
+// entry someone else typed in by hand (no phone of their own involved) has no way to
+// know it's the same real person as an entry in a different community, so it stays a
+// standalone per-community entry like today.
+function linkToGlobalPlayer(p){
+  if (!myIdentity.id) return;
+  p.clientId = myIdentity.id;
+}
+// Phone/avatar for a self-identified roster entry (see linkToGlobalPlayer) live in this
+// shared registry instead of on the per-community roster entry, so the same real person
+// only has to set them once and every community they're in sees the same values. A
+// manually-typed-in roster entry (no clientId) keeps using its own phone/photo fields,
+// same as before this existed.
+function getGlobalPlayer(clientId){
+  return (state.globalPlayers && state.globalPlayers[clientId]) || {};
+}
+function setGlobalPlayer(clientId, updates){
+  if (!clientId) return;
+  if (!state.globalPlayers) state.globalPlayers = {};
+  state.globalPlayers[clientId] = Object.assign({}, state.globalPlayers[clientId], updates);
+}
+function getPlayerPhone(p){ return p.clientId ? (getGlobalPlayer(p.clientId).phone || "") : (p.phone || ""); }
+function setPlayerPhone(p, phone){ if (p.clientId) setGlobalPlayer(p.clientId, {phone}); else p.phone = phone; }
+// Avatars are global-only - a roster entry someone just typed in by hand (no linked
+// device) has no shared identity to hang a photo off of, so it simply can't have one.
+function getPlayerPhoto(p){ return p.clientId ? getGlobalPlayer(p.clientId).photo : undefined; }
+function setPlayerPhoto(p, photo){ if (p.clientId) setGlobalPlayer(p.clientId, {photo}); }
 // Seat a player into the first open slot (main 9, then the 10th overflow slot),
 // growing g.seats to hold it if needed. Shared by autoSeatSelf and autoJoinViaInvite.
 function seatPlayerIfRoom(g, playerId, p){
@@ -648,6 +678,7 @@ async function autoJoinViaInvite(gameId){
     if (!myIdentity.name) return; // no name yet to identify/create with (forced onboarding will ask, then retry)
     p = c.roster.find(pl => pl.name === myIdentity.name);
     if (!p) { p = {id: uid(), name: myIdentity.name}; c.roster.push(p); }
+    linkToGlobalPlayer(p);
     if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
     myIdentity.myPlayers[g.communityId] = p.id;
     saveIdentity();
@@ -735,7 +766,8 @@ function openFilePicker(communityId, playerId, useCamera){
     processSelfieFile(file, (dataUrl) => {
       const c = getCommunity(communityId);
       const rp = c && c.roster.find(pl => pl.id === playerId);
-      if (rp) { rp.photo = dataUrl; saveState(); render(); }
+      if (rp && !rp.clientId) { alert("אפשר לקבוע אווטר רק לשחקן שנכנס בעצמו דרך קישור הזמנה."); return; }
+      if (rp) { setPlayerPhoto(rp, dataUrl); saveState(); render(); }
     });
   };
   selfieInput.click();
@@ -1167,7 +1199,7 @@ function renderTable(gameId){
     const buyin = buyinTotals[pid] || 0;
     const chips = liveChips[pid] || 0;
     const rosterP = c.roster.find(rp => rp.id === pid);
-    const photo = rosterP && rosterP.photo;
+    const photo = rosterP && getPlayerPhoto(rosterP);
     let caption = `קנייה ₪${buyin}`;
     if (cashedOut) {
       const profit = chips - buyin;
@@ -1293,6 +1325,10 @@ function renderModal(m){
         <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-open-avatar-creator>${icon('plus')} יצירת אווטרים חדשים</button>
         <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-open-avatar-manage>${icon('pencil')} ניהול</button>
       </div>
+      <div class="section-title" style="padding:0;margin:0 0 8px;">שחקנים גלובליים</div>
+      <div style="margin-bottom:18px;">
+        <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-open-global-players>${icon('users')} רשימת שחקנים, טלפון ואווטר</button>
+      </div>
       <div class="section-title" style="padding:0;margin:0 0 8px;">גיבוי ושחזור</div>
       <div style="display:flex;gap:8px;margin-bottom:18px;">
         <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-download-backup>${icon('download')} הורד גיבוי JSON</button>
@@ -1301,6 +1337,30 @@ function renderModal(m){
       <a href="https://console.anthropic.com" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:18px;color:var(--muted);font-size:12px;text-decoration:underline;">console.anthropic.com</a>
       <div style="text-align:center;margin-top:8px;color:var(--muted);font-size:11px;">גרסה: ${esc(appVersion || "לא ידוע")}</div>
     `;
+  } else if (m.type === "globalPlayers") {
+    title = "שחקנים גלובליים";
+    const clientIds = Object.keys(state.globalPlayers || {});
+    const rows = clientIds.map(cid => {
+      let name = null;
+      for (const c of state.communities) {
+        const match = c.roster.find(p => p.clientId === cid);
+        if (match) { name = match.name; break; }
+      }
+      const data = state.globalPlayers[cid] || {};
+      return { clientId: cid, name: name || "(לא נמצא בשום קבוצה)", phone: data.phone, photo: data.photo };
+    });
+    body = rows.length ? `
+      <p style="color:var(--muted);font-size:12px;margin-bottom:14px;">שחקנים שנכנסו בעצמם דרך קישור הזמנה - הטלפון והאווטר שלהם משותפים לכל הקבוצות שהם חברים בהן.</p>
+      <div class="scroll-list">
+        ${rows.map(r => `<div class="roster-row">
+          <div class="row" style="gap:10px;">
+            ${r.photo ? `<img src="${r.photo}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;">` : `<div style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.08);"></div>`}
+            <span>${esc(r.name)}</span>
+          </div>
+          <span style="color:var(--muted);font-size:12px;" dir="ltr">${esc(r.phone||"אין טלפון")}</span>
+        </div>`).join("")}
+      </div>
+    ` : `<p style="color:var(--muted);font-size:13px;">עדיין אין שחקנים שנכנסו בעצמם דרך קישור הזמנה.</p>`;
   } else if (m.type === "avatarManage") {
     title = "ניהול אווטרים";
     const groups = getAvatarGroups();
@@ -1649,7 +1709,7 @@ function renderModal(m){
       if (m.editingId === p.id) {
         return `<div class="roster-row" style="flex-direction:column;align-items:stretch;gap:8px;">
           <input type="text" id="edit-name-input" value="${esc(p.name)}" placeholder="שם" autofocus>
-          <input type="tel" id="edit-phone-input" value="${esc(p.phone||'')}" placeholder="טלפון (לתשלום ישיר לשחקן)" dir="ltr">
+          <input type="tel" id="edit-phone-input" value="${esc(getPlayerPhone(p))}" placeholder="טלפון (לתשלום ישיר לשחקן)" dir="ltr">
           <div class="row" style="gap:4px;justify-content:flex-end;">
             <button class="icon-btn ok" data-save-edit="${p.id}">${icon('check')}</button>
             <button class="icon-btn" data-cancel-edit>${icon('x')}</button>
@@ -1857,7 +1917,7 @@ function renderModal(m){
     const c = getCommunity(g.communityId);
     const candidates = g.players.filter(p => p.id !== m.fromPlayerId).map(p => {
       const rp = (c.roster||[]).find(r => r.id === p.id);
-      return { id: p.id, name: p.name, phone: rp && rp.phone };
+      return { id: p.id, name: p.name, phone: rp && getPlayerPhone(rp) };
     });
     const selected = m.toPlayerId ? candidates.find(p=>p.id===m.toPlayerId) : null;
     title = `שלם לשחקן (₪${m.amount})`;
@@ -2440,7 +2500,8 @@ function attachHandlers(){
         const av = (state.customAvatars||[]).find(a => a.id === key.slice(7));
         photo = av ? av.image : null;
       }
-      if (rp && photo) { rp.photo = photo; saveState(); }
+      if (rp && photo && !rp.clientId) { alert("אפשר לקבוע אווטר רק לשחקן שנכנס בעצמו דרך קישור הזמנה."); closeModal(); return; }
+      if (rp && photo) { setPlayerPhoto(rp, photo); saveState(); }
       closeModal();
     });
   }
@@ -2450,6 +2511,8 @@ function attachHandlers(){
     if (openCreatorBtn) openCreatorBtn.onclick = () => openModal({type:"avatarCreator", imageSrc: null, points: []});
     const openManageBtn = app.querySelector("[data-open-avatar-manage]");
     if (openManageBtn) openManageBtn.onclick = () => openModal({type:"avatarManage"});
+    const openGlobalPlayersBtn = app.querySelector("[data-open-global-players]");
+    if (openGlobalPlayersBtn) openGlobalPlayersBtn.onclick = () => openModal({type:"globalPlayers"});
   }
 
   if (modal && modal.type === "avatarManage") {
@@ -2548,7 +2611,7 @@ function attachHandlers(){
         const c = getCommunity(modal.communityId);
         const p = c.roster.find(pl=>pl.id===saveEdit.dataset.saveEdit);
         p.name = name;
-        p.phone = phoneInput.value.trim();
+        setPlayerPhone(p, phoneInput.value.trim());
         saveState();
       }
       updateModal({editingId:null});
@@ -2607,6 +2670,7 @@ function attachHandlers(){
       if (myIdentity.name) {
         let creatorPlayer = c.roster.find(pl => pl.name === myIdentity.name);
         if (!creatorPlayer) { creatorPlayer = {id: uid(), name: myIdentity.name}; c.roster.push(creatorPlayer); }
+        linkToGlobalPlayer(creatorPlayer);
         seatPlayerIfRoom(g, creatorPlayer.id, creatorPlayer);
       }
       state.games.push(g);
@@ -3081,6 +3145,7 @@ function attachHandlers(){
       if (!name) { alert("צריך להזין שם לקבוצה."); return; }
       const communityId = uid();
       const creatorPlayer = {id: uid(), name: myIdentity.name};
+      linkToGlobalPlayer(creatorPlayer);
       if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
       myIdentity.myPlayers[communityId] = creatorPlayer.id;
       saveIdentity();
@@ -3258,7 +3323,8 @@ function attachHandlers(){
       const g = getGame(modal.gameId);
       const c = getCommunity(g.communityId);
       const target = (c.roster||[]).find(p => p.id === modal.toPlayerId);
-      const phone = target && target.phone ? target.phone.replace(/[^0-9+]/g, "") : null;
+      const targetPhone = target && getPlayerPhone(target);
+      const phone = targetPhone ? targetPhone.replace(/[^0-9+]/g, "") : null;
       // Best-effort deep links, same caveat as the PayBox group link: neither app's
       // exact URL scheme for pre-filling a phone+amount is officially confirmed, so
       // this may just open the app without them - harmless if the params are ignored.
