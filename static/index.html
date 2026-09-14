@@ -841,7 +841,7 @@ function renderCommunity(communityId){
     <div class="top row" style="padding-bottom:10px;">
       <button class="back-arrow" data-back-home>${icon('back')}</button>
       <h1 class="serif sm flex1">${esc(c.name)}</h1>
-      ${c.createdByName && myIdentity.name && c.createdByName === myIdentity.name ? `<button class="icon-btn" data-open-paybox-settings="${c.id}" title="הגדרת פייבוקס" style="padding:4px;"><img src="/static/paybox-icon.png" style="width:56px;height:14px;border-radius:3px;display:block;"></button>` : ""}
+      ${c.createdByName && myIdentity.name && c.createdByName === myIdentity.name ? `<button class="icon-btn" data-open-paybox-settings="${c.id}" title="הגדרת פייבוקס" style="background:none;padding:0;"><img src="/static/paybox-icon.png" style="width:36px;height:30px;display:block;"></button>` : ""}
       <button class="icon-btn gold" data-open-chip-setup="${c.id}" title="הגדרת ציפים">${icon('chip')}</button>
       <button class="btn btn-ghost btn-sm" data-show-roster style="display:flex;align-items:center;gap:6px;">${icon('users')} שחקנים (${c.roster.length})</button>
     </div>
