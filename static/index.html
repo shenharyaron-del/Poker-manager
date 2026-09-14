@@ -515,6 +515,8 @@ let appVersion = null; // filled in by init() from /api/version
 let nav = { screen: "home", communityId: null, gameId: null };
 let modal = null; // {type, ...}
 let hideEmptySeats = false; // UI-only toggle, not persisted
+let showSettlement = false; // UI-only toggle, not persisted
+let settlementFilterPlayerId = null; // UI-only, not persisted - null means "show everyone"
 
 function go(screen, extra){
   nav = Object.assign({screen}, extra||{});
@@ -807,6 +809,108 @@ function computeFinalBalances(game){
   return finalBalances;
 }
 
+// Minimum-transfer settlement: who still needs to pay whom, and how much, to zero
+// everyone out - folding in money already moved (paybox-pot payments reduce what the
+// payer still owes overall; direct player-to-player payments net out between that
+// specific pair) before running the standard greedy largest-debtor/largest-creditor
+// match. Direct payments already made are returned separately so the caller can draw
+// them as "already settled" rather than have the algorithm recompute them.
+function computeSettlementTransfers(game){
+  const finalBalances = computeFinalBalances(game);
+  const working = {};
+  Object.keys(finalBalances).forEach(id => { working[id] = finalBalances[id].profit; });
+
+  (game.payboxPayments||[]).forEach(pp => {
+    if (working[pp.playerId] !== undefined) working[pp.playerId] += pp.amount;
+  });
+  const directPayments = game.playerPayments || [];
+  directPayments.forEach(dp => {
+    if (working[dp.fromPlayerId] !== undefined) working[dp.fromPlayerId] += dp.amount;
+    if (working[dp.toPlayerId] !== undefined) working[dp.toPlayerId] -= dp.amount;
+  });
+
+  const debtors = [], creditors = [];
+  Object.entries(working).forEach(([id, bal]) => {
+    if (bal < -0.5) debtors.push({id, amt: -bal});
+    else if (bal > 0.5) creditors.push({id, amt: bal});
+  });
+  debtors.sort((a,b) => b.amt - a.amt);
+  creditors.sort((a,b) => b.amt - a.amt);
+
+  // Raw (unrounded) greedy match first, then round each transfer down to a whole
+  // shekel so the payer never sends more than intended (the pot should never end up
+  // short from over-collecting) - which leaves a small leftover from the rounding.
+  const raw = [];
+  let i = 0, j = 0;
+  while (i < debtors.length && j < creditors.length) {
+    const pay = Math.min(debtors[i].amt, creditors[j].amt);
+    raw.push({ from: debtors[i].id, to: creditors[j].id, amount: pay });
+    debtors[i].amt -= pay;
+    creditors[j].amt -= pay;
+    if (debtors[i].amt < 0.5) i++;
+    if (creditors[j].amt < 0.5) j++;
+  }
+
+  let shortfall = 0;
+  const remaining = [];
+  raw.forEach(t => {
+    const floored = Math.floor(t.amount);
+    shortfall += t.amount - floored;
+    if (floored > 0) remaining.push({ from: t.from, to: t.to, amount: floored });
+  });
+
+  let warning = null;
+  shortfall = Math.round(shortfall * 100) / 100;
+  if (shortfall > 0.005) {
+    const yaron = game.players.find(p => p.name === "ירון שנהר");
+    const yaronDebtTransfer = yaron ? remaining.find(t => t.from === yaron.id) : null;
+    if (yaron && shortfall <= 2 && yaronDebtTransfer) {
+      yaronDebtTransfer.amount += Math.ceil(shortfall);
+    } else {
+      warning = `יש אי-התאמה של ₪${shortfall} בחישוב עיגולי ההסדר שלא ניתן היה לשייך אוטומטית - כדאי לבדוק את הנתונים לפני התשלום.`;
+    }
+  }
+
+  return { remaining, alreadyPaid: directPayments, warning };
+}
+
+// Renders the settlement arrows as an SVG (for the lines/arrowheads - the table wrap's
+// aspect ratio isn't square, so the viewBox is stretched non-uniformly to line up with
+// seats positioned by left%/top%, which distorts shapes slightly, fine for straight
+// lines) plus separate plain HTML labels (undistorted text, positioned the same way the
+// seats are) for the amounts. optionalFilterId narrows to only that player's transfers.
+function renderSettlementArrows(SEAT_POS, seats, transfers, optionalFilterId){
+  const items = [];
+  transfers.forEach(t => {
+    const fromIdx = seats.indexOf(t.fromId), toIdx = seats.indexOf(t.toId);
+    if (fromIdx === -1 || toIdx === -1) return;
+    if (optionalFilterId && t.fromId !== optionalFilterId && t.toId !== optionalFilterId) return;
+    const [x1,y1] = SEAT_POS[fromIdx], [x2,y2] = SEAT_POS[toIdx];
+    items.push({ x1, y1, x2, y2, amount: t.amount, paid: t.paid });
+  });
+  if (!items.length) return { svg: "", labelsHtml: "" };
+
+  const lines = items.map((it,i) => {
+    const color = it.paid ? "#57534e" : "#fbbf24";
+    const marker = it.paid ? "arrowhead-gray" : "arrowhead-gold";
+    return `<line x1="${it.x1}" y1="${it.y1}" x2="${it.x2}" y2="${it.y2}" stroke="${color}" stroke-width="${it.paid?0.5:0.7}" opacity="${it.paid?0.55:0.9}" marker-end="url(#${marker})"/>`;
+  }).join("");
+  const svg = `<svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;z-index:2;pointer-events:none;">
+    <defs>
+      <marker id="arrowhead-gold" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#fbbf24"/></marker>
+      <marker id="arrowhead-gray" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#57534e"/></marker>
+    </defs>
+    ${lines}
+  </svg>`;
+
+  const labelsHtml = items.map(it => {
+    const mx = (it.x1+it.x2)/2, my = (it.y1+it.y2)/2;
+    return `<div style="position:absolute;left:${mx}%;top:${my}%;transform:translate(-50%,-50%);z-index:5;background:${it.paid?'#3f3c39':'#78350f'};color:${it.paid?'#a8a29e':'#fde68a'};font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;white-space:nowrap;pointer-events:none;">₪${it.amount}${it.paid?' ✓':''}</div>`;
+  }).join("");
+
+  return { svg, labelsHtml };
+}
+
 // ---------- Icons (tiny inline SVGs) ----------
 const ICONS = {
   plus: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
@@ -981,6 +1085,20 @@ function renderTable(gameId){
   const diffLabel = diff > 0.5 ? "קופה בחוסר" : (diff < -0.5 ? "קופה בעודף" : "קופה מאוזנת");
   const diffColor = diff > 0.5 ? "#fda4af" : (diff < -0.5 ? "#6ee7b7" : "var(--muted)");
 
+  const allCashedOut = seatedIds.length > 0 && seatedIds.every(pid => pid in g.cashouts);
+  let settlementSvg = "", settlementLabels = "", settlementWarning = "";
+  if (allCashedOut && showSettlement) {
+    const { remaining, alreadyPaid, warning } = computeSettlementTransfers(g);
+    const transfers = [
+      ...remaining.map(t => ({ fromId: t.from, toId: t.to, amount: t.amount, paid: false })),
+      ...alreadyPaid.map(t => ({ fromId: t.fromPlayerId, toId: t.toPlayerId, amount: t.amount, paid: true })),
+    ];
+    const rendered = renderSettlementArrows(SEAT_POS, seats, transfers, settlementFilterPlayerId);
+    settlementSvg = rendered.svg;
+    settlementLabels = rendered.labelsHtml;
+    if (warning) settlementWarning = `<div style="background:#450a0a;color:#fca5a5;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;text-align:center;">${esc(warning)}</div>`;
+  }
+
   return `
     <div class="top row" style="padding-top:14px;padding-bottom:6px;">
       <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
@@ -993,10 +1111,14 @@ function renderTable(gameId){
       </div>
       <button class="icon-btn gold" data-open-poker-odds title="מה הסיכויים שלי" style="flex-shrink:0;width:36px;height:36px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;">${icon('percent')}</button>
     </div>
+    ${allCashedOut ? `<button class="btn ${showSettlement?'':'btn-ghost'} btn-block" data-toggle-settlement style="margin-bottom:10px;${showSettlement?'background:#0891b2;color:#fff;':''}">${icon('share')} ${showSettlement?'הסתר הסדר תשלומים':'הסדר תשלומים'}</button>` : ""}
+    ${settlementWarning}
     <div class="poker-table-wrap">
       <div class="poker-table-felt"></div>
       <img src="/static/logo-watermark.png" style="position:absolute;left:50%;top:39%;transform:translate(-50%,-50%);width:46%;opacity:.6;pointer-events:none;">
+      ${settlementSvg}
       ${seatsHtml}
+      ${settlementLabels}
       <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) translateY(70px);text-align:center;z-index:3;">
         <div style="color:var(--muted);font-size:12px;">סה"כ קנייה ₪${totalBuyinAll}</div>
         <div style="color:var(--muted);font-size:12px;">סה"כ ציפים ₪${totalChipsAll}</div>
@@ -1407,9 +1529,10 @@ function renderModal(m){
     title = `שחקנים ב${esc(c.name)}`;
     const rows = c.roster.map(p => {
       if (m.editingId === p.id) {
-        return `<div class="roster-row">
-          <input type="text" id="edit-name-input" value="${esc(p.name)}" style="flex:1;margin-left:8px;" autofocus>
-          <div class="row" style="gap:4px;">
+        return `<div class="roster-row" style="flex-direction:column;align-items:stretch;gap:8px;">
+          <input type="text" id="edit-name-input" value="${esc(p.name)}" placeholder="שם" autofocus>
+          <input type="tel" id="edit-phone-input" value="${esc(p.phone||'')}" placeholder="טלפון (לתשלום ישיר לשחקן)" dir="ltr">
+          <div class="row" style="gap:4px;justify-content:flex-end;">
             <button class="icon-btn ok" data-save-edit="${p.id}">${icon('check')}</button>
             <button class="icon-btn" data-cancel-edit>${icon('x')}</button>
           </div>
@@ -1581,6 +1704,29 @@ function renderModal(m){
       </div>
       <button class="btn btn-primary btn-block" data-confirm-paybox>שמור העברה</button>
     `;
+  } else if (m.type === "payPlayer") {
+    const g = getGame(m.gameId);
+    const c = getCommunity(g.communityId);
+    const candidates = (c.roster||[]).filter(p => p.id !== m.fromPlayerId && p.phone);
+    const selected = m.toPlayerId ? candidates.find(p=>p.id===m.toPlayerId) : null;
+    title = `שלם לשחקן (₪${m.amount})`;
+    body = `
+      ${candidates.length ? `
+        <div class="scroll-list" style="margin-bottom:14px;">
+          ${candidates.map(p => `<div class="checkbox-row" data-select-pay-target="${p.id}">
+            <input type="radio" name="pay-target" ${m.toPlayerId===p.id?"checked":""} style="margin-left:8px;">
+            <span class="flex1">${esc(p.name)}</span>
+          </div>`).join("")}
+        </div>
+      ` : `<p style="color:var(--muted);font-size:12px;margin-bottom:14px;">לאף שחקן פעיל אין מספר טלפון שמור. אפשר להוסיף טלפון דרך רשימת השחקנים בקבוצה.</p>`}
+      ${selected ? `
+        <div class="row" style="gap:10px;margin-bottom:14px;">
+          <button class="btn btn-block" style="background:#000;color:#fff;" data-pay-via="bit">ביט</button>
+          <button class="btn btn-block" style="background:#0891b2;color:#fff;" data-pay-via="paybox">פייבוקס</button>
+        </div>
+        <button class="btn btn-primary btn-block" data-confirm-pay-player>שולם</button>
+      ` : ""}
+    `;
   } else if (m.type === "payboxSettings") {
     const c = getCommunity(m.communityId);
     title = `<div dir="ltr" style="display:flex;align-items:flex-start;gap:8px;">
@@ -1628,12 +1774,14 @@ function renderModal(m){
     title = esc(p ? p.name : "שחקן");
     if (cashedOut) {
       const finalBalances = computeFinalBalances(g);
-      const alreadyPaid = (g.payboxPayments||[]).filter(pp=>pp.playerId===m.playerId).reduce((s,pp)=>s+pp.amount,0);
+      const alreadyPaidPaybox = (g.payboxPayments||[]).filter(pp=>pp.playerId===m.playerId).reduce((s,pp)=>s+pp.amount,0);
+      const alreadyPaidDirect = (g.playerPayments||[]).filter(dp=>dp.fromPlayerId===m.playerId).reduce((s,dp)=>s+dp.amount,0);
       const fb = finalBalances[m.playerId];
-      const owes = fb ? -(fb.profit + alreadyPaid) : 0;
+      const owes = fb ? -(fb.profit + alreadyPaidPaybox + alreadyPaidDirect) : 0;
       body = `
         <button class="btn btn-ghost btn-block" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-menu-summary>${icon('bar')} סיכום</button>
         ${owes > 0.005 ? `<button class="btn btn-block" style="background:#0891b2;color:#fff;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-menu-paybox-pay data-paybox-amount="${Math.round(owes*100)/100}"><img src="/static/paybox-icon.png" style="height:18px;width:auto;display:block;"> שלם בפייבוקס (₪${Math.round(owes*100)/100})</button>` : ""}
+        ${owes > 0.005 ? `<button class="btn btn-ghost btn-block" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-menu-pay-player data-pay-player-amount="${Math.round(owes*100)/100}">${icon('share')} שלם לשחקן (₪${Math.round(owes*100)/100})</button>` : ""}
         <button class="btn btn-ghost btn-block" data-return-to-game="${m.playerId}" style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('undo')} החזר למשחק</button>
       `;
     } else {
@@ -1949,6 +2097,9 @@ function attachHandlers(){
   const openOddsBtn = app.querySelector("[data-open-poker-odds]");
   if (openOddsBtn) openOddsBtn.onclick = () => openModal({type:"pokerOdds", imageSrc: null, reading: false, error: null, results: null, hands: null, board: null});
 
+  const toggleSettlementBtn = app.querySelector("[data-toggle-settlement]");
+  if (toggleSettlementBtn) toggleSettlementBtn.onclick = () => { showSettlement = !showSettlement; settlementFilterPlayerId = null; render(); };
+
   app.querySelectorAll("[data-seat]").forEach(el => {
     const dragHandle = el.querySelector(".seat-circle") || el;
     let drag = null;
@@ -1980,11 +2131,19 @@ function attachHandlers(){
       el.style.opacity = "";
       drag = null;
       if (!wasMoved) {
-        // A plain tap opens the seat menu, same as tapping the info text below.
         const g = getGame(nav.gameId);
         const seats = g.seats || new Array(9).fill(null);
         const pid = seats[fromIdx];
-        if (pid) openModal({type:"seatMenu", gameId: nav.gameId, playerId: pid, seatIndex: fromIdx});
+        if (!pid) return;
+        if (showSettlement) {
+          // While settlement arrows are showing, tapping a player filters to just
+          // their transfers instead of opening the seat menu - tap again to clear it.
+          settlementFilterPlayerId = settlementFilterPlayerId === pid ? null : pid;
+          render();
+          return;
+        }
+        // A plain tap opens the seat menu, same as tapping the info text below.
+        openModal({type:"seatMenu", gameId: nav.gameId, playerId: pid, seatIndex: fromIdx});
         return;
       }
       el.style.pointerEvents = "none";
@@ -2023,7 +2182,13 @@ function attachHandlers(){
       const idx = parseInt(el.dataset.seat);
       const seats = g.seats || new Array(9).fill(null);
       const pid = seats[idx];
-      if (pid) openModal({type:"seatMenu", gameId: nav.gameId, playerId: pid, seatIndex: idx});
+      if (!pid) return;
+      if (showSettlement) {
+        settlementFilterPlayerId = settlementFilterPlayerId === pid ? null : pid;
+        render();
+        return;
+      }
+      openModal({type:"seatMenu", gameId: nav.gameId, playerId: pid, seatIndex: idx});
     };
     const settledEl = el.querySelector("[data-toggle-settled]");
     if (settledEl) settledEl.onclick = (e) => {
@@ -2184,11 +2349,14 @@ function attachHandlers(){
     const saveEdit = app.querySelector("[data-save-edit]");
     if (saveEdit) saveEdit.onclick = () => {
       const input = document.getElementById("edit-name-input");
+      const phoneInput = document.getElementById("edit-phone-input");
       const name = input.value.trim();
       if (name) {
         const c = getCommunity(modal.communityId);
         const p = c.roster.find(pl=>pl.id===saveEdit.dataset.saveEdit);
-        p.name = name; saveState();
+        p.name = name;
+        p.phone = phoneInput.value.trim();
+        saveState();
       }
       updateModal({editingId:null});
     };
@@ -2837,6 +3005,35 @@ function attachHandlers(){
     };
   }
 
+  if (modal && modal.type === "payPlayer") {
+    app.querySelectorAll("[data-select-pay-target]").forEach(el => el.onclick = () => {
+      updateModal({toPlayerId: el.dataset.selectPayTarget});
+    });
+    app.querySelectorAll("[data-pay-via]").forEach(el => el.onclick = () => {
+      const g = getGame(modal.gameId);
+      const c = getCommunity(g.communityId);
+      const target = (c.roster||[]).find(p => p.id === modal.toPlayerId);
+      if (!target || !target.phone) return;
+      const phone = target.phone.replace(/[^0-9+]/g, "");
+      // Best-effort deep links, same caveat as the PayBox group link: neither app's
+      // exact URL scheme for pre-filling a phone+amount is officially confirmed, so
+      // this may just open the app without them - harmless if the params are ignored.
+      const url = el.dataset.payVia === "bit"
+        ? `bit://transfer?phone=${encodeURIComponent(phone)}&amount=${modal.amount}`
+        : `https://payboxapp.page.link/pay?phone=${encodeURIComponent(phone)}&amount=${modal.amount}`;
+      window.open(url, "_blank", "noopener");
+    });
+    const confirmPayPlayer = app.querySelector("[data-confirm-pay-player]");
+    if (confirmPayPlayer) confirmPayPlayer.onclick = () => {
+      if (!modal.toPlayerId) return;
+      const g = getGame(modal.gameId);
+      if (!g.playerPayments) g.playerPayments = [];
+      g.playerPayments.push({id:uid(), fromPlayerId: modal.fromPlayerId, toPlayerId: modal.toPlayerId, amount: modal.amount, ts: Date.now()});
+      saveState();
+      closeModal();
+    };
+  }
+
   if (modal && modal.type === "payboxSettings") {
     app.querySelectorAll("[data-select-paybox]").forEach(el => el.onclick = () => {
       const c = getCommunity(modal.communityId);
@@ -2924,6 +3121,10 @@ function attachHandlers(){
       if (!link) { alert("לא הוגדרה קבוצת פייבוקס. בקשו מיוצר הקבוצה להגדיר אחת ממסך הקבוצה."); return; }
       const url = link + (link.includes("?") ? "&" : "?") + "amount=" + amount;
       window.open(url, "_blank", "noopener");
+    };
+    const menuPayPlayer = app.querySelector("[data-menu-pay-player]");
+    if (menuPayPlayer) menuPayPlayer.onclick = () => {
+      openModal({type:"payPlayer", gameId: modal.gameId, fromPlayerId: modal.playerId, amount: parseFloat(menuPayPlayer.dataset.payPlayerAmount), toPlayerId: null});
     };
   }
 
