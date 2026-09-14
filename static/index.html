@@ -902,9 +902,11 @@ function renderCommunity(communityId){
     </div>`).join("") : `<div class="empty">עדיין אין ערבי משחק בקבוצה הזו</div>`;
 
   return `
-    <div class="top row" style="padding-bottom:10px;">
+    <div class="top row" style="padding-bottom:8px;">
       <button class="back-arrow" data-back-home>${icon('back')}</button>
       <h1 class="serif sm flex1">${esc(c.name)}</h1>
+    </div>
+    <div class="row" style="justify-content:flex-end;padding-bottom:10px;">
       ${c.createdByName && myIdentity.name && c.createdByName === myIdentity.name ? `<button data-open-paybox-settings="${c.id}" title="הגדרת פייבוקס" dir="ltr" style="display:flex;align-items:center;gap:5px;background:#0891b2;border:none;border-radius:8px;padding:5px 9px;color:#fff;cursor:pointer;flex-shrink:0;">
         <span style="display:inline-flex;flex-shrink:0;"><img src="/static/paybox-icon.png" style="height:17px;width:auto;display:block;"></span>
         <span style="display:flex;flex-direction:column;align-items:flex-start;line-height:1.05;">
