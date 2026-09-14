@@ -342,19 +342,26 @@ function defaultState(){
 // (200 OK), so a thrown error here always means the fetch genuinely failed. Every caller
 // must handle that by keeping whatever's already in memory, never by falling back to
 // defaultState() - doing so and then saving would wipe real data with an empty snapshot.
-// Sends back the ETag from our last successful load so an unchanged poll gets a
-// near-empty 304 instead of resending the whole state blob (every player's photo
-// included) - this is what was actually burning through the Render bandwidth quota,
-// since most polls happen while nothing changed. Returns null on 304 ("you already
-// have the latest") - every caller must treat that as "keep current state", never
-// as an empty/missing result.
-let lastStateETag = null;
+// Checks the tiny /api/state/hash endpoint first and skips the full fetch if nothing
+// changed since our last load - this is what actually cuts the Render bandwidth usage,
+// since most polls happen while nothing changed. (A real conditional GET with ETag/304
+// would be the standard way to do this, but Render's edge silently strips a custom ETag
+// response header before it reaches the browser, so that never actually worked - this
+// sidesteps it with a plain small JSON body instead of relying on any header surviving.)
+// Returns null when unchanged - every caller must treat that as "keep current state",
+// never as an empty/missing result.
+let lastStateHash = null;
 async function loadState(){
-  const headers = lastStateETag ? { "If-None-Match": lastStateETag } : {};
-  const res = await fetch("/api/state", { headers });
-  if (res.status === 304) return null;
+  try {
+    const hashRes = await fetch("/api/state/hash");
+    if (hashRes.ok) {
+      const { hash } = await hashRes.json();
+      if (hash === lastStateHash) return null;
+      lastStateHash = hash;
+    }
+  } catch(e) { /* hash check failed - fall through and fetch the full state anyway */ }
+  const res = await fetch("/api/state");
   if (!res.ok) throw new Error("failed to load state: " + res.status);
-  lastStateETag = res.headers.get("ETag");
   return await res.json();
 }
 

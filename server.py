@@ -95,16 +95,31 @@ def get_state():
         cur.execute("SELECT data FROM shared_state WHERE id = 1")
         row = cur.fetchone()
     conn.close()
-    data = row[0] if row else json.dumps({"communities": [], "games": []})
-    # The client polls this every few seconds and on every SSE "changed" event, but the
-    # state (including every player's photo, base64-encoded) usually hasn't actually
+    if row:
+        return row[0], 200, {"Content-Type": "application/json"}
+    return jsonify({"communities": [], "games": []})
+
+
+@app.route("/api/state/hash")
+def get_state_hash():
+    # The client polls /api/state every few seconds and on every SSE "changed" event, but
+    # the state (including every player's photo, base64-encoded) usually hasn't actually
     # changed between polls - resending the full multi-hundred-KB blob every time burns
-    # through bandwidth fast with several phones open over a whole poker night. An ETag
-    # lets an unchanged poll get a near-empty 304 instead.
-    etag = hashlib.md5(data.encode("utf-8")).hexdigest()
-    if request.headers.get("If-None-Match") == etag:
-        return "", 304
-    return data, 200, {"Content-Type": "application/json", "ETag": etag}
+    # through bandwidth fast with several phones open over a whole poker night.
+    #
+    # The natural fix is a conditional GET (ETag + 304), but Render's edge (Cloudflare)
+    # silently strips a custom ETag response header before it reaches the browser, so
+    # that never actually worked - the client could never learn what the last ETag was.
+    # This tiny endpoint sidesteps that: the client fetches just this hash first (a
+    # plain, tiny JSON body - confirmed to pass through untouched, unlike the header) and
+    # only fetches the full /api/state when the hash has actually changed.
+    conn = get_db()
+    with conn.cursor() as cur:
+        cur.execute("SELECT data FROM shared_state WHERE id = 1")
+        row = cur.fetchone()
+    conn.close()
+    data = row[0] if row else json.dumps({"communities": [], "games": []})
+    return jsonify({"hash": hashlib.md5(data.encode("utf-8")).hexdigest()})
 
 
 @app.route("/api/state", methods=["POST"])
