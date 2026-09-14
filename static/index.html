@@ -643,6 +643,12 @@ function getActivePayboxLink(c){
   }
   return (c && c.payboxLink) || null;
 }
+function getActivePayboxEntry(c){
+  if (c && c.payboxLinks && c.payboxLinks.length) {
+    return c.payboxLinks.find(pl => pl.id === c.activePayboxLinkId) || c.payboxLinks[0];
+  }
+  return null;
+}
 function getGame(id){ return state.games.find(g => g.id === id); }
 function maybeAutoCloseNight(g){
   const seated = (g.seats || []).filter(Boolean);
@@ -1148,6 +1154,7 @@ function renderTable(gameId){
   const diffColor = diff > 0.5 ? "#fda4af" : (diff < -0.5 ? "#6ee7b7" : "var(--muted)");
 
   const allCashedOut = seatedIds.length > 0 && seatedIds.every(pid => pid in g.cashouts);
+  const activePaybox = getActivePayboxEntry(c);
   let settlementWarning = "";
   currentSettlementTransfers = null;
   if (allCashedOut && showSettlement) {
@@ -1175,7 +1182,12 @@ function renderTable(gameId){
       </div>
       <button class="icon-btn gold" data-open-poker-odds title="מה הסיכויים שלי" style="flex-shrink:0;width:36px;height:36px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;">${icon('percent')}</button>
     </div>
-    ${allCashedOut ? `<button class="btn ${showSettlement?'':'btn-ghost'} btn-block" data-toggle-settlement style="margin-bottom:10px;${showSettlement?'background:#0891b2;color:#fff;':''}">${icon('coins')} ${showSettlement?'הסתר הסדר תשלומים':'הסדר תשלומים'}</button>` : ""}
+    ${allCashedOut ? `<button class="btn ${showSettlement?'':'btn-ghost'} btn-block" data-toggle-settlement style="margin-bottom:10px;${showSettlement?'background:#0891b2;color:#fff;':''}">${icon('coins')} ${showSettlement?'הסתר הסדר תשלומים':'הסדר תשלומים בין שחקנים'}</button>` : ""}
+    ${allCashedOut && showSettlement ? `<div class="row" style="gap:8px;margin-bottom:10px;">
+      ${activePaybox ? `<button class="btn btn-block" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;" data-open-active-paybox><img src="/static/paybox-icon.png" style="height:16px;width:auto;display:block;">${esc(activePaybox.name)}</button>` : ""}
+      <button class="btn btn-block" style="background:#0891b2;color:#fff;" data-open-paybox-generic>פייבוקס</button>
+      <button class="btn btn-block" style="background:#000;color:#fff;" data-open-bit-generic>ביט</button>
+    </div>` : ""}
     ${settlementWarning}
     <div class="poker-table-wrap">
       <div class="poker-table-felt"></div>
@@ -1712,6 +1724,16 @@ function renderModal(m){
       <p style="color:#6ee7b7;font-size:13px;">לבטל את ההעברה של <b>${esc(p.name)}</b> לקבוצת פייבוקס על סך <b>₪${b?b.amount:""}</b>? ההעברה תימחק לגמרי מהרישום.</p>
       <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-delete-paybox>בטל העברה</button>
     `;
+  } else if (m.type === "deletePlayerPayment") {
+    const g = getGame(m.gameId);
+    const p = g.players.find(pl=>pl.id===m.playerId);
+    const b = (g.playerPayments||[]).find(bi=>bi.id===m.paymentId);
+    const toName = b ? (g.players.find(pl=>pl.id===b.toPlayerId)||{}).name || "?" : "";
+    title = "ביטול העברה";
+    body = `
+      <p style="color:#6ee7b7;font-size:13px;">לבטל את ההעברה של <b>${esc(p.name)}</b> ל-<b>${esc(toName)}</b> על סך <b>₪${b?b.amount:""}</b>? ההעברה תימחק לגמרי מהרישום.</p>
+      <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-delete-player-payment>בטל העברה</button>
+    `;
   } else if (m.type === "addExisting") {
     const g = getGame(m.gameId);
     const c = getCommunity(g.communityId);
@@ -2002,6 +2024,14 @@ function renderModal(m){
       rows += `<div class="section-title" style="padding:0;margin:14px 0 6px;">העברות לקבוצת פייבוקס</div>`;
       rows += paybox.map((b,i) => `<div class="roster-row"><span>העברה ${i+1}${b.ts?` · ${fmtTime(b.ts)}`:""}</span><span style="display:flex;align-items:center;gap:10px;">₪${b.amount}<button class="icon-btn" style="color:#fda4af;" data-delete-paybox="${b.id}" title="ביטול העברה">${icon('trash')}</button></span></div>`).join("");
     }
+    const directPayments = (g.playerPayments||[]).filter(b=>b.fromPlayerId===m.playerId);
+    if (directPayments.length) {
+      rows += `<div class="section-title" style="padding:0;margin:14px 0 6px;">העברות ישירות לשחקנים</div>`;
+      rows += directPayments.map(b => {
+        const toName = (g.players.find(pl=>pl.id===b.toPlayerId)||{}).name || "?";
+        return `<div class="roster-row"><span>העביר ל-${esc(toName)}${b.ts?` · ${fmtTime(b.ts)}`:""}</span><span style="display:flex;align-items:center;gap:10px;">₪${b.amount}<button class="icon-btn" style="color:#fda4af;" data-delete-player-payment="${b.id}" title="ביטול העברה">${icon('trash')}</button></span></div>`;
+      }).join("");
+    }
     const myOut = g.cashouts[m.playerId];
     if (myOut) {
       rows += `<div class="section-title" style="padding:0;margin:14px 0 6px;">יציאה מהמשחק</div>`;
@@ -2032,15 +2062,16 @@ function renderModal(m){
     }
     if (g.closed) {
       const finalBalances = computeFinalBalances(g);
-      const alreadyPaid = (g.payboxPayments||[]).filter(pp=>pp.playerId===m.playerId).reduce((s,pp)=>s+pp.amount,0);
+      const alreadyPaidPaybox = (g.payboxPayments||[]).filter(pp=>pp.playerId===m.playerId).reduce((s,pp)=>s+pp.amount,0);
+      const alreadyPaidDirect = directPayments.reduce((s,dp)=>s+dp.amount,0);
       const fb = finalBalances[m.playerId];
       rows += `<div class="section-title" style="padding:0;margin:14px 0 6px;">חלק בסיכום הסופי</div>`;
       if (!fb) {
         rows += `<div class="roster-row"><span>לא נכלל בסיכום הסופי (סודר ישירות עם שחקן אחר)</span></div>`;
       } else {
-        const remaining = fb.profit + alreadyPaid;
+        const remaining = fb.profit + alreadyPaidPaybox + alreadyPaidDirect;
         if (Math.abs(remaining) < 0.005) {
-          rows += `<div class="roster-row"><span>מאוזן — אין תשלום נדרש לקבוצת פייבוקס</span></div>`;
+          rows += `<div class="roster-row"><span>מאוזן — אין תשלום נוסף נדרש</span></div>`;
         } else {
           rows += `<div class="roster-row"><span>${remaining>0?"מקבל מקבוצת פייבוקס":"מעביר לקבוצת פייבוקס"}</span><span style="font-weight:700;color:${remaining>0?'#6ee7b7':'#fda4af'};">₪${Math.round(Math.abs(remaining)*100)/100}</span></div>`;
         }
@@ -2166,6 +2197,18 @@ function attachHandlers(){
 
   const toggleSettlementBtn = app.querySelector("[data-toggle-settlement]");
   if (toggleSettlementBtn) toggleSettlementBtn.onclick = () => { showSettlement = !showSettlement; settlementFilterPlayerId = null; render(); };
+
+  const openActivePayboxBtn = app.querySelector("[data-open-active-paybox]");
+  if (openActivePayboxBtn) openActivePayboxBtn.onclick = () => {
+    const g = getGame(nav.gameId);
+    const c = getCommunity(g.communityId);
+    const link = getActivePayboxLink(c);
+    if (link) window.open(link, "_blank", "noopener");
+  };
+  const openPayboxGenericBtn = app.querySelector("[data-open-paybox-generic]");
+  if (openPayboxGenericBtn) openPayboxGenericBtn.onclick = () => window.open("https://links.payboxapp.com/", "_blank", "noopener");
+  const openBitGenericBtn = app.querySelector("[data-open-bit-generic]");
+  if (openBitGenericBtn) openBitGenericBtn.onclick = () => window.open("bit://", "_blank", "noopener");
 
   app.querySelectorAll("[data-seat]").forEach(el => {
     const dragHandle = el.querySelector(".seat-circle") || el;
@@ -3005,6 +3048,9 @@ function attachHandlers(){
     app.querySelectorAll("[data-delete-paybox]").forEach(el => el.onclick = () => {
       openModal({type:"deletePaybox", gameId: modal.gameId, playerId: modal.playerId, paymentId: el.dataset.deletePaybox, returnTo: modal});
     });
+    app.querySelectorAll("[data-delete-player-payment]").forEach(el => el.onclick = () => {
+      openModal({type:"deletePlayerPayment", gameId: modal.gameId, playerId: modal.playerId, paymentId: el.dataset.deletePlayerPayment, returnTo: modal});
+    });
   }
 
   if (modal && modal.type === "deleteBuyin") {
@@ -3022,6 +3068,16 @@ function attachHandlers(){
     if (confirmDelPaybox) confirmDelPaybox.onclick = () => {
       const g = getGame(modal.gameId);
       g.payboxPayments = (g.payboxPayments||[]).filter(b => b.id !== modal.paymentId);
+      saveState();
+      openModal(modal.returnTo);
+    };
+  }
+
+  if (modal && modal.type === "deletePlayerPayment") {
+    const confirmDelPP = app.querySelector("[data-confirm-delete-player-payment]");
+    if (confirmDelPP) confirmDelPP.onclick = () => {
+      const g = getGame(modal.gameId);
+      g.playerPayments = (g.playerPayments||[]).filter(b => b.id !== modal.paymentId);
       saveState();
       openModal(modal.returnTo);
     };
