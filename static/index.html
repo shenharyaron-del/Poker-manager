@@ -380,8 +380,17 @@ async function doRefreshNow(){
     // race it - the GET can land before that POST commits and return stale data that then
     // overwrites the local (correct, newer) state, making the change flicker away for a
     // few seconds until the next refresh catches up. Wait for it to finish first so the
-    // fetch is always at least as fresh as anything already saved.
-    if (saveInFlight) await saveInFlight;
+    // fetch is always at least as fresh as anything already saved. A single snapshot-and-
+    // await isn't enough: rapid actions (several buy-ins in a row) queue additional saves
+    // onto saveInFlight while we're waiting on an earlier one, and each save's own
+    // completion now triggers this same refresh via SSE (including on the tab that made
+    // it) - so keep re-checking until it's stayed the same across our own wait, meaning
+    // no newer save snuck in while we were watching.
+    let pending;
+    do {
+      pending = saveInFlight;
+      if (pending) await pending;
+    } while (pending !== saveInFlight);
     const fresh = await loadState();
     state = fresh;
     const scrollY = window.scrollY;
