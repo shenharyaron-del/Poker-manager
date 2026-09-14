@@ -1089,8 +1089,6 @@ function renderCommunity(communityId){
         </span>
       </button>` : ""}
       <button class="icon-btn gold" data-open-chip-setup="${c.id}" title="הגדרת ציפים">${icon('chip')}</button>
-      <button class="icon-btn" data-download-backup title="הורד גיבוי JSON" style="color:var(--muted);">${icon('download')}</button>
-      <button class="icon-btn" data-open-restore title="שחזור גרסה קודמת" style="color:var(--muted);">${icon('undo')}</button>
       <button class="btn btn-ghost btn-sm" data-show-roster style="display:flex;align-items:center;gap:6px;">${icon('users')} שחקנים (${c.roster.length})</button>
     </div>
     <div class="section-title">ערבי משחק</div>
@@ -1253,12 +1251,11 @@ function renderModal(m){
         <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-open-avatar-creator>${icon('plus')} יצירת אווטרים חדשים</button>
         <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-open-avatar-manage>${icon('pencil')} ניהול</button>
       </div>
-      <div class="section-title" style="padding:0;margin:0 0 8px;">קצב רענון אוטומטי</div>
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-        <input type="number" min="2" step="1" id="refresh-interval-input" value="${state.refreshIntervalSec || 6}" style="width:80px;">
-        <span style="color:var(--muted);font-size:13px;">שניות</span>
+      <div class="section-title" style="padding:0;margin:0 0 8px;">גיבוי ושחזור</div>
+      <div style="display:flex;gap:8px;margin-bottom:18px;">
+        <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-download-backup>${icon('download')} הורד גיבוי JSON</button>
+        <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-open-restore>${icon('undo')} שחזור גרסה קודמת</button>
       </div>
-      <button class="btn btn-primary btn-block" data-save-admin-settings>שמור</button>
       <a href="https://console.anthropic.com" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:18px;color:var(--muted);font-size:12px;text-decoration:underline;">console.anthropic.com</a>
       <div style="text-align:center;margin-top:8px;color:var(--muted);font-size:11px;">גרסה: ${esc(appVersion || "לא ידוע")}</div>
     `;
@@ -2409,14 +2406,6 @@ function attachHandlers(){
     if (openCreatorBtn) openCreatorBtn.onclick = () => openModal({type:"avatarCreator", imageSrc: null, points: []});
     const openManageBtn = app.querySelector("[data-open-avatar-manage]");
     if (openManageBtn) openManageBtn.onclick = () => openModal({type:"avatarManage"});
-    const saveSettingsBtn = app.querySelector("[data-save-admin-settings]");
-    if (saveSettingsBtn) saveSettingsBtn.onclick = () => {
-      const v = parseInt(document.getElementById("refresh-interval-input").value, 10);
-      if (!v || v < 2) { alert("קצב הרענון צריך להיות לפחות 2 שניות."); return; }
-      state.refreshIntervalSec = v;
-      saveState();
-      closeModal();
-    };
   }
 
   if (modal && modal.type === "avatarManage") {
