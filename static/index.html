@@ -851,7 +851,13 @@ function renderCommunity(communityId){
     <div class="top row" style="padding-bottom:10px;">
       <button class="back-arrow" data-back-home>${icon('back')}</button>
       <h1 class="serif sm flex1">${esc(c.name)}</h1>
-      ${c.createdByName && myIdentity.name && c.createdByName === myIdentity.name ? `<button class="icon-btn" data-open-paybox-settings="${c.id}" title="הגדרת פייבוקס" style="background:none;">${icon('paybox')}</button>` : ""}
+      ${c.createdByName && myIdentity.name && c.createdByName === myIdentity.name ? `<button data-open-paybox-settings="${c.id}" title="הגדרת פייבוקס" style="display:flex;align-items:center;gap:5px;background:#0891b2;border:none;border-radius:8px;padding:5px 9px;color:#fff;cursor:pointer;flex-shrink:0;">
+        <span style="display:inline-flex;flex-shrink:0;">${icon('paybox').replace('width="24" height="24"','width="17" height="17"')}</span>
+        <span style="display:flex;flex-direction:column;align-items:flex-start;line-height:1.05;">
+          <span style="font-family:system-ui,sans-serif;font-weight:700;font-size:12px;">PayBox</span>
+          <span style="font-family:system-ui,sans-serif;font-weight:400;font-size:8px;opacity:.8;">Setup</span>
+        </span>
+      </button>` : ""}
       <button class="icon-btn gold" data-open-chip-setup="${c.id}" title="הגדרת ציפים">${icon('chip')}</button>
       <button class="btn btn-ghost btn-sm" data-show-roster style="display:flex;align-items:center;gap:6px;">${icon('users')} שחקנים (${c.roster.length})</button>
     </div>
