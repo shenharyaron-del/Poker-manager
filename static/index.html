@@ -1012,6 +1012,7 @@ function icon(name){ return ICONS[name] || ""; }
 // ---------- Rendering ----------
 function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 function fmtTime(ts){ if(!ts) return ""; const d = new Date(ts); return d.toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'}); }
+function fmtDateTime(isoStr){ if(!isoStr) return ""; const d = new Date(isoStr); return d.toLocaleDateString('he-IL') + " " + d.toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'}); }
 
 // ---------- Screen names (for talking about the app together, and shown in the header) ----------
 const SCREEN_NAMES = {
@@ -1089,6 +1090,7 @@ function renderCommunity(communityId){
       </button>` : ""}
       <button class="icon-btn gold" data-open-chip-setup="${c.id}" title="הגדרת ציפים">${icon('chip')}</button>
       <button class="icon-btn" data-download-backup title="הורד גיבוי JSON" style="color:var(--muted);">${icon('download')}</button>
+      <button class="icon-btn" data-open-restore title="שחזור גרסה קודמת" style="color:var(--muted);">${icon('undo')}</button>
       <button class="btn btn-ghost btn-sm" data-show-roster style="display:flex;align-items:center;gap:6px;">${icon('users')} שחקנים (${c.roster.length})</button>
     </div>
     <div class="section-title">ערבי משחק</div>
@@ -1631,6 +1633,26 @@ function renderModal(m){
         <button class="btn btn-primary" data-add-roster style="padding:11px 16px;">${icon('plus')}</button>
       </div>
     `;
+  } else if (m.type === "restoreHistory") {
+    title = "שחזור גרסה קודמת";
+    if (m.versions === null) {
+      body = `<p style="color:var(--muted);font-size:13px;">טוען...</p>`;
+    } else if (!m.versions.length) {
+      body = `<p style="color:var(--muted);font-size:13px;">אין עדיין גרסאות שמורות - הן נשמרות אוטומטית מרגע שמישהו שומר שינוי.</p>`;
+    } else {
+      body = `
+        <p style="color:var(--muted);font-size:12px;margin-bottom:12px;">שחזור מחליף את כל הנתונים הנוכחיים (המשותפים לכולם) בגרסה שנבחרה. הגרסה הנוכחית תישמר אוטומטית ברשימה, כך שאפשר לחזור ממנה אם צריך.</p>
+        <div class="scroll-list">
+          ${m.versions.map(v => `<div class="roster-row"><span>${fmtDateTime(v.savedAt)}</span><button class="btn" style="background:#be123c;color:#fff;padding:8px 14px;" data-restore-version="${v.id}">שחזר</button></div>`).join("")}
+        </div>
+      `;
+    }
+  } else if (m.type === "confirmRestore") {
+    title = "אישור שחזור";
+    body = `
+      <p style="color:#6ee7b7;font-size:13px;">לשחזר את הגרסה מ-<b>${fmtDateTime(m.savedAt)}</b>? כל הנתונים הנוכחיים (המשותפים לכולם) יוחלפו בגרסה הזו. הגרסה הנוכחית תישמר אוטומטית ואפשר יהיה לחזור אליה.</p>
+      <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-restore>שחזר גרסה</button>
+    `;
   } else if (m.type === "stats") {
     const c = getCommunity(m.communityId);
     const player = c.roster.find(p=>p.id===m.playerId);
@@ -2148,6 +2170,18 @@ function attachHandlers(){
     URL.revokeObjectURL(url);
   };
 
+  const openRestore = app.querySelector("[data-open-restore]");
+  if (openRestore) openRestore.onclick = async () => {
+    openModal({type:"restoreHistory", versions: null});
+    try {
+      const res = await fetch("/api/state/history");
+      const versions = res.ok ? await res.json() : [];
+      if (modal && modal.type === "restoreHistory") updateModal({versions});
+    } catch(e) {
+      if (modal && modal.type === "restoreHistory") updateModal({versions: []});
+    }
+  };
+
   const openPayboxSettings = app.querySelector("[data-open-paybox-settings]");
   if (openPayboxSettings) openPayboxSettings.onclick = () => {
     const c = getCommunity(openPayboxSettings.dataset.openPayboxSettings);
@@ -2496,6 +2530,33 @@ function attachHandlers(){
         saveState();
       }
       updateModal({});
+    };
+  }
+
+  if (modal && modal.type === "restoreHistory") {
+    app.querySelectorAll("[data-restore-version]").forEach(el => el.onclick = () => {
+      const v = (modal.versions||[]).find(x => String(x.id) === el.dataset.restoreVersion);
+      openModal({type:"confirmRestore", historyId: el.dataset.restoreVersion, savedAt: v ? v.savedAt : ""});
+    });
+  }
+
+  if (modal && modal.type === "confirmRestore") {
+    const confirmRestoreBtn = app.querySelector("[data-confirm-restore]");
+    if (confirmRestoreBtn) confirmRestoreBtn.onclick = async () => {
+      confirmRestoreBtn.disabled = true;
+      confirmRestoreBtn.textContent = "משחזר...";
+      try {
+        const res = await fetch(`/api/state/history/${modal.historyId}`);
+        if (!res.ok) throw new Error("failed to load version: " + res.status);
+        const restored = await res.json();
+        state = restored;
+        await saveState();
+        closeModal();
+      } catch(e) {
+        alert("השחזור נכשל - בדוק את החיבור לאינטרנט ונסה שוב.");
+        confirmRestoreBtn.disabled = false;
+        confirmRestoreBtn.textContent = "שחזר גרסה";
+      }
     };
   }
 
