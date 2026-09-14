@@ -454,8 +454,21 @@ async function doRefreshNow(source){
         pending = saveInFlight;
         if (pending) await pending;
       } while (pending !== saveInFlight);
+      const stableFlight = saveInFlight;
       logSync(`refresh[${callId}] past save-wait, GET start`);
       const fresh = await loadState();
+      // While that GET was in flight, a new local action could have mutated state and
+      // queued its own save (saveInFlight would now differ from what we confirmed was
+      // settled right before fetching) - this response was issued before that save
+      // existed, so it can't reflect it. Applying it would revert the just-made change
+      // (e.g. a removed seat reappearing) until a later refresh catches up - and if
+      // another save happens before that, the reverted state becomes real. Discard it
+      // and loop again instead, which will wait for the new save and re-fetch.
+      if (saveInFlight !== stableFlight) {
+        logSync(`refresh[${callId}] STALE - a save started mid-fetch, discarding and retrying`);
+        refreshQueued = true;
+        continue;
+      }
       if (fresh === null) {
         logSync(`refresh[${callId}] 304 not-modified, nothing to apply`);
       } else {
