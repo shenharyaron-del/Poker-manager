@@ -517,6 +517,7 @@ let modal = null; // {type, ...}
 let hideEmptySeats = false; // UI-only toggle, not persisted
 let showSettlement = false; // UI-only toggle, not persisted
 let settlementFilterPlayerId = null; // UI-only, not persisted - null means "show everyone"
+let currentSettlementTransfers = null; // set by renderTable(), consumed by drawSettlementArrows() after the DOM updates
 
 function go(screen, extra){
   nav = Object.assign({screen}, extra||{});
@@ -874,28 +875,56 @@ function computeSettlementTransfers(game){
   return { remaining, alreadyPaid: directPayments, warning };
 }
 
-// Renders the settlement arrows as an SVG (for the lines/arrowheads - the table wrap's
-// aspect ratio isn't square, so the viewBox is stretched non-uniformly to line up with
-// seats positioned by left%/top%, which distorts shapes slightly, fine for straight
-// lines) plus separate plain HTML labels (undistorted text, positioned the same way the
-// seats are) for the amounts. optionalFilterId narrows to only that player's transfers.
-function renderSettlementArrows(SEAT_POS, seats, transfers, optionalFilterId){
-  const items = [];
-  transfers.forEach(t => {
-    const fromIdx = seats.indexOf(t.fromId), toIdx = seats.indexOf(t.toId);
-    if (fromIdx === -1 || toIdx === -1) return;
-    if (optionalFilterId && t.fromId !== optionalFilterId && t.toId !== optionalFilterId) return;
-    const [x1,y1] = SEAT_POS[fromIdx], [x2,y2] = SEAT_POS[toIdx];
-    items.push({ x1, y1, x2, y2, amount: t.amount, paid: t.paid });
-  });
-  if (!items.length) return { svg: "", labelsHtml: "" };
+// Draws the settlement arrows into #settlement-overlay using each seat-circle's actual
+// measured position, not a percentage guess - the seat-wrap block centers itself (circle
+// + name/caption stacked below) on its left%/top% point, so the circle's own visual
+// center sits above that point, not on it. Using real getBoundingClientRect() avoids
+// having to hand-derive that offset, and lets each line get trimmed back by the circle's
+// radius so it starts/ends at the nearest edge between the two circles instead of
+// disappearing under them. Called after every render() (table screen only, no-op if
+// settlement isn't showing) since it needs the seats already laid out in the DOM.
+function drawSettlementArrows(){
+  const overlay = document.getElementById("settlement-overlay");
+  if (!overlay) return;
+  const data = currentSettlementTransfers;
+  if (!data) { overlay.innerHTML = ""; return; }
 
-  const lines = items.map((it,i) => {
+  const wrap = overlay.closest(".poker-table-wrap");
+  if (!wrap) return;
+  const wrapRect = wrap.getBoundingClientRect();
+
+  const centerOf = (playerId) => {
+    const idx = data.seats.indexOf(playerId);
+    if (idx === -1) return null;
+    const circle = wrap.querySelector(`[data-seat="${idx}"] .seat-circle`);
+    if (!circle) return null;
+    const r = circle.getBoundingClientRect();
+    return { x: r.left + r.width/2 - wrapRect.left, y: r.top + r.height/2 - wrapRect.top, radius: r.width/2 };
+  };
+
+  const items = [];
+  data.transfers.forEach(t => {
+    if (data.filterId && t.fromId !== data.filterId && t.toId !== data.filterId) return;
+    const from = centerOf(t.fromId), to = centerOf(t.toId);
+    if (!from || !to) return;
+    const dx = to.x - from.x, dy = to.y - from.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const ux = dx / dist, uy = dy / dist;
+    items.push({
+      x1: from.x + ux*from.radius, y1: from.y + uy*from.radius,
+      x2: to.x - ux*to.radius, y2: to.y - uy*to.radius,
+      amount: t.amount, paid: t.paid,
+    });
+  });
+
+  if (!items.length) { overlay.innerHTML = ""; return; }
+
+  const lines = items.map(it => {
     const color = it.paid ? "#57534e" : "#fbbf24";
     const marker = it.paid ? "arrowhead-gray" : "arrowhead-gold";
-    return `<line x1="${it.x1}" y1="${it.y1}" x2="${it.x2}" y2="${it.y2}" stroke="${color}" stroke-width="${it.paid?0.5:0.7}" opacity="${it.paid?0.55:0.9}" marker-end="url(#${marker})"/>`;
+    return `<line x1="${it.x1}" y1="${it.y1}" x2="${it.x2}" y2="${it.y2}" stroke="${color}" stroke-width="${it.paid?2:2.5}" opacity="${it.paid?0.55:0.9}" marker-end="url(#${marker})"/>`;
   }).join("");
-  const svg = `<svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;z-index:2;pointer-events:none;">
+  const svg = `<svg width="${wrapRect.width}" height="${wrapRect.height}" viewBox="0 0 ${wrapRect.width} ${wrapRect.height}" style="position:absolute;inset:0;z-index:2;pointer-events:none;">
     <defs>
       <marker id="arrowhead-gold" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#fbbf24"/></marker>
       <marker id="arrowhead-gray" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#57534e"/></marker>
@@ -903,12 +932,12 @@ function renderSettlementArrows(SEAT_POS, seats, transfers, optionalFilterId){
     ${lines}
   </svg>`;
 
-  const labelsHtml = items.map(it => {
+  const labels = items.map(it => {
     const mx = (it.x1+it.x2)/2, my = (it.y1+it.y2)/2;
-    return `<div style="position:absolute;left:${mx}%;top:${my}%;transform:translate(-50%,-50%);z-index:5;background:${it.paid?'#3f3c39':'#78350f'};color:${it.paid?'#a8a29e':'#fde68a'};font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;white-space:nowrap;pointer-events:none;">₪${it.amount}${it.paid?' ✓':''}</div>`;
+    return `<div style="position:absolute;left:${mx}px;top:${my}px;transform:translate(-50%,-50%);z-index:5;background:${it.paid?'#3f3c39':'#78350f'};color:${it.paid?'#a8a29e':'#fde68a'};font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;white-space:nowrap;">₪${it.amount}${it.paid?' ✓':''}</div>`;
   }).join("");
 
-  return { svg, labelsHtml };
+  overlay.innerHTML = svg + labels;
 }
 
 // ---------- Icons (tiny inline SVGs) ----------
@@ -964,6 +993,7 @@ function render(){
   if (modal) html += renderModal(modal);
   app.innerHTML = html;
   attachHandlers();
+  drawSettlementArrows();
 }
 
 function renderHome(){
@@ -1087,16 +1117,18 @@ function renderTable(gameId){
   const diffColor = diff > 0.5 ? "#fda4af" : (diff < -0.5 ? "#6ee7b7" : "var(--muted)");
 
   const allCashedOut = seatedIds.length > 0 && seatedIds.every(pid => pid in g.cashouts);
-  let settlementSvg = "", settlementLabels = "", settlementWarning = "";
+  let settlementWarning = "";
+  currentSettlementTransfers = null;
   if (allCashedOut && showSettlement) {
     const { remaining, alreadyPaid, warning } = computeSettlementTransfers(g);
-    const transfers = [
-      ...remaining.map(t => ({ fromId: t.from, toId: t.to, amount: t.amount, paid: false })),
-      ...alreadyPaid.map(t => ({ fromId: t.fromPlayerId, toId: t.toPlayerId, amount: t.amount, paid: true })),
-    ];
-    const rendered = renderSettlementArrows(SEAT_POS, seats, transfers, settlementFilterPlayerId);
-    settlementSvg = rendered.svg;
-    settlementLabels = rendered.labelsHtml;
+    currentSettlementTransfers = {
+      seats,
+      transfers: [
+        ...remaining.map(t => ({ fromId: t.from, toId: t.to, amount: t.amount, paid: false })),
+        ...alreadyPaid.map(t => ({ fromId: t.fromPlayerId, toId: t.toPlayerId, amount: t.amount, paid: true })),
+      ],
+      filterId: settlementFilterPlayerId,
+    };
     if (warning) settlementWarning = `<div style="background:#450a0a;color:#fca5a5;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;text-align:center;">${esc(warning)}</div>`;
   }
 
@@ -1117,9 +1149,8 @@ function renderTable(gameId){
     <div class="poker-table-wrap">
       <div class="poker-table-felt"></div>
       <img src="/static/logo-watermark.png" style="position:absolute;left:50%;top:39%;transform:translate(-50%,-50%);width:46%;opacity:.6;pointer-events:none;">
-      ${settlementSvg}
       ${seatsHtml}
-      ${settlementLabels}
+      <div id="settlement-overlay" style="position:absolute;inset:0;pointer-events:none;"></div>
       <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) translateY(70px);text-align:center;z-index:3;">
         <div style="color:var(--muted);font-size:12px;">סה"כ קנייה ₪${totalBuyinAll}</div>
         <div style="color:var(--muted);font-size:12px;">סה"כ ציפים ₪${totalChipsAll}</div>
