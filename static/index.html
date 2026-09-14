@@ -342,24 +342,62 @@ function defaultState(){
 // (200 OK), so a thrown error here always means the fetch genuinely failed. Every caller
 // must handle that by keeping whatever's already in memory, never by falling back to
 // defaultState() - doing so and then saving would wipe real data with an empty snapshot.
+// Sends back the ETag from our last successful load so an unchanged poll gets a
+// near-empty 304 instead of resending the whole state blob (every player's photo
+// included) - this is what was actually burning through the Render bandwidth quota,
+// since most polls happen while nothing changed. Returns null on 304 ("you already
+// have the latest") - every caller must treat that as "keep current state", never
+// as an empty/missing result.
+let lastStateETag = null;
 async function loadState(){
-  const res = await fetch("/api/state");
+  const headers = lastStateETag ? { "If-None-Match": lastStateETag } : {};
+  const res = await fetch("/api/state", { headers });
+  if (res.status === 304) return null;
   if (!res.ok) throw new Error("failed to load state: " + res.status);
+  lastStateETag = res.headers.get("ETag");
   return await res.json();
+}
+
+// Temporary diagnostic overlay for tracking down a reported sync-flicker bug.
+// Turn on by opening the app with ?debug=1 in the URL. Shows a small scrolling
+// log in the corner of the screen - safe to leave in, does nothing unless the
+// flag is set, and can be removed once the bug is found.
+const DEBUG_SYNC = new URLSearchParams(location.search).get("debug") === "1";
+const syncLog = [];
+function logSync(msg){
+  if (!DEBUG_SYNC) return;
+  const t = new Date().toISOString().slice(11,23);
+  syncLog.push(`${t} ${msg}`);
+  if (syncLog.length > 40) syncLog.shift();
+  renderSyncLog();
+}
+function renderSyncLog(){
+  let el = document.getElementById("sync-debug-log");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "sync-debug-log";
+    el.style.cssText = "position:fixed;bottom:0;left:0;right:0;max-height:40vh;overflow-y:auto;background:rgba(0,0,0,.9);color:#6ee7b7;font-family:monospace;font-size:10px;padding:6px;z-index:999999;direction:ltr;text-align:left;white-space:pre-wrap;";
+    document.body.appendChild(el);
+  }
+  el.textContent = syncLog.join("\n");
+  el.scrollTop = el.scrollHeight;
 }
 
 let saveInFlight = null;
 async function saveState(){
   // Serialize saves so overlapping calls don't race each other.
+  logSync(`saveState() called, buyins=${(state.games||[]).map(g=>g.buyins.length).join(',')}`);
   const run = async () => {
+    logSync("save: POST start");
     try {
       await fetch("/api/state", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(state)
       });
+      logSync("save: POST done");
     }
-    catch(e){ console.error("save failed", e); alert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+    catch(e){ logSync("save: POST FAILED " + e); console.error("save failed", e); alert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
   };
   saveInFlight = (saveInFlight || Promise.resolve()).then(run);
   return saveInFlight;
@@ -373,8 +411,10 @@ async function saveState(){
 // primary mechanism. Skip a refresh whenever a modal is open so we never yank away
 // something someone's mid-typing; render() re-draws whatever nav/modal already are, so this
 // never navigates anyone away from the screen (e.g. table) they're currently looking at.
-async function doRefreshNow(){
-  if (modal) return;
+async function doRefreshNow(source){
+  const callId = DEBUG_SYNC ? Math.random().toString(36).slice(2,6) : "";
+  logSync(`refresh[${callId}] triggered by ${source}, modal=${!!modal}`);
+  if (modal) { logSync(`refresh[${callId}] SKIPPED - modal open`); return; }
   try {
     // If a save from something the user just did is still in flight, fetching now would
     // race it - the GET can land before that POST commits and return stale data that then
@@ -391,12 +431,19 @@ async function doRefreshNow(){
       pending = saveInFlight;
       if (pending) await pending;
     } while (pending !== saveInFlight);
+    logSync(`refresh[${callId}] past save-wait, GET start`);
     const fresh = await loadState();
+    if (fresh === null) {
+      logSync(`refresh[${callId}] 304 not-modified, nothing to apply`);
+      return;
+    }
+    logSync(`refresh[${callId}] GET done, buyins=${(fresh.games||[]).map(g=>g.buyins.length).join(',')}, applying (modal now=${!!modal})`);
     state = fresh;
     const scrollY = window.scrollY;
     render();
     window.scrollTo(0, scrollY);
-  } catch(e) { /* offline or a hiccup - next refresh will retry */ }
+    logSync(`refresh[${callId}] applied+rendered`);
+  } catch(e) { logSync(`refresh[${callId}] ERROR ${e}`); /* offline or a hiccup - next refresh will retry */ }
 }
 // Interval itself lives in shared state (refreshIntervalSec) so Super Admin can change it
 // from any device and every other device picks up the new cadence on its next tick.
@@ -405,7 +452,7 @@ function scheduleAutoRefresh(){
   setTimeout(tickAutoRefresh, sec * 1000);
 }
 async function tickAutoRefresh(){
-  await doRefreshNow();
+  await doRefreshNow("periodic-tick");
   scheduleAutoRefresh();
 }
 // EventSource reconnects on its own after a drop (network hiccup, server restart, phone
@@ -414,11 +461,11 @@ async function tickAutoRefresh(){
 function connectLiveSync(){
   try {
     const es = new EventSource("/api/events");
-    es.onmessage = () => { doRefreshNow(); };
+    es.onmessage = () => { doRefreshNow("sse"); };
   } catch(e) { /* SSE unsupported/blocked - periodic polling still covers us */ }
 }
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) doRefreshNow();
+  if (!document.hidden) doRefreshNow("visibilitychange");
 });
 
 // ---------- "Who am I" - private per-browser identity, used only to tag who created a community ----------
@@ -507,7 +554,7 @@ async function autoJoinViaInvite(gameId){
   // window for a lost-update race against a concurrent save from another device (e.g.
   // the community admin's own phone saving a snapshot from before this join happened,
   // silently wiping the new roster entry/seat back out on the shared blob).
-  try { state = await loadState(); } catch(e) { /* fall back to what's already in memory */ }
+  try { const fresh = await loadState(); if (fresh !== null) state = fresh; } catch(e) { /* fall back to what's already in memory */ }
   const g = getGame(gameId);
   if (!g || g.closed) return;
   const c = getCommunity(g.communityId);
@@ -880,6 +927,7 @@ function renderTable(gameId){
   const buyinTotals = {};
   g.buyins.forEach(b => { buyinTotals[b.playerId] = (buyinTotals[b.playerId]||0) + b.amount; });
   const liveChips = g.liveChips || {};
+  if (DEBUG_SYNC) logSync(`renderTable: ${g.buyins.length} buyins, totals=${JSON.stringify(buyinTotals)}`);
 
   const seatsHtml = seats.map((pid, i) => {
     const [x,y] = SEAT_POS[i];
@@ -2759,6 +2807,7 @@ function attachHandlers(){
       if (!amt || amt <= 0) return;
       const g = getGame(modal.gameId);
       g.buyins.push({id:uid(), playerId: modal.playerId, amount: amt, ts: Date.now()});
+      logSync(`buyin confirmed player=${modal.playerId} amt=${amt} -> game now has ${g.buyins.length} buyins`);
       saveState();
       closeModal();
     };
@@ -3089,7 +3138,7 @@ window.addEventListener("popstate", () => {
       // Our initial load may have caught a stale shared-state snapshot (a race with
       // someone else's concurrent save) and missed a game that genuinely exists -
       // try once more with a fresh fetch before giving up and falling back to home.
-      try { state = await loadState(); } catch(e) { /* keep the state we already have */ }
+      try { const fresh = await loadState(); if (fresh !== null) state = fresh; } catch(e) { /* keep the state we already have */ }
       invitedGame = getGame(inviteGameId);
     }
     if (invitedGame) {

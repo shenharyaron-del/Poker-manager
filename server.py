@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import queue
@@ -94,9 +95,16 @@ def get_state():
         cur.execute("SELECT data FROM shared_state WHERE id = 1")
         row = cur.fetchone()
     conn.close()
-    if row:
-        return row[0], 200, {"Content-Type": "application/json"}
-    return jsonify({"communities": [], "games": []})
+    data = row[0] if row else json.dumps({"communities": [], "games": []})
+    # The client polls this every few seconds and on every SSE "changed" event, but the
+    # state (including every player's photo, base64-encoded) usually hasn't actually
+    # changed between polls - resending the full multi-hundred-KB blob every time burns
+    # through bandwidth fast with several phones open over a whole poker night. An ETag
+    # lets an unchanged poll get a near-empty 304 instead.
+    etag = hashlib.md5(data.encode("utf-8")).hexdigest()
+    if request.headers.get("If-None-Match") == etag:
+        return "", 304
+    return data, 200, {"Content-Type": "application/json", "ETag": etag}
 
 
 @app.route("/api/state", methods=["POST"])
