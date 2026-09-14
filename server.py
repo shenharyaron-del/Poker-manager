@@ -1,11 +1,13 @@
 import json
 import os
+import queue
 import re
+import threading
 from pathlib import Path
 
 import anthropic
 import psycopg2
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory
 
 try:
     from dotenv import load_dotenv
@@ -23,6 +25,25 @@ APP_VERSION = os.environ.get("RENDER_GIT_COMMIT", "local")[:7]
 
 app = Flask(__name__, static_folder=None)
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10MB, enough for a chip photo
+
+# ---------- Push instant "state changed" notifications over SSE ----------
+# One Queue per connected browser tab; save_state() drops a message in every queue
+# right after it commits, so every other open tab refetches within the same second
+# instead of waiting for its next poll. Single-process assumption (Render runs one
+# instance of this app) - fine for a small poker group, would need a real pub/sub
+# (Redis etc.) if this ever ran across multiple instances.
+_subscribers = []
+_subscribers_lock = threading.Lock()
+
+
+def _broadcast_state_changed():
+    with _subscribers_lock:
+        subs = list(_subscribers)
+    for q in subs:
+        try:
+            q.put_nowait("changed")
+        except queue.Full:
+            pass
 
 
 def get_db():
@@ -91,7 +112,34 @@ def save_state():
         )
     conn.commit()
     conn.close()
+    _broadcast_state_changed()
     return jsonify({"ok": True})
+
+
+@app.route("/api/events")
+def events():
+    def stream():
+        q = queue.Queue(maxsize=10)
+        with _subscribers_lock:
+            _subscribers.append(q)
+        try:
+            yield ": connected\n\n"
+            while True:
+                try:
+                    msg = q.get(timeout=25)
+                    yield f"data: {msg}\n\n"
+                except queue.Empty:
+                    yield ": keep-alive\n\n"  # keeps the connection from idling out
+        finally:
+            with _subscribers_lock:
+                if q in _subscribers:
+                    _subscribers.remove(q)
+
+    return Response(
+        stream(),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.route("/api/identity", methods=["GET"])
@@ -177,4 +225,7 @@ def vision():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=os.environ.get("DEBUG") == "1")
+    # threaded=True is required now - an SSE connection (/api/events) stays open
+    # indefinitely, and the default single-threaded dev server would block every
+    # other request behind it for as long as any one tab stays connected.
+    app.run(host="0.0.0.0", port=port, debug=os.environ.get("DEBUG") == "1", threaded=True)

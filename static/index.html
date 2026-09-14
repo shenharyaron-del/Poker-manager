@@ -366,11 +366,29 @@ async function saveState(){
 }
 
 // ---------- Keep the shared data fresh without the user having to do anything ----------
-// There's no live push/socket sync - other people's changes (buy-ins, new joiners, seat
-// moves) only show up on this device once it re-fetches. Poll quietly in the background;
-// skip a tick whenever a modal is open so we never yank away something someone's mid-typing.
-// render() re-draws whatever nav/modal already are, so this never navigates anyone away
-// from the screen (e.g. table) they're currently looking at.
+// Primary path is instant: the server pushes a "changed" event over SSE the moment anyone
+// saves (see connectLiveSync below), so other open tabs refetch within about a second.
+// Periodic polling stays underneath as a fallback for when SSE is unsupported/blocked or
+// the connection drops - same safety net as before, just now a backup instead of the
+// primary mechanism. Skip a refresh whenever a modal is open so we never yank away
+// something someone's mid-typing; render() re-draws whatever nav/modal already are, so this
+// never navigates anyone away from the screen (e.g. table) they're currently looking at.
+async function doRefreshNow(){
+  if (modal) return;
+  try {
+    // If a save from something the user just did is still in flight, fetching now would
+    // race it - the GET can land before that POST commits and return stale data that then
+    // overwrites the local (correct, newer) state, making the change flicker away for a
+    // few seconds until the next refresh catches up. Wait for it to finish first so the
+    // fetch is always at least as fresh as anything already saved.
+    if (saveInFlight) await saveInFlight;
+    const fresh = await loadState();
+    state = fresh;
+    const scrollY = window.scrollY;
+    render();
+    window.scrollTo(0, scrollY);
+  } catch(e) { /* offline or a hiccup - next refresh will retry */ }
+}
 // Interval itself lives in shared state (refreshIntervalSec) so Super Admin can change it
 // from any device and every other device picks up the new cadence on its next tick.
 function scheduleAutoRefresh(){
@@ -378,23 +396,21 @@ function scheduleAutoRefresh(){
   setTimeout(tickAutoRefresh, sec * 1000);
 }
 async function tickAutoRefresh(){
-  if (!modal) {
-    try {
-      // If a save from something the user just did is still in flight, fetching now would
-      // race it - the GET can land before that POST commits and return stale data that
-      // then overwrites the local (correct, newer) state, making the change flicker away
-      // for a few seconds until the next tick catches up. Wait for it to finish first so
-      // the fetch is always at least as fresh as anything already saved.
-      if (saveInFlight) await saveInFlight;
-      const fresh = await loadState();
-      state = fresh;
-      const scrollY = window.scrollY;
-      render();
-      window.scrollTo(0, scrollY);
-    } catch(e) { /* offline or a hiccup - next tick will retry */ }
-  }
+  await doRefreshNow();
   scheduleAutoRefresh();
 }
+// EventSource reconnects on its own after a drop (network hiccup, server restart, phone
+// backgrounded) - nothing extra needed here for that. visibilitychange below covers the
+// case where the tab was backgrounded long enough to miss events entirely.
+function connectLiveSync(){
+  try {
+    const es = new EventSource("/api/events");
+    es.onmessage = () => { doRefreshNow(); };
+  } catch(e) { /* SSE unsupported/blocked - periodic polling still covers us */ }
+}
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) doRefreshNow();
+});
 
 // ---------- "Who am I" - private per-browser identity, used only to tag who created a community ----------
 // Not a real login: it's a name each user types once, remembered for their own browser via
@@ -3067,6 +3083,7 @@ window.addEventListener("popstate", () => {
   if (!myIdentity.name) modal = {type:"identityName", forced:true};
   render();
   scheduleAutoRefresh();
+  connectLiveSync();
 })();
 </script>
 </body>
