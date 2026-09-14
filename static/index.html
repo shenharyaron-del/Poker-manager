@@ -3023,9 +3023,12 @@ function attachHandlers(){
       // exact URL scheme for pre-filling a phone+amount is officially confirmed, so
       // this may just open the app without them - harmless if the params are ignored.
       // Without a saved phone there's nothing to pre-fill, so just open the app itself.
+      // links.payboxapp.com is PayBox's own confirmed-working domain (same one used for
+      // the group link elsewhere in the app) - phone/amount as query params is still a
+      // guess, but at least the domain itself is real instead of a made-up one.
       const url = el.dataset.payVia === "bit"
         ? (phone ? `bit://transfer?phone=${encodeURIComponent(phone)}&amount=${modal.amount}` : "bit://")
-        : (phone ? `https://payboxapp.page.link/pay?phone=${encodeURIComponent(phone)}&amount=${modal.amount}` : "paybox://");
+        : (phone ? `https://links.payboxapp.com/?phone=${encodeURIComponent(phone)}&amount=${modal.amount}` : "https://links.payboxapp.com/");
       window.open(url, "_blank", "noopener");
     });
     const confirmPayPlayer = app.querySelector("[data-confirm-pay-player]");
