@@ -2601,6 +2601,14 @@ function attachHandlers(){
       const c = getCommunity(modal.communityId);
       const dateVal = document.getElementById("new-game-date").value || modal.date;
       const g = {id:uid(), communityId:c.id, date:dateVal, players: [], buyins:[], cashouts:{}, payboxPayments:[], playerPayments:[], seats:new Array(9).fill(null), liveChips:{}, closed:false, createdByName: myIdentity.name};
+      // Explicitly seat whoever's creating the table, by name - independent of whatever
+      // this device's remembered-player link happens to be, so opening a new table
+      // reliably seats its actual creator rather than depending on that link being right.
+      if (myIdentity.name) {
+        let creatorPlayer = c.roster.find(pl => pl.name === myIdentity.name);
+        if (!creatorPlayer) { creatorPlayer = {id: uid(), name: myIdentity.name}; c.roster.push(creatorPlayer); }
+        seatPlayerIfRoom(g, creatorPlayer.id, creatorPlayer);
+      }
       state.games.push(g);
       saveState();
       go("table", {gameId:g.id, communityId:c.id});
