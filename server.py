@@ -122,21 +122,6 @@ def get_state_hash():
     return jsonify({"hash": hashlib.md5(data.encode("utf-8")).hexdigest()})
 
 
-@app.route("/api/_debug_save_asset", methods=["POST"])
-def debug_save_asset():
-    # TEMPORARY - lets a phone upload an image straight into static/ for a one-off asset
-    # swap, bypassing chat/shell length limits on giant base64 strings. Remove after use.
-    body = request.get_json(force=True) or {}
-    data_url = body.get("dataUrl", "")
-    filename = body.get("filename", "")
-    match = DATA_URL_RE.match(data_url)
-    if not match or not filename or "/" in filename or ".." in filename:
-        return jsonify({"error": "bad request"}), 400
-    import base64
-    (STATIC_DIR / filename).write_bytes(base64.b64decode(match.group(2)))
-    return jsonify({"ok": True})
-
-
 @app.route("/api/state", methods=["POST"])
 def save_state():
     data = request.get_data(as_text=True)

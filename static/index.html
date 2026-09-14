@@ -906,7 +906,7 @@ function renderCommunity(communityId){
       <button class="back-arrow" data-back-home>${icon('back')}</button>
       <h1 class="serif sm flex1">${esc(c.name)}</h1>
       ${c.createdByName && myIdentity.name && c.createdByName === myIdentity.name ? `<button data-open-paybox-settings="${c.id}" title="הגדרת פייבוקס" dir="ltr" style="display:flex;align-items:center;gap:5px;background:#0891b2;border:none;border-radius:8px;padding:5px 9px;color:#fff;cursor:pointer;flex-shrink:0;">
-        <span style="display:inline-flex;flex-shrink:0;">${icon('paybox').replace('width="24" height="24"','width="17" height="17"')}</span>
+        <span style="display:inline-flex;flex-shrink:0;"><img src="/static/paybox-icon.png" style="height:17px;width:auto;display:block;"></span>
         <span style="display:flex;flex-direction:column;align-items:flex-start;line-height:1.05;">
           <span style="font-family:system-ui,sans-serif;font-weight:400;font-size:12px;">PayBox</span>
           <span style="font-family:system-ui,sans-serif;font-weight:400;font-size:8px;opacity:.8;">Setup</span>
@@ -1582,7 +1582,7 @@ function renderModal(m){
   } else if (m.type === "payboxSettings") {
     const c = getCommunity(m.communityId);
     title = `<div dir="ltr" style="display:flex;align-items:flex-start;gap:8px;">
-      <span style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;background:#0891b2;flex-shrink:0;">${icon('paybox')}</span>
+      <span style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;background:#0891b2;flex-shrink:0;"><img src="/static/paybox-icon.png" style="height:22px;width:auto;display:block;"></span>
       <div style="display:flex;flex-direction:column;align-items:flex-start;">
         <span style="font-family:system-ui,sans-serif;font-weight:400;font-size:15px;line-height:1.1;">PayBox</span>
         <span style="font-family:system-ui,sans-serif;font-weight:400;font-size:10px;line-height:1.1;opacity:.65;">Setup</span>
