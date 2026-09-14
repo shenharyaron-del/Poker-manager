@@ -3316,9 +3316,13 @@ function attachHandlers(){
       if (!g.players.some(gp => gp.id === p.id)) g.players.push({id:p.id, name:p.name});
       if (!g.liveChips) g.liveChips = {};
       if (g.liveChips[p.id] === undefined) g.liveChips[p.id] = 0;
-      if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
-      myIdentity.myPlayers[g.communityId] = p.id;
-      saveIdentity();
+      // Deliberately not touching myIdentity.myPlayers here - picking a seat for someone
+      // doesn't mean this device belongs to them. Whoever's actually running the app
+      // often seats several different people from their own phone while setting up the
+      // table, and each assignment used to overwrite this device's own "remembered
+      // player," so the next game they opened auto-seated whoever they'd most recently
+      // assigned to a seat instead of themselves. That mapping should only come from
+      // genuinely self-identifying (via an invite link, or creating the community).
       saveState();
       closeModal();
     });
