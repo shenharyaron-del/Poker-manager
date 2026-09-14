@@ -779,7 +779,7 @@ const ICONS = {
   share: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>',
   gear: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>',
   percent: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>',
-  paybox: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="19" height="19" rx="5"/><circle cx="12" cy="10" r="3.2"/><path d="M6.3 18.6c0-3.3 2.5-5.2 5.7-5.2s5.7 1.9 5.7 5.2"/></svg>',
+  paybox: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="6" r="2.6"/><path d="M12 9.5v8.5M12 12l-4.5-3.5M12 12l4.5-3.5M12 16l-3.5 4M12 16l3.5 4"/></svg>',
 };
 function icon(name){ return ICONS[name] || ""; }
 
@@ -851,10 +851,10 @@ function renderCommunity(communityId){
     <div class="top row" style="padding-bottom:10px;">
       <button class="back-arrow" data-back-home>${icon('back')}</button>
       <h1 class="serif sm flex1">${esc(c.name)}</h1>
-      ${c.createdByName && myIdentity.name && c.createdByName === myIdentity.name ? `<button data-open-paybox-settings="${c.id}" title="הגדרת פייבוקס" style="display:flex;align-items:center;gap:5px;background:#0891b2;border:none;border-radius:8px;padding:5px 9px;color:#fff;cursor:pointer;flex-shrink:0;">
+      ${c.createdByName && myIdentity.name && c.createdByName === myIdentity.name ? `<button data-open-paybox-settings="${c.id}" title="הגדרת פייבוקס" dir="ltr" style="display:flex;align-items:center;gap:5px;background:#0891b2;border:none;border-radius:8px;padding:5px 9px;color:#fff;cursor:pointer;flex-shrink:0;">
         <span style="display:inline-flex;flex-shrink:0;">${icon('paybox').replace('width="24" height="24"','width="17" height="17"')}</span>
         <span style="display:flex;flex-direction:column;align-items:flex-start;line-height:1.05;">
-          <span style="font-family:system-ui,sans-serif;font-weight:700;font-size:12px;">PayBox</span>
+          <span style="font-family:system-ui,sans-serif;font-weight:400;font-size:12px;">PayBox</span>
           <span style="font-family:system-ui,sans-serif;font-weight:400;font-size:8px;opacity:.8;">Setup</span>
         </span>
       </button>` : ""}
@@ -1526,10 +1526,10 @@ function renderModal(m){
     `;
   } else if (m.type === "payboxSettings") {
     const c = getCommunity(m.communityId);
-    title = `<div style="display:flex;align-items:flex-start;gap:8px;">
+    title = `<div dir="ltr" style="display:flex;align-items:flex-start;gap:8px;">
       <span style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;background:#0891b2;flex-shrink:0;">${icon('paybox')}</span>
       <div style="display:flex;flex-direction:column;align-items:flex-start;">
-        <span style="font-family:system-ui,sans-serif;font-weight:700;font-size:15px;line-height:1.1;">PayBox</span>
+        <span style="font-family:system-ui,sans-serif;font-weight:400;font-size:15px;line-height:1.1;">PayBox</span>
         <span style="font-family:system-ui,sans-serif;font-weight:400;font-size:10px;line-height:1.1;opacity:.65;">Setup</span>
       </div>
     </div>`;
