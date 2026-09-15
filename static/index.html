@@ -1302,7 +1302,7 @@ function renderModal(m){
   if (m.type === "identityName") {
     title = m.forced ? "ברוכים הבאים" : "עדכון שם";
     body = `
-      ${m.forced ? `<p style="color:var(--muted);font-size:13px;">איך קוראים לך? השם ישמש לזיהוי מי יצר קבוצה, ונשמר רק במכשיר הזה.</p>` : ""}
+      ${m.forced ? `<p style="color:var(--muted);font-size:13px;">איך קוראים לך?</p>` : ""}
       <div style="margin-bottom:12px;">
         <input type="text" id="identity-name-input" value="${esc(myIdentity.name || '')}" placeholder="השם שלך" style="width:100%;" autofocus>
       </div>
