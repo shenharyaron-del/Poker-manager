@@ -4,6 +4,7 @@ import os
 import queue
 import re
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 
 import anthropic
@@ -47,7 +48,24 @@ def _broadcast_state_changed():
             pass
 
 
-def get_db():
+_INIT_STATEMENTS = (
+    "CREATE TABLE IF NOT EXISTS shared_state ("
+    "  id INTEGER PRIMARY KEY CHECK (id = 1),"
+    "  data TEXT NOT NULL"
+    ")",
+    "CREATE TABLE IF NOT EXISTS identities ("
+    "  client_id TEXT PRIMARY KEY,"
+    "  data TEXT NOT NULL"
+    ")",
+    "CREATE TABLE IF NOT EXISTS state_history ("
+    "  id SERIAL PRIMARY KEY,"
+    "  data TEXT NOT NULL,"
+    "  saved_at TIMESTAMP NOT NULL DEFAULT now()"
+    ")",
+)
+
+
+def _new_connection():
     conn = psycopg2.connect(DATABASE_URL)
     with conn.cursor() as cur:
         # CREATE TABLE IF NOT EXISTS isn't fully race-safe in Postgres - two connections
@@ -56,21 +74,7 @@ def get_db():
         # loser gets a duplicate-key error on the system catalog instead of silently
         # doing nothing. That's harmless (the table exists either way) but would
         # otherwise surface as a real 500 to whoever's request lost the race.
-        for statement in (
-            "CREATE TABLE IF NOT EXISTS shared_state ("
-            "  id INTEGER PRIMARY KEY CHECK (id = 1),"
-            "  data TEXT NOT NULL"
-            ")",
-            "CREATE TABLE IF NOT EXISTS identities ("
-            "  client_id TEXT PRIMARY KEY,"
-            "  data TEXT NOT NULL"
-            ")",
-            "CREATE TABLE IF NOT EXISTS state_history ("
-            "  id SERIAL PRIMARY KEY,"
-            "  data TEXT NOT NULL,"
-            "  saved_at TIMESTAMP NOT NULL DEFAULT now()"
-            ")",
-        ):
+        for statement in _INIT_STATEMENTS:
             try:
                 cur.execute(statement)
             except psycopg2.errors.DuplicateTable:
@@ -79,6 +83,35 @@ def get_db():
                 conn.rollback()
     conn.commit()
     return conn
+
+
+# One connection, reused for the process's whole lifetime, instead of opening a fresh
+# one (full TCP+TLS handshake to Supabase, plus the CREATE TABLE checks above) on every
+# single request - that round trip was adding several seconds to every API call. A lock
+# serializes access across Flask's request threads, which is fine at this app's traffic
+# (a poker group's phones, not a high-concurrency service) since each query is now just
+# the query itself, no connection setup. If the connection dies underneath us (e.g. an
+# idle timeout on Supabase's side), the failing request's query raises and we drop the
+# connection so the *next* request reconnects - one request degrades, not the whole app.
+_db_conn = None
+_db_lock = threading.Lock()
+
+
+@contextmanager
+def get_db():
+    global _db_conn
+    with _db_lock:
+        if _db_conn is None or _db_conn.closed:
+            _db_conn = _new_connection()
+        try:
+            yield _db_conn
+        except psycopg2.Error:
+            try:
+                _db_conn.close()
+            except Exception:
+                pass
+            _db_conn = None
+            raise
 
 
 @app.route("/")
@@ -105,11 +138,11 @@ def version():
 
 @app.route("/api/state", methods=["GET"])
 def get_state():
-    conn = get_db()
-    with conn.cursor() as cur:
-        cur.execute("SELECT data FROM shared_state WHERE id = 1")
-        row = cur.fetchone()
-    conn.close()
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT data FROM shared_state WHERE id = 1")
+            row = cur.fetchone()
+        conn.commit()
     if row:
         return row[0], 200, {"Content-Type": "application/json"}
     return jsonify({"communities": [], "games": []})
@@ -128,11 +161,11 @@ def get_state_hash():
     # This tiny endpoint sidesteps that: the client fetches just this hash first (a
     # plain, tiny JSON body - confirmed to pass through untouched, unlike the header) and
     # only fetches the full /api/state when the hash has actually changed.
-    conn = get_db()
-    with conn.cursor() as cur:
-        cur.execute("SELECT data FROM shared_state WHERE id = 1")
-        row = cur.fetchone()
-    conn.close()
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT data FROM shared_state WHERE id = 1")
+            row = cur.fetchone()
+        conn.commit()
     data = row[0] if row else json.dumps({"communities": [], "games": []})
     return jsonify({"hash": hashlib.md5(data.encode("utf-8")).hexdigest()})
 
@@ -141,47 +174,46 @@ def get_state_hash():
 def save_state():
     data = request.get_data(as_text=True)
     json.loads(data)  # reject anything that isn't valid JSON before storing it
-    conn = get_db()
-    with conn.cursor() as cur:
-        # Snapshot whatever was there before this overwrites it, so a bad save (accidental
-        # or a bug) can be rolled back - keep only the last few, this is a safety net for
-        # undoing a recent mistake, not a full audit log.
-        cur.execute("SELECT data FROM shared_state WHERE id = 1")
-        prev = cur.fetchone()
-        if prev:
-            cur.execute("INSERT INTO state_history (data) VALUES (%s)", (prev[0],))
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            # Snapshot whatever was there before this overwrites it, so a bad save
+            # (accidental or a bug) can be rolled back - keep only the last few, this is
+            # a safety net for undoing a recent mistake, not a full audit log.
+            cur.execute("SELECT data FROM shared_state WHERE id = 1")
+            prev = cur.fetchone()
+            if prev:
+                cur.execute("INSERT INTO state_history (data) VALUES (%s)", (prev[0],))
+                cur.execute(
+                    "DELETE FROM state_history WHERE id NOT IN "
+                    "(SELECT id FROM state_history ORDER BY saved_at DESC LIMIT 3)"
+                )
             cur.execute(
-                "DELETE FROM state_history WHERE id NOT IN "
-                "(SELECT id FROM state_history ORDER BY saved_at DESC LIMIT 3)"
+                "INSERT INTO shared_state (id, data) VALUES (1, %s) "
+                "ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data",
+                (data,),
             )
-        cur.execute(
-            "INSERT INTO shared_state (id, data) VALUES (1, %s) "
-            "ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data",
-            (data,),
-        )
-    conn.commit()
-    conn.close()
+        conn.commit()
     _broadcast_state_changed()
     return jsonify({"ok": True})
 
 
 @app.route("/api/state/history")
 def get_state_history():
-    conn = get_db()
-    with conn.cursor() as cur:
-        cur.execute("SELECT id, saved_at FROM state_history ORDER BY saved_at DESC")
-        rows = cur.fetchall()
-    conn.close()
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, saved_at FROM state_history ORDER BY saved_at DESC")
+            rows = cur.fetchall()
+        conn.commit()
     return jsonify([{"id": r[0], "savedAt": r[1].isoformat()} for r in rows])
 
 
 @app.route("/api/state/history/<int:history_id>", methods=["GET"])
 def get_state_history_entry(history_id):
-    conn = get_db()
-    with conn.cursor() as cur:
-        cur.execute("SELECT data FROM state_history WHERE id = %s", (history_id,))
-        row = cur.fetchone()
-    conn.close()
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT data FROM state_history WHERE id = %s", (history_id,))
+            row = cur.fetchone()
+        conn.commit()
     if not row:
         return jsonify({"error": "not found"}), 404
     return row[0], 200, {"Content-Type": "application/json"}
@@ -216,11 +248,11 @@ def events():
 @app.route("/api/identity", methods=["GET"])
 def get_identity():
     client_id = request.args.get("clientId", "")
-    conn = get_db()
-    with conn.cursor() as cur:
-        cur.execute("SELECT data FROM identities WHERE client_id = %s", (client_id,))
-        row = cur.fetchone()
-    conn.close()
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT data FROM identities WHERE client_id = %s", (client_id,))
+            row = cur.fetchone()
+        conn.commit()
     if row:
         return row[0], 200, {"Content-Type": "application/json"}
     return jsonify(None)
@@ -231,15 +263,14 @@ def save_identity():
     client_id = request.args.get("clientId", "")
     data = request.get_data(as_text=True)
     json.loads(data)
-    conn = get_db()
-    with conn.cursor() as cur:
-        cur.execute(
-            "INSERT INTO identities (client_id, data) VALUES (%s, %s) "
-            "ON CONFLICT (client_id) DO UPDATE SET data = EXCLUDED.data",
-            (client_id, data),
-        )
-    conn.commit()
-    conn.close()
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO identities (client_id, data) VALUES (%s, %s) "
+                "ON CONFLICT (client_id) DO UPDATE SET data = EXCLUDED.data",
+                (client_id, data),
+            )
+        conn.commit()
     return jsonify({"ok": True})
 
 
