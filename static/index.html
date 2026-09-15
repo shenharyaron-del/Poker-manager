@@ -1194,11 +1194,15 @@ function renderTable(gameId){
   const liveChips = g.liveChips || {};
   if (DEBUG_SYNC) logSync(`renderTable: ${g.buyins.length} buyins, totals=${JSON.stringify(buyinTotals)}`);
 
+  const seatedIds = seats.filter(Boolean);
+  const allCashedOut = seatedIds.length > 0 && seatedIds.every(pid => pid in g.cashouts);
+
   const seatsHtml = seats.map((pid, i) => {
     const [x,y] = SEAT_POS[i];
     if (!pid) {
       if (i === 9) return ""; // the 10th slot's empty state is handled by the dedicated "add extra player" button instead
-      if (hideEmptySeats) return "";
+      // Once the night is over, empty seats are just clutter - always hide them, no toggle.
+      if (hideEmptySeats || allCashedOut) return "";
       return `<div class="seat-wrap" style="left:${x}%;top:${y}%;" data-seat="${i}"><div class="seat-circle empty">+</div></div>`;
     }
     const p = g.players.find(pl => pl.id === pid);
@@ -1212,11 +1216,8 @@ function renderTable(gameId){
     if (cashedOut) {
       const profit = chips - buyin;
       const sign = profit > 0 ? "+" : "";
-      const isZero = Math.abs(profit) < 0.5;
       const profitColor = profit > 0.5 ? "#6ee7b7" : (profit < -0.5 ? "#fda4af" : "inherit");
-      const settled = !!(g.cashouts[pid] && g.cashouts[pid].settled);
-      caption = `<span style="color:${profitColor};font-weight:700;">${sign}₪${Math.round(profit)}</span>` +
-        (isZero ? "" : `<br><span data-toggle-settled="${pid}" style="cursor:pointer;font-size:9px;color:${settled?'#6ee7b7':'#fbbf24'};">${settled?'✓ הוסדר':'ממתין להסדר'}</span>`);
+      caption = `<span style="color:${profitColor};font-weight:700;">${sign}₪${Math.round(profit)}</span>`;
     }
     const circleStyle = (photo && !cashedOut) ? ` style="background-image:url('${photo}');background-size:cover;background-position:center;"` : "";
     const doorIconBig = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>';
@@ -1230,14 +1231,12 @@ function renderTable(gameId){
     </div>`;
   }).join("");
 
-  const seatedIds = seats.filter(Boolean);
   const totalBuyinAll = seatedIds.reduce((s,pid)=>s+(buyinTotals[pid]||0),0);
   const totalChipsAll = seatedIds.reduce((s,pid)=>s+(liveChips[pid]||0),0);
   const diff = totalChipsAll - totalBuyinAll;
   const diffLabel = diff > 0.5 ? "קופה בחוסר" : (diff < -0.5 ? "קופה בעודף" : "קופה מאוזנת");
   const diffColor = diff > 0.5 ? "#fda4af" : (diff < -0.5 ? "#6ee7b7" : "var(--muted)");
 
-  const allCashedOut = seatedIds.length > 0 && seatedIds.every(pid => pid in g.cashouts);
   const activePaybox = getActivePayboxEntry(c);
   let settlementWarning = "";
   currentSettlementTransfers = null;
@@ -1260,15 +1259,16 @@ function renderTable(gameId){
       <div class="flex1">
         <h1 class="serif sm" style="color:var(--gold);">${esc(c.name)}</h1>
         <div class="meta" style="color:#6ee7b7;font-size:12px;display:flex;align-items:center;gap:5px;">${icon('cal')}${esc(g.date)}${g.createdByName ? ` · נוצר ע"י ${esc(g.createdByName)}` : ""}</div>
-        ${seats.slice(0,9).some(s=>!s) ? `
+        ${(!allCashedOut && seats.slice(0,9).some(s=>!s)) ? `
           <button class="icon-btn" data-toggle-empty-seats title="${hideEmptySeats?'הצג מקומות פנויים':'הסתר מקומות פנויים'}" style="margin-top:6px;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.05);color:var(--muted);opacity:.6;display:inline-flex;align-items:center;justify-content:center;">${icon(hideEmptySeats?'eyeOff':'eye')}</button>
         ` : ""}
       </div>
       <button class="icon-btn gold" data-open-poker-odds title="מה הסיכויים שלי" style="flex-shrink:0;width:36px;height:36px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;">${icon('percent')}</button>
     </div>
+    ${allCashedOut && activePaybox ? `<button class="btn btn-block" style="margin-bottom:6px;background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;" data-open-active-paybox><img src="/static/paybox-icon.png" style="height:16px;width:auto;display:block;">העברה לקבוצת פייבוקס משותפת ${esc(activePaybox.name)}</button>
+    <div style="text-align:center;color:var(--muted);font-size:12px;margin-bottom:6px;">או</div>` : ""}
     ${allCashedOut ? `<button class="btn ${showSettlement?'':'btn-ghost'} btn-block" data-toggle-settlement style="margin-bottom:10px;${showSettlement?'background:#0891b2;color:#fff;':''}">${icon('coins')} ${showSettlement?'הסתר הסדר תשלומים':'הסדר תשלומים בין שחקנים'}</button>` : ""}
     ${allCashedOut && showSettlement ? `<div class="row" style="gap:8px;margin-bottom:10px;">
-      ${activePaybox ? `<button class="btn btn-block" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;" data-open-active-paybox><img src="/static/paybox-icon.png" style="height:16px;width:auto;display:block;">${esc(activePaybox.name)}</button>` : ""}
       <button class="btn btn-block" style="background:#0891b2;color:#fff;" data-open-paybox-generic>פייבוקס</button>
       <button class="btn btn-block" style="background:#000;color:#fff;" data-open-bit-generic>ביט</button>
     </div>` : ""}
@@ -2458,13 +2458,6 @@ function attachHandlers(){
         return;
       }
       openModal({type:"seatMenu", gameId: nav.gameId, playerId: pid, seatIndex: idx});
-    };
-    const settledEl = el.querySelector("[data-toggle-settled]");
-    if (settledEl) settledEl.onclick = (e) => {
-      e.stopPropagation();
-      const g = getGame(nav.gameId);
-      const co = g.cashouts[settledEl.dataset.toggleSettled];
-      if (co) { co.settled = !co.settled; saveState(); render(); }
     };
   });
 
