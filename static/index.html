@@ -656,7 +656,12 @@ function autoSeatSelf(gameId){
     }
   }
   if (!p) return;
-  if (seatPlayerIfRoom(g, p.id, p)) saveState();
+  // Backfill for players who self-identified before global-player linking existed:
+  // their myPlayers link is already correct, they just never got a clientId.
+  let changed = false;
+  if (!p.clientId) { linkToGlobalPlayer(p); changed = true; }
+  if (seatPlayerIfRoom(g, p.id, p)) changed = true;
+  if (changed) saveState();
 }
 // For someone opening a game via a shared invite link: if this device isn't already
 // linked to a roster player in this community, find one by matching name (so the same
@@ -682,6 +687,9 @@ async function autoJoinViaInvite(gameId){
     if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
     myIdentity.myPlayers[g.communityId] = p.id;
     saveIdentity();
+  } else if (!p.clientId) {
+    // Backfill for a player who self-identified before global-player linking existed.
+    linkToGlobalPlayer(p);
   }
   seatPlayerIfRoom(g, p.id, p);
   await saveState();
