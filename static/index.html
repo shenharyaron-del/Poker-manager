@@ -966,41 +966,21 @@ function computeSettlementTransfers(game){
   debtors.sort((a,b) => b.amt - a.amt);
   creditors.sort((a,b) => b.amt - a.amt);
 
-  // Raw (unrounded) greedy match first, then round each transfer down to a whole
-  // shekel so the payer never sends more than intended (the pot should never end up
-  // short from over-collecting) - which leaves a small leftover from the rounding.
-  const raw = [];
+  // Greedy largest-debtor/largest-creditor match, keeping exact amounts (rounded only to
+  // the nearest agora) instead of flooring to a whole shekel - a real-number settlement
+  // always balances exactly, so there's no leftover to fold into anyone's transfer.
+  const remaining = [];
   let i = 0, j = 0;
   while (i < debtors.length && j < creditors.length) {
-    const pay = Math.min(debtors[i].amt, creditors[j].amt);
-    raw.push({ from: debtors[i].id, to: creditors[j].id, amount: pay });
+    const pay = Math.round(Math.min(debtors[i].amt, creditors[j].amt) * 100) / 100;
+    if (pay > 0) remaining.push({ from: debtors[i].id, to: creditors[j].id, amount: pay });
     debtors[i].amt -= pay;
     creditors[j].amt -= pay;
     if (debtors[i].amt < 0.5) i++;
     if (creditors[j].amt < 0.5) j++;
   }
 
-  let shortfall = 0;
-  const remaining = [];
-  raw.forEach(t => {
-    const floored = Math.floor(t.amount);
-    shortfall += t.amount - floored;
-    if (floored > 0) remaining.push({ from: t.from, to: t.to, amount: floored });
-  });
-
-  let warning = null;
-  shortfall = Math.round(shortfall * 100) / 100;
-  if (shortfall > 0.005) {
-    const yaron = game.players.find(p => p.name === "ירון שנהר");
-    const yaronDebtTransfer = yaron ? remaining.find(t => t.from === yaron.id) : null;
-    if (yaron && shortfall <= 2 && yaronDebtTransfer) {
-      yaronDebtTransfer.amount += Math.ceil(shortfall);
-    } else {
-      warning = `יש אי-התאמה של ₪${shortfall} בחישוב עיגולי ההסדר שלא ניתן היה לשייך אוטומטית - כדאי לבדוק את הנתונים לפני התשלום.`;
-    }
-  }
-
-  return { remaining, alreadyPaid: directPayments, warning };
+  return { remaining, alreadyPaid: directPayments, warning: null };
 }
 
 // Draws the settlement arrows into #settlement-overlay using each seat-circle's actual
@@ -2080,10 +2060,22 @@ function renderModal(m){
   } else if (m.type === "removeSeat") {
     const g = getGame(m.gameId);
     const p = g.players.find(pl=>pl.id===m.playerId);
+    const hasBuyins = g.buyins.some(b => b.playerId === m.playerId);
+    const hasChips = ((g.liveChips||{})[m.playerId] || 0) > 0;
     title = "הסרה מהשולחן";
     body = `
       <p style="color:#6ee7b7;font-size:13px;">להסיר את <b>${esc(p?p.name:"")}</b> מהשולחן?</p>
+      ${(hasBuyins || hasChips) ? `<p style="color:#fbbf24;font-size:12px;">לשחקן יש קניות/ציפים בשולחן - הם יאופסו, כאילו לא ישב בשולחן. אם יחזור, הכל יעמוד על אפס.</p>` : ""}
       <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-clear-seat>הסר מהשולחן</button>
+    `;
+  } else if (m.type === "returnToGamePayment") {
+    const g = getGame(m.gameId);
+    const p = g.players.find(pl=>pl.id===m.playerId);
+    title = "כבר בוצע תשלום";
+    body = `
+      <p style="color:#fbbf24;font-size:13px;">ל<b>${esc(p?p.name:"")}</b> כבר יש תשלום רשום מהיציאה הקודמת (₪${m.paidAmount}). לאפס את התשלום או להשאיר אותו?</p>
+      <button class="btn btn-block" style="background:#be123c;color:#fff;margin-bottom:8px;" data-confirm-return-reset-payment>אפס תשלום וחזור למשחק</button>
+      <button class="btn btn-ghost btn-block" data-confirm-return-keep-payment>השאר תשלום וחזור למשחק</button>
     `;
   } else if (m.type === "leave") {
     const g = getGame(m.gameId);
@@ -2360,8 +2352,18 @@ function attachHandlers(){
   app.querySelectorAll("[data-history]").forEach(el => el.onclick = () => openModal({type:"history", gameId: nav.gameId, playerId: el.dataset.history}));
   app.querySelectorAll("[data-edit-cashout]").forEach(el => el.onclick = () => openModal({type:"editCashout", gameId: nav.gameId, playerId: el.dataset.editCashout}));
   app.querySelectorAll("[data-return-to-game]").forEach(el => el.onclick = () => {
+    const playerId = el.dataset.returnToGame;
     const g = getGame(nav.gameId);
-    delete g.cashouts[el.dataset.returnToGame];
+    const paidPaybox = (g.payboxPayments||[]).filter(pp=>pp.playerId===playerId).reduce((s,pp)=>s+pp.amount,0);
+    const paidDirect = (g.playerPayments||[]).filter(dp=>dp.fromPlayerId===playerId).reduce((s,dp)=>s+dp.amount,0);
+    const totalPaid = paidPaybox + paidDirect;
+    if (totalPaid > 0.005) {
+      openModal({type:"returnToGamePayment", gameId: nav.gameId, playerId, paidAmount: Math.round(totalPaid*100)/100});
+      return;
+    }
+    delete g.cashouts[playerId];
+    if (!g.liveChips) g.liveChips = {};
+    g.liveChips[playerId] = 0; // back in the game with a clean chip count, not their old cashout amount
     if (g.closed) g.closed = false; // a night with an active player again can't stay "closed"
     saveState();
     closeModal();
@@ -3516,10 +3518,33 @@ function attachHandlers(){
         const idx = g.seats.indexOf(modal.playerId);
         if (idx !== -1) g.seats[idx] = null;
       }
+      // As if this player never sat down tonight - so if they come back, they start clean.
+      g.buyins = g.buyins.filter(b => b.playerId !== modal.playerId);
+      if (g.liveChips) delete g.liveChips[modal.playerId];
       const justClosed = maybeAutoCloseNight(g);
       saveState(justClosed);
       closeModal();
     };
+  }
+
+  if (modal && modal.type === "returnToGamePayment") {
+    const doReturn = (resetPayment) => {
+      const g = getGame(modal.gameId);
+      if (resetPayment) {
+        g.payboxPayments = (g.payboxPayments||[]).filter(pp => pp.playerId !== modal.playerId);
+        g.playerPayments = (g.playerPayments||[]).filter(dp => dp.fromPlayerId !== modal.playerId);
+      }
+      delete g.cashouts[modal.playerId];
+      if (!g.liveChips) g.liveChips = {};
+      g.liveChips[modal.playerId] = 0;
+      if (g.closed) g.closed = false;
+      saveState();
+      closeModal();
+    };
+    const resetPaymentBtn = app.querySelector("[data-confirm-return-reset-payment]");
+    if (resetPaymentBtn) resetPaymentBtn.onclick = () => doReturn(true);
+    const keepPaymentBtn = app.querySelector("[data-confirm-return-keep-payment]");
+    if (keepPaymentBtn) keepPaymentBtn.onclick = () => doReturn(false);
   }
 
   if (modal && modal.type === "seatBuyins") {
