@@ -114,6 +114,53 @@ def get_db():
             raise
 
 
+# In-memory mirror of the `shared_state` row plus its hash. GET /api/state and GET
+# /api/state/hash are polled constantly (every refresh tick, every syncBeforeMutate call
+# before a table action) but the data itself rarely changes between polls - serving both
+# straight from here means those reads never touch Postgres at all, only save_state()
+# does. Valid only because Render runs a single instance of this process; a multi-instance
+# deployment would need a shared cache (Redis etc.) instead, since each instance would
+# otherwise carry its own out-of-sync copy.
+_state_cache = None
+_state_hash_cache = None
+_state_cache_lock = threading.Lock()
+
+
+def _default_state_json():
+    return json.dumps({"communities": [], "games": []})
+
+
+def _load_state_from_db():
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT data FROM shared_state WHERE id = 1")
+            row = cur.fetchone()
+        conn.commit()
+    return row[0] if row else _default_state_json()
+
+
+def _get_cached_state():
+    global _state_cache, _state_hash_cache
+    with _state_cache_lock:
+        if _state_cache is not None:
+            return _state_cache, _state_hash_cache
+    # Cache miss (first request since this process started) - fill it from the DB. Two
+    # requests racing here at startup both hit the DB once each, harmlessly.
+    data = _load_state_from_db()
+    state_hash = hashlib.md5(data.encode("utf-8")).hexdigest()
+    with _state_cache_lock:
+        _state_cache = data
+        _state_hash_cache = state_hash
+    return data, state_hash
+
+
+def _set_cached_state(data):
+    global _state_cache, _state_hash_cache
+    with _state_cache_lock:
+        _state_cache = data
+        _state_hash_cache = hashlib.md5(data.encode("utf-8")).hexdigest()
+
+
 @app.route("/")
 def index():
     # Always revalidate with the server before using a cached copy, so a deploy is picked
@@ -138,14 +185,8 @@ def version():
 
 @app.route("/api/state", methods=["GET"])
 def get_state():
-    with get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT data FROM shared_state WHERE id = 1")
-            row = cur.fetchone()
-        conn.commit()
-    if row:
-        return row[0], 200, {"Content-Type": "application/json"}
-    return jsonify({"communities": [], "games": []})
+    data, _ = _get_cached_state()
+    return data, 200, {"Content-Type": "application/json"}
 
 
 @app.route("/api/state/hash")
@@ -161,13 +202,8 @@ def get_state_hash():
     # This tiny endpoint sidesteps that: the client fetches just this hash first (a
     # plain, tiny JSON body - confirmed to pass through untouched, unlike the header) and
     # only fetches the full /api/state when the hash has actually changed.
-    with get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT data FROM shared_state WHERE id = 1")
-            row = cur.fetchone()
-        conn.commit()
-    data = row[0] if row else json.dumps({"communities": [], "games": []})
-    return jsonify({"hash": hashlib.md5(data.encode("utf-8")).hexdigest()})
+    _, state_hash = _get_cached_state()
+    return jsonify({"hash": state_hash})
 
 
 @app.route("/api/state", methods=["POST"])
@@ -193,6 +229,7 @@ def save_state():
                 (data,),
             )
         conn.commit()
+    _set_cached_state(data)
     _broadcast_state_changed()
     return jsonify({"ok": True})
 
