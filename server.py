@@ -210,19 +210,26 @@ def get_state_hash():
 def save_state():
     data = request.get_data(as_text=True)
     json.loads(data)  # reject anything that isn't valid JSON before storing it
+    # Every routine action (a buy-in, a seat change) saves too - snapshotting on every one
+    # of those would burn through the retained history within seconds during an active
+    # game and leave nothing useful to restore. The client marks only the saves that
+    # follow a meaningful checkpoint (a game ending, a community/game created or deleted)
+    # with ?checkpoint=1 - only those get a history entry.
+    checkpoint = request.args.get("checkpoint") == "1"
     with get_db() as conn:
         with conn.cursor() as cur:
-            # Snapshot whatever was there before this overwrites it, so a bad save
-            # (accidental or a bug) can be rolled back - keep only the last few, this is
-            # a safety net for undoing a recent mistake, not a full audit log.
-            cur.execute("SELECT data FROM shared_state WHERE id = 1")
-            prev = cur.fetchone()
-            if prev:
-                cur.execute("INSERT INTO state_history (data) VALUES (%s)", (prev[0],))
-                cur.execute(
-                    "DELETE FROM state_history WHERE id NOT IN "
-                    "(SELECT id FROM state_history ORDER BY saved_at DESC LIMIT 3)"
-                )
+            if checkpoint:
+                # Snapshot whatever was there before this overwrites it, so a bad save
+                # (accidental or a bug) can be rolled back - keep only the last few, this
+                # is a safety net for undoing a recent mistake, not a full audit log.
+                cur.execute("SELECT data FROM shared_state WHERE id = 1")
+                prev = cur.fetchone()
+                if prev:
+                    cur.execute("INSERT INTO state_history (data) VALUES (%s)", (prev[0],))
+                    cur.execute(
+                        "DELETE FROM state_history WHERE id NOT IN "
+                        "(SELECT id FROM state_history ORDER BY saved_at DESC LIMIT 3)"
+                    )
             cur.execute(
                 "INSERT INTO shared_state (id, data) VALUES (1, %s) "
                 "ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data",
