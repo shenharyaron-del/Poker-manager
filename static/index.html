@@ -597,6 +597,16 @@ function linkToGlobalPlayer(p){
   if (!myIdentity.id) return;
   p.clientId = myIdentity.id;
 }
+// A self-joined player's name should read the same everywhere - renaming them in one
+// community (or via their own device's identity screen) updates every roster copy
+// linked to the same clientId, instead of leaving stale/conflicting names behind.
+// No-op for a manually-typed-in player (no clientId - nothing else to keep in sync).
+function renamePlayerEverywhere(clientId, newName){
+  if (!clientId) return;
+  state.communities.forEach(c => {
+    (c.roster||[]).forEach(p => { if (p.clientId === clientId) p.name = newName; });
+  });
+}
 // Phone/avatar for a self-identified roster entry (see linkToGlobalPlayer) live in this
 // shared registry instead of on the per-community roster entry, so the same real person
 // only has to set them once and every community they're in sees the same values. A
@@ -2525,6 +2535,8 @@ function attachHandlers(){
       if (!name) { alert("צריך להזין שם."); return; }
       myIdentity.name = name;
       saveIdentity();
+      renamePlayerEverywhere(myIdentity.id, name);
+      await saveState();
       // A first-time visitor via an invite link has no name yet when autoJoinViaInvite
       // first runs in init(), so it bails out - retry now that we have one.
       if (nav.screen === "table" && nav.gameId) await autoJoinViaInvite(nav.gameId);
@@ -2658,6 +2670,7 @@ function attachHandlers(){
         const c = getCommunity(modal.communityId);
         const p = c.roster.find(pl=>pl.id===saveEdit.dataset.saveEdit);
         p.name = name;
+        renamePlayerEverywhere(p.clientId, name); // keep a self-joined player's name in sync across every community
         setPlayerPhone(p, phoneInput.value.trim());
         saveState();
       }
