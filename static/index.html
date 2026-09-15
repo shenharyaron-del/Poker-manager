@@ -1039,14 +1039,18 @@ function drawSettlementArrows(){
   if (!items.length) { overlay.innerHTML = ""; return; }
 
   const lines = items.map(it => {
-    const color = it.paid ? "#57534e" : "#fbbf24";
-    const marker = it.paid ? "arrowhead-gray" : "arrowhead-gold";
-    return `<line x1="${it.x1}" y1="${it.y1}" x2="${it.x2}" y2="${it.y2}" stroke="${color}" stroke-width="${it.paid?2:2.5}" opacity="${it.paid?0.55:0.9}" marker-end="url(#${marker})"/>`;
+    // "Already paid" lines used to be a dark gray (#57534e) at low opacity - nearly
+    // invisible against the dark green felt. A light, dashed line reads as "done/secondary"
+    // without disappearing into the background.
+    const color = it.paid ? "#e7e5e4" : "#fbbf24";
+    const marker = it.paid ? "arrowhead-paid" : "arrowhead-gold";
+    const dash = it.paid ? ` stroke-dasharray="5,4"` : "";
+    return `<line x1="${it.x1}" y1="${it.y1}" x2="${it.x2}" y2="${it.y2}" stroke="${color}" stroke-width="${it.paid?2:2.5}" opacity="${it.paid?0.85:0.9}"${dash} marker-end="url(#${marker})"/>`;
   }).join("");
   const svg = `<svg width="${wrapRect.width}" height="${wrapRect.height}" viewBox="0 0 ${wrapRect.width} ${wrapRect.height}" style="position:absolute;inset:0;z-index:2;pointer-events:none;">
     <defs>
       <marker id="arrowhead-gold" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#fbbf24"/></marker>
-      <marker id="arrowhead-gray" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#57534e"/></marker>
+      <marker id="arrowhead-paid" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#e7e5e4"/></marker>
     </defs>
     ${lines}
   </svg>`;
@@ -1124,7 +1128,7 @@ function renderHome(){
         <div class="name serif">${esc(c.name)}</div>
         <div class="meta">${icon('users')} נוצרה ע"י ${esc(c.createdByName || "לא ידוע")}</div>
       </div>
-      ${c.createdByName && myIdentity.name && c.createdByName === myIdentity.name ? `<button class="icon-btn danger" data-delete-community="${c.id}">${icon('trash')}</button>` : ""}
+      ${(isSuperAdmin() || (c.createdByName && myIdentity.name && c.createdByName === myIdentity.name)) ? `<button class="icon-btn danger" data-delete-community="${c.id}">${icon('trash')}</button>` : ""}
       <button class="icon-btn" data-duplicate-community="${c.id}" title="שכפל קבוצה">${icon('copy')}</button>
       <div class="chev">${icon('chev')}</div>
     </div>`).join("");
@@ -1153,7 +1157,7 @@ function renderCommunity(communityId){
     <div class="card ${g.closed?"":"card-open"}" data-open-game="${g.id}">
       <div class="row flex1"><span style="color:#6ee7b7">${icon('cal')}</span><span style="font-weight:600">${esc(g.date)}</span>${g.closed?"":`<span class="open-badge">פעיל</span>`}</div>
       ${g.closed?"":`<button class="icon-btn gold" data-invite-game="${g.id}" title="הזמן שחקן לשולחן">${icon('share')}</button>`}
-      <button class="icon-btn danger" data-delete-game="${g.id}">${icon('trash')}</button>
+      ${myIdentity.name && (myIdentity.name === g.createdByName || myIdentity.name === c.createdByName) ? `<button class="icon-btn danger" data-delete-game="${g.id}">${icon('trash')}</button>` : ""}
       <div class="chev">${icon('chev')}</div>
     </div>`).join("") : `<div class="empty">עדיין אין ערבי משחק בקבוצה הזו</div>`;
 
@@ -1269,8 +1273,8 @@ function renderTable(gameId){
     <div style="text-align:center;color:var(--muted);font-size:12px;margin-bottom:6px;">או</div>` : ""}
     ${allCashedOut ? `<button class="btn ${showSettlement?'':'btn-ghost'} btn-block" data-toggle-settlement style="margin-bottom:10px;${showSettlement?'background:#0891b2;color:#fff;':''}">${icon('coins')} ${showSettlement?'הסתר הסדר תשלומים':'הסדר תשלומים בין שחקנים'}</button>` : ""}
     ${allCashedOut && showSettlement ? `<div class="row" style="gap:8px;margin-bottom:10px;">
-      <button class="btn btn-block" style="background:#0891b2;color:#fff;" data-open-paybox-generic>פייבוקס</button>
-      <button class="btn btn-block" style="background:#000;color:#fff;" data-open-bit-generic>ביט</button>
+      <button class="btn btn-block" style="background:#0891b2;color:#fff;" data-open-paybox-generic>פתח פייבוקס לתשלום</button>
+      <button class="btn btn-block" style="background:#0891b2;color:#fff;" data-open-bit-generic>פתח ביט לתשלום</button>
     </div>` : ""}
     ${settlementWarning}
     <div class="poker-table-wrap">
