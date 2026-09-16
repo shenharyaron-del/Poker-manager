@@ -2082,7 +2082,9 @@ function renderModal(m){
     const c = getCommunity(g.communityId);
     const p = g.players.find(pl=>pl.id===m.playerId);
     const cashedOut = m.playerId in g.cashouts;
-    const canRemove = myIdentity.name && (myIdentity.name === g.createdByName || myIdentity.name === c.createdByName);
+    const isSelf = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId] === m.playerId;
+    const myBuyinTotal = g.buyins.filter(b => b.playerId === m.playerId).reduce((s,b) => s+b.amount, 0);
+    const canRemove = (isSelf && myBuyinTotal === 0) || (myIdentity.name && (myIdentity.name === g.createdByName || myIdentity.name === c.createdByName));
     title = esc(p ? p.name : "שחקן");
     if (cashedOut) {
       const finalBalances = computeFinalBalances(g);
