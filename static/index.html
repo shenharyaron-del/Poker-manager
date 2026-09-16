@@ -844,7 +844,15 @@ function getAvatarGroups(){
   return visible;
 }
 const SUPER_ADMIN_NAME = "ירון שנהר";
-function isSuperAdmin(){ return myIdentity.name === SUPER_ADMIN_NAME; }
+// A player's role can be set explicitly (state.globalPlayers[clientId].role) via the
+// global players list - until it has been, fall back to the original hardcoded super
+// admin by name, so that person doesn't lose access the moment this ships.
+function getPlayerRole(clientId, resolvedName){
+  const stored = state.globalPlayers && state.globalPlayers[clientId] && state.globalPlayers[clientId].role;
+  if (stored) return stored;
+  return resolvedName === SUPER_ADMIN_NAME ? "superAdmin" : "user";
+}
+function isSuperAdmin(){ return getPlayerRole(myIdentity.id, myIdentity.name) === "superAdmin"; }
 
 const PROFIT_BUCKETS = [
   {min:-Infinity, max:-200, label:"-200",     loss:true},
@@ -1366,7 +1374,7 @@ function renderModal(m){
       </div>
       <div class="section-title" style="padding:0;margin:0 0 8px;">שחקנים גלובליים</div>
       <div style="margin-bottom:18px;">
-        <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-open-global-players>${icon('users')} רשימת שחקנים, טלפון ואווטר</button>
+        <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-open-global-players>${icon('users')} רשימת שחקנים</button>
       </div>
       <div class="section-title" style="padding:0;margin:0 0 8px;">גיבוי ושחזור</div>
       <div style="display:flex;gap:8px;margin-bottom:8px;">
@@ -1383,27 +1391,44 @@ function renderModal(m){
   } else if (m.type === "globalPlayers") {
     title = "שחקנים גלובליים";
     const clientIds = Object.keys(state.globalPlayers || {});
-    const rows = clientIds.map(cid => {
+    const filter = m.roleFilter || "all";
+    let rows = clientIds.map(cid => {
       let name = null;
       for (const c of state.communities) {
         const match = c.roster.find(p => p.clientId === cid);
         if (match) { name = match.name; break; }
       }
       const data = state.globalPlayers[cid] || {};
-      return { clientId: cid, name: name || "(לא נמצא בשום קבוצה)", phone: data.phone, photo: data.photo };
+      return { clientId: cid, name, role: getPlayerRole(cid, name), phone: data.phone, photo: data.photo, orphaned: !name };
     });
-    body = rows.length ? `
-      <p style="color:var(--muted);font-size:12px;margin-bottom:14px;">שחקנים שנכנסו בעצמם דרך קישור הזמנה - הטלפון והאווטר שלהם משותפים לכל הקבוצות שהם חברים בהן.</p>
-      <div class="scroll-list">
-        ${rows.map(r => `<div class="roster-row">
-          <div class="row" style="gap:10px;">
-            ${r.photo ? `<img src="${r.photo}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;">` : `<div style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.08);"></div>`}
-            <span>${esc(r.name)}</span>
-          </div>
-          <span style="color:var(--muted);font-size:12px;" dir="ltr">${esc(r.phone||"אין טלפון")}</span>
-        </div>`).join("")}
+    if (filter !== "all") rows = rows.filter(r => r.role === filter);
+    body = `
+      <div class="row" style="gap:8px;margin-bottom:14px;">
+        <button class="btn ${filter==="all"?"btn-primary":"btn-ghost"} flex1" data-role-filter="all" style="padding:8px;font-size:12px;">הכל</button>
+        <button class="btn ${filter==="superAdmin"?"btn-primary":"btn-ghost"} flex1" data-role-filter="superAdmin" style="padding:8px;font-size:12px;">Super Admin</button>
+        <button class="btn ${filter==="user"?"btn-primary":"btn-ghost"} flex1" data-role-filter="user" style="padding:8px;font-size:12px;">User</button>
       </div>
-    ` : `<p style="color:var(--muted);font-size:13px;">עדיין אין שחקנים שנכנסו בעצמם דרך קישור הזמנה.</p>`;
+      ${rows.length ? `
+        <p style="color:var(--muted);font-size:12px;margin-bottom:14px;">שחקנים שנכנסו בעצמם דרך קישור הזמנה - הטלפון והאווטר שלהם משותפים לכל הקבוצות שהם חברים בהן.</p>
+        <div class="scroll-list">
+          ${rows.map(r => `<div class="roster-row" style="align-items:center;">
+            <div class="row" style="gap:10px;flex:1;min-width:0;">
+              ${r.photo ? `<img src="${r.photo}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;">` : `<div style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.08);flex-shrink:0;"></div>`}
+              <div style="min-width:0;">
+                <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.name || "(לא נמצא בשום קבוצה)")}</div>
+                <div style="color:var(--muted);font-size:11px;" dir="ltr">${esc(r.phone||"אין טלפון")}</div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+              ${r.clientId === myIdentity.id
+                ? `<span class="btn btn-ghost" style="padding:6px 10px;font-size:11px;white-space:nowrap;opacity:.6;cursor:default;">${r.role==="superAdmin"?"Super Admin":"User"} (אתה)</span>`
+                : `<button class="btn btn-ghost" data-toggle-role="${r.clientId}" style="padding:6px 10px;font-size:11px;white-space:nowrap;">${r.role==="superAdmin"?"Super Admin":"User"}</button>`}
+              ${r.orphaned ? `<button class="icon-btn danger" data-delete-orphan="${r.clientId}" title="מחק רשומה יתומה">${icon('trash')}</button>` : ""}
+            </div>
+          </div>`).join("")}
+        </div>
+      ` : `<p style="color:var(--muted);font-size:13px;">${clientIds.length ? "אין שחקנים בסינון הזה." : "עדיין אין שחקנים שנכנסו בעצמם דרך קישור הזמנה."}</p>`}
+    `;
   } else if (m.type === "avatarManage") {
     title = "ניהול אווטרים";
     const groups = getAvatarGroups();
@@ -2622,6 +2647,27 @@ function attachHandlers(){
     if (openGlobalPlayersBtn) openGlobalPlayersBtn.onclick = () => openModal({type:"globalPlayers"});
   }
 
+  if (modal && modal.type === "globalPlayers") {
+    app.querySelectorAll("[data-role-filter]").forEach(el => el.onclick = () => updateModal({roleFilter: el.dataset.roleFilter}));
+    app.querySelectorAll("[data-toggle-role]").forEach(el => el.onclick = () => {
+      const cid = el.dataset.toggleRole;
+      let name = null;
+      for (const c of state.communities) {
+        const match = c.roster.find(p => p.clientId === cid);
+        if (match) { name = match.name; break; }
+      }
+      const current = getPlayerRole(cid, name);
+      setGlobalPlayer(cid, {role: current === "superAdmin" ? "user" : "superAdmin"});
+      saveState();
+      updateModal({});
+    });
+    app.querySelectorAll("[data-delete-orphan]").forEach(el => el.onclick = () => {
+      if (state.globalPlayers) delete state.globalPlayers[el.dataset.deleteOrphan];
+      saveState();
+      updateModal({});
+    });
+  }
+
   if (modal && modal.type === "avatarManage") {
     app.querySelectorAll("[data-delete-avatar]").forEach(el => el.onclick = (e) => {
       e.stopPropagation();
@@ -2703,7 +2749,14 @@ function attachHandlers(){
     app.querySelectorAll("[data-edit-player]").forEach(el => el.onclick = () => updateModal({editingId: el.dataset.editPlayer}));
     app.querySelectorAll("[data-remove-player]").forEach(el => el.onclick = () => {
       const c = getCommunity(modal.communityId);
+      const removed = c.roster.find(p => p.id === el.dataset.removePlayer);
       c.roster = c.roster.filter(p => p.id !== el.dataset.removePlayer);
+      // If this was their last linked community, clean up the now-orphaned global
+      // registry entry instead of leaving a ghost record with no community to trace to.
+      if (removed && removed.clientId) {
+        const stillLinkedElsewhere = state.communities.some(cm => cm.roster.some(p => p.clientId === removed.clientId));
+        if (!stillLinkedElsewhere && state.globalPlayers) delete state.globalPlayers[removed.clientId];
+      }
       saveState();
       updateModal({});
     });
