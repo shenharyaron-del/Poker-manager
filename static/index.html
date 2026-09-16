@@ -1136,7 +1136,13 @@ function render(){
 }
 
 function renderHome(){
-  let cards = state.communities.map(c => `
+  // Only show communities this device actually belongs to - created it, or is linked to
+  // a roster entry in it (self-joined via invite link). Super Admin sees everything,
+  // since they're managing the whole app, not just their own games.
+  const myCommunities = isSuperAdmin() ? state.communities : state.communities.filter(c =>
+    c.createdBy === myIdentity.id || c.roster.some(p => p.clientId === myIdentity.id)
+  );
+  let cards = myCommunities.map(c => `
     <div class="card" data-open-community="${c.id}">
       <div class="flex1">
         <div class="name serif">${esc(c.name)}</div>
