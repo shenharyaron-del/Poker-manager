@@ -1159,13 +1159,19 @@ function renderCommunity(communityId){
   const c = getCommunity(communityId);
   if (!c) return `<div class="empty">קבוצה לא נמצאה</div>`;
   const games = gamesForCommunity(communityId);
-  const gamesHtml = games.length ? games.map(g => `
+  const gamesHtml = games.length ? games.map(g => {
+    const seatedCount = (g.seats||[]).filter(Boolean).length;
+    const waitingForPlayers = !g.closed && seatedCount < 2;
+    return `
     <div class="card ${g.closed?"":"card-open"}" data-open-game="${g.id}">
-      <div class="row flex1"><span style="color:#6ee7b7">${icon('cal')}</span><div class="flex1"><div style="font-weight:600">${esc(g.name || g.date)}</div>${g.name ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${esc(g.date)}</div>` : ""}</div>${g.closed?"":`<span class="open-badge">פעיל</span>`}</div>
-      ${g.closed?"":`<button class="icon-btn gold" data-invite-game="${g.id}" title="הזמן שחקן לשולחן">${icon('share')}</button>`}
+      <div class="row flex1"><span style="color:#6ee7b7">${icon('cal')}</span><div class="flex1"><div style="font-weight:600">${esc(g.name || g.date)}</div>${g.name ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${esc(g.date)}</div>` : ""}</div>${g.closed ? "" : (waitingForPlayers ? `<span class="open-badge" style="background:#57534e;color:#f5f5f4;">ממתין לשחקנים</span>` : `<span class="open-badge">פעיל</span>`)}</div>
+      ${g.closed ? "" : (waitingForPlayers
+        ? `<button class="btn btn-primary" data-invite-game="${g.id}" style="padding:8px 12px;font-size:13px;white-space:nowrap;display:flex;align-items:center;gap:6px;">${icon('share')} הזמנת שחקנים</button>`
+        : `<button class="icon-btn gold" data-invite-game="${g.id}" title="הזמן שחקן לשולחן">${icon('share')}</button>`)}
       ${myIdentity.name && (myIdentity.name === g.createdByName || myIdentity.name === c.createdByName) ? `<button class="icon-btn danger" data-delete-game="${g.id}">${icon('trash')}</button>` : ""}
       <div class="chev">${icon('chev')}</div>
-    </div>`).join("") : `<div class="empty">עדיין אין ערבי משחק בקבוצה הזו</div>`;
+    </div>`;
+  }).join("") : `<div class="empty">עדיין אין ערבי משחק בקבוצה הזו</div>`;
 
   return `
     <div class="top row" style="padding-bottom:8px;">
@@ -2305,7 +2311,7 @@ function attachHandlers(){
     const c = g && getCommunity(g.communityId);
     if (!g || !c) return;
     const url = location.origin + location.pathname + "?game=" + encodeURIComponent(g.id);
-    const text = `הצטרפו אליי למשחק פוקר ב${c.name} - ${g.date}`;
+    const text = `הצטרפו אליי למשחק פוקר ב${c.name} - ${g.name || g.date}`;
     if (navigator.share) {
       try { await navigator.share({title: "הזמנה למשחק פוקר", text, url}); } catch(err) { /* user cancelled the share sheet */ }
     } else if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -2789,7 +2795,10 @@ function attachHandlers(){
       }
       state.games.push(g);
       saveState();
-      go("table", {gameId:g.id, communityId:c.id});
+      // Land back on the games list, not straight into the table - the new game's card
+      // is right there with an "invite players" button, so that's reachable in one tap
+      // instead of having to navigate back to it after creating the table.
+      go("community", {communityId:c.id});
     };
   }
 
