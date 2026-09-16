@@ -178,6 +178,16 @@ def static_files(filename):
     return response
 
 
+@app.route("/sw.js")
+def service_worker():
+    # Served from the root path (not /static/) so its default scope covers the whole
+    # origin - a service worker registered from a subpath can only control pages under
+    # that same subpath.
+    response = send_from_directory(STATIC_DIR, "sw.js")
+    response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return response
+
+
 @app.route("/api/version")
 def version():
     return jsonify({"version": APP_VERSION})
