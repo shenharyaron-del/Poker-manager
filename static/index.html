@@ -1206,6 +1206,11 @@ function renderTable(gameId){
 
   const seatedIds = seats.filter(Boolean);
   const allCashedOut = seatedIds.length > 0 && seatedIds.every(pid => pid in g.cashouts);
+  // Quick self-service actions for a player who joined via their own phone and is seated
+  // at this table - buy-in/end-night without needing someone else to do it for them.
+  const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+  const myPlayerSeated = myPlayerId && seatedIds.includes(myPlayerId);
+  const myPlayerCashedOut = myPlayerId && (myPlayerId in g.cashouts);
 
   const seatsHtml = seats.map((pid, i) => {
     const [x,y] = SEAT_POS[i];
@@ -1283,7 +1288,7 @@ function renderTable(gameId){
       <button class="btn btn-block" style="background:#0891b2;color:#fff;" data-open-bit-generic>פתח ביט לתשלום</button>
     </div>` : ""}
     ${settlementWarning}
-    <div class="poker-table-wrap">
+    <div class="poker-table-wrap" style="${myPlayerSeated && !allCashedOut ? "margin-bottom:90px;" : ""}">
       <div class="poker-table-felt"></div>
       <img src="/static/logo-watermark.png" style="position:absolute;left:50%;top:39%;transform:translate(-50%,-50%);width:46%;opacity:.6;pointer-events:none;">
       ${seatsHtml}
@@ -1299,6 +1304,16 @@ function renderTable(gameId){
         </div>
       ` : ""}
     </div>
+    ${myPlayerSeated && !allCashedOut ? `<div class="bottom-bar">
+      ${myPlayerCashedOut ? `
+        <button class="btn btn-ghost btn-block" data-return-to-game="${myPlayerId}" style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('undo')} החזר למשחק</button>
+      ` : `
+        <div class="row" style="gap:8px;">
+          <button class="btn btn-primary flex1" data-my-buyin>${icon('plus')} קנייה</button>
+          <button class="btn flex1" style="background:#57534e;color:#f5f5f4;" data-my-end-night>${icon('out')} סיים ערב</button>
+        </div>
+      `}
+    </div>` : ""}
   `;
 }
 
@@ -2002,11 +2017,19 @@ function renderModal(m){
     const seated = new Set((g.seats||[]).filter(Boolean));
     const avail = c.roster.filter(p => !seated.has(p.id)).sort((a,b) => a.name.localeCompare(b.name, 'he'));
     title = `מי יושב במקום ${m.seatIndex+1}?`;
-    body = avail.length ? `
-      <div class="scroll-list">
-        ${avail.map(p => `<div class="checkbox-row" data-pick-player="${p.id}"><span class="flex1">${esc(p.name)}</span></div>`).join("")}
+    body = `
+      ${avail.length ? `
+        <div class="scroll-list">
+          ${avail.map(p => `<div class="checkbox-row" data-pick-player="${p.id}"><span class="flex1">${esc(p.name)}</span></div>`).join("")}
+        </div>
+      ` : `<div class="empty" style="padding:12px 0;">כל השחקנים בקבוצה כבר יושבים בשולחן.</div>`}
+      <div class="section-title" style="padding:0;margin:10px 0 8px;">או הוסיפו שחקן אורח</div>
+      <p style="color:var(--muted);font-size:11px;margin:0 0 8px;">שחקן חד-פעמי למשחק הזה בלבד - לא יתווסף לרשימת השחקנים הקבועה של הקבוצה.</p>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="pick-seat-guest-name" placeholder="שם האורח" style="flex:1;">
+        <button class="btn btn-primary" data-add-guest-seat>${icon('plus')}</button>
       </div>
-    ` : `<div class="empty" style="padding:12px 0;">כל השחקנים בקבוצה כבר יושבים בשולחן.</div>`;
+    `;
   } else if (m.type === "seatMenu") {
     const g = getGame(m.gameId);
     const c = getCommunity(g.communityId);
@@ -2363,6 +2386,18 @@ function attachHandlers(){
     openModal({type:"newGame", communityId: nav.communityId, date: new Date().toISOString().slice(0,10)});
   };
 
+  const myBuyinBtn = app.querySelector("[data-my-buyin]");
+  if (myBuyinBtn) myBuyinBtn.onclick = () => {
+    const g = getGame(nav.gameId);
+    const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+    if (myPlayerId) openModal({type:"seatBuyins", gameId: nav.gameId, playerId: myPlayerId});
+  };
+  const myEndNightBtn = app.querySelector("[data-my-end-night]");
+  if (myEndNightBtn) myEndNightBtn.onclick = () => {
+    const g = getGame(nav.gameId);
+    const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+    if (myPlayerId) openModal({type:"seatChips", gameId: nav.gameId, playerId: myPlayerId});
+  };
   app.querySelectorAll("[data-buyin]").forEach(el => el.onclick = () => openModal({type:"buyin", gameId: nav.gameId, playerId: el.dataset.buyin, amount:""}));
   app.querySelectorAll("[data-leave]").forEach(el => el.onclick = () => openModal({type:"leave", gameId: nav.gameId, playerId: el.dataset.leave, amount:""}));
   app.querySelectorAll("[data-history]").forEach(el => el.onclick = () => openModal({type:"history", gameId: nav.gameId, playerId: el.dataset.history}));
@@ -3493,6 +3528,25 @@ function attachHandlers(){
       saveState();
       closeModal();
     });
+    const addGuestBtn = app.querySelector("[data-add-guest-seat]");
+    if (addGuestBtn) addGuestBtn.onclick = async () => {
+      const nameInput = document.getElementById("pick-seat-guest-name");
+      const name = nameInput.value.trim();
+      if (!name) { alert("צריך להזין שם."); return; }
+      addGuestBtn.disabled = true;
+      await syncBeforeMutate();
+      const g = getGame(modal.gameId);
+      // A one-off guest for this game only - not added to the community's roster, so
+      // they won't show up as a permanent member of the group.
+      const guest = {id: uid(), name};
+      if (!g.seats) g.seats = new Array(9).fill(null);
+      g.seats[modal.seatIndex] = guest.id;
+      g.players.push(guest);
+      if (!g.liveChips) g.liveChips = {};
+      g.liveChips[guest.id] = 0;
+      saveState();
+      closeModal();
+    };
   }
 
   if (modal && modal.type === "seatMenu") {
