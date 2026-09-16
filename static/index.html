@@ -1390,7 +1390,15 @@ function renderModal(m){
     `;
   } else if (m.type === "globalPlayers") {
     title = "שחקנים גלובליים";
-    const clientIds = Object.keys(state.globalPlayers || {});
+    // The list must reflect everyone who's actually linked to a roster somewhere (the
+    // real source of truth for "who joined"), not just clientIds that happen to have a
+    // phone/photo saved - that left genuinely-joined players with neither invisible here,
+    // and separately, still surface any leftover globalPlayers entry no roster points to
+    // anymore (a true orphan) so it can be cleaned up.
+    const rosterClientIds = new Set();
+    state.communities.forEach(c => c.roster.forEach(p => { if (p.clientId) rosterClientIds.add(p.clientId); }));
+    const orphanIds = Object.keys(state.globalPlayers || {}).filter(cid => !rosterClientIds.has(cid));
+    const clientIds = [...rosterClientIds, ...orphanIds];
     const filter = m.roleFilter || "all";
     let rows = clientIds.map(cid => {
       let name = null;
@@ -1398,10 +1406,11 @@ function renderModal(m){
         const match = c.roster.find(p => p.clientId === cid);
         if (match) { name = match.name; break; }
       }
-      const data = state.globalPlayers[cid] || {};
+      const data = (state.globalPlayers && state.globalPlayers[cid]) || {};
       return { clientId: cid, name, role: getPlayerRole(cid, name), phone: data.phone, photo: data.photo, orphaned: !name };
     });
     if (filter !== "all") rows = rows.filter(r => r.role === filter);
+    rows.sort((a,b) => (a.name || "(לא נמצא בשום קבוצה)").localeCompare(b.name || "(לא נמצא בשום קבוצה)", 'he'));
     body = `
       <div class="row" style="gap:8px;margin-bottom:14px;">
         <button class="btn ${filter==="all"?"btn-primary":"btn-ghost"} flex1" data-role-filter="all" style="padding:8px;font-size:12px;">הכל</button>
