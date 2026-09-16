@@ -1161,7 +1161,7 @@ function renderCommunity(communityId){
   const games = gamesForCommunity(communityId);
   const gamesHtml = games.length ? games.map(g => `
     <div class="card ${g.closed?"":"card-open"}" data-open-game="${g.id}">
-      <div class="row flex1"><span style="color:#6ee7b7">${icon('cal')}</span><span style="font-weight:600">${esc(g.name || g.date)}</span>${g.closed?"":`<span class="open-badge">פעיל</span>`}</div>
+      <div class="row flex1"><span style="color:#6ee7b7">${icon('cal')}</span><div class="flex1"><div style="font-weight:600">${esc(g.name || g.date)}</div>${g.name ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${esc(g.date)}</div>` : ""}</div>${g.closed?"":`<span class="open-badge">פעיל</span>`}</div>
       ${g.closed?"":`<button class="icon-btn gold" data-invite-game="${g.id}" title="הזמן שחקן לשולחן">${icon('share')}</button>`}
       ${myIdentity.name && (myIdentity.name === g.createdByName || myIdentity.name === c.createdByName) ? `<button class="icon-btn danger" data-delete-game="${g.id}">${icon('trash')}</button>` : ""}
       <div class="chev">${icon('chev')}</div>
