@@ -1272,7 +1272,7 @@ function renderTable(gameId){
     <div class="top row" style="padding-top:14px;padding-bottom:16px;">
       <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
       <div class="flex1">
-        <h1 class="serif sm" data-edit-game-name="${g.id}" style="color:var(--gold);cursor:pointer;text-decoration:underline;text-underline-offset:4px;">${esc(g.name || c.name)}</h1>
+        <h1 class="serif sm" style="color:var(--gold);">${esc(g.name || c.name)}</h1>
         <div class="meta" style="color:#6ee7b7;font-size:12px;display:flex;align-items:center;gap:5px;">${icon('cal')}${esc(g.date)}${g.createdByName ? ` · נוצר ע"י ${esc(g.createdByName)}` : ""}</div>
         ${(!allCashedOut && seats.slice(0,9).some(s=>!s)) ? `
           <button class="icon-btn" data-toggle-empty-seats title="${hideEmptySeats?'הצג מקומות פנויים':'הסתר מקומות פנויים'}" style="margin-top:6px;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.05);color:var(--muted);opacity:.6;display:inline-flex;align-items:center;justify-content:center;">${icon(hideEmptySeats?'eyeOff':'eye')}</button>
@@ -1328,16 +1328,6 @@ function renderModal(m){
         <input type="text" id="identity-name-input" value="${esc(myIdentity.name || '')}" placeholder="השם שלך" style="width:100%;" autofocus>
       </div>
       <button class="btn btn-primary btn-block" data-confirm-identity-name>שמור</button>
-    `;
-  } else if (m.type === "editGameName") {
-    const g = getGame(m.gameId);
-    const c = getCommunity(g.communityId);
-    title = "שם השולחן";
-    body = `
-      <div style="margin-bottom:12px;">
-        <input type="text" id="game-name-input" value="${esc(g.name || '')}" placeholder="${esc(c.name)}" style="width:100%;" autofocus>
-      </div>
-      <button class="btn btn-primary btn-block" data-confirm-game-name>שמור</button>
     `;
   } else if (m.type === "inviteGone") {
     title = "הקישור לא בתוקף";
@@ -1847,9 +1837,10 @@ function renderModal(m){
       `;
     }
   } else if (m.type === "newGame") {
+    const c = getCommunity(m.communityId);
     title = "ערב משחק חדש";
     body = `
-      <div class="field"><label>תאריך</label><input type="date" id="new-game-date" value="${m.date}"></div>
+      <div class="field"><label>שם השולחן</label><input type="text" id="new-game-name" placeholder="${esc(c ? c.name : "")}" autofocus></div>
       <p style="color:var(--muted);font-size:12px;margin-top:-6px;">אחרי היצירה תוכלו להושיב שחקנים סביב השולחן.</p>
       <button class="btn btn-primary btn-block" data-create-game>פתח שולחן</button>
     `;
@@ -2294,7 +2285,6 @@ function attachHandlers(){
   const app = document.getElementById("app");
 
   app.querySelectorAll("[data-edit-identity-name]").forEach(el => el.onclick = () => openModal({type:"identityName", forced:false}));
-  app.querySelectorAll("[data-edit-game-name]").forEach(el => el.onclick = () => openModal({type:"editGameName", gameId: el.dataset.editGameName}));
   app.querySelectorAll("[data-open-admin-settings]").forEach(el => el.onclick = () => openModal({type:"adminSettings"}));
   app.querySelectorAll("[data-open-community]").forEach(el => el.onclick = () => go("community", {communityId: el.dataset.openCommunity}));
   app.querySelectorAll("[data-delete-community]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type:"deleteCommunity", communityId: el.dataset.deleteCommunity}); });
@@ -2596,17 +2586,6 @@ function attachHandlers(){
     };
   }
 
-  if (modal && modal.type === "editGameName") {
-    const confirmBtn = app.querySelector("[data-confirm-game-name]");
-    if (confirmBtn) confirmBtn.onclick = () => {
-      const name = document.getElementById("game-name-input").value.trim();
-      const g = getGame(modal.gameId);
-      if (name) g.name = name; else delete g.name; // empty -> fall back to showing the community name
-      saveState();
-      closeModal();
-    };
-  }
-
   if (modal && modal.type === "photoSource") {
     const camBtn = app.querySelector("[data-photo-camera]");
     if (camBtn) camBtn.onclick = () => openFilePicker(modal.communityId, modal.playerId, true);
@@ -2791,13 +2770,14 @@ function attachHandlers(){
   }
 
   if (modal && modal.type === "newGame") {
-    const dateInput = document.getElementById("new-game-date");
-    if (dateInput) dateInput.onchange = (e) => { modal.date = e.target.value; };
     const createBtn = app.querySelector("[data-create-game]");
     if (createBtn) createBtn.onclick = () => {
       const c = getCommunity(modal.communityId);
-      const dateVal = document.getElementById("new-game-date").value || modal.date;
-      const g = {id:uid(), communityId:c.id, date:dateVal, players: [], buyins:[], cashouts:{}, payboxPayments:[], playerPayments:[], seats:new Array(9).fill(null), liveChips:{}, closed:false, createdByName: myIdentity.name};
+      const name = document.getElementById("new-game-name").value.trim();
+      // The date is kept only for sort order, defaulting to today - there's no picker
+      // for it, the table's identity is its name (or falls back to the community name).
+      const g = {id:uid(), communityId:c.id, date:modal.date, players: [], buyins:[], cashouts:{}, payboxPayments:[], playerPayments:[], seats:new Array(9).fill(null), liveChips:{}, closed:false, createdByName: myIdentity.name};
+      if (name) g.name = name;
       // Explicitly seat whoever's creating the table, by name - independent of whatever
       // this device's remembered-player link happens to be, so opening a new table
       // reliably seats its actual creator rather than depending on that link being right.
