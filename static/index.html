@@ -1161,7 +1161,7 @@ function renderCommunity(communityId){
   const games = gamesForCommunity(communityId);
   const gamesHtml = games.length ? games.map(g => `
     <div class="card ${g.closed?"":"card-open"}" data-open-game="${g.id}">
-      <div class="row flex1"><span style="color:#6ee7b7">${icon('cal')}</span><span style="font-weight:600">${esc(g.date)}</span>${g.closed?"":`<span class="open-badge">פעיל</span>`}</div>
+      <div class="row flex1"><span style="color:#6ee7b7">${icon('cal')}</span><span style="font-weight:600">${esc(g.name || g.date)}</span>${g.closed?"":`<span class="open-badge">פעיל</span>`}</div>
       ${g.closed?"":`<button class="icon-btn gold" data-invite-game="${g.id}" title="הזמן שחקן לשולחן">${icon('share')}</button>`}
       ${myIdentity.name && (myIdentity.name === g.createdByName || myIdentity.name === c.createdByName) ? `<button class="icon-btn danger" data-delete-game="${g.id}">${icon('trash')}</button>` : ""}
       <div class="chev">${icon('chev')}</div>
@@ -1272,7 +1272,7 @@ function renderTable(gameId){
     <div class="top row" style="padding-top:14px;padding-bottom:16px;">
       <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
       <div class="flex1">
-        <h1 class="serif sm" style="color:var(--gold);">${esc(c.name)}</h1>
+        <h1 class="serif sm" data-edit-game-name="${g.id}" style="color:var(--gold);cursor:pointer;text-decoration:underline;text-underline-offset:4px;">${esc(g.name || c.name)}</h1>
         <div class="meta" style="color:#6ee7b7;font-size:12px;display:flex;align-items:center;gap:5px;">${icon('cal')}${esc(g.date)}${g.createdByName ? ` · נוצר ע"י ${esc(g.createdByName)}` : ""}</div>
         ${(!allCashedOut && seats.slice(0,9).some(s=>!s)) ? `
           <button class="icon-btn" data-toggle-empty-seats title="${hideEmptySeats?'הצג מקומות פנויים':'הסתר מקומות פנויים'}" style="margin-top:6px;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.05);color:var(--muted);opacity:.6;display:inline-flex;align-items:center;justify-content:center;">${icon(hideEmptySeats?'eyeOff':'eye')}</button>
@@ -1328,6 +1328,16 @@ function renderModal(m){
         <input type="text" id="identity-name-input" value="${esc(myIdentity.name || '')}" placeholder="השם שלך" style="width:100%;" autofocus>
       </div>
       <button class="btn btn-primary btn-block" data-confirm-identity-name>שמור</button>
+    `;
+  } else if (m.type === "editGameName") {
+    const g = getGame(m.gameId);
+    const c = getCommunity(g.communityId);
+    title = "שם השולחן";
+    body = `
+      <div style="margin-bottom:12px;">
+        <input type="text" id="game-name-input" value="${esc(g.name || '')}" placeholder="${esc(c.name)}" style="width:100%;" autofocus>
+      </div>
+      <button class="btn btn-primary btn-block" data-confirm-game-name>שמור</button>
     `;
   } else if (m.type === "inviteGone") {
     title = "הקישור לא בתוקף";
@@ -2284,6 +2294,7 @@ function attachHandlers(){
   const app = document.getElementById("app");
 
   app.querySelectorAll("[data-edit-identity-name]").forEach(el => el.onclick = () => openModal({type:"identityName", forced:false}));
+  app.querySelectorAll("[data-edit-game-name]").forEach(el => el.onclick = () => openModal({type:"editGameName", gameId: el.dataset.editGameName}));
   app.querySelectorAll("[data-open-admin-settings]").forEach(el => el.onclick = () => openModal({type:"adminSettings"}));
   app.querySelectorAll("[data-open-community]").forEach(el => el.onclick = () => go("community", {communityId: el.dataset.openCommunity}));
   app.querySelectorAll("[data-delete-community]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type:"deleteCommunity", communityId: el.dataset.deleteCommunity}); });
@@ -2581,6 +2592,17 @@ function attachHandlers(){
       // A first-time visitor via an invite link has no name yet when autoJoinViaInvite
       // first runs in init(), so it bails out - retry now that we have one.
       if (nav.screen === "table" && nav.gameId) await autoJoinViaInvite(nav.gameId);
+      closeModal();
+    };
+  }
+
+  if (modal && modal.type === "editGameName") {
+    const confirmBtn = app.querySelector("[data-confirm-game-name]");
+    if (confirmBtn) confirmBtn.onclick = () => {
+      const name = document.getElementById("game-name-input").value.trim();
+      const g = getGame(modal.gameId);
+      if (name) g.name = name; else delete g.name; // empty -> fall back to showing the community name
+      saveState();
       closeModal();
     };
   }
