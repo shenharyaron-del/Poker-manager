@@ -242,33 +242,56 @@ def save_state():
     base_hash = request.args.get("baseHash")
     with get_db() as conn:
         with conn.cursor() as cur:
-            if base_hash:
-                cur.execute("SELECT data FROM shared_state WHERE id = 1")
-                row = cur.fetchone()
-                current_data = row[0] if row else _default_state_json()
-                current_hash = hashlib.md5(current_data.encode("utf-8")).hexdigest()
-                if base_hash != current_hash:
-                    # Close out this read-only transaction before returning - this
-                    # connection is reused for the next request, not closed here.
+            if base_hash and not checkpoint:
+                # Hot path (routine actions - buy-ins, seating, etc.): fold the check
+                # into the write itself as a single atomic statement instead of a
+                # separate SELECT then WRITE - Postgres's own row lock makes this
+                # check-and-write atomic on its own, one round trip instead of two.
+                # rowcount is 0 only when a row already existed and its hash didn't
+                # match (a real conflict) - a first-ever insert always proceeds.
+                cur.execute(
+                    "INSERT INTO shared_state (id, data) VALUES (1, %s) "
+                    "ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data "
+                    "WHERE md5(shared_state.data) = %s",
+                    (data, base_hash),
+                )
+                if cur.rowcount == 0:
                     conn.commit()
                     return jsonify({"conflict": True}), 409
-            if checkpoint:
-                # Snapshot whatever was there before this overwrites it, so a bad save
-                # (accidental or a bug) can be rolled back - keep only the last few, this
-                # is a safety net for undoing a recent mistake, not a full audit log.
-                cur.execute("SELECT data FROM shared_state WHERE id = 1")
-                prev = cur.fetchone()
-                if prev:
-                    cur.execute("INSERT INTO state_history (data) VALUES (%s)", (prev[0],))
-                    cur.execute(
-                        "DELETE FROM state_history WHERE id NOT IN "
-                        "(SELECT id FROM state_history ORDER BY saved_at DESC LIMIT 3)"
-                    )
-            cur.execute(
-                "INSERT INTO shared_state (id, data) VALUES (1, %s) "
-                "ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data",
-                (data,),
-            )
+            else:
+                # Rarer path: a checkpoint save needs the pre-overwrite value anyway
+                # (to snapshot into history), so reuse that same read for the baseHash
+                # comparison too instead of reading twice.
+                row_existed = False
+                prev_data = None
+                if checkpoint or base_hash:
+                    cur.execute("SELECT data FROM shared_state WHERE id = 1")
+                    row = cur.fetchone()
+                    row_existed = row is not None
+                    prev_data = row[0] if row else _default_state_json()
+                if base_hash:
+                    current_hash = hashlib.md5(prev_data.encode("utf-8")).hexdigest()
+                    if base_hash != current_hash:
+                        # Close out this read-only transaction before returning - this
+                        # connection is reused for the next request, not closed here.
+                        conn.commit()
+                        return jsonify({"conflict": True}), 409
+                if checkpoint:
+                    # Snapshot whatever was there before this overwrites it, so a bad
+                    # save (accidental or a bug) can be rolled back - keep only the
+                    # last few, a safety net for undoing a recent mistake, not a full
+                    # audit log. Nothing to snapshot yet on the very first-ever save.
+                    if row_existed:
+                        cur.execute("INSERT INTO state_history (data) VALUES (%s)", (prev_data,))
+                        cur.execute(
+                            "DELETE FROM state_history WHERE id NOT IN "
+                            "(SELECT id FROM state_history ORDER BY saved_at DESC LIMIT 3)"
+                        )
+                cur.execute(
+                    "INSERT INTO shared_state (id, data) VALUES (1, %s) "
+                    "ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data",
+                    (data,),
+                )
         conn.commit()
     _set_cached_state(data)
     _broadcast_state_changed()
