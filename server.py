@@ -9,6 +9,7 @@ from pathlib import Path
 
 import anthropic
 import psycopg2
+import psycopg2.pool
 from flask import Flask, Response, jsonify, request, send_from_directory
 
 try:
@@ -65,8 +66,7 @@ _INIT_STATEMENTS = (
 )
 
 
-def _new_connection():
-    conn = psycopg2.connect(DATABASE_URL)
+def _ensure_schema(conn):
     with conn.cursor() as cur:
         # CREATE TABLE IF NOT EXISTS isn't fully race-safe in Postgres - two connections
         # can both see "doesn't exist yet" and both try to create it (only happens once,
@@ -82,36 +82,51 @@ def _new_connection():
             except psycopg2.errors.UniqueViolation:
                 conn.rollback()
     conn.commit()
-    return conn
 
 
-# One connection, reused for the process's whole lifetime, instead of opening a fresh
-# one (full TCP+TLS handshake to Supabase, plus the CREATE TABLE checks above) on every
-# single request - that round trip was adding several seconds to every API call. A lock
-# serializes access across Flask's request threads, which is fine at this app's traffic
-# (a poker group's phones, not a high-concurrency service) since each query is now just
-# the query itself, no connection setup. If the connection dies underneath us (e.g. an
-# idle timeout on Supabase's side), the failing request's query raises and we drop the
-# connection so the *next* request reconnects - one request degrades, not the whole app.
-_db_conn = None
-_db_lock = threading.Lock()
+# A small pool of connections instead of one shared connection serialized behind a
+# single lock. One shared connection meant every request - reads and writes, from
+# completely different players - had to wait in line behind every other in-flight
+# request, even though Postgres itself already handles real concurrent access safely
+# (save_state's atomic UPSERT correctly resolves conflicting writes to the same row on
+# its own). That self-imposed serialization is what turned into multi-second waits to
+# add a player or buy in when several phones were active near-simultaneously at the
+# table. Separate pooled connections remove that artificial bottleneck.
+_MIN_POOL_CONNS = 1
+_MAX_POOL_CONNS = 10
+_db_pool = None
+_db_pool_lock = threading.Lock()
+
+
+def _get_pool():
+    global _db_pool
+    with _db_pool_lock:
+        if _db_pool is None:
+            pool = psycopg2.pool.ThreadedConnectionPool(_MIN_POOL_CONNS, _MAX_POOL_CONNS, DATABASE_URL)
+            conn = pool.getconn()
+            try:
+                _ensure_schema(conn)
+            finally:
+                pool.putconn(conn)
+            _db_pool = pool
+    return _db_pool
 
 
 @contextmanager
 def get_db():
-    global _db_conn
-    with _db_lock:
-        if _db_conn is None or _db_conn.closed:
-            _db_conn = _new_connection()
-        try:
-            yield _db_conn
-        except psycopg2.Error:
-            try:
-                _db_conn.close()
-            except Exception:
-                pass
-            _db_conn = None
-            raise
+    pool = _get_pool()
+    conn = pool.getconn()
+    close_bad = False
+    try:
+        yield conn
+    except psycopg2.Error:
+        # This connection is in a bad/unknown state (e.g. an idle timeout on Supabase's
+        # side) - close it instead of returning it to the pool, so the pool opens a
+        # fresh one next time it's needed. Only this one request degrades, not the app.
+        close_bad = True
+        raise
+    finally:
+        pool.putconn(conn, close=close_bad)
 
 
 # In-memory mirror of the `shared_state` row plus its hash. GET /api/state and GET

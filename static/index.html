@@ -597,7 +597,11 @@ async function loadIdentity(){
       if (data) return data;
     }
   } catch(e) { /* not set yet */ }
-  return { id: uid(), name: null };
+  // id must always be this device's stable clientId, never a fresh random one - a random
+  // fallback here (whether from a failed/slow fetch or genuinely no record yet) used to
+  // silently split one real person into two: it got linked into rosters/globalPlayers
+  // under a throwaway id, so the same phone showed up twice under the same typed-in name.
+  return { id: getClientId(), name: null };
 }
 async function loadVersion(){
   try {
@@ -618,7 +622,7 @@ async function saveIdentity(){
 }
 
 let state = defaultState();
-let myIdentity = { id: uid(), name: null };
+let myIdentity = { id: getClientId(), name: null };
 let appVersion = null; // filled in by init() from /api/version
 
 // ---------- Navigation (not persisted - always starts at home) ----------
@@ -3898,9 +3902,7 @@ function attachHandlers(){
     });
     updateLiveBalance();
     const confirmBulkBtn = app.querySelector("[data-confirm-end-bulk]");
-    if (confirmBulkBtn) confirmBulkBtn.onclick = () => {
-      const g = getGame(modal.gameId);
-      const active = g.players.filter(p => !(p.id in g.cashouts));
+    if (confirmBulkBtn) confirmBulkBtn.onclick = async () => {
       const multiplier = getMultiplier();
       const inputs = app.querySelectorAll("[data-end-amount]");
       let allFilled = true;
@@ -3911,26 +3913,42 @@ function attachHandlers(){
         values[inp.dataset.endAmount] = v / multiplier;
       });
       if (!allFilled) { alert("צריך למלא סכום תקין לכל שחקן פעיל."); return; }
-      if (!g.liveChips) g.liveChips = {};
-      active.forEach(p => {
-        const amt = Math.round(values[p.id]*100)/100;
-        g.cashouts[p.id] = {amount: amt, ts: Date.now(), arrangedWith: []};
-        g.liveChips[p.id] = amt;
+      const gameId = modal.gameId;
+      confirmBulkBtn.disabled = true;
+      showButtonLoading(confirmBulkBtn);
+      await mutateAndSave(() => {
+        const g = getGame(gameId);
+        if (!g.liveChips) g.liveChips = {};
+        // Re-check against the FRESH state, not the (possibly stale) snapshot the form was
+        // built from: someone may have cashed themselves out via their own seat while this
+        // bulk screen was open - never clobber an already-saved entry with a guessed one.
+        g.players.forEach(p => {
+          if (p.id in g.cashouts) return;
+          if (!(p.id in values)) return;
+          const amt = Math.round(values[p.id]*100)/100;
+          g.cashouts[p.id] = {amount: amt, ts: Date.now(), arrangedWith: []};
+          g.liveChips[p.id] = amt;
+        });
+        g.closed = true;
+        const c = getCommunity(g.communityId);
+        c.lastParticipants = g.players.map(p=>p.id);
+        return true; // checkpoint - closing a game is worth a history snapshot
       });
-      g.closed = true;
-      const c = getCommunity(g.communityId);
-      c.lastParticipants = g.players.map(p=>p.id);
-      saveState(true);
-      openModal({type:"summary", gameId: g.id});
+      openModal({type:"summary", gameId});
     };
     const confirmBtn = app.querySelector("[data-confirm-end]");
-    if (confirmBtn) confirmBtn.onclick = () => {
-      const g = getGame(modal.gameId);
-      g.closed = true;
-      const c = getCommunity(g.communityId);
-      c.lastParticipants = g.players.map(p=>p.id);
-      saveState(true);
-      openModal({type:"summary", gameId: g.id});
+    if (confirmBtn) confirmBtn.onclick = async () => {
+      const gameId = modal.gameId;
+      confirmBtn.disabled = true;
+      showButtonLoading(confirmBtn);
+      await mutateAndSave(() => {
+        const g = getGame(gameId);
+        g.closed = true;
+        const c = getCommunity(g.communityId);
+        c.lastParticipants = g.players.map(p=>p.id);
+        return true;
+      });
+      openModal({type:"summary", gameId});
     };
   }
 }
@@ -3953,7 +3971,7 @@ window.addEventListener("popstate", () => {
     // A failed initial load must never be treated as "no data yet" - only fall back to
     // defaultState() here (the one legitimate use of it), never after a save is possible.
     state = stateResult.status === "fulfilled" ? stateResult.value : defaultState();
-    myIdentity = identityResult.status === "fulfilled" ? identityResult.value : { id: uid(), name: null };
+    myIdentity = identityResult.status === "fulfilled" ? identityResult.value : { id: getClientId(), name: null };
     appVersion = versionResult.status === "fulfilled" ? versionResult.value : null;
   }
   // One-time cleanup: remove legacy communities that weren't created via the "new community"
