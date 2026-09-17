@@ -57,6 +57,8 @@ h1.sm{font-size:20px;}
 .card{background:var(--card);border:1px solid var(--card-b);border-radius:16px;padding:16px;margin-bottom:10px;display:flex;align-items:center;gap:12px;cursor:pointer;}
 .card-open{border-color:var(--gold);background:rgba(251,191,36,.08);}
 .open-badge{font-size:11px;font-weight:700;color:var(--gold-text);background:var(--gold);border-radius:8px;padding:3px 8px;}
+.poker-loading-spin{display:inline-flex;animation:pokerChipSpin .8s linear infinite;}
+@keyframes pokerChipSpin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
 .card:active{transform:scale(0.98);}
 .card .name{font-weight:700;font-size:16px;}
 .card .meta{color:var(--muted);font-size:12px;margin-top:4px;display:flex;align-items:center;gap:5px;}
@@ -451,6 +453,14 @@ async function mutateAndSave(mutatorFn, checkpoint){
     logSync(`mutateAndSave: conflict on attempt ${attempt+1}, retrying`);
   }
   alert("לא הצלחנו לשמור בגלל התנגשות עם שמירה אחרת - נסו את הפעולה שוב.");
+}
+
+// Swaps a button's content for a spinning poker chip while mutateAndSave is working -
+// syncing/saving/retrying can take a moment, and a merely-disabled button with no other
+// feedback reads as frozen rather than busy.
+function showButtonLoading(btn){
+  if (!btn) return;
+  btn.innerHTML = `<span class="poker-loading-spin">${icon('chip')}</span>`;
 }
 
 // ---------- Keep the shared data fresh without the user having to do anything ----------
@@ -3515,6 +3525,7 @@ function attachHandlers(){
       const amt = parseFloat(document.getElementById("buyin-amount").value);
       if (!amt || amt <= 0) return;
       confirmBtn.disabled = true;
+      showButtonLoading(confirmBtn);
       await mutateAndSave(() => {
         const g = getGame(modal.gameId);
         g.buyins.push({id:uid(), playerId: modal.playerId, amount: amt, ts: Date.now()});
@@ -3532,6 +3543,7 @@ function attachHandlers(){
       const playerId = document.getElementById("paybox-player").value;
       if (!amt || amt <= 0 || !playerId) return;
       confirmPaybox.disabled = true;
+      showButtonLoading(confirmPaybox);
       await mutateAndSave(() => {
         const g = getGame(modal.gameId);
         if (!g.payboxPayments) g.payboxPayments = [];
@@ -3567,6 +3579,7 @@ function attachHandlers(){
     if (confirmPayPlayer) confirmPayPlayer.onclick = async () => {
       if (!modal.toPlayerId) return;
       confirmPayPlayer.disabled = true;
+      showButtonLoading(confirmPayPlayer);
       await mutateAndSave(() => {
         const g = getGame(modal.gameId);
         if (!g.playerPayments) g.playerPayments = [];
@@ -3622,6 +3635,7 @@ function attachHandlers(){
   if (modal && modal.type === "pickSeat") {
     app.querySelectorAll("[data-pick-player]").forEach(el => el.onclick = async () => {
       el.style.pointerEvents = "none";
+      showButtonLoading(el);
       await mutateAndSave(() => {
         const g = getGame(modal.gameId);
         const c = getCommunity(g.communityId);
@@ -3648,6 +3662,7 @@ function attachHandlers(){
       const name = nameInput.value.trim();
       if (!name) { alert("צריך להזין שם."); return; }
       addGuestBtn.disabled = true;
+      showButtonLoading(addGuestBtn);
       await mutateAndSave(() => {
         const g = getGame(modal.gameId);
         // A one-off guest for this game only - not added to the community's roster, so
@@ -3699,6 +3714,7 @@ function attachHandlers(){
     const confirmClear = app.querySelector("[data-confirm-clear-seat]");
     if (confirmClear) confirmClear.onclick = async () => {
       confirmClear.disabled = true;
+      showButtonLoading(confirmClear);
       await mutateAndSave(() => {
         const g = getGame(modal.gameId);
         if (g.seats) {
@@ -3738,6 +3754,7 @@ function attachHandlers(){
     app.querySelectorAll("[data-seat-instant-chip]").forEach(el => el.onclick = async () => {
       const amt = parseFloat(el.dataset.seatInstantChip);
       el.disabled = true;
+      showButtonLoading(el);
       await mutateAndSave(() => {
         const g = getGame(modal.gameId);
         g.buyins.push({id:uid(), playerId: modal.playerId, amount: amt, ts: Date.now()});
@@ -3755,6 +3772,7 @@ function attachHandlers(){
       const amt = parseFloat(document.getElementById("seat-buyin-amount").value);
       if (!amt || amt <= 0) return;
       confirmSeatBuyin.disabled = true;
+      showButtonLoading(confirmSeatBuyin);
       await mutateAndSave(() => {
         const g = getGame(modal.gameId);
         g.buyins.push({id:uid(), playerId: modal.playerId, amount: amt, ts: Date.now()});
@@ -3784,6 +3802,7 @@ function attachHandlers(){
       const inputEl = document.getElementById("seat-chips");
       const v = inputEl ? parseFloat(inputEl.value) : NaN;
       quickEndBtn.disabled = true;
+      showButtonLoading(quickEndBtn);
       await mutateAndSave(() => {
         const g = getGame(modal.gameId);
         const chips = (!isNaN(v) && v >= 0) ? v : ((g.liveChips||{})[modal.playerId] || 0);
@@ -3808,6 +3827,7 @@ function attachHandlers(){
       const amt = parseFloat(document.getElementById("bulk-buyin-amount").value);
       if (!amt || amt <= 0) return;
       confirmBulkBuyin.disabled = true;
+      showButtonLoading(confirmBulkBuyin);
       await mutateAndSave(() => {
         const g = getGame(modal.gameId);
         const ids = Object.keys(modal.selected).filter(k => modal.selected[k]);
@@ -3828,6 +3848,7 @@ function attachHandlers(){
       const multiplier = (!multRaw || multRaw < 1) ? 1 : (multRaw > 99 ? 99 : multRaw);
       const amt = Math.round((raw / multiplier) * 100) / 100;
       confirmBtn.disabled = true;
+      showButtonLoading(confirmBtn);
       await mutateAndSave(() => {
         const g = getGame(modal.gameId);
         g.cashouts[modal.playerId] = {amount: amt, ts: Date.now(), arrangedWith: []};
