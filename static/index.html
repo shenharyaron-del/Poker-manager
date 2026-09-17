@@ -401,23 +401,56 @@ let saveInFlight = null;
 // to (a game ending, a community/game created or deleted) - the server only snapshots
 // history on those, not on every routine action, so the retained versions stay a useful
 // distance apart instead of all getting consumed within seconds of active play.
-async function saveState(checkpoint){
+// baseHash, when passed, asks the server to reject this save (409) if the shared state
+// has moved on since that hash was read - see mutateAndSave below for the retry loop
+// that uses this. Returns "ok" (saved), "conflict" (rejected, base is stale), or
+// "error" (network/other failure - already alerted). Existing callers that don't pass
+// baseHash are unaffected - the server skips the check entirely when it's absent.
+async function saveState(checkpoint, baseHash){
   // Serialize saves so overlapping calls don't race each other.
   logSync(`saveState() called, buyins=${(state.games||[]).map(g=>g.buyins.length).join(',')}`);
   const run = async () => {
     logSync("save: POST start");
     try {
-      await fetch("/api/state" + (checkpoint ? "?checkpoint=1" : ""), {
+      const params = [];
+      if (checkpoint) params.push("checkpoint=1");
+      if (baseHash) params.push("baseHash=" + encodeURIComponent(baseHash));
+      const res = await fetch("/api/state" + (params.length ? "?" + params.join("&") : ""), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(state)
       });
       logSync("save: POST done");
+      if (res.status === 409) return "conflict";
+      return "ok";
     }
-    catch(e){ logSync("save: POST FAILED " + e); console.error("save failed", e); alert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+    catch(e){ logSync("save: POST FAILED " + e); console.error("save failed", e); alert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return "error"; }
   };
   saveInFlight = (saveInFlight || Promise.resolve()).then(run);
   return saveInFlight;
+}
+
+// Applies mutatorFn on top of the freshest known state and saves it, but if another
+// device's save lands in between our sync and our save, the server rejects it (see
+// saveState's baseHash) instead of silently overwriting their change - this re-syncs,
+// re-applies the SAME mutation on the new base, and retries, rather than losing it.
+// mutatorFn must look its own data up fresh each call (e.g. getGame(id) inside it), not
+// close over references captured before this ran, since those become stale on retry.
+// mutatorFn may optionally return true/false to mark this save as a checkpoint (e.g. "did
+// this action just close the game?") - when it returns undefined, the checkpoint param
+// is used instead.
+async function mutateAndSave(mutatorFn, checkpoint){
+  const MAX_ATTEMPTS = 4;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    await syncBeforeMutate();
+    const baseHash = lastStateHash;
+    const mutatorResult = mutatorFn();
+    const effectiveCheckpoint = mutatorResult !== undefined ? mutatorResult : checkpoint;
+    const result = await saveState(effectiveCheckpoint, baseHash);
+    if (result !== "conflict") return;
+    logSync(`mutateAndSave: conflict on attempt ${attempt+1}, retrying`);
+  }
+  alert("לא הצלחנו לשמור בגלל התנגשות עם שמירה אחרת - נסו את הפעולה שוב.");
 }
 
 // ---------- Keep the shared data fresh without the user having to do anything ----------
@@ -3482,11 +3515,11 @@ function attachHandlers(){
       const amt = parseFloat(document.getElementById("buyin-amount").value);
       if (!amt || amt <= 0) return;
       confirmBtn.disabled = true;
-      await syncBeforeMutate();
-      const g = getGame(modal.gameId);
-      g.buyins.push({id:uid(), playerId: modal.playerId, amount: amt, ts: Date.now()});
-      logSync(`buyin confirmed player=${modal.playerId} amt=${amt} -> game now has ${g.buyins.length} buyins`);
-      saveState();
+      await mutateAndSave(() => {
+        const g = getGame(modal.gameId);
+        g.buyins.push({id:uid(), playerId: modal.playerId, amount: amt, ts: Date.now()});
+        logSync(`buyin confirmed player=${modal.playerId} amt=${amt} -> game now has ${g.buyins.length} buyins`);
+      });
       closeModal();
     };
   }
@@ -3499,11 +3532,11 @@ function attachHandlers(){
       const playerId = document.getElementById("paybox-player").value;
       if (!amt || amt <= 0 || !playerId) return;
       confirmPaybox.disabled = true;
-      await syncBeforeMutate();
-      const g = getGame(modal.gameId);
-      if (!g.payboxPayments) g.payboxPayments = [];
-      g.payboxPayments.push({id:uid(), playerId, amount: amt, ts: Date.now()});
-      saveState();
+      await mutateAndSave(() => {
+        const g = getGame(modal.gameId);
+        if (!g.payboxPayments) g.payboxPayments = [];
+        g.payboxPayments.push({id:uid(), playerId, amount: amt, ts: Date.now()});
+      });
       closeModal();
     };
   }
@@ -3534,11 +3567,11 @@ function attachHandlers(){
     if (confirmPayPlayer) confirmPayPlayer.onclick = async () => {
       if (!modal.toPlayerId) return;
       confirmPayPlayer.disabled = true;
-      await syncBeforeMutate();
-      const g = getGame(modal.gameId);
-      if (!g.playerPayments) g.playerPayments = [];
-      g.playerPayments.push({id:uid(), fromPlayerId: modal.fromPlayerId, toPlayerId: modal.toPlayerId, amount: modal.amount, ts: Date.now()});
-      saveState();
+      await mutateAndSave(() => {
+        const g = getGame(modal.gameId);
+        if (!g.playerPayments) g.playerPayments = [];
+        g.playerPayments.push({id:uid(), fromPlayerId: modal.fromPlayerId, toPlayerId: modal.toPlayerId, amount: modal.amount, ts: Date.now()});
+      });
       closeModal();
     };
   }
@@ -3589,24 +3622,24 @@ function attachHandlers(){
   if (modal && modal.type === "pickSeat") {
     app.querySelectorAll("[data-pick-player]").forEach(el => el.onclick = async () => {
       el.style.pointerEvents = "none";
-      await syncBeforeMutate();
-      const g = getGame(modal.gameId);
-      const c = getCommunity(g.communityId);
-      const p = c.roster.find(pl => pl.id === el.dataset.pickPlayer);
-      if (!p) return;
-      if (!g.seats) g.seats = new Array(9).fill(null);
-      g.seats[modal.seatIndex] = p.id;
-      if (!g.players.some(gp => gp.id === p.id)) g.players.push({id:p.id, name:p.name});
-      if (!g.liveChips) g.liveChips = {};
-      if (g.liveChips[p.id] === undefined) g.liveChips[p.id] = 0;
-      // Deliberately not touching myIdentity.myPlayers here - picking a seat for someone
-      // doesn't mean this device belongs to them. Whoever's actually running the app
-      // often seats several different people from their own phone while setting up the
-      // table, and each assignment used to overwrite this device's own "remembered
-      // player," so the next game they opened auto-seated whoever they'd most recently
-      // assigned to a seat instead of themselves. That mapping should only come from
-      // genuinely self-identifying (via an invite link, or creating the community).
-      saveState();
+      await mutateAndSave(() => {
+        const g = getGame(modal.gameId);
+        const c = getCommunity(g.communityId);
+        const p = c.roster.find(pl => pl.id === el.dataset.pickPlayer);
+        if (!p) return;
+        if (!g.seats) g.seats = new Array(9).fill(null);
+        g.seats[modal.seatIndex] = p.id;
+        if (!g.players.some(gp => gp.id === p.id)) g.players.push({id:p.id, name:p.name});
+        if (!g.liveChips) g.liveChips = {};
+        if (g.liveChips[p.id] === undefined) g.liveChips[p.id] = 0;
+        // Deliberately not touching myIdentity.myPlayers here - picking a seat for someone
+        // doesn't mean this device belongs to them. Whoever's actually running the app
+        // often seats several different people from their own phone while setting up the
+        // table, and each assignment used to overwrite this device's own "remembered
+        // player," so the next game they opened auto-seated whoever they'd most recently
+        // assigned to a seat instead of themselves. That mapping should only come from
+        // genuinely self-identifying (via an invite link, or creating the community).
+      });
       closeModal();
     });
     const addGuestBtn = app.querySelector("[data-add-guest-seat]");
@@ -3615,17 +3648,17 @@ function attachHandlers(){
       const name = nameInput.value.trim();
       if (!name) { alert("צריך להזין שם."); return; }
       addGuestBtn.disabled = true;
-      await syncBeforeMutate();
-      const g = getGame(modal.gameId);
-      // A one-off guest for this game only - not added to the community's roster, so
-      // they won't show up as a permanent member of the group.
-      const guest = {id: uid(), name};
-      if (!g.seats) g.seats = new Array(9).fill(null);
-      g.seats[modal.seatIndex] = guest.id;
-      g.players.push(guest);
-      if (!g.liveChips) g.liveChips = {};
-      g.liveChips[guest.id] = 0;
-      saveState();
+      await mutateAndSave(() => {
+        const g = getGame(modal.gameId);
+        // A one-off guest for this game only - not added to the community's roster, so
+        // they won't show up as a permanent member of the group.
+        const guest = {id: uid(), name};
+        if (!g.seats) g.seats = new Array(9).fill(null);
+        g.seats[modal.seatIndex] = guest.id;
+        g.players.push(guest);
+        if (!g.liveChips) g.liveChips = {};
+        g.liveChips[guest.id] = 0;
+      });
       closeModal();
     };
   }
@@ -3666,17 +3699,17 @@ function attachHandlers(){
     const confirmClear = app.querySelector("[data-confirm-clear-seat]");
     if (confirmClear) confirmClear.onclick = async () => {
       confirmClear.disabled = true;
-      await syncBeforeMutate();
-      const g = getGame(modal.gameId);
-      if (g.seats) {
-        const idx = g.seats.indexOf(modal.playerId);
-        if (idx !== -1) g.seats[idx] = null;
-      }
-      // As if this player never sat down tonight - so if they come back, they start clean.
-      g.buyins = g.buyins.filter(b => b.playerId !== modal.playerId);
-      if (g.liveChips) delete g.liveChips[modal.playerId];
-      const justClosed = maybeAutoCloseNight(g);
-      saveState(justClosed);
+      await mutateAndSave(() => {
+        const g = getGame(modal.gameId);
+        if (g.seats) {
+          const idx = g.seats.indexOf(modal.playerId);
+          if (idx !== -1) g.seats[idx] = null;
+        }
+        // As if this player never sat down tonight - so if they come back, they start clean.
+        g.buyins = g.buyins.filter(b => b.playerId !== modal.playerId);
+        if (g.liveChips) delete g.liveChips[modal.playerId];
+        return maybeAutoCloseNight(g);
+      });
       closeModal();
     };
   }
@@ -3705,10 +3738,10 @@ function attachHandlers(){
     app.querySelectorAll("[data-seat-instant-chip]").forEach(el => el.onclick = async () => {
       const amt = parseFloat(el.dataset.seatInstantChip);
       el.disabled = true;
-      await syncBeforeMutate();
-      const g = getGame(modal.gameId);
-      g.buyins.push({id:uid(), playerId: modal.playerId, amount: amt, ts: Date.now()});
-      saveState();
+      await mutateAndSave(() => {
+        const g = getGame(modal.gameId);
+        g.buyins.push({id:uid(), playerId: modal.playerId, amount: amt, ts: Date.now()});
+      });
       closeModal();
     });
     const otherToggle = app.querySelector("[data-seat-other-toggle]");
@@ -3722,10 +3755,10 @@ function attachHandlers(){
       const amt = parseFloat(document.getElementById("seat-buyin-amount").value);
       if (!amt || amt <= 0) return;
       confirmSeatBuyin.disabled = true;
-      await syncBeforeMutate();
-      const g = getGame(modal.gameId);
-      g.buyins.push({id:uid(), playerId: modal.playerId, amount: amt, ts: Date.now()});
-      saveState();
+      await mutateAndSave(() => {
+        const g = getGame(modal.gameId);
+        g.buyins.push({id:uid(), playerId: modal.playerId, amount: amt, ts: Date.now()});
+      });
       closeModal();
     };
     const seatHistoryBtn = app.querySelector("[data-seat-history]");
@@ -3751,14 +3784,14 @@ function attachHandlers(){
       const inputEl = document.getElementById("seat-chips");
       const v = inputEl ? parseFloat(inputEl.value) : NaN;
       quickEndBtn.disabled = true;
-      await syncBeforeMutate();
-      const g = getGame(modal.gameId);
-      const chips = (!isNaN(v) && v >= 0) ? v : ((g.liveChips||{})[modal.playerId] || 0);
-      if (!g.liveChips) g.liveChips = {};
-      g.liveChips[modal.playerId] = chips;
-      g.cashouts[modal.playerId] = {amount: chips, ts: Date.now(), arrangedWith: []};
-      const justClosed = maybeAutoCloseNight(g);
-      saveState(justClosed);
+      await mutateAndSave(() => {
+        const g = getGame(modal.gameId);
+        const chips = (!isNaN(v) && v >= 0) ? v : ((g.liveChips||{})[modal.playerId] || 0);
+        if (!g.liveChips) g.liveChips = {};
+        g.liveChips[modal.playerId] = chips;
+        g.cashouts[modal.playerId] = {amount: chips, ts: Date.now(), arrangedWith: []};
+        return maybeAutoCloseNight(g);
+      });
       closeModal();
     };
   }
@@ -3775,12 +3808,12 @@ function attachHandlers(){
       const amt = parseFloat(document.getElementById("bulk-buyin-amount").value);
       if (!amt || amt <= 0) return;
       confirmBulkBuyin.disabled = true;
-      await syncBeforeMutate();
-      const g = getGame(modal.gameId);
-      const ids = Object.keys(modal.selected).filter(k => modal.selected[k]);
-      const now = Date.now();
-      ids.forEach(pid => { g.buyins.push({id:uid(), playerId: pid, amount: amt, ts: now}); });
-      saveState();
+      await mutateAndSave(() => {
+        const g = getGame(modal.gameId);
+        const ids = Object.keys(modal.selected).filter(k => modal.selected[k]);
+        const now = Date.now();
+        ids.forEach(pid => { g.buyins.push({id:uid(), playerId: pid, amount: amt, ts: now}); });
+      });
       closeModal();
     };
   }
@@ -3795,13 +3828,13 @@ function attachHandlers(){
       const multiplier = (!multRaw || multRaw < 1) ? 1 : (multRaw > 99 ? 99 : multRaw);
       const amt = Math.round((raw / multiplier) * 100) / 100;
       confirmBtn.disabled = true;
-      await syncBeforeMutate();
-      const g = getGame(modal.gameId);
-      g.cashouts[modal.playerId] = {amount: amt, ts: Date.now(), arrangedWith: []};
-      if (!g.liveChips) g.liveChips = {};
-      g.liveChips[modal.playerId] = amt;
-      const justClosed = maybeAutoCloseNight(g);
-      saveState(justClosed);
+      await mutateAndSave(() => {
+        const g = getGame(modal.gameId);
+        g.cashouts[modal.playerId] = {amount: amt, ts: Date.now(), arrangedWith: []};
+        if (!g.liveChips) g.liveChips = {};
+        g.liveChips[modal.playerId] = amt;
+        return maybeAutoCloseNight(g);
+      });
       closeModal();
     };
   }

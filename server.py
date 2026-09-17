@@ -226,6 +226,16 @@ def save_state():
     # follow a meaningful checkpoint (a game ending, a community/game created or deleted)
     # with ?checkpoint=1 - only those get a history entry.
     checkpoint = request.args.get("checkpoint") == "1"
+    # Optional optimistic-concurrency check: the client sends the hash of the state it
+    # built this save on top of. If the shared state has moved on since then (another
+    # device saved first), reject instead of silently overwriting whatever they just
+    # changed - the client re-syncs, reapplies its own change on the new base, and
+    # retries. Callers that don't pass this skip the check entirely (unchanged behavior).
+    base_hash = request.args.get("baseHash")
+    if base_hash:
+        _, current_hash = _get_cached_state()
+        if base_hash != current_hash:
+            return jsonify({"conflict": True}), 409
     with get_db() as conn:
         with conn.cursor() as cur:
             if checkpoint:
