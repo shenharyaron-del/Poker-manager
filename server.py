@@ -231,13 +231,27 @@ def save_state():
     # device saved first), reject instead of silently overwriting whatever they just
     # changed - the client re-syncs, reapplies its own change on the new base, and
     # retries. Callers that don't pass this skip the check entirely (unchanged behavior).
+    #
+    # This check MUST happen inside the get_db() lock, not before it: get_db() serializes
+    # every request onto one connection, so checking-then-writing atomically under that
+    # same lock is what actually closes the race. Checking against the in-memory cache
+    # before acquiring the lock looked equivalent but wasn't - two requests built on the
+    # identical base hash could both pass that check before either one's write updated
+    # the cache, then both proceed to write once the lock let them through one at a time,
+    # the second blindly overwriting the first despite its own check having "passed".
     base_hash = request.args.get("baseHash")
-    if base_hash:
-        _, current_hash = _get_cached_state()
-        if base_hash != current_hash:
-            return jsonify({"conflict": True}), 409
     with get_db() as conn:
         with conn.cursor() as cur:
+            if base_hash:
+                cur.execute("SELECT data FROM shared_state WHERE id = 1")
+                row = cur.fetchone()
+                current_data = row[0] if row else _default_state_json()
+                current_hash = hashlib.md5(current_data.encode("utf-8")).hexdigest()
+                if base_hash != current_hash:
+                    # Close out this read-only transaction before returning - this
+                    # connection is reused for the next request, not closed here.
+                    conn.commit()
+                    return jsonify({"conflict": True}), 409
             if checkpoint:
                 # Snapshot whatever was there before this overwrites it, so a bad save
                 # (accidental or a bug) can be rolled back - keep only the last few, this
