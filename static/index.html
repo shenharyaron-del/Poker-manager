@@ -826,6 +826,29 @@ async function autoJoinViaInvite(gameId){
   await saveState();
   render();
 }
+// Community-level invite (WhatsApp "?community=" link, see data-invite-community): joins
+// the visitor straight into the community's roster, same identity/linking rules as
+// autoJoinViaInvite, but without seating them at any particular game/table.
+async function autoJoinViaCommunityInvite(communityId){
+  try { const fresh = await loadState(); if (fresh !== null) state = fresh; } catch(e) { /* fall back to what's already in memory */ }
+  const c = getCommunity(communityId);
+  if (!c) return;
+  let playerId = myIdentity.myPlayers && myIdentity.myPlayers[c.id];
+  let p = playerId ? c.roster.find(pl => pl.id === playerId) : null;
+  if (!p) {
+    if (!myIdentity.name) return; // no name yet to identify/create with (forced onboarding will ask, then retry)
+    p = c.roster.find(pl => pl.name === myIdentity.name);
+    if (!p) { p = {id: uid(), name: myIdentity.name}; c.roster.push(p); }
+    linkToGlobalPlayer(p);
+    if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
+    myIdentity.myPlayers[c.id] = p.id;
+    saveIdentity();
+  } else if (!p.clientId) {
+    linkToGlobalPlayer(p);
+  }
+  await saveState();
+  render();
+}
 function openModal(m){ modal = m; render(); }
 function closeModal(){ modal = null; render(); }
 function updateModal(partial){
@@ -1211,6 +1234,7 @@ const ICONS = {
   eye: '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
   eyeOff: '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0112 20c-7 0-10-8-10-8a18.5 18.5 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 10 8 10 8a18.5 18.5 0 01-2.16 3.19M14.12 14.12a3 3 0 11-4.24-4.24M1 1l22 22"/></svg>',
   share: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>',
+  whatsapp: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 004.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91C21.96 6.45 17.5 2 12.04 2zm5.8 14.01c-.24.68-1.4 1.32-1.93 1.4-.5.07-1.13.1-1.83-.12-.42-.13-.96-.31-1.66-.6-2.92-1.26-4.83-4.2-4.98-4.4-.15-.2-1.19-1.58-1.19-3.02 0-1.43.75-2.14 1.02-2.43.27-.29.58-.36.78-.36.2 0 .39 0 .56.01.18.01.42-.07.66.5.24.58.82 2 .89 2.14.07.15.11.32.02.51-.09.2-.14.32-.27.49-.13.17-.28.38-.4.51-.13.14-.27.29-.12.57.15.28.67 1.11 1.44 1.8.99.88 1.82 1.16 2.1 1.29.28.13.44.11.6-.07.17-.18.71-.83.9-1.11.19-.28.38-.24.63-.14.26.09 1.64.77 1.92.91.28.14.47.21.53.33.07.12.07.68-.17 1.36z"/></svg>',
   gear: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>',
   percent: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>',
   paybox: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="6" r="2.6"/><path d="M12 9.5v8.5M12 12l-4.5-3.5M12 12l4.5-3.5M12 16l-3.5 4M12 16l3.5 4"/></svg>',
@@ -1313,6 +1337,9 @@ function renderCommunity(communityId){
       </button>` : ""}
       ${c.createdByName && myIdentity.name && c.createdByName === myIdentity.name ? `<button class="icon-btn gold" data-open-chip-setup="${c.id}" title="הגדרת ציפים">${icon('chip')}</button>` : ""}
       <button class="btn btn-ghost btn-sm" data-show-roster style="display:flex;align-items:center;gap:6px;">${icon('users')} שחקנים (${c.roster.length})</button>
+    </div>
+    <div class="row" style="justify-content:flex-end;padding-bottom:10px;">
+      <button class="btn btn-sm" data-invite-community="${c.id}" style="background:#25D366;color:#fff;display:flex;align-items:center;gap:6px;">${icon('whatsapp')} הזמנה דרך WhatsApp</button>
     </div>
     <div class="section-title">ערבי משחק</div>
     <div class="px5" style="margin-bottom:80px;">${gamesHtml}</div>
@@ -2495,6 +2522,14 @@ function attachHandlers(){
       alert(url);
     }
   });
+  app.querySelectorAll("[data-invite-community]").forEach(el => el.onclick = (e) => {
+    e.stopPropagation();
+    const c = getCommunity(el.dataset.inviteCommunity);
+    if (!c) return;
+    const url = location.origin + location.pathname + "?community=" + encodeURIComponent(c.id);
+    const text = `הצטרפו אליי לקבוצת הפוקר ${c.name} - ${url}`;
+    window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank", "noopener");
+  });
   const backHome = app.querySelector("[data-back-home]"); if (backHome) backHome.onclick = () => go("home");
   const backCommunity = app.querySelector("[data-back-community]"); if (backCommunity) backCommunity.onclick = () => go("community", {communityId: backCommunity.dataset.backCommunity});
 
@@ -2778,6 +2813,8 @@ function attachHandlers(){
     if (confirmBtn) confirmBtn.onclick = async () => {
       const name = document.getElementById("identity-name-input").value.trim();
       if (!name) { alert("צריך להזין שם."); return; }
+      confirmBtn.disabled = true;
+      showButtonLoading(confirmBtn);
       myIdentity.name = name;
       saveIdentity();
       renamePlayerEverywhere(myIdentity.id, name);
@@ -2785,6 +2822,7 @@ function attachHandlers(){
       // A first-time visitor via an invite link has no name yet when autoJoinViaInvite
       // first runs in init(), so it bails out - retry now that we have one.
       if (nav.screen === "table" && nav.gameId) await autoJoinViaInvite(nav.gameId);
+      else if (nav.screen === "community" && nav.communityId) await autoJoinViaCommunityInvite(nav.communityId);
       closeModal();
     };
   }
@@ -4075,6 +4113,20 @@ window.addEventListener("popstate", () => {
       // The linked game genuinely doesn't exist (most likely its host deleted that
       // evening) - say so instead of silently landing on the home screen with no
       // explanation for why the link didn't work.
+      modal = {type:"inviteGone"};
+    }
+  }
+  const inviteCommunityId = new URLSearchParams(location.search).get("community");
+  if (inviteCommunityId && !inviteGameId) {
+    let invitedCommunity = getCommunity(inviteCommunityId);
+    if (!invitedCommunity) {
+      try { const fresh = await loadState(); if (fresh !== null) state = fresh; } catch(e) { /* keep the state we already have */ }
+      invitedCommunity = getCommunity(inviteCommunityId);
+    }
+    if (invitedCommunity) {
+      nav = { screen: "community", communityId: invitedCommunity.id };
+      await autoJoinViaCommunityInvite(invitedCommunity.id);
+    } else {
       modal = {type:"inviteGone"};
     }
   }
