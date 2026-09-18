@@ -113,8 +113,8 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .seat-circle.filled{background:var(--gold);color:var(--gold-text);border:2px solid var(--gold);}
 .seat-circle.filled.cashed-out{background:#57534e;border-color:#57534e;color:#fda4af;}
 .seat-circle.selected{box-shadow:0 0 0 3px #22d3ee,0 0 0 6px rgba(34,211,238,.25);}
-.buyin-fly{position:fixed;left:0;top:0;z-index:400;pointer-events:none;display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;background:var(--gold);color:var(--gold-text);font-weight:800;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.4);transform:translate(-50%,-50%);transition:left .65s cubic-bezier(.22,.7,.3,1),top .65s cubic-bezier(.22,.7,.3,1),opacity .3s ease .55s,transform .3s ease;}
-.buyin-fly.landed{transform:translate(-50%,-50%) scale(1.25);}
+.buyin-fly{position:absolute;left:0;top:0;z-index:400;pointer-events:none;display:flex;align-items:center;justify-content:center;min-width:34px;height:30px;padding:0 9px;border-radius:15px;background:var(--gold);color:var(--gold-text);font-weight:800;font-size:12px;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.4);transform:translate(-50%,-50%);transition:left .65s cubic-bezier(.22,.7,.3,1),top .65s cubic-bezier(.22,.7,.3,1),opacity .3s ease .55s,transform .3s ease;}
+.buyin-fly.landed{transform:translate(-50%,-50%) scale(1.15);}
 .buyin-fly.fading{opacity:0;}
 .on-behalf-badge{background:#78350f;color:#fde68a;border-radius:9px;padding:6px 10px;font-size:12px;font-weight:700;text-align:center;margin-bottom:10px;}
 .seat-info{display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;padding:2px 0;}
@@ -684,17 +684,22 @@ function flyBuyinBadge(fromEl, amount){
     const toRect = toCircle.getBoundingClientRect();
     const badge = document.createElement("div");
     badge.className = "buyin-fly";
+    badge.textContent = `+₪${amount}`;
     // left/top target the circles' exact center points - the badge centers itself on
     // whatever point that is via its own translate(-50%,-50%), so no half-width math here.
-    badge.style.left = (fromRect.left + fromRect.width/2) + "px";
-    badge.style.top = (fromRect.top + fromRect.height/2) + "px";
+    // Document-relative coordinates (rect + scroll offset) via position:absolute, not
+    // position:fixed's viewport-relative ones - a mobile browser's address-bar chrome can
+    // shift the visual vs layout viewport, throwing off a fixed element's real position
+    // relative to getBoundingClientRect() measurements taken against page content.
+    badge.style.left = (fromRect.left + fromRect.width/2 + window.scrollX) + "px";
+    badge.style.top = (fromRect.top + fromRect.height/2 + window.scrollY) + "px";
     document.body.appendChild(badge);
     badge.offsetHeight; // force layout so the start position is painted before we set the
     // destination below - without this, the browser can coalesce both style writes into
     // one frame and skip animating the transition entirely.
-    badge.style.left = (toRect.left + toRect.width/2) + "px";
-    badge.style.top = (toRect.top + toRect.height/2) + "px";
-    setTimeout(() => { badge.textContent = `+₪${amount}`; badge.classList.add("landed"); }, 650);
+    badge.style.left = (toRect.left + toRect.width/2 + window.scrollX) + "px";
+    badge.style.top = (toRect.top + toRect.height/2 + window.scrollY) + "px";
+    setTimeout(() => { badge.classList.add("landed"); }, 650);
     setTimeout(() => { badge.classList.add("fading"); }, 950);
     setTimeout(() => { badge.remove(); }, 1300);
   } catch(e) { /* cosmetic only */ }
