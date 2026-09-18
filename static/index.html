@@ -89,6 +89,7 @@ input[type=text],input[type=number],input[type=date],.select-input{
 input:focus,.select-input:focus{border-color:var(--gold);}
 .chip-row{display:flex;gap:8px;margin-bottom:12px;}
 .chip-btn{flex:1;padding:9px;border-radius:9px;background:var(--input);border:1px solid var(--input-b);color:var(--text);font-family:inherit;cursor:pointer;}
+.chip-btn:disabled{opacity:.4;cursor:not-allowed;}
 .overlay{position:fixed;inset:0;background:#000;display:flex;align-items:flex-end;justify-content:center;z-index:50;}
 @media(min-width:600px){.overlay{align-items:center;}}
 .modal{background:#064e3b;width:100%;max-width:480px;border-radius:20px 20px 0 0;border:1px solid var(--card-b);padding:20px;max-height:85vh;overflow-y:auto;}
@@ -708,7 +709,15 @@ async function doPanelBuyin(amount, btnEl){
   if (!amount || amount <= 0) return;
   const pid = selectedSeatPlayerId;
   if (!pid) return;
+  // Block another buy-in until this one's total has actually landed - otherwise a quick
+  // second tap could fire (and build its own mutation on top of a not-yet-updated total)
+  // before the first save even started reflecting on screen. render() at the end below
+  // rebuilds this row from scratch, which re-enables everything on its own.
+  document.querySelectorAll("[data-panel-buyin-quick],[data-panel-buyin-confirm],#panel-buyin-custom").forEach(el => el.disabled = true);
   flyBuyinBadge(btnEl, amount);
+  // mutateAndSave (the real network save) starts here, immediately - it is NOT waiting
+  // on flyBuyinBadge's own setTimeout-driven animation, which is purely decorative and
+  // runs independently in parallel.
   await mutateAndSave(() => {
     const g = getGame(nav.gameId);
     g.buyins.push({id: uid(), playerId: pid, amount, ts: Date.now()});
@@ -1431,13 +1440,11 @@ function renderActionPanel(g, c, seatedIds){
   } else {
     const canRemove = admin || (isSelf && buyinTotal === 0);
     panelBody = `
-      <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:6px;">קנייה:</div>
-      <div class="chip-row" data-panel-buyin-quick-row>
-        ${[50,80,100].map(v=>`<button class="chip-btn" data-panel-buyin-quick="${v}">₪${v}</button>`).join("")}
-      </div>
-      <div style="display:flex;gap:8px;margin-bottom:10px;">
-        <input type="number" inputmode="decimal" id="panel-buyin-custom" placeholder="סכום אחר" style="flex:1;">
-        <button class="btn btn-primary" data-panel-buyin-confirm>${icon('plus')} הוסף</button>
+      <div style="display:flex;align-items:center;gap:5px;margin-bottom:10px;">
+        <span style="font-size:12px;font-weight:700;color:var(--muted);flex-shrink:0;">קנייה:</span>
+        ${[50,80,100].map(v=>`<button class="chip-btn" data-panel-buyin-quick="${v}" style="flex:0 0 auto;padding:7px 8px;font-size:12px;">${v}</button>`).join("")}
+        <input type="number" inputmode="decimal" id="panel-buyin-custom" placeholder="סכום" style="width:54px;flex:0 0 54px;padding:7px 4px;font-size:12px;text-align:center;">
+        <button class="btn btn-primary" data-panel-buyin-confirm style="flex-shrink:0;padding:7px 10px;">${icon('plus')}</button>
       </div>
       <button class="btn btn-ghost btn-block" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-history>${icon('bar')} היסטוריית קניות</button>
       <button class="btn btn-block" style="background:#57534e;color:#f5f5f4;margin-bottom:${canRemove?'10px':'0'};display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-end-night>${icon('out')} סיים ערב</button>
