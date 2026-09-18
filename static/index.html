@@ -1350,8 +1350,8 @@ function renderCommunity(communityId){
         </span>
       </button>` : ""}
       ${c.createdByName && myIdentity.name && c.createdByName === myIdentity.name ? `<button class="icon-btn gold" data-open-chip-setup="${c.id}" title="הגדרת ציפים">${icon('chip')}</button>` : ""}
+      ${c.createdByName && myIdentity.name && c.createdByName === myIdentity.name ? `<button class="icon-btn" data-invite-community="${c.id}" title="הזמנה דרך WhatsApp" style="background:#25D366;color:#fff;">${icon('share')}</button>` : ""}
       <button class="btn btn-ghost btn-sm" data-show-roster style="display:flex;align-items:center;gap:6px;">${icon('users')} שחקנים (${c.roster.length})</button>
-      <button class="btn btn-sm" data-invite-community="${c.id}" style="background:#25D366;color:#fff;display:flex;align-items:center;gap:6px;">${icon('share')} הזמנה דרך WhatsApp</button>
     </div>
     <div class="section-title">ערבי משחק</div>
     <div class="px5" style="margin-bottom:80px;">${gamesHtml}</div>
