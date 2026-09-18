@@ -109,13 +109,12 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .poker-table-felt{position:absolute;inset:9% 13% 9% 9%;border-radius:50%;background:radial-gradient(ellipse at 50% 40%, #0f6b48, #073826 75%);border:7px solid #3d2412;box-shadow:inset 0 0 34px rgba(0,0,0,.45);}
 .seat-wrap{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;width:78px;touch-action:none;}
 .seat-circle{position:relative;width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;touch-action:none;}
-.seat-circle.empty{border:2px solid rgba(255,255,255,.35);color:var(--muted);background:rgba(255,255,255,.05);font-size:20px;}
-.seat-circle.empty.pickable{border-color:var(--gold);color:var(--gold);cursor:pointer;}
+.seat-circle.empty{border:2px dashed rgba(255,255,255,.35);color:var(--muted);background:rgba(255,255,255,.05);font-size:20px;}
 .seat-circle.filled{background:var(--gold);color:var(--gold-text);border:2px solid var(--gold);}
 .seat-circle.filled.cashed-out{background:#57534e;border-color:#57534e;color:#fda4af;}
 .seat-circle.selected{box-shadow:0 0 0 3px #22d3ee,0 0 0 6px rgba(34,211,238,.25);}
-.buyin-fly{position:fixed;z-index:400;pointer-events:none;display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;background:var(--gold);color:var(--gold-text);font-weight:800;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.4);transition:left .65s cubic-bezier(.22,.7,.3,1),top .65s cubic-bezier(.22,.7,.3,1),opacity .3s ease .55s,transform .3s ease;}
-.buyin-fly.landed{transform:scale(1.25);}
+.buyin-fly{position:fixed;left:0;top:0;z-index:400;pointer-events:none;display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;background:var(--gold);color:var(--gold-text);font-weight:800;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.4);transform:translate(-50%,-50%);transition:left .65s cubic-bezier(.22,.7,.3,1),top .65s cubic-bezier(.22,.7,.3,1),opacity .3s ease .55s,transform .3s ease;}
+.buyin-fly.landed{transform:translate(-50%,-50%) scale(1.25);}
 .buyin-fly.fading{opacity:0;}
 .on-behalf-badge{background:#78350f;color:#fde68a;border-radius:9px;padding:6px 10px;font-size:12px;font-weight:700;text-align:center;margin-bottom:10px;}
 .seat-info{display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;padding:2px 0;}
@@ -672,13 +671,16 @@ function flyBuyinBadge(fromEl, amount){
     const toRect = toCircle.getBoundingClientRect();
     const badge = document.createElement("div");
     badge.className = "buyin-fly";
-    badge.style.left = (fromRect.left + fromRect.width/2 - 17) + "px";
-    badge.style.top = (fromRect.top + fromRect.height/2 - 17) + "px";
+    // left/top target the circles' exact center points - the badge centers itself on
+    // whatever point that is via its own translate(-50%,-50%), so no half-width math here.
+    badge.style.left = (fromRect.left + fromRect.width/2) + "px";
+    badge.style.top = (fromRect.top + fromRect.height/2) + "px";
     document.body.appendChild(badge);
-    requestAnimationFrame(() => {
-      badge.style.left = (toRect.left + toRect.width/2 - 17) + "px";
-      badge.style.top = (toRect.top + toRect.height/2 - 17) + "px";
-    });
+    badge.offsetHeight; // force layout so the start position is painted before we set the
+    // destination below - without this, the browser can coalesce both style writes into
+    // one frame and skip animating the transition entirely.
+    badge.style.left = (toRect.left + toRect.width/2) + "px";
+    badge.style.top = (toRect.top + toRect.height/2) + "px";
     setTimeout(() => { badge.textContent = `+₪${amount}`; badge.classList.add("landed"); }, 650);
     setTimeout(() => { badge.classList.add("fading"); }, 950);
     setTimeout(() => { badge.remove(); }, 1300);
@@ -1234,7 +1236,6 @@ const ICONS = {
   eye: '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
   eyeOff: '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0112 20c-7 0-10-8-10-8a18.5 18.5 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 10 8 10 8a18.5 18.5 0 01-2.16 3.19M14.12 14.12a3 3 0 11-4.24-4.24M1 1l22 22"/></svg>',
   share: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>',
-  whatsapp: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 004.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91C21.96 6.45 17.5 2 12.04 2zm5.8 14.01c-.24.68-1.4 1.32-1.93 1.4-.5.07-1.13.1-1.83-.12-.42-.13-.96-.31-1.66-.6-2.92-1.26-4.83-4.2-4.98-4.4-.15-.2-1.19-1.58-1.19-3.02 0-1.43.75-2.14 1.02-2.43.27-.29.58-.36.78-.36.2 0 .39 0 .56.01.18.01.42-.07.66.5.24.58.82 2 .89 2.14.07.15.11.32.02.51-.09.2-.14.32-.27.49-.13.17-.28.38-.4.51-.13.14-.27.29-.12.57.15.28.67 1.11 1.44 1.8.99.88 1.82 1.16 2.1 1.29.28.13.44.11.6-.07.17-.18.71-.83.9-1.11.19-.28.38-.24.63-.14.26.09 1.64.77 1.92.91.28.14.47.21.53.33.07.12.07.68-.17 1.36z"/></svg>',
   gear: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>',
   percent: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>',
   paybox: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="6" r="2.6"/><path d="M12 9.5v8.5M12 12l-4.5-3.5M12 12l4.5-3.5M12 16l-3.5 4M12 16l3.5 4"/></svg>',
@@ -1337,9 +1338,7 @@ function renderCommunity(communityId){
       </button>` : ""}
       ${c.createdByName && myIdentity.name && c.createdByName === myIdentity.name ? `<button class="icon-btn gold" data-open-chip-setup="${c.id}" title="הגדרת ציפים">${icon('chip')}</button>` : ""}
       <button class="btn btn-ghost btn-sm" data-show-roster style="display:flex;align-items:center;gap:6px;">${icon('users')} שחקנים (${c.roster.length})</button>
-    </div>
-    <div class="row" style="justify-content:flex-end;padding-bottom:10px;">
-      <button class="btn btn-sm" data-invite-community="${c.id}" style="background:#25D366;color:#fff;display:flex;align-items:center;gap:6px;">${icon('whatsapp')} הזמנה דרך WhatsApp</button>
+      <button class="btn btn-sm" data-invite-community="${c.id}" style="background:#25D366;color:#fff;display:flex;align-items:center;gap:6px;">${icon('share')} הזמנה דרך WhatsApp</button>
     </div>
     <div class="section-title">ערבי משחק</div>
     <div class="px5" style="margin-bottom:80px;">${gamesHtml}</div>
@@ -1460,7 +1459,7 @@ function renderTable(gameId){
       // Only the table/community creator can seat a guest into an empty seat - everyone
       // else gets a plain circle (no +) that's still a valid drop target for repositioning
       // an already-seated player via drag, just not tappable to add someone new.
-      return `<div class="seat-wrap" style="left:${x}%;top:${y}%;" data-seat="${i}"><div class="seat-circle empty${admin?' pickable':''}">${admin?'+':''}</div></div>`;
+      return `<div class="seat-wrap" style="left:${x}%;top:${y}%;" data-seat="${i}"><div class="seat-circle empty">${admin?'+':''}</div></div>`;
     }
     const p = g.players.find(pl => pl.id === pid);
     const name = p ? p.name : "?";
