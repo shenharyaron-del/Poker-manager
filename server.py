@@ -310,7 +310,12 @@ def save_state():
         conn.commit()
     _set_cached_state(data)
     _broadcast_state_changed()
-    return jsonify({"ok": True})
+    # Hand back the hash of what was just saved so the client can use it as next save's
+    # baseHash without an extra round trip to re-fetch it (see mutateAndSave). Computed
+    # locally from `data` rather than read back from the shared cache, since a concurrent
+    # request could update that cache in between and hand back the wrong hash.
+    new_hash = hashlib.md5(data.encode("utf-8")).hexdigest()
+    return jsonify({"ok": True, "hash": new_hash})
 
 
 @app.route("/api/state/history")

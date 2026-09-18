@@ -109,7 +109,7 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .poker-table-felt{position:absolute;inset:9% 13% 9% 9%;border-radius:50%;background:radial-gradient(ellipse at 50% 40%, #0f6b48, #073826 75%);border:7px solid #3d2412;box-shadow:inset 0 0 34px rgba(0,0,0,.45);}
 .seat-wrap{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;width:78px;touch-action:none;}
 .seat-circle{position:relative;width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;touch-action:none;}
-.seat-circle.empty{border:2px dashed rgba(255,255,255,.35);color:var(--muted);background:rgba(255,255,255,.05);font-size:20px;}
+.seat-circle.vacant{border:2px dashed rgba(255,255,255,.35);color:var(--muted);background:rgba(255,255,255,.05);font-size:20px;}
 .seat-circle.filled{background:var(--gold);color:var(--gold-text);border:2px solid var(--gold);}
 .seat-circle.filled.cashed-out{background:#57534e;border-color:#57534e;color:#fda4af;}
 .seat-circle.selected{box-shadow:0 0 0 3px #22d3ee,0 0 0 6px rgba(34,211,238,.25);}
@@ -429,6 +429,9 @@ async function saveState(checkpoint, baseHash){
       });
       logSync("save: POST done");
       if (res.status === 409) return "conflict";
+      // Cache the hash of what we just saved so the next mutateAndSave call can build
+      // on it directly instead of needing a fresh GET first (see mutateAndSave).
+      try { const body = await res.json(); if (body && body.hash) lastStateHash = body.hash; } catch(e) { /* fine - next save just re-syncs if needed */ }
       return "ok";
     }
     catch(e){ logSync("save: POST FAILED " + e); console.error("save failed", e); alert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return "error"; }
@@ -446,10 +449,20 @@ async function saveState(checkpoint, baseHash){
 // mutatorFn may optionally return true/false to mark this save as a checkpoint (e.g. "did
 // this action just close the game?") - when it returns undefined, the checkpoint param
 // is used instead.
+// The first attempt skips the explicit re-sync GET and trusts lastStateHash as-is - it's
+// already kept fresh by the periodic/SSE-driven background refresh, so paying for a full
+// extra round trip before every single save just to confirm what we already knew doubled
+// the visible latency of every action for no benefit in the common (no real conflict)
+// case. The server's baseHash check still catches a genuinely stale base and rejects it
+// (409) exactly as before - only THEN do we pay for a real sync, now that we know we
+// actually need one, before retrying. lastStateHash can still be null this early (e.g.
+// the very first action if the initial load's hash fetch itself failed) - that must
+// never be sent as a falsy baseHash (the server skips its conflict check entirely when
+// it's absent), so force a real sync in that case too.
 async function mutateAndSave(mutatorFn, checkpoint){
   const MAX_ATTEMPTS = 4;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    await syncBeforeMutate();
+    if (attempt > 0 || !lastStateHash) await syncBeforeMutate();
     const baseHash = lastStateHash;
     const mutatorResult = mutatorFn();
     const effectiveCheckpoint = mutatorResult !== undefined ? mutatorResult : checkpoint;
@@ -1459,7 +1472,7 @@ function renderTable(gameId){
       // Only the table/community creator can seat a guest into an empty seat - everyone
       // else gets a plain circle (no +) that's still a valid drop target for repositioning
       // an already-seated player via drag, just not tappable to add someone new.
-      return `<div class="seat-wrap" style="left:${x}%;top:${y}%;" data-seat="${i}"><div class="seat-circle empty">${admin?'+':''}</div></div>`;
+      return `<div class="seat-wrap" style="left:${x}%;top:${y}%;" data-seat="${i}"><div class="seat-circle vacant">${admin?'+':''}</div></div>`;
     }
     const p = g.players.find(pl => pl.id === pid);
     const name = p ? p.name : "?";
