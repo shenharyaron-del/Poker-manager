@@ -109,9 +109,15 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .poker-table-felt{position:absolute;inset:9% 13% 9% 9%;border-radius:50%;background:radial-gradient(ellipse at 50% 40%, #0f6b48, #073826 75%);border:7px solid #3d2412;box-shadow:inset 0 0 34px rgba(0,0,0,.45);}
 .seat-wrap{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;width:78px;touch-action:none;}
 .seat-circle{position:relative;width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;touch-action:none;}
-.seat-circle.empty{border:2px dashed rgba(255,255,255,.35);color:var(--muted);background:rgba(255,255,255,.05);font-size:20px;}
+.seat-circle.empty{border:2px solid rgba(255,255,255,.35);color:var(--muted);background:rgba(255,255,255,.05);font-size:20px;}
+.seat-circle.empty.pickable{border-color:var(--gold);color:var(--gold);cursor:pointer;}
 .seat-circle.filled{background:var(--gold);color:var(--gold-text);border:2px solid var(--gold);}
 .seat-circle.filled.cashed-out{background:#57534e;border-color:#57534e;color:#fda4af;}
+.seat-circle.selected{box-shadow:0 0 0 3px #22d3ee,0 0 0 6px rgba(34,211,238,.25);}
+.buyin-fly{position:fixed;z-index:400;pointer-events:none;display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;background:var(--gold);color:var(--gold-text);font-weight:800;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.4);transition:left .65s cubic-bezier(.22,.7,.3,1),top .65s cubic-bezier(.22,.7,.3,1),opacity .3s ease .55s,transform .3s ease;}
+.buyin-fly.landed{transform:scale(1.25);}
+.buyin-fly.fading{opacity:0;}
+.on-behalf-badge{background:#78350f;color:#fde68a;border-radius:9px;padding:6px 10px;font-size:12px;font-weight:700;text-align:center;margin-bottom:10px;}
 .seat-info{display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;padding:2px 0;}
 .seat-name{font-size:11px;font-weight:700;color:var(--text);text-align:center;white-space:nowrap;max-width:78px;overflow:hidden;text-overflow:ellipsis;}
 .seat-caption{font-size:9.5px;color:#a7f3d0;text-align:center;line-height:1.35;white-space:nowrap;}
@@ -628,14 +634,72 @@ let appVersion = null; // filled in by init() from /api/version
 // ---------- Navigation (not persisted - always starts at home) ----------
 let nav = { screen: "home", communityId: null, gameId: null };
 let modal = null; // {type, ...}
-let hideEmptySeats = false; // UI-only toggle, not persisted
 let showSettlement = false; // UI-only toggle, not persisted
 let settlementFilterPlayerId = null; // UI-only, not persisted - null means "show everyone"
 let currentSettlementTransfers = null; // set by renderTable(), consumed by drawSettlementArrows() after the DOM updates
+// Whose seat the bottom action panel currently shows (see renderTable/renderActionPanel) -
+// defaults to the viewer's own seat, but the table/community creator can tap any active
+// seat to act "on behalf of" that player instead. UI-only, not persisted, reset on nav.
+let selectedSeatPlayerId = null;
+// Only the table's or community's creator may seat other people and act on their behalf
+// (buy-ins, ending their night, removing them) - anyone typing someone else's name is
+// just a courtesy elsewhere, but this gate is what keeps that from being used to mess
+// with someone else's seat.
+function isTableAdmin(g, c){
+  return !!(myIdentity.name && ((g && myIdentity.name === g.createdByName) || (c && myIdentity.name === c.createdByName)));
+}
+// A tap on a filled seat selects it into the bottom action panel - always allowed for
+// your own seat, and for the table/community creator on anyone's active seat (to act
+// "on behalf of" them). Anyone else tapping someone else's seat is a no-op.
+function trySelectSeatPlayer(pid){
+  const g = getGame(nav.gameId);
+  const c = getCommunity(g.communityId);
+  const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+  if (pid === myPlayerId || isTableAdmin(g, c)) {
+    selectedSeatPlayerId = pid;
+    render();
+  }
+}
+
+// Purely cosmetic feedback for a buy-in from the action panel: a small badge flies from
+// the button that was tapped to the selected seat's circle, then turns into "+amount"
+// briefly before fading - never anything the actual save depends on.
+function flyBuyinBadge(fromEl, amount){
+  try {
+    const toCircle = document.querySelector(".seat-circle.selected");
+    if (!fromEl || !toCircle) return;
+    const fromRect = fromEl.getBoundingClientRect();
+    const toRect = toCircle.getBoundingClientRect();
+    const badge = document.createElement("div");
+    badge.className = "buyin-fly";
+    badge.style.left = (fromRect.left + fromRect.width/2 - 17) + "px";
+    badge.style.top = (fromRect.top + fromRect.height/2 - 17) + "px";
+    document.body.appendChild(badge);
+    requestAnimationFrame(() => {
+      badge.style.left = (toRect.left + toRect.width/2 - 17) + "px";
+      badge.style.top = (toRect.top + toRect.height/2 - 17) + "px";
+    });
+    setTimeout(() => { badge.textContent = `+₪${amount}`; badge.classList.add("landed"); }, 650);
+    setTimeout(() => { badge.classList.add("fading"); }, 950);
+    setTimeout(() => { badge.remove(); }, 1300);
+  } catch(e) { /* cosmetic only */ }
+}
+async function doPanelBuyin(amount, btnEl){
+  if (!amount || amount <= 0) return;
+  const pid = selectedSeatPlayerId;
+  if (!pid) return;
+  flyBuyinBadge(btnEl, amount);
+  await mutateAndSave(() => {
+    const g = getGame(nav.gameId);
+    g.buyins.push({id: uid(), playerId: pid, amount, ts: Date.now()});
+  });
+  render();
+}
 
 function go(screen, extra){
   nav = Object.assign({screen}, extra||{});
   modal = null;
+  selectedSeatPlayerId = null; // re-defaults to the viewer's own seat on the next table render
   if (screen === "table" && nav.gameId) autoSeatSelf(nav.gameId);
   render();
 }
@@ -1258,6 +1322,87 @@ function renderCommunity(communityId){
   `;
 }
 
+// The bottom action panel replaces both the old tap-to-open seat menu and the old
+// self-service-only bottom bar with one panel keyed off selectedSeatPlayerId: your own
+// seat by default, or - for the table/community creator only - whichever active seat
+// they tapped, to act "on behalf of" that player (see isTableAdmin and the seat click
+// handler in attachHandlers).
+function renderActionPanel(g, c, seatedIds){
+  const admin = isTableAdmin(g, c);
+  const activePaybox = getActivePayboxEntry(c);
+  const allCashedOut = seatedIds.length > 0 && seatedIds.every(pid => pid in g.cashouts);
+  const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+
+  // The paybox/settlement group used to live above the table; it's table-wide, not tied
+  // to whichever seat is selected, so it always shows first once everyone's cashed out.
+  let settlementWarning = "";
+  currentSettlementTransfers = null;
+  if (allCashedOut && showSettlement) {
+    const { remaining, alreadyPaid, warning } = computeSettlementTransfers(g);
+    currentSettlementTransfers = {
+      seats: g.seats || new Array(9).fill(null),
+      transfers: [
+        ...remaining.map(t => ({ fromId: t.from, toId: t.to, amount: t.amount, paid: false })),
+        ...alreadyPaid.map(t => ({ fromId: t.fromPlayerId, toId: t.toPlayerId, amount: t.amount, paid: true })),
+      ],
+      filterId: settlementFilterPlayerId,
+    };
+    if (warning) settlementWarning = `<div style="background:#450a0a;color:#fca5a5;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;text-align:center;">${esc(warning)}</div>`;
+  }
+  const settlementHtml = allCashedOut ? `
+    ${activePaybox ? `<button class="btn btn-block" style="margin-bottom:6px;background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;" data-open-active-paybox><img src="/static/paybox-icon.png" style="height:16px;width:auto;display:block;">העברה לקבוצת פייבוקס משותפת: ${esc(activePaybox.name)}</button>
+    <div style="text-align:center;color:var(--muted);font-size:12px;margin-bottom:6px;">או</div>` : ""}
+    <button class="btn ${showSettlement?'':'btn-ghost'} btn-block" data-toggle-settlement style="margin-bottom:10px;${showSettlement?'background:#0891b2;color:#fff;':''}">${icon('coins')} ${showSettlement?'הסתר הסדר תשלומים':'הסדר תשלומים בין שחקנים'}</button>
+    ${showSettlement ? `<div class="row" style="gap:8px;margin-bottom:10px;">
+      <button class="btn btn-block" style="background:#0891b2;color:#fff;" data-open-paybox-generic>פתח פייבוקס לתשלום</button>
+      <button class="btn btn-block" style="background:#0891b2;color:#fff;" data-open-bit-generic>פתח ביט לתשלום</button>
+    </div>` : ""}
+    ${settlementWarning}
+  ` : "";
+
+  const pid = selectedSeatPlayerId;
+  if (!pid || !seatedIds.includes(pid)) {
+    return (settlementHtml || allCashedOut) ? `<div class="bottom-bar">${settlementHtml}</div>` : "";
+  }
+  const p = g.players.find(pl => pl.id === pid);
+  const isSelf = pid === myPlayerId;
+  const onBehalf = admin && !isSelf;
+  const cashedOut = pid in g.cashouts;
+  const buyinTotal = g.buyins.filter(b => b.playerId === pid).reduce((s,b) => s+b.amount, 0);
+  const behalfBadge = onBehalf ? `<div class="on-behalf-badge">פועל בשם ${esc(p?p.name:"")}</div>` : "";
+
+  let panelBody;
+  if (cashedOut) {
+    const finalBalances = computeFinalBalances(g);
+    const alreadyPaidPaybox = (g.payboxPayments||[]).filter(pp=>pp.playerId===pid).reduce((s,pp)=>s+pp.amount,0);
+    const alreadyPaidDirect = (g.playerPayments||[]).filter(dp=>dp.fromPlayerId===pid).reduce((s,dp)=>s+dp.amount,0);
+    const fb = finalBalances[pid];
+    const owes = fb ? -(fb.profit + alreadyPaidPaybox + alreadyPaidDirect) : 0;
+    panelBody = `
+      <button class="btn btn-ghost btn-block" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-summary>${icon('bar')} סיכום ערב</button>
+      ${owes > 0.005 && !onBehalf ? `<button class="btn btn-block" style="background:#0891b2;color:#fff;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-paybox-pay data-paybox-amount="${Math.round(owes*100)/100}"><img src="/static/paybox-icon.png" style="height:18px;width:auto;display:block;"> שלם בפייבוקס (₪${Math.round(owes*100)/100})</button>` : ""}
+      ${owes > 0.005 ? `<button class="btn btn-ghost btn-block" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-pay-player data-pay-player-amount="${Math.round(owes*100)/100}">${icon('coins')} שלם לשחקן (₪${Math.round(owes*100)/100})</button>` : ""}
+      ${admin ? `<button class="btn btn-ghost btn-block" data-return-to-game="${pid}" style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('undo')} החזר למשחק</button>` : ""}
+    `;
+  } else {
+    const canRemove = admin || (isSelf && buyinTotal === 0);
+    panelBody = `
+      <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:6px;">קנייה:</div>
+      <div class="chip-row" data-panel-buyin-quick-row>
+        ${[50,80,100].map(v=>`<button class="chip-btn" data-panel-buyin-quick="${v}">₪${v}</button>`).join("")}
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <input type="number" inputmode="decimal" id="panel-buyin-custom" placeholder="סכום אחר" style="flex:1;">
+        <button class="btn btn-primary" data-panel-buyin-confirm>${icon('plus')} הוסף</button>
+      </div>
+      <button class="btn btn-ghost btn-block" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-history>${icon('bar')} היסטוריית קניות</button>
+      <button class="btn btn-block" style="background:#57534e;color:#f5f5f4;margin-bottom:${canRemove?'10px':'0'};display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-end-night>${icon('out')} סיים ערב</button>
+      ${canRemove ? `<button class="btn btn-block" style="background:#be123c;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-remove>${icon('trash')} הסר מהשולחן</button>` : ""}
+    `;
+  }
+  return `<div class="bottom-bar">${settlementHtml}${behalfBadge}${panelBody}</div>`;
+}
+
 function renderTable(gameId){
   const SEAT_POS = [
     [50,8],[74,18],[85,43],[80,71],[65,90],[35,90],[12,71],[7,43],[22,18],[2,90]
@@ -1273,19 +1418,22 @@ function renderTable(gameId){
 
   const seatedIds = seats.filter(Boolean);
   const allCashedOut = seatedIds.length > 0 && seatedIds.every(pid => pid in g.cashouts);
-  // Quick self-service actions for a player who joined via their own phone and is seated
-  // at this table - buy-in/end-night without needing someone else to do it for them.
+  const admin = isTableAdmin(g, c);
   const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
-  const myPlayerSeated = myPlayerId && seatedIds.includes(myPlayerId);
-  const myPlayerCashedOut = myPlayerId && (myPlayerId in g.cashouts);
+  // Default the action panel to the viewer's own seat; keep whatever the admin tapped
+  // unless it's no longer valid (that player left the table).
+  if (selectedSeatPlayerId && !seatedIds.includes(selectedSeatPlayerId)) selectedSeatPlayerId = null;
+  if (!selectedSeatPlayerId && myPlayerId && seatedIds.includes(myPlayerId)) selectedSeatPlayerId = myPlayerId;
 
   const seatsHtml = seats.map((pid, i) => {
     const [x,y] = SEAT_POS[i];
     if (!pid) {
       if (i === 9) return ""; // the 10th slot's empty state is handled by the dedicated "add extra player" button instead
-      // Once the night is over, empty seats are just clutter - always hide them, no toggle.
-      if (hideEmptySeats || allCashedOut) return "";
-      return `<div class="seat-wrap" style="left:${x}%;top:${y}%;" data-seat="${i}"><div class="seat-circle empty">+</div></div>`;
+      if (allCashedOut) return ""; // once the night is over, empty seats are just clutter
+      // Only the table/community creator can seat a guest into an empty seat - everyone
+      // else gets a plain circle (no +) that's still a valid drop target for repositioning
+      // an already-seated player via drag, just not tappable to add someone new.
+      return `<div class="seat-wrap" style="left:${x}%;top:${y}%;" data-seat="${i}"><div class="seat-circle empty${admin?' pickable':''}">${admin?'+':''}</div></div>`;
     }
     const p = g.players.find(pl => pl.id === pid);
     const name = p ? p.name : "?";
@@ -1304,8 +1452,9 @@ function renderTable(gameId){
     const circleStyle = (photo && !cashedOut) ? ` style="background-image:url('${photo}');background-size:cover;background-position:center;"` : "";
     const doorIconBig = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>';
     const circleInner = cashedOut ? doorIconBig : (photo ? "" : esc((name||"?").slice(0,2)));
+    const selected = pid === selectedSeatPlayerId;
     return `<div class="seat-wrap" style="left:${x}%;top:${y}%;" data-seat="${i}">
-      <div class="seat-circle filled ${cashedOut?'cashed-out':''}"${circleStyle}>${circleInner}</div>
+      <div class="seat-circle filled ${cashedOut?'cashed-out':''}${selected?' selected':''}"${circleStyle}>${circleInner}</div>
       <div class="seat-info" data-seat-info>
         <div class="seat-name">${esc(name)}</div>
         <div class="seat-caption">${caption}</div>
@@ -1319,21 +1468,7 @@ function renderTable(gameId){
   const diffLabel = diff > 0.5 ? "קופה בחוסר" : (diff < -0.5 ? "קופה בעודף" : "קופה מאוזנת");
   const diffColor = diff > 0.5 ? "#fda4af" : (diff < -0.5 ? "#6ee7b7" : "var(--muted)");
 
-  const activePaybox = getActivePayboxEntry(c);
-  let settlementWarning = "";
-  currentSettlementTransfers = null;
-  if (allCashedOut && showSettlement) {
-    const { remaining, alreadyPaid, warning } = computeSettlementTransfers(g);
-    currentSettlementTransfers = {
-      seats,
-      transfers: [
-        ...remaining.map(t => ({ fromId: t.from, toId: t.to, amount: t.amount, paid: false })),
-        ...alreadyPaid.map(t => ({ fromId: t.fromPlayerId, toId: t.toPlayerId, amount: t.amount, paid: true })),
-      ],
-      filterId: settlementFilterPlayerId,
-    };
-    if (warning) settlementWarning = `<div style="background:#450a0a;color:#fca5a5;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;text-align:center;">${esc(warning)}</div>`;
-  }
+  const panelHtml = renderActionPanel(g, c, seatedIds);
 
   return `
     <div class="top row" style="padding-top:14px;padding-bottom:16px;">
@@ -1341,21 +1476,10 @@ function renderTable(gameId){
       <div class="flex1">
         <h1 class="serif sm" style="color:var(--gold);">${esc(g.name || c.name)}</h1>
         <div class="meta" style="color:#6ee7b7;font-size:12px;display:flex;align-items:center;gap:5px;">${icon('cal')}${esc(g.date)}${g.createdByName ? ` · נוצר ע"י ${esc(g.createdByName)}` : ""}</div>
-        ${(!allCashedOut && seats.slice(0,9).some(s=>!s)) ? `
-          <button class="icon-btn" data-toggle-empty-seats title="${hideEmptySeats?'הצג מקומות פנויים':'הסתר מקומות פנויים'}" style="margin-top:6px;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.05);color:var(--muted);opacity:.6;display:inline-flex;align-items:center;justify-content:center;">${icon(hideEmptySeats?'eyeOff':'eye')}</button>
-        ` : ""}
       </div>
       ${!allCashedOut ? `<button class="icon-btn gold" data-open-poker-odds title="מה הסיכויים שלי" style="flex-shrink:0;width:36px;height:36px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;">${icon('percent')}</button>` : ""}
     </div>
-    ${allCashedOut && activePaybox ? `<button class="btn btn-block" style="margin-bottom:6px;background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;" data-open-active-paybox><img src="/static/paybox-icon.png" style="height:16px;width:auto;display:block;">העברה לקבוצת פייבוקס משותפת: ${esc(activePaybox.name)}</button>
-    <div style="text-align:center;color:var(--muted);font-size:12px;margin-bottom:6px;">או</div>` : ""}
-    ${allCashedOut ? `<button class="btn ${showSettlement?'':'btn-ghost'} btn-block" data-toggle-settlement style="margin-bottom:10px;${showSettlement?'background:#0891b2;color:#fff;':''}">${icon('coins')} ${showSettlement?'הסתר הסדר תשלומים':'הסדר תשלומים בין שחקנים'}</button>` : ""}
-    ${allCashedOut && showSettlement ? `<div class="row" style="gap:8px;margin-bottom:10px;">
-      <button class="btn btn-block" style="background:#0891b2;color:#fff;" data-open-paybox-generic>פתח פייבוקס לתשלום</button>
-      <button class="btn btn-block" style="background:#0891b2;color:#fff;" data-open-bit-generic>פתח ביט לתשלום</button>
-    </div>` : ""}
-    ${settlementWarning}
-    <div class="poker-table-wrap" style="${myPlayerSeated && !allCashedOut ? "margin-bottom:90px;" : ""}">
+    <div class="poker-table-wrap" style="${panelHtml ? "margin-bottom:280px;" : ""}">
       <div class="poker-table-felt"></div>
       <img src="/static/logo-watermark.png" style="position:absolute;left:50%;top:39%;transform:translate(-50%,-50%);width:46%;opacity:.6;pointer-events:none;">
       ${seatsHtml}
@@ -1371,16 +1495,7 @@ function renderTable(gameId){
         </div>
       ` : ""}
     </div>
-    ${myPlayerSeated && !allCashedOut ? `<div class="bottom-bar">
-      ${myPlayerCashedOut ? `
-        <button class="btn btn-ghost btn-block" data-return-to-game="${myPlayerId}" style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('undo')} החזר למשחק</button>
-      ` : `
-        <div class="row" style="gap:8px;">
-          <button class="btn btn-primary flex1" data-my-buyin>${icon('plus')} קנייה</button>
-          <button class="btn flex1" style="background:#57534e;color:#f5f5f4;" data-my-end-night>${icon('out')} סיים ערב</button>
-        </div>
-      `}
-    </div>` : ""}
+    ${panelHtml}
   `;
 }
 
@@ -2124,36 +2239,6 @@ function renderModal(m){
         <button class="btn btn-primary" data-add-guest-seat>${icon('plus')}</button>
       </div>
     `;
-  } else if (m.type === "seatMenu") {
-    const g = getGame(m.gameId);
-    const c = getCommunity(g.communityId);
-    const p = g.players.find(pl=>pl.id===m.playerId);
-    const cashedOut = m.playerId in g.cashouts;
-    const isSelf = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId] === m.playerId;
-    const myBuyinTotal = g.buyins.filter(b => b.playerId === m.playerId).reduce((s,b) => s+b.amount, 0);
-    const canRemove = (isSelf && myBuyinTotal === 0) || (myIdentity.name && (myIdentity.name === g.createdByName || myIdentity.name === c.createdByName));
-    title = esc(p ? p.name : "שחקן");
-    if (cashedOut) {
-      const finalBalances = computeFinalBalances(g);
-      const alreadyPaidPaybox = (g.payboxPayments||[]).filter(pp=>pp.playerId===m.playerId).reduce((s,pp)=>s+pp.amount,0);
-      const alreadyPaidDirect = (g.playerPayments||[]).filter(dp=>dp.fromPlayerId===m.playerId).reduce((s,dp)=>s+dp.amount,0);
-      const fb = finalBalances[m.playerId];
-      const owes = fb ? -(fb.profit + alreadyPaidPaybox + alreadyPaidDirect) : 0;
-      body = `
-        <button class="btn btn-ghost btn-block" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-menu-summary>${icon('bar')} סיכום</button>
-        ${owes > 0.005 ? `<button class="btn btn-block" style="background:#0891b2;color:#fff;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-menu-paybox-pay data-paybox-amount="${Math.round(owes*100)/100}"><img src="/static/paybox-icon.png" style="height:18px;width:auto;display:block;"> שלם בפייבוקס (₪${Math.round(owes*100)/100})</button>` : ""}
-        ${owes > 0.005 ? `<button class="btn btn-ghost btn-block" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-menu-pay-player data-pay-player-amount="${Math.round(owes*100)/100}">${icon('coins')} שלם לשחקן (₪${Math.round(owes*100)/100})</button>` : ""}
-        <button class="btn btn-ghost btn-block" data-return-to-game="${m.playerId}" style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('undo')} החזר למשחק</button>
-      `;
-    } else {
-      body = `
-        <button class="btn btn-primary btn-block" style="margin-bottom:10px;" data-menu-buyins>${icon('plus')} קנייה</button>
-        <button class="btn btn-block" style="background:#57534e;color:#f5f5f4;margin-bottom:10px;" data-menu-chips>${icon('out')} סיים ערב</button>
-        ${canRemove ? `<button class="btn btn-block" style="background:#be123c;color:#fff;margin-bottom:10px;" data-menu-remove>${icon('trash')} הסר מהשולחן</button>` : ""}
-        <button class="btn btn-ghost btn-block" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-menu-history>${icon('bar')} היסטוריית קניות</button>
-        <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-menu-change-avatar>${icon('pencil')} שינוי אווטר</button>
-      `;
-    }
   } else if (m.type === "seatBuyins") {
     const g = getGame(m.gameId);
     const p = g.players.find(pl=>pl.id===m.playerId);
@@ -2180,7 +2265,7 @@ function renderModal(m){
     const cashedOut = m.playerId in g.cashouts;
     title = esc(p ? p.name : "שחקן");
     body = `
-      <div class="field"><label>כמות ציפים נוכחית</label><input type="number" inputmode="decimal" id="seat-chips" value="${chips}"></div>
+      <div class="field"><label>סה"כ ערך הציפים שנותרו (₪)</label><input type="number" inputmode="decimal" id="seat-chips" value="${chips}"></div>
       <div style="display:flex;gap:8px;margin-bottom:10px;">
         <button class="btn btn-ghost flex1" data-open-chip-photo style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('chip')} חשב ציפים מתמונה</button>
         <button class="btn btn-ghost flex1" data-open-chip-manual style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('chip')} הזן לפי כמויות ציפים</button>
@@ -2482,17 +2567,38 @@ function attachHandlers(){
     openModal({type:"newGame", communityId: nav.communityId, date: new Date().toISOString().slice(0,10)});
   };
 
-  const myBuyinBtn = app.querySelector("[data-my-buyin]");
-  if (myBuyinBtn) myBuyinBtn.onclick = () => {
-    const g = getGame(nav.gameId);
-    const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
-    if (myPlayerId) openModal({type:"seatBuyins", gameId: nav.gameId, playerId: myPlayerId});
+  app.querySelectorAll("[data-panel-buyin-quick]").forEach(el => el.onclick = () => {
+    doPanelBuyin(parseFloat(el.dataset.panelBuyinQuick), el);
+  });
+  const panelBuyinConfirmBtn = app.querySelector("[data-panel-buyin-confirm]");
+  if (panelBuyinConfirmBtn) panelBuyinConfirmBtn.onclick = () => {
+    const input = document.getElementById("panel-buyin-custom");
+    const amt = input ? parseFloat(input.value) : NaN;
+    if (!amt || amt <= 0) return;
+    if (input) input.value = "";
+    doPanelBuyin(amt, panelBuyinConfirmBtn);
   };
-  const myEndNightBtn = app.querySelector("[data-my-end-night]");
-  if (myEndNightBtn) myEndNightBtn.onclick = () => {
+  const panelHistoryBtn = app.querySelector("[data-panel-history]");
+  if (panelHistoryBtn) panelHistoryBtn.onclick = () => openModal({type:"history", gameId: nav.gameId, playerId: selectedSeatPlayerId});
+  const panelSummaryBtn = app.querySelector("[data-panel-summary]");
+  if (panelSummaryBtn) panelSummaryBtn.onclick = () => openModal({type:"history", gameId: nav.gameId, playerId: selectedSeatPlayerId});
+  const panelEndNightBtn = app.querySelector("[data-panel-end-night]");
+  if (panelEndNightBtn) panelEndNightBtn.onclick = () => openModal({type:"seatChips", gameId: nav.gameId, playerId: selectedSeatPlayerId});
+  const panelRemoveBtn = app.querySelector("[data-panel-remove]");
+  if (panelRemoveBtn) panelRemoveBtn.onclick = () => openModal({type:"removeSeat", gameId: nav.gameId, playerId: selectedSeatPlayerId});
+  const panelPayboxPayBtn = app.querySelector("[data-panel-paybox-pay]");
+  if (panelPayboxPayBtn) panelPayboxPayBtn.onclick = () => {
     const g = getGame(nav.gameId);
-    const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
-    if (myPlayerId) openModal({type:"seatChips", gameId: nav.gameId, playerId: myPlayerId});
+    const c = getCommunity(g.communityId);
+    const link = getActivePayboxLink(c);
+    const amount = panelPayboxPayBtn.dataset.payboxAmount;
+    if (!link) { alert("לא הוגדרה קבוצת פייבוקס. בקשו מיוצר הקבוצה להגדיר אחת ממסך הקבוצה."); return; }
+    const url = link + (link.includes("?") ? "&" : "?") + "amount=" + amount;
+    window.open(url, "_blank", "noopener");
+  };
+  const panelPayPlayerBtn = app.querySelector("[data-panel-pay-player]");
+  if (panelPayPlayerBtn) panelPayPlayerBtn.onclick = () => {
+    openModal({type:"payPlayer", gameId: nav.gameId, fromPlayerId: selectedSeatPlayerId, amount: parseFloat(panelPayPlayerBtn.dataset.payPlayerAmount), toPlayerId: null});
   };
   app.querySelectorAll("[data-buyin]").forEach(el => el.onclick = () => openModal({type:"buyin", gameId: nav.gameId, playerId: el.dataset.buyin, amount:""}));
   app.querySelectorAll("[data-leave]").forEach(el => el.onclick = () => openModal({type:"leave", gameId: nav.gameId, playerId: el.dataset.leave, amount:""}));
@@ -2540,9 +2646,6 @@ function attachHandlers(){
 
   const addExtraBtn = app.querySelector("[data-add-extra-player]");
   if (addExtraBtn) addExtraBtn.onclick = () => openModal({type:"addExisting", gameId: nav.gameId});
-
-  const toggleEmptyBtn = app.querySelector("[data-toggle-empty-seats]");
-  if (toggleEmptyBtn) toggleEmptyBtn.onclick = () => { hideEmptySeats = !hideEmptySeats; render(); };
 
   const openOddsBtn = app.querySelector("[data-open-poker-odds]");
   if (openOddsBtn) openOddsBtn.onclick = () => openModal({type:"pokerOdds", imageSrc: null, reading: false, error: null, results: null, hands: null, board: null});
@@ -2604,8 +2707,9 @@ function attachHandlers(){
           render();
           return;
         }
-        // A plain tap opens the seat menu, same as tapping the info text below.
-        openModal({type:"seatMenu", gameId: nav.gameId, playerId: pid, seatIndex: fromIdx});
+        // A plain tap selects this seat into the bottom panel, same as tapping the info
+        // text below.
+        trySelectSeatPlayer(pid);
         return;
       }
       el.style.pointerEvents = "none";
@@ -2633,9 +2737,13 @@ function attachHandlers(){
     });
     el.onclick = () => {
       const g = getGame(nav.gameId);
+      const c = getCommunity(g.communityId);
       const idx = parseInt(el.dataset.seat);
       const seats = g.seats || new Array(9).fill(null);
-      if (!seats[idx]) openModal({type:"pickSeat", gameId: nav.gameId, seatIndex: idx});
+      // Only the table/community creator can seat a new guest into an empty seat -
+      // everyone else just sees a plain circle, still a valid drag target for moving an
+      // already-seated player's own position.
+      if (!seats[idx] && isTableAdmin(g, c)) openModal({type:"pickSeat", gameId: nav.gameId, seatIndex: idx});
     };
     const infoEl = el.querySelector("[data-seat-info]");
     if (infoEl) infoEl.onclick = (e) => {
@@ -2650,7 +2758,7 @@ function attachHandlers(){
         render();
         return;
       }
-      openModal({type:"seatMenu", gameId: nav.gameId, playerId: pid, seatIndex: idx});
+      trySelectSeatPlayer(pid);
     };
   });
 
@@ -3679,38 +3787,6 @@ function attachHandlers(){
         g.liveChips[guest.id] = 0;
       });
       closeModal();
-    };
-  }
-
-  if (modal && modal.type === "seatMenu") {
-    const menuBuyins = app.querySelector("[data-menu-buyins]");
-    if (menuBuyins) menuBuyins.onclick = () => openModal({type:"seatBuyins", gameId: modal.gameId, playerId: modal.playerId});
-    const menuChips = app.querySelector("[data-menu-chips]");
-    if (menuChips) menuChips.onclick = () => openModal({type:"seatChips", gameId: modal.gameId, playerId: modal.playerId});
-    const menuRemove = app.querySelector("[data-menu-remove]");
-    if (menuRemove) menuRemove.onclick = () => openModal({type:"removeSeat", gameId: modal.gameId, playerId: modal.playerId});
-    const menuChangeAvatar = app.querySelector("[data-menu-change-avatar]");
-    if (menuChangeAvatar) menuChangeAvatar.onclick = () => {
-      const g = getGame(modal.gameId);
-      openModal({type:"photoSource", communityId: g.communityId, playerId: modal.playerId});
-    };
-    const menuHistory = app.querySelector("[data-menu-history]");
-    if (menuHistory) menuHistory.onclick = () => openModal({type:"history", gameId: modal.gameId, playerId: modal.playerId});
-    const menuSummary = app.querySelector("[data-menu-summary]");
-    if (menuSummary) menuSummary.onclick = () => openModal({type:"history", gameId: modal.gameId, playerId: modal.playerId});
-    const menuPayboxPay = app.querySelector("[data-menu-paybox-pay]");
-    if (menuPayboxPay) menuPayboxPay.onclick = () => {
-      const g = getGame(modal.gameId);
-      const c = getCommunity(g.communityId);
-      const link = getActivePayboxLink(c);
-      const amount = menuPayboxPay.dataset.payboxAmount;
-      if (!link) { alert("לא הוגדרה קבוצת פייבוקס. בקשו מיוצר הקבוצה להגדיר אחת ממסך הקבוצה."); return; }
-      const url = link + (link.includes("?") ? "&" : "?") + "amount=" + amount;
-      window.open(url, "_blank", "noopener");
-    };
-    const menuPayPlayer = app.querySelector("[data-menu-pay-player]");
-    if (menuPayPlayer) menuPayPlayer.onclick = () => {
-      openModal({type:"payPlayer", gameId: modal.gameId, fromPlayerId: modal.playerId, amount: parseFloat(menuPayPlayer.dataset.payPlayerAmount), toPlayerId: null});
     };
   }
 
