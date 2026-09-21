@@ -78,6 +78,23 @@ h1.sm{font-size:20px;}
 .icon-btn.gold{color:var(--gold);}
 .icon-btn.ok{background:#065f46;color:#6ee7b7;}
 .bottom-bar{position:fixed;bottom:0;left:0;right:0;max-width:520px;margin:0 auto;padding:16px 20px;background:linear-gradient(to top,var(--bg2) 60%, transparent);}
+/* Table screen only: the table circle used to be sized purely from its own width (a
+   padding-top percentage trick) with a guessed fixed margin reserved for the fixed
+   bottom action panel - on a real phone (especially with browser chrome eating into the
+   visible height, or a taller action panel) the true content routinely exceeded one
+   screen, forcing a page scroll. This instead makes the table screen a column that's
+   exactly the visible viewport tall: the header and action panel keep their natural
+   size, and the table circle - now sized from the ACTUAL remaining height, not a guess -
+   flexes to fill whatever's left, shrinking on a short screen rather than overflowing it. */
+body.table-screen{height:100vh;height:100dvh;overflow:hidden;}
+body.table-screen #app{height:100vh;height:100dvh;display:flex;flex-direction:column;padding-bottom:0;}
+body.table-screen .top{flex-shrink:0;}
+/* min-height keeps the table circle from ever fully disappearing - if the action panel
+   below (e.g. a settlement view listing several players' transfers) genuinely needs more
+   room than what's left on a short screen, the panel itself scrolls internally instead,
+   never the page. */
+body.table-screen .poker-table-wrap{flex:1;min-height:130px;width:auto;padding-top:0;aspect-ratio:1/1.1;max-width:100%;max-height:100%;margin:4px auto 8px;}
+body.table-screen .bottom-bar{position:static;flex-shrink:0;background:none;margin:0;max-width:none;max-height:50vh;max-height:50dvh;overflow-y:auto;}
 .empty{text-align:center;padding:50px 20px;color:#059669;font-size:14px;}
 .section-title{color:var(--gold);font-size:11px;font-weight:700;letter-spacing:.05em;margin:0 0 8px;padding:0 20px;}
 .field{display:block;margin-bottom:14px;}
@@ -1559,6 +1576,7 @@ const SCREEN_NAMES = {
 
 function render(){
   const app = document.getElementById("app");
+  document.body.classList.toggle("table-screen", nav.screen === "table");
   let html = "";
   if (nav.screen === "home") html = renderHome();
   else if (nav.screen === "community") html = renderCommunity(nav.communityId);
@@ -1868,7 +1886,7 @@ function renderTable(gameId){
       </div>
       ${!allCashedOut ? `<button class="icon-btn gold" data-open-poker-odds title="מה הסיכויים שלי" style="flex-shrink:0;width:36px;height:36px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;">${icon('percent')}</button>` : ""}
     </div>
-    <div class="poker-table-wrap" style="${panelHtml ? "margin-bottom:280px;" : ""}">
+    <div class="poker-table-wrap">
       <div class="poker-table-felt"></div>
       <img src="/static/logo-watermark.png" style="position:absolute;left:50%;top:39%;transform:translate(-50%,-50%);width:46%;opacity:.6;pointer-events:none;">
       ${seatsHtml}
@@ -2683,8 +2701,8 @@ function renderModal(m){
     // either recomputes the total-value field at the bottom, which is still a plain,
     // directly-editable field itself (so a manual override always still works).
     const qtyRow = ratio ? `
+      <p style="color:var(--muted);font-size:12px;margin:0 0 6px;">אפשר להזין את סך הציפים הכולל, או להזין למטה את כמות הציפים לפי צבע</p>
       <div class="section-title" style="padding:0;margin:0 0 6px;">חישוב ידני של סך ערך ציפים</div>
-      <p style="color:var(--muted);font-size:12px;margin:0 0 8px;">אפשר להזין את סך הציפים הכולל, או להזין למטה את כמות הציפים לפי צבע</p>
       <div class="field">
         <div class="row" style="gap:8px;">
           <input type="number" inputmode="numeric" id="total-chip-qty" data-chip-ratio="${ratio}" placeholder="0" style="flex:1;">
