@@ -405,6 +405,14 @@ function renderSyncLog(){
 }
 
 let saveInFlight = null;
+// A whole mutateAndSave call - which can involve several attempts (conflict, resync,
+// reapply, retry) on a slow connection - not just its individual network POSTs. Only
+// saveState() updates saveInFlight, and it does so per-attempt, so there's a real gap
+// between a rejected attempt and the next one's retry where saveInFlight briefly looks
+// "settled" even though the overall action is still in progress. doRefreshNow (see
+// below) needs to wait out the FULL action, not just whichever single POST happens to be
+// running at the moment it checks - see mutateAndSave for where this gets set.
+let actionInFlight = null;
 // checkpoint=true marks this save as a meaningful point worth being able to restore back
 // to (a game ending, a community/game created or deleted) - the server only snapshots
 // history on those, not on every routine action, so the retained versions stay a useful
@@ -461,17 +469,31 @@ async function saveState(checkpoint, baseHash){
 // never be sent as a falsy baseHash (the server skips its conflict check entirely when
 // it's absent), so force a real sync in that case too.
 async function mutateAndSave(mutatorFn, checkpoint){
-  const MAX_ATTEMPTS = 4;
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    if (attempt > 0 || !lastStateHash) await syncBeforeMutate();
-    const baseHash = lastStateHash;
-    const mutatorResult = mutatorFn();
-    const effectiveCheckpoint = mutatorResult !== undefined ? mutatorResult : checkpoint;
-    const result = await saveState(effectiveCheckpoint, baseHash);
-    if (result !== "conflict") return;
-    logSync(`mutateAndSave: conflict on attempt ${attempt+1}, retrying`);
+  // Marks the ENTIRE call (every retry attempt, not just whichever POST happens to be
+  // running right now) as in-flight, so a concurrent doRefreshNow waits out the whole
+  // thing - see actionInFlight above. Without this, a conflict+retry on a slow connection
+  // leaves a window, between the rejected attempt and the retry's own save, where
+  // saveInFlight looks settled - a refresh landing in that window redraws the screen from
+  // scratch with fresh (enabled) controls before this action has actually finished,
+  // letting a frustrated second tap fire a genuine duplicate action.
+  let resolveAction;
+  actionInFlight = new Promise(res => { resolveAction = res; });
+  try {
+    const MAX_ATTEMPTS = 4;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      if (attempt > 0 || !lastStateHash) await syncBeforeMutate();
+      const baseHash = lastStateHash;
+      const mutatorResult = mutatorFn();
+      const effectiveCheckpoint = mutatorResult !== undefined ? mutatorResult : checkpoint;
+      const result = await saveState(effectiveCheckpoint, baseHash);
+      if (result !== "conflict") return;
+      logSync(`mutateAndSave: conflict on attempt ${attempt+1}, retrying`);
+    }
+    alert("לא הצלחנו לשמור בגלל התנגשות עם שמירה אחרת - נסו את הפעולה שוב.");
+  } finally {
+    actionInFlight = null;
+    resolveAction();
   }
-  alert("לא הצלחנו לשמור בגלל התנגשות עם שמירה אחרת - נסו את הפעולה שוב.");
 }
 
 // Swaps a button's content for a spinning poker chip while mutateAndSave is working -
@@ -520,12 +542,19 @@ async function doRefreshNow(source){
       // onto saveInFlight while we're waiting on an earlier one, and each save's own
       // completion now triggers this same refresh via SSE (including on the tab that made
       // it) - so keep re-checking until it's stayed the same across our own wait, meaning
-      // no newer save snuck in while we were watching.
-      let pending;
+      // no newer save snuck in while we were watching. Also wait out actionInFlight, not
+      // just saveInFlight: a mutateAndSave stuck in a conflict-retry loop (a real
+      // possibility on a slow connection) has a gap between attempts where saveInFlight
+      // alone looks settled even though the action as a whole isn't done - fetching and
+      // rendering in that gap would redraw the action's controls as fresh/enabled before
+      // it's actually finished, letting a second tap fire a genuine duplicate action.
+      let pending, pendingAction;
       do {
         pending = saveInFlight;
+        pendingAction = actionInFlight;
         if (pending) await pending;
-      } while (pending !== saveInFlight);
+        if (pendingAction) await pendingAction;
+      } while (pending !== saveInFlight || pendingAction !== actionInFlight);
       const stableFlight = saveInFlight;
       logSync(`refresh[${callId}] past save-wait, GET start`);
       const fresh = await loadState();
@@ -536,7 +565,7 @@ async function doRefreshNow(source){
       // (e.g. a removed seat reappearing) until a later refresh catches up - and if
       // another save happens before that, the reverted state becomes real. Discard it
       // and loop again instead, which will wait for the new save and re-fetch.
-      if (saveInFlight !== stableFlight) {
+      if (saveInFlight !== stableFlight || actionInFlight) {
         logSync(`refresh[${callId}] STALE - a save started mid-fetch, discarding and retrying`);
         refreshQueued = true;
         continue;
