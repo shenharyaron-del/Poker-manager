@@ -903,6 +903,23 @@ async function uploadPhoto(dataUrl){
   const { id } = await res.json();
   return photoUrl(id);
 }
+// The custom-avatar gallery is shared across everyone (not per-community), so opening it
+// the first time on a device fires one request per avatar (dozens) that a browser hasn't
+// cached yet - noticeably slow just for that first open, fast every time after since
+// /api/photos responses are cached for a year. Quietly warming the browser's own HTTP
+// cache with these in the background right after the app loads (not blocking anything,
+// not awaited) means that cost is usually already paid by the time someone actually opens
+// the avatar picker, instead of being felt as a delay right when they tap it.
+function prefetchCustomAvatars(){
+  try {
+    (state.customAvatars || []).forEach(av => {
+      if (av.image && av.image.startsWith("/api/photos/")) {
+        const img = new Image();
+        img.src = av.image;
+      }
+    });
+  } catch(e) { /* best-effort only */ }
+}
 // The vision API (callClaudeVisionMulti) needs actual base64 image bytes, not a URL - used
 // only for chip reference photos sent along with an AI chip-count analysis, a rare enough
 // action that paying for this fetch at use-time is no loss compared to keeping them inline
@@ -4705,6 +4722,7 @@ window.addEventListener("popstate", () => {
   render();
   scheduleAutoRefresh();
   connectLiveSync();
+  prefetchCustomAvatars();
   // Keep the server from spinning down (Render's free tier sleeps an idle instance)
   // while someone's actively at the table - a plain, cheap GET, not tied to whether
   // anything actually changed.
