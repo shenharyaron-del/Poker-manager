@@ -1638,7 +1638,7 @@ function renderCommunity(communityId){
         </span>
       </button>` : ""}
       ${c.createdByName && myIdentity.name && c.createdByName === myIdentity.name ? `<button class="icon-btn gold" data-open-chip-setup="${c.id}" title="הגדרת ציפים">${icon('chip')}</button>` : ""}
-      ${c.createdByName && myIdentity.name && c.createdByName === myIdentity.name ? `<button class="icon-btn" data-invite-community="${c.id}" title="הזמנה דרך WhatsApp" style="background:#25D366;color:#fff;">${icon('share')}</button>` : ""}
+      ${c.createdByName && myIdentity.name && c.createdByName === myIdentity.name ? `<button class="icon-btn gold" data-invite-community="${c.id}" title="הזמנה דרך WhatsApp">${icon('share')}</button>` : ""}
       <button class="btn btn-ghost btn-sm" data-show-roster style="display:flex;align-items:center;gap:6px;">${icon('users')} שחקנים (${c.roster.length})</button>
     </div>
     ${(() => {
