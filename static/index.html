@@ -1832,7 +1832,7 @@ function renderModal(m){
         if (match) { name = match.name; break; }
       }
       const data = (state.globalPlayers && state.globalPlayers[cid]) || {};
-      return { clientId: cid, name, role: getPlayerRole(cid, name), phone: data.phone, photo: data.photo, orphaned: !name };
+      return { clientId: cid, name, role: getPlayerRole(cid, name), photo: data.photo, orphaned: !name };
     });
     if (filter !== "all") rows = rows.filter(r => r.role === filter);
     rows.sort((a,b) => (a.name || "(לא נמצא בשום קבוצה)").localeCompare(b.name || "(לא נמצא בשום קבוצה)", 'he'));
@@ -1850,7 +1850,7 @@ function renderModal(m){
               ${r.photo ? `<img src="${r.photo}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;">` : `<div style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.08);flex-shrink:0;"></div>`}
               <div style="min-width:0;">
                 <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.name || "(לא נמצא בשום קבוצה)")}</div>
-                <div style="color:var(--muted);font-size:11px;" dir="ltr">${esc(r.phone||"אין טלפון")}</div>
+                <div style="color:var(--muted);font-size:11px;" dir="ltr">מכשיר: ${esc(r.clientId.slice(0,8))}</div>
               </div>
             </div>
             <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
@@ -2676,6 +2676,20 @@ function renderModal(m){
     body += `<div class="note">* ירוק = מקבל מקבוצת פייבוקס, אדום = מעביר לקבוצת פייבוקס.${Object.keys(alreadyPaid).length ? " הסכומים שכבר הועברו לפייבוקס במהלך הערב כבר נלקחו בחשבון." : ""}</div>`;
     if (rows.length) {
       body += `<button class="btn btn-primary btn-block" data-open-paybox-from-summary style="margin-top:14px;">${icon('share')} פייבוקס</button>`;
+    }
+    // The rows above are about what's still owed via paybox (arranged direct payments
+    // already netted out, balanced players filtered out) - this recap is the plain,
+    // complete picture: what every player actually won or lost tonight, buy-ins vs. what
+    // they cashed out with.
+    const profitRows = g.players.map(p => {
+      const co = g.cashouts[p.id];
+      if (!co) return null;
+      const profit = co.amount - (buyinTotals[p.id] || 0);
+      return {name: p.name, profit};
+    }).filter(Boolean).sort((a,b) => b.profit - a.profit);
+    if (profitRows.length) {
+      body += `<div class="section-title" style="padding:0;margin:16px 0 8px;">סה"כ רווח / הפסד</div>`;
+      body += profitRows.map(r => `<div class="roster-row"><span>${esc(r.name)}</span><span style="font-weight:700;color:${r.profit>0.005?'#6ee7b7':(r.profit<-0.005?'#fda4af':'inherit')};">${r.profit>0?'+':''}₪${Math.round(r.profit*100)/100}</span></div>`).join("");
     }
   } else if (m.type === "history") {
     const g = getGame(m.gameId);
