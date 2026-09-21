@@ -976,6 +976,9 @@ function openFilePicker(communityId, playerId, useCamera){
     const file = e.target.files[0];
     if (!file) return;
     processSelfieFile(file, (dataUrl) => {
+      // No communityId means this was opened from the identity/name screen - set the
+      // viewer's own global avatar directly rather than a specific roster entry.
+      if (!communityId) { setGlobalPlayer(myIdentity.id, {photo: dataUrl}); saveState(); render(); return; }
       const c = getCommunity(communityId);
       const rp = c && c.roster.find(pl => pl.id === playerId);
       if (rp && !rp.clientId) { alert("אפשר לקבוע אווטר רק לשחקן שנכנס בעצמו דרך קישור הזמנה."); return; }
@@ -1623,12 +1626,19 @@ function renderModal(m){
   let title = "";
   if (m.type === "identityName") {
     title = m.forced ? "ברוכים הבאים" : "עדכון שם";
+    const myPhoto = getGlobalPlayer(myIdentity.id).photo;
     body = `
-      ${m.forced ? `<p style="color:var(--muted);font-size:13px;">איך קוראים לך?</p>` : ""}
+      ${m.forced ? `<p style="color:var(--muted);font-size:13px;">איך קוראים לך?</p>` : `
+        <div style="text-align:center;margin-bottom:14px;">
+          <img src="${myPhoto || '/static/logo-watermark.png'}" style="width:76px;height:76px;border-radius:50%;object-fit:cover;display:block;margin:0 auto 8px;border:2px solid var(--gold);">
+          <button class="btn btn-ghost btn-sm" data-change-avatar>${icon('pencil')} שנה אווטר</button>
+        </div>
+      `}
       <div style="margin-bottom:12px;">
         <input type="text" id="identity-name-input" value="${esc(myIdentity.name || '')}" placeholder="השם שלך" style="width:100%;" autofocus>
       </div>
-      <button class="btn btn-primary btn-block" data-confirm-identity-name>שמור</button>
+      <button class="btn btn-primary btn-block" data-confirm-identity-name style="${m.forced?'':'margin-bottom:12px;'}">שמור</button>
+      ${!m.forced ? `<button class="btn btn-ghost btn-block" data-my-stats>${icon('bar')} הביצועים שלי</button>` : ""}
     `;
   } else if (m.type === "inviteGone") {
     title = "הקישור לא בתוקף";
@@ -2083,7 +2093,6 @@ function renderModal(m){
       return `<div class="roster-row">
         <div class="row" style="gap:8px;"><span>${esc(p.name)}</span>${netBadge(playerNetProfit(m.communityId, p.id))}</div>
         <div class="row" style="gap:4px;">
-          <button class="icon-btn gold" data-view-stats="${p.id}">${icon('bar')}</button>
           <button class="icon-btn" data-edit-player="${p.id}">${icon('pencil')}</button>
           <button class="icon-btn danger" data-remove-player="${p.id}">${icon('trash')}</button>
         </div>
@@ -2123,45 +2132,67 @@ function renderModal(m){
       <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-restore-from-file>שחזר מהקובץ</button>
     `;
   } else if (m.type === "stats") {
-    const c = getCommunity(m.communityId);
-    const player = c.roster.find(p=>p.id===m.playerId);
-    title = `סטטיסטיקות — ${esc(player.name)}`;
-    const allGames = gamesForCommunity(m.communityId);
-    const totalCommunityGames = allGames.length;
-    const participatedGames = allGames.filter(g => g.players.some(p=>p.id===player.id));
-    const profits = [];
-    let best=null, worst=null;
-    participatedGames.forEach(g => {
-      const co = g.cashouts[player.id];
-      if (!co) return;
-      const buyins = g.buyins.filter(b=>b.playerId===player.id).reduce((s,b)=>s+b.amount,0);
-      const profit = co.amount - buyins;
-      profits.push(profit);
-      if (!best || profit > best.profit) best = {date:g.date, profit};
-      if (!worst || profit < worst.profit) worst = {date:g.date, profit};
-    });
-    const net = profits.reduce((s,p)=>s+p,0);
-    const wins = profits.filter(p=>p>0);
-    const losses = profits.filter(p=>p<0);
-    const avgWin = wins.length ? wins.reduce((s,p)=>s+p,0)/wins.length : null;
-    const avgLoss = losses.length ? losses.reduce((s,p)=>s+p,0)/losses.length : null;
-    const avgOverall = profits.length ? net/profits.length : null;
-    if (profits.length === 0) {
-      body = `<div class="empty" style="padding:20px 0;">${esc(player.name)} עדיין לא סיים אף ערב משחק.</div>`;
+    // Opened from the identity/name screen now (not the community roster), scoped to
+    // whichever real person is asking - every community they've self-joined via clientId,
+    // not just one. A community picker (plus "הכל") only makes sense to show when there's
+    // more than one to choose between.
+    const clientId = m.clientId;
+    const myCommunities = state.communities.filter(c => c.roster.some(p => p.clientId === clientId));
+    const displayName = (myCommunities[0] && (myCommunities[0].roster.find(p=>p.clientId===clientId)||{}).name) || myIdentity.name || "שחקן";
+    title = `סטטיסטיקות — ${esc(displayName)}`;
+    if (!myCommunities.length) {
+      body = `<div class="empty" style="padding:20px 0;">עדיין לא הצטרפת לאף קבוצה.</div>`;
     } else {
-      body = `
-        <div class="stats-net ${net>=0?'pos':'neg'}"><div class="pot-label">מאזן כולל</div><div class="val">${net>=0?"+":""}₪${Math.round(net)}</div></div>
-        <div class="stats-grid" style="margin-bottom:10px;">
-          <div class="box"><div class="l">ערבים ששוחקו (בקבוצה)</div><div class="v">${totalCommunityGames}</div></div>
-          <div class="box"><div class="l">סה"כ ערבים שהשתתף בהם</div><div class="v">${participatedGames.length}</div></div>
-          <div class="box"><div class="l">ממוצע נצחונות</div><div class="v" style="color:#6ee7b7;">${avgWin!=null?`+₪${Math.round(avgWin)}`:"—"}</div></div>
-          <div class="box"><div class="l">ממוצע הפסדים</div><div class="v" style="color:#fda4af;">${avgLoss!=null?`₪${Math.round(avgLoss)}`:"—"}</div></div>
+      const selected = (m.selectedCommunityId && myCommunities.some(c=>c.id===m.selectedCommunityId)) ? m.selectedCommunityId : "all";
+      const activeCommunities = selected === "all" ? myCommunities : myCommunities.filter(c => c.id === selected);
+      const selectorHtml = myCommunities.length > 1 ? `
+        <div class="row" style="gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+          <button class="btn ${selected==='all'?'btn-primary':'btn-ghost'} btn-sm" data-stats-select-community="all">הכל</button>
+          ${myCommunities.map(c => `<button class="btn ${selected===c.id?'btn-primary':'btn-ghost'} btn-sm" data-stats-select-community="${c.id}">${esc(c.name)}</button>`).join("")}
         </div>
-        <div class="roster-row"><span>ממוצע כללי למשחק</span><span style="font-weight:700;">${avgOverall>=0?"+":""}₪${Math.round(avgOverall)}</span></div>
-        ${renderBarChart(computeProfitBuckets(profits))}
-        ${best?`<div class="roster-row"><span style="color:#059669;font-size:12px;">הערב הכי טוב (${esc(best.date)})</span><span style="color:#6ee7b7;font-weight:700;">+₪${Math.round(best.profit)}</span></div>`:""}
-        ${worst?`<div class="roster-row"><span style="color:#059669;font-size:12px;">הערב הכי גרוע (${esc(worst.date)})</span><span style="color:#fda4af;font-weight:700;">₪${Math.round(worst.profit)}</span></div>`:""}
-      `;
+      ` : "";
+      let totalCommunityGames = 0;
+      const profits = [];
+      let best=null, worst=null;
+      activeCommunities.forEach(c => {
+        const player = c.roster.find(p => p.clientId === clientId);
+        if (!player) return;
+        const allGames = gamesForCommunity(c.id);
+        totalCommunityGames += allGames.length;
+        const participatedGames = allGames.filter(g => g.players.some(p=>p.id===player.id));
+        participatedGames.forEach(g => {
+          const co = g.cashouts[player.id];
+          if (!co) return;
+          const buyins = g.buyins.filter(b=>b.playerId===player.id).reduce((s,b)=>s+b.amount,0);
+          const profit = co.amount - buyins;
+          profits.push(profit);
+          if (!best || profit > best.profit) best = {date:g.date, profit, communityName: c.name};
+          if (!worst || profit < worst.profit) worst = {date:g.date, profit, communityName: c.name};
+        });
+      });
+      const net = profits.reduce((s,p)=>s+p,0);
+      const wins = profits.filter(p=>p>0);
+      const losses = profits.filter(p=>p<0);
+      const avgWin = wins.length ? wins.reduce((s,p)=>s+p,0)/wins.length : null;
+      const avgLoss = losses.length ? losses.reduce((s,p)=>s+p,0)/losses.length : null;
+      const avgOverall = profits.length ? net/profits.length : null;
+      if (profits.length === 0) {
+        body = selectorHtml + `<div class="empty" style="padding:20px 0;">עדיין לא סיים אף ערב משחק.</div>`;
+      } else {
+        body = selectorHtml + `
+          <div class="stats-net ${net>=0?'pos':'neg'}"><div class="pot-label">מאזן כולל</div><div class="val">${net>=0?"+":""}₪${Math.round(net)}</div></div>
+          <div class="stats-grid" style="margin-bottom:10px;">
+            <div class="box"><div class="l">ערבים ${selected==='all'?'בכל הקבוצות':'בקבוצה'}</div><div class="v">${totalCommunityGames}</div></div>
+            <div class="box"><div class="l">סה"כ ערבים שהשתתף בהם</div><div class="v">${profits.length}</div></div>
+            <div class="box"><div class="l">ממוצע נצחונות</div><div class="v" style="color:#6ee7b7;">${avgWin!=null?`+₪${Math.round(avgWin)}`:"—"}</div></div>
+            <div class="box"><div class="l">ממוצע הפסדים</div><div class="v" style="color:#fda4af;">${avgLoss!=null?`₪${Math.round(avgLoss)}`:"—"}</div></div>
+          </div>
+          <div class="roster-row"><span>ממוצע כללי למשחק</span><span style="font-weight:700;">${avgOverall>=0?"+":""}₪${Math.round(avgOverall)}</span></div>
+          ${renderBarChart(computeProfitBuckets(profits))}
+          ${best?`<div class="roster-row"><span style="color:#059669;font-size:12px;">הערב הכי טוב (${esc(best.date)}${selected==='all'?` · ${esc(best.communityName)}`:''})</span><span style="color:#6ee7b7;font-weight:700;">+₪${Math.round(best.profit)}</span></div>`:""}
+          ${worst?`<div class="roster-row"><span style="color:#059669;font-size:12px;">הערב הכי גרוע (${esc(worst.date)}${selected==='all'?` · ${esc(worst.communityName)}`:''})</span><span style="color:#fda4af;font-weight:700;">₪${Math.round(worst.profit)}</span></div>`:""}
+        `;
+      }
     }
   } else if (m.type === "newGame") {
     const c = getCommunity(m.communityId);
@@ -2976,6 +3007,10 @@ function attachHandlers(){
       else if (nav.screen === "community" && nav.communityId) await autoJoinViaCommunityInvite(nav.communityId);
       closeModal();
     };
+    const changeAvatarBtn = app.querySelector("[data-change-avatar]");
+    if (changeAvatarBtn) changeAvatarBtn.onclick = () => openModal({type:"photoSource"});
+    const myStatsBtn = app.querySelector("[data-my-stats]");
+    if (myStatsBtn) myStatsBtn.onclick = () => openModal({type:"stats", clientId: myIdentity.id});
   }
 
   if (modal && modal.type === "photoSource") {
@@ -2984,8 +3019,6 @@ function attachHandlers(){
     const galBtn = app.querySelector("[data-photo-gallery]");
     if (galBtn) galBtn.onclick = () => openFilePicker(modal.communityId, modal.playerId, false);
     app.querySelectorAll("[data-pick-avatar]").forEach(el => el.onclick = () => {
-      const c = getCommunity(modal.communityId);
-      const rp = c && c.roster.find(pl => pl.id === modal.playerId);
       const key = el.dataset.pickAvatar;
       let photo = null;
       if (key.startsWith("builtin:")) photo = "/static/avatars/" + key.slice(8) + ".jpg";
@@ -2993,9 +3026,24 @@ function attachHandlers(){
         const av = (state.customAvatars||[]).find(a => a.id === key.slice(7));
         photo = av ? av.image : null;
       }
+      // No communityId/playerId means this was opened from the identity/name screen -
+      // set the viewer's own global avatar directly rather than a specific roster entry.
+      if (!modal.communityId) {
+        if (photo) { setGlobalPlayer(myIdentity.id, {photo}); saveState(); }
+        closeModal();
+        return;
+      }
+      const c = getCommunity(modal.communityId);
+      const rp = c && c.roster.find(pl => pl.id === modal.playerId);
       if (rp && photo && !rp.clientId) { alert("אפשר לקבוע אווטר רק לשחקן שנכנס בעצמו דרך קישור הזמנה."); closeModal(); return; }
       if (rp && photo) { setPlayerPhoto(rp, photo); saveState(); }
       closeModal();
+    });
+  }
+
+  if (modal && modal.type === "stats") {
+    app.querySelectorAll("[data-stats-select-community]").forEach(el => el.onclick = () => {
+      updateModal({selectedCommunityId: el.dataset.statsSelectCommunity});
     });
   }
 
@@ -3106,7 +3154,6 @@ function attachHandlers(){
   }
 
   if (modal && modal.type === "roster") {
-    app.querySelectorAll("[data-view-stats]").forEach(el => el.onclick = () => openModal({type:"stats", communityId: modal.communityId, playerId: el.dataset.viewStats}));
     app.querySelectorAll("[data-edit-player]").forEach(el => el.onclick = () => updateModal({editingId: el.dataset.editPlayer}));
     app.querySelectorAll("[data-remove-player]").forEach(el => el.onclick = () => {
       const c = getCommunity(modal.communityId);
