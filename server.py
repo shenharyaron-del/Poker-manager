@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import json
 import os
@@ -62,6 +63,12 @@ _INIT_STATEMENTS = (
     "  id SERIAL PRIMARY KEY,"
     "  data TEXT NOT NULL,"
     "  saved_at TIMESTAMP NOT NULL DEFAULT now()"
+    ")",
+    # id is a content hash (see upload_photo) - uploading the same bytes twice is a
+    # harmless no-op instead of storing a duplicate copy.
+    "CREATE TABLE IF NOT EXISTS photos ("
+    "  id TEXT PRIMARY KEY,"
+    "  data TEXT NOT NULL"
     ")",
 )
 
@@ -393,6 +400,53 @@ def save_identity():
             )
         conn.commit()
     return jsonify({"ok": True})
+
+
+@app.route("/api/photos", methods=["POST"])
+def upload_photo():
+    # Photos (avatars, chip-count photos) used to live inline in shared_state's JSON
+    # blob, so every one of them was re-sent on every single save/load of the whole
+    # app - a buy-in that changes a few bytes of real data still had to transfer every
+    # player's photo along with it. Storing them here instead, referenced by id, means
+    # routine saves carry just that id (a short string) and browsers fetch/cache each
+    # photo once via GET below instead of redownloading it on every poll.
+    data_url = request.get_data(as_text=True)
+    if not DATA_URL_RE.match(data_url):
+        return jsonify({"error": "unsupported image data"}), 400
+    # Content-hash id: uploading the same bytes twice (e.g. two players picking the same
+    # built-in-style custom avatar) reuses the same row instead of storing it twice, and
+    # makes this endpoint naturally idempotent - migrating existing photos can be re-run
+    # safely if it's ever interrupted partway through.
+    photo_id = hashlib.sha256(data_url.encode("utf-8")).hexdigest()[:24]
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO photos (id, data) VALUES (%s, %s) ON CONFLICT (id) DO NOTHING",
+                (photo_id, data_url),
+            )
+        conn.commit()
+    return jsonify({"id": photo_id})
+
+
+@app.route("/api/photos/<photo_id>")
+def get_photo(photo_id):
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT data FROM photos WHERE id = %s", (photo_id,))
+            row = cur.fetchone()
+        conn.commit()
+    if not row:
+        return jsonify({"error": "not found"}), 404
+    match = DATA_URL_RE.match(row[0])
+    if not match:
+        return jsonify({"error": "corrupt photo data"}), 500
+    media_type, b64data = match.group(1), match.group(2)
+    response = Response(base64.b64decode(b64data), mimetype=media_type)
+    # id is a content hash (see upload_photo) - the same id always means the same bytes,
+    # so this is safe to cache forever; a changed photo gets a new id/URL rather than
+    # ever overwriting this one.
+    response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
 
 
 @app.route("/api/vision", methods=["POST"])

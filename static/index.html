@@ -486,10 +486,15 @@ async function mutateAndSave(mutatorFn, checkpoint){
       const mutatorResult = mutatorFn();
       const effectiveCheckpoint = mutatorResult !== undefined ? mutatorResult : checkpoint;
       const result = await saveState(effectiveCheckpoint, baseHash);
-      if (result !== "conflict") return;
+      // true only once the server has actually accepted and stored this save - callers
+      // that need to know the mutation is really confirmed (e.g. only playing a sound
+      // once the backend confirms a buy-in landed, not just optimistically on click) rely
+      // on this, not on the promise merely resolving.
+      if (result !== "conflict") return result === "ok";
       logSync(`mutateAndSave: conflict on attempt ${attempt+1}, retrying`);
     }
     alert("לא הצלחנו לשמור בגלל התנגשות עם שמירה אחרת - נסו את הפעולה שוב.");
+    return false;
   } finally {
     actionInFlight = null;
     resolveAction();
@@ -759,7 +764,6 @@ async function doPanelBuyin(amount, btnEl){
   // rebuilds this row from scratch, which re-enables everything on its own.
   document.querySelectorAll("[data-panel-buyin-quick],[data-panel-buyin-confirm],#panel-buyin-custom").forEach(el => el.disabled = true);
   flyBuyinBadge(btnEl, amount);
-  playBuyinSound(); // local-initiator only - other devices get the counting animation instead
   // Starts the caption's count-up immediately (optimistically), using the seat's current
   // known total - it doesn't wait for the network round trip below, so it feels instant.
   // If the confirmed save ends up different (a conflict resolved against someone else's
@@ -769,10 +773,15 @@ async function doPanelBuyin(amount, btnEl){
   // mutateAndSave (the real network save) starts here, immediately - it is NOT waiting
   // on flyBuyinBadge's own setTimeout-driven animation, which is purely decorative and
   // runs independently in parallel.
-  await mutateAndSave(() => {
+  const confirmed = await mutateAndSave(() => {
     const g = getGame(nav.gameId);
     g.buyins.push({id: uid(), playerId: pid, amount, ts: Date.now()});
   });
+  // Only once the backend has actually accepted the save, not optimistically on click -
+  // a click that ends up failing/never reaching the server shouldn't sound like it worked.
+  // Still local-initiator only, same as before - other devices get the counting animation
+  // instead of a sound for a change that isn't theirs.
+  if (confirmed) playBuyinSound();
   render();
 }
 
@@ -838,6 +847,36 @@ function setPlayerPhone(p, phone){ if (p.clientId) setGlobalPlayer(p.clientId, {
 // device) has no shared identity to hang a photo off of, so it simply can't have one.
 function getPlayerPhoto(p){ return p.clientId ? getGlobalPlayer(p.clientId).photo : undefined; }
 function setPlayerPhoto(p, photo){ if (p.clientId) setGlobalPlayer(p.clientId, {photo}); }
+// Every photo (avatar, custom-avatar-library image) is uploaded here once and then
+// referenced everywhere else by this short URL, instead of embedding its full base64
+// data directly in shared state - that used to mean every player's photo got resent on
+// every single save (a buy-in that changes a few bytes still carried everyone's avatar
+// along with it, ~98% of a real save's payload in practice). Every existing .photo/
+// .image field already just gets interpolated straight into an <img src> or
+// background-image:url(...), so this URL is a drop-in replacement for the old inline
+// data: string - no render-site changes needed, only the handful of places that
+// capture/create a new photo need to upload it first.
+function photoUrl(id){ return "/api/photos/" + id; }
+async function uploadPhoto(dataUrl){
+  const res = await fetch("/api/photos", { method: "POST", headers: {"Content-Type":"text/plain"}, body: dataUrl });
+  if (!res.ok) throw new Error("photo upload failed: " + res.status);
+  const { id } = await res.json();
+  return photoUrl(id);
+}
+// The vision API (callClaudeVisionMulti) needs actual base64 image bytes, not a URL - used
+// only for chip reference photos sent along with an AI chip-count analysis, a rare enough
+// action that paying for this fetch at use-time is no loss compared to keeping them inline
+// in state (and resending them on every unrelated save) just for this one occasional path.
+async function urlToDataUrl(url){
+  const res = await fetch(url);
+  const blob = await res.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
 // Seat a player into the first open slot (main 9, then the 10th overflow slot),
 // growing g.seats to hold it if needed. Shared by autoSeatSelf and autoJoinViaInvite.
 function seatPlayerIfRoom(g, playerId, p){
@@ -1025,14 +1064,17 @@ function openFilePicker(communityId, playerId, useCamera){
   selfieInput.onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    processSelfieFile(file, (dataUrl) => {
+    processSelfieFile(file, async (dataUrl) => {
+      let photo;
+      try { photo = await uploadPhoto(dataUrl); }
+      catch(e) { alert("העלאת התמונה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
       // No communityId means this was opened from the identity/name screen - set the
       // viewer's own global avatar directly rather than a specific roster entry.
-      if (!communityId) { setGlobalPlayer(myIdentity.id, {photo: dataUrl}); saveState(); render(); return; }
+      if (!communityId) { setGlobalPlayer(myIdentity.id, {photo}); saveState(); render(); return; }
       const c = getCommunity(communityId);
       const rp = c && c.roster.find(pl => pl.id === playerId);
       if (rp && !rp.clientId) { alert("אפשר לקבוע אווטר רק לשחקן שנכנס בעצמו דרך קישור הזמנה."); return; }
-      if (rp) { setPlayerPhoto(rp, dataUrl); saveState(); render(); }
+      if (rp) { setPlayerPhoto(rp, photo); saveState(); render(); }
     });
   };
   selfieInput.click();
@@ -1305,25 +1347,36 @@ function optimisticallyAnimateBuyin(gameId, pid, amount){
     lastSeatCaptionValues[gameId][pid] = to;
   } catch(e) { /* cosmetic only */ }
 }
-// Short, synthesized "coin" blip on a local buy-in - no audio asset to host, and reusing
-// one AudioContext (created lazily, on the first buy-in - the click itself is the user
-// gesture browsers require before audio is allowed to play) avoids accumulating contexts.
+// Short, synthesized "coins" jingle on a local buy-in - no audio asset to host, and
+// reusing one AudioContext (created lazily, on the first buy-in - the click itself is the
+// user gesture browsers require before audio is allowed to play) avoids accumulating
+// contexts. A few quick high metallic chirps staggered in time (rather than one flat
+// beep) reads more like coins dropping on a table than a plain notification blip.
 let _sharedAudioCtx = null;
 function playBuyinSound(){
   try {
     if (!_sharedAudioCtx) _sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const ctx = _sharedAudioCtx;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(880, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.08);
-    gain.gain.setValueAtTime(0.15, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.16);
+    const clinks = [
+      {delay: 0,     freq: 2400},
+      {delay: 0.05,  freq: 3100},
+      {delay: 0.095, freq: 2700},
+      {delay: 0.15,  freq: 3400},
+    ];
+    clinks.forEach(({delay, freq}) => {
+      const t0 = ctx.currentTime + delay;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(freq, t0);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.8, t0 + 0.07);
+      gain.gain.setValueAtTime(0.11, t0);
+      gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.09);
+      osc.start(t0);
+      osc.stop(t0 + 0.1);
+    });
   } catch(e) { /* audio unsupported/blocked - never let this block the actual buy-in */ }
 }
 function animateCaptionNumber(el, from, to, isProfit, startTime){
@@ -1672,7 +1725,7 @@ function renderActionPanel(g, c, seatedIds){
         <span style="font-size:12px;font-weight:700;color:var(--muted);flex-shrink:0;">קנייה:</span>
         ${[50,80,100].map(v=>`<button class="chip-btn" data-panel-buyin-quick="${v}" style="flex:1;padding:7px 4px;font-size:12px;">${v}</button>`).join("")}
         <input type="number" inputmode="decimal" id="panel-buyin-custom" placeholder="אחר" style="flex:1;min-width:0;padding:7px 4px;font-size:12px;text-align:center;">
-        <button class="btn btn-primary" data-panel-buyin-confirm style="flex-shrink:0;padding:7px 10px;">${icon('plus')}</button>
+        <button class="btn btn-primary" data-panel-buyin-confirm disabled style="flex-shrink:0;padding:7px 10px;">${icon('plus')}</button>
       </div>
       <button class="btn btn-ghost btn-block" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-history>${icon('bar')} היסטוריית קניות</button>
       <button class="btn btn-block" style="background:#57534e;color:#f5f5f4;margin-bottom:${canRemove?'10px':'0'};display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-end-night>${icon('out')} סיים ערב</button>
@@ -2932,6 +2985,11 @@ function attachHandlers(){
     doPanelBuyin(parseFloat(el.dataset.panelBuyinQuick), el);
   });
   const panelBuyinConfirmBtn = app.querySelector("[data-panel-buyin-confirm]");
+  const panelBuyinCustomInput = document.getElementById("panel-buyin-custom");
+  if (panelBuyinCustomInput && panelBuyinConfirmBtn) panelBuyinCustomInput.oninput = () => {
+    const amt = parseFloat(panelBuyinCustomInput.value);
+    panelBuyinConfirmBtn.disabled = !amt || amt <= 0;
+  };
   if (panelBuyinConfirmBtn) panelBuyinConfirmBtn.onclick = () => {
     const input = document.getElementById("panel-buyin-custom");
     const amt = input ? parseFloat(input.value) : NaN;
@@ -3572,7 +3630,9 @@ function attachHandlers(){
         if (!refs.length) throw new Error("no chip references defined");
         const refList = refs.map((cv,i) => `תמונה מספר ${i+2}: זוטון בערך ${cv.value}`).join("; ");
         const prompt = `התמונה הראשונה היא תמונה של מגדלי ציפי פוקר של שחקן אחד, עומדים זקוף. שאר התמונות הן תמונות ייחוס שמראות בדיוק איך נראה כל סוג זוטון: ${refList}. חוקים שיעזרו לכם לספור בדיוק: (1) בכל מגדל יש לכל היותר 10 ציפים - לעולם לא יותר. (2) אם יש כמה מגדלים מאותו סוג זוטון, לכל היותר מגדל אחד מהם קטן מ-10 - כל השאר מלאים, כלומר בדיוק 10; אז אם מגדל נראה כמעט מלא ביחס למגדלים אחרים מאותו סוג, כנראה שהוא בדיוק 10. (3) מגדלים מאותו סוג זוטון תמיד ממוקמים אחד ליד השני בתמונה - השתמשו בזה כדי לא לבלבל בין זוטונים דומים. לכל מגדל נראה לעין בתמונה הראשונה: השוו אותו לתמונות הייחוס וזהו לאיזו תמונת ייחוס הוא הכי דומה (לפי המספר שלה, 2 עד ${refs.length+1}), וספרו כמה ציפים יש במגדל לפי הפסים/החלוקות הנראות, תוך שימוש בחוקים לעיל. תנו גם תיבה תוחמת (bounding box) בפיקסלים מוחלטים יחסית לתמונה הראשונה כפי שהיא (רוחב ${modal.imageW}, גובה ${modal.imageH}), בפורמט [x1,y1,x2,y2] - פינה שמאלית-עליונה ופינה ימנית-תחתונה. החזירו תשובה בפורמט JSON בלבד, בלי טקסט נוסף ובלי markdown, במבנה הזה בדיוק: [{"refImage":<מספר תמונת הייחוס, 2 עד ${refs.length+1}>,"count":<integer>,"box":[x1,y1,x2,y2]}]`;
-        const dataUrls = [modal.imageSrc, ...refs.map(cv => cv.image)];
+        const refDataUrls = await Promise.all(refs.map(cv =>
+          cv.image.startsWith("data:") ? cv.image : urlToDataUrl(cv.image)));
+        const dataUrls = [modal.imageSrc, ...refDataUrls];
         const result = await callClaudeVisionMulti(dataUrls, prompt);
         const stacks = (Array.isArray(result) ? result : []).filter(r => r && r.count).map(r => {
           const cv = refs[Math.round(r.refImage) - 2];
@@ -3760,6 +3820,14 @@ function attachHandlers(){
       const communityId = modal.communityId;
       saveBtn.disabled = true;
       showButtonLoading(saveBtn);
+      // A point's image is only a fresh data: URL if it was just captured/cropped this
+      // session - one carried over unchanged from `existing` (see data-open-chip-setup)
+      // is already an uploaded /api/photos/... URL, so only the new ones need uploading.
+      try {
+        await Promise.all(values.map(async (v) => {
+          if (v.image && v.image.startsWith("data:")) v.image = await uploadPhoto(v.image);
+        }));
+      } catch(e) { alert("העלאת תמונות הציפים נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); render(); return; }
       await mutateAndSave(() => {
         const c = getCommunity(communityId);
         if (values.length) c.chipValues = values;
@@ -3908,16 +3976,22 @@ function attachHandlers(){
     const retakeAvatarBtn = app.querySelector("[data-retake-avatar-photo]");
     if (retakeAvatarBtn) retakeAvatarBtn.onclick = () => updateModal({imageSrc: null});
     const saveAvatarsBtn = app.querySelector("[data-save-avatars]");
-    if (saveAvatarsBtn) saveAvatarsBtn.onclick = () => {
+    if (saveAvatarsBtn) saveAvatarsBtn.onclick = async () => {
       syncAvatarPointFields();
-      const newAvatars = [];
+      const pending = [];
       for (const pt of modal.points) {
         const name = (pt.name||"").trim();
         const category = (pt.category||"").trim();
         if (!name || !category) { alert("צריך להזין שם וקטגוריה לכל אווטר."); return; }
-        newAvatars.push({id: uid(), name, category, image: pt.image});
+        pending.push({pt, name, category});
       }
-      if (!newAvatars.length) { alert("צריך לסמן לפחות אווטר אחד."); return; }
+      if (!pending.length) { alert("צריך לסמן לפחות אווטר אחד."); return; }
+      showButtonLoading(saveAvatarsBtn);
+      let newAvatars;
+      try {
+        newAvatars = await Promise.all(pending.map(async ({pt, name, category}) =>
+          ({id: uid(), name, category, image: await uploadPhoto(pt.image)})));
+      } catch(e) { alert("העלאת האווטרים נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); render(); return; }
       state.customAvatars = (state.customAvatars||[]).concat(newAvatars);
       saveState();
       if (modal.communityId) openModal({type:"photoSource", communityId: modal.communityId, playerId: modal.playerId});
