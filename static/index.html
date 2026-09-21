@@ -2667,22 +2667,28 @@ function renderModal(m){
     // directly-editable field itself (so a manual override always still works).
     const qtyRow = ratio ? `
       <div class="field">
-        <label>כמות ציפים כוללת (יחס 1:${ratio})</label>
+        <label>כמות ציפים (אופציונלי)</label>
         <div class="row" style="gap:8px;">
           <input type="number" inputmode="numeric" id="total-chip-qty" data-chip-ratio="${ratio}" placeholder="0" style="flex:1;">
-          <span id="total-chip-qty-value" style="color:var(--muted);font-size:13px;white-space:nowrap;flex-shrink:0;">= ₪0</span>
+          <span id="total-chip-qty-value" class="badge badge-ok" style="white-space:nowrap;flex-shrink:0;">= ₪0</span>
         </div>
       </div>
     ` : "";
     const colorRows = chipValues.length ? `
       <div class="section-title" style="padding:0;margin:0 0 6px;">ציפים לפי צבע</div>
       <div class="scroll-list" style="margin-bottom:14px;">
-        ${chipValues.map(cv => `
-          <div class="roster-row">
-            <div class="row" style="gap:10px;">
-              ${cv.image ? `<img src="${cv.image}" style="width:28px;height:28px;object-fit:cover;border-radius:6px;border:1px solid rgba(255,255,255,.3);flex-shrink:0;">` : `<div style="width:28px;height:28px;border-radius:6px;border:1px dashed var(--muted);flex-shrink:0;"></div>`}
-              <input type="number" inputmode="numeric" data-color-count="${cv.id}" data-color-value="${cv.value}" placeholder="0" style="width:56px;height:34px;font-size:15px;text-align:center;">
-              <span>ציפים × ₪${cv.value}</span>
+        ${chipValues.map((cv) => `
+          <div style="position:relative;margin-bottom:16px;">
+            <div class="roster-row" style="margin-bottom:0;padding-left:58px;">
+              <div class="row" style="gap:10px;">
+                ${cv.image ? `<img src="${cv.image}" style="width:28px;height:28px;object-fit:cover;border-radius:6px;border:1px solid rgba(255,255,255,.3);flex-shrink:0;">` : ""}
+                <input type="number" inputmode="numeric" data-color-count="${cv.id}" data-color-value="${cv.value}" placeholder="0" style="width:56px;height:34px;font-size:15px;text-align:center;">
+                <span>ציפים × ₪${cv.value}</span>
+              </div>
+            </div>
+            <div style="position:absolute;left:2px;top:0;background:#065f46;color:#fff;font-weight:700;font-size:11px;padding:6px 12px 16px;line-height:1.3;text-align:center;border-radius:8px 8px 0 0;clip-path:polygon(0 0,100% 0,100% 62%,50% 100%,0 62%);box-shadow:0 2px 4px rgba(0,0,0,.3);">
+              <div style="font-size:10px;">+</div>
+              <div data-color-count-value="${cv.id}">= ₪0</div>
             </div>
           </div>
         `).join("")}
@@ -2691,7 +2697,6 @@ function renderModal(m){
     body = `
       ${qtyRow}
       ${colorRows}
-      <button class="btn btn-ghost btn-block" style="margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:6px;" data-open-chip-photo>${icon('chip')} חשב ציפים מתמונה</button>
       <div class="field"><label>סה"כ ערך הציפים שנותרו (₪)</label><input type="number" inputmode="decimal" id="seat-chips" value="${chips}"></div>
       ${cashedOut ? `
         <p style="color:var(--muted);font-size:12px;">השחקן כבר יצא מהמשחק.</p>
@@ -4455,11 +4460,6 @@ function attachHandlers(){
   }
 
   if (modal && modal.type === "seatChips") {
-    const openChipPhoto = app.querySelector("[data-open-chip-photo]");
-    if (openChipPhoto) openChipPhoto.onclick = () => {
-      const g = getGame(modal.gameId);
-      openModal({type:"chipPhotoCount", gameId: modal.gameId, playerId: modal.playerId, communityId: g.communityId, imageSrc: null, stacks: [], analyzing: false, analyzeError: null, noPhoto: false});
-    };
     // Recomputes the bottom total-value field from the qty/per-color rows whenever either
     // changes - it stays a plain input otherwise, so directly typing into it still works
     // as a manual override (until a source row is touched again and resyncs it).
@@ -4478,7 +4478,10 @@ function attachHandlers(){
       app.querySelectorAll("[data-color-count]").forEach(el => {
         const cnt = parseFloat(el.value);
         const val = parseFloat(el.dataset.colorValue);
-        if (!isNaN(cnt) && !isNaN(val)) total += cnt * val;
+        const sub = (!isNaN(cnt) && !isNaN(val)) ? cnt * val : 0;
+        total += sub;
+        const rowValueEl = app.querySelector(`[data-color-count-value="${el.dataset.colorCount}"]`);
+        if (rowValueEl) rowValueEl.textContent = `= ₪${Math.round(sub*100)/100}`;
       });
       seatChipsInput.value = Math.round(total * 100) / 100;
     };
