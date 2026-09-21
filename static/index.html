@@ -2287,7 +2287,7 @@ function renderModal(m){
       body = `
         <div class="section-title" style="padding:0;margin:0 0 6px;">יחס ציפים</div>
         <div class="field">
-          <label>1 שקל עבור <input type="number" inputmode="decimal" id="chip-ratio-input" value="${esc(c.chipRatio || '')}" placeholder="למשל 4" style="width:70px;display:inline-block;text-align:center;"> ציפים</label>
+          <label>1 שקל עבור <input type="number" inputmode="decimal" id="chip-ratio-input" value="${esc(c.chipRatio || '')}" placeholder="4" style="width:70px;display:inline-block;text-align:center;"> ציפים</label>
         </div>
         <p style="color:var(--muted);font-size:12px;margin-top:-8px;">משמש לספירת ציפים כוללת בסיום ערב (כמות ציפים ולא לפי צבע) - למשל, יחס של 4 אומר ש-100 ציפים שווים ל-₪25.</p>
         ${editableList}
@@ -2684,7 +2684,8 @@ function renderModal(m){
     // directly-editable field itself (so a manual override always still works).
     const qtyRow = ratio ? `
       <div class="field">
-        <label>כמות ציפים (אופציונלי)</label>
+        <label>חישוב ידני של סך ערך ציפים</label>
+        <p style="color:var(--muted);font-size:12px;margin:0 0 8px;">אפשר להזין כאן את סכום הציפים הכולל, או להזין למטה את כמות הציפים לפי צבע.</p>
         <div class="row" style="gap:8px;">
           <input type="number" inputmode="numeric" id="total-chip-qty" data-chip-ratio="${ratio}" placeholder="0" style="flex:1;">
           <span id="total-chip-qty-value" class="badge badge-ok" style="white-space:nowrap;flex-shrink:0;">= ₪0</span>
@@ -2712,7 +2713,7 @@ function renderModal(m){
     body = `
       ${qtyRow}
       ${colorRows}
-      <div class="field"><label>סה"כ ערך הציפים שנותרו (₪)</label><input type="number" inputmode="decimal" id="seat-chips" value="${chips}"></div>
+      <div class="field"><label>סה"כ ערך הציפים בש"ח (מחושב אוטומטי)</label><input type="number" inputmode="decimal" id="seat-chips" value="${chips}"></div>
       ${cashedOut ? `
         <p style="color:var(--muted);font-size:12px;">השחקן כבר יצא מהמשחק.</p>
         <button class="btn btn-ghost btn-block" data-return-to-game="${m.playerId}" style="margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('undo')} החזר למשחק</button>
