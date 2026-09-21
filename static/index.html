@@ -14,7 +14,6 @@
 <meta name="apple-mobile-web-app-title" content="Poker Manager">
 <meta property="og:title" content="Poker Manager">
 <meta property="og:url" content="https://poker-manager-7irt.onrender.com/">
-<meta name="description" content="ניהול ערבי פוקר, ציפים ומאזנים לקבוצה שלכם">
 <meta property="og:description" content="ניהול ערבי פוקר, ציפים ומאזנים לקבוצה שלכם">
 <meta property="og:image" content="https://poker-manager-7irt.onrender.com/static/logo-share.jpg">
 <meta property="og:image:type" content="image/jpeg">
@@ -1454,11 +1453,8 @@ function renderHome(){
   if (!cards) cards = `<div class="empty">עדיין אין קבוצות - צרו את הקבוצה הראשונה שלכם</div>`;
   return `
     <div class="top">
-      <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;">
+      <div class="row" style="gap:8px;align-items:center;">
         <div class="hello-name" data-edit-identity-name style="cursor:pointer;color:var(--muted);font-size:12px;margin-bottom:4px;text-decoration:underline;text-underline-offset:3px;">שלום, ${esc(myIdentity.name || '')}</div>
-        <span style="font-size:11px;color:#34d399;background:rgba(6,95,70,0.5);border:1px solid #059669;padding:2px 8px;border-radius:999px;margin-bottom:4px;display:inline-flex;align-items:center;gap:4px;">
-          ${icon('check')} יבוא מגיטהאב צלח
-        </span>
         ${isSuperAdmin() ? `<button class="icon-btn" data-open-admin-settings title="הגדרות">${icon('gear')}</button>` : ""}
       </div>
       <h1 class="serif">הקבוצות שלי</h1>
