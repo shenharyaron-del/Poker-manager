@@ -1,0 +1,6 @@
+{
+  "name": "Poker Manager",
+  "description": "ניהול ערבי פוקר, ציפים ומאזנים לקבוצה שלכם - Poker night manager, chips, and ledger",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
