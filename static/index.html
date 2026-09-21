@@ -649,6 +649,10 @@ let nav = { screen: "home", communityId: null, gameId: null };
 let modal = null; // {type, ...}
 let showSettlement = false; // UI-only toggle, not persisted
 let settlementFilterPlayerId = null; // UI-only, not persisted - null means "show everyone"
+// Which players the table creator has checked off to share an end-of-night pot
+// imbalance correction (see renderActionPanel's "pot not balanced" branch) - UI-only,
+// not persisted, keyed by playerId, reset on nav.
+let balanceFixSelected = {};
 let currentSettlementTransfers = null; // set by renderTable(), consumed by drawSettlementArrows() after the DOM updates
 // Whose seat the bottom action panel currently shows (see renderTable/renderActionPanel) -
 // defaults to the viewer's own seat, but the table/community creator can tap any active
@@ -677,15 +681,14 @@ function trySelectSeatPlayer(pid){
 // Purely cosmetic feedback for a buy-in from the action panel: a small badge flies from
 // the button that was tapped to the selected seat's circle, then turns into "+amount"
 // briefly before fading - never anything the actual save depends on.
-function flyBuyinBadge(fromEl, amount){
+function flyAmountBadge(fromEl, toEl, amount){
   try {
-    const toCircle = document.querySelector(".seat-circle.selected");
-    if (!fromEl || !toCircle) return;
+    if (!fromEl || !toEl) return;
     const fromRect = fromEl.getBoundingClientRect();
-    const toRect = toCircle.getBoundingClientRect();
+    const toRect = toEl.getBoundingClientRect();
     const badge = document.createElement("div");
     badge.className = "buyin-fly";
-    badge.textContent = `+₪${amount}`;
+    badge.textContent = `${amount>=0?'+':'-'}₪${Math.abs(Math.round(amount*100)/100)}`;
     // left/top target the circles' exact center points - the badge centers itself on
     // whatever point that is via its own translate(-50%,-50%), so no half-width math here.
     // Document-relative coordinates (rect + scroll offset) via position:absolute, not
@@ -704,6 +707,18 @@ function flyBuyinBadge(fromEl, amount){
     setTimeout(() => { badge.classList.add("fading"); }, 950);
     setTimeout(() => { badge.remove(); }, 1300);
   } catch(e) { /* cosmetic only */ }
+}
+function flyBuyinBadge(fromEl, amount){
+  flyAmountBadge(fromEl, document.querySelector(".seat-circle.selected"), amount);
+}
+// Finds a seated player's own circle element on the table, for animations that don't
+// target the currently-selected seat (e.g. the pot-balance fix, which can hit several
+// players at once).
+function findSeatCircleEl(g, pid){
+  const seats = g.seats || [];
+  const idx = seats.indexOf(pid);
+  if (idx < 0) return null;
+  return document.querySelector(`[data-seat="${idx}"] .seat-circle`);
 }
 async function doPanelBuyin(amount, btnEl){
   if (!amount || amount <= 0) return;
@@ -729,6 +744,7 @@ function go(screen, extra){
   nav = Object.assign({screen}, extra||{});
   modal = null;
   selectedSeatPlayerId = null; // re-defaults to the viewer's own seat on the next table render
+  balanceFixSelected = {};
   if (screen === "table" && nav.gameId) autoSeatSelf(nav.gameId);
   render();
 }
@@ -1386,11 +1402,24 @@ function renderActionPanel(g, c, seatedIds){
   const allCashedOut = seatedIds.length > 0 && seatedIds.every(pid => pid in g.cashouts);
   const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
 
+  // Whether the declared chip totals actually match what was bought in - checked here
+  // (not just for display in renderTable) because it gates which table-level controls
+  // show once the night is over: an unbalanced pot must be fixed before anyone starts
+  // settling payments off numbers that don't add up.
+  const buyinTotals = {};
+  g.buyins.forEach(b => { buyinTotals[b.playerId] = (buyinTotals[b.playerId]||0) + b.amount; });
+  const liveChips = g.liveChips || {};
+  const totalBuyinAll = seatedIds.reduce((s,pid)=>s+(buyinTotals[pid]||0),0);
+  const totalChipsAll = seatedIds.reduce((s,pid)=>s+(liveChips[pid]||0),0);
+  const diff = totalChipsAll - totalBuyinAll;
+  const potUnbalanced = allCashedOut && Math.abs(diff) > 5;
+
   // The paybox/settlement group used to live above the table; it's table-wide, not tied
-  // to whichever seat is selected, so it always shows first once everyone's cashed out.
+  // to whichever seat is selected, so it always shows first once everyone's cashed out -
+  // but only once the pot is actually balanced (see potFixHtml below otherwise).
   let settlementWarning = "";
   currentSettlementTransfers = null;
-  if (allCashedOut && showSettlement) {
+  if (allCashedOut && !potUnbalanced && showSettlement) {
     const { remaining, alreadyPaid, warning } = computeSettlementTransfers(g);
     currentSettlementTransfers = {
       seats: g.seats || new Array(9).fill(null),
@@ -1402,7 +1431,7 @@ function renderActionPanel(g, c, seatedIds){
     };
     if (warning) settlementWarning = `<div style="background:#450a0a;color:#fca5a5;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;text-align:center;">${esc(warning)}</div>`;
   }
-  const settlementHtml = allCashedOut ? `
+  const settlementHtml = (allCashedOut && !potUnbalanced) ? `
     ${activePaybox ? `<button class="btn btn-block" style="margin-bottom:6px;background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;" data-open-active-paybox><img src="/static/paybox-icon.png" style="height:16px;width:auto;display:block;">העברה לקבוצת פייבוקס משותפת: ${esc(activePaybox.name)}</button>
     <div style="text-align:center;color:var(--muted);font-size:12px;margin-bottom:6px;">או</div>` : ""}
     <button class="btn ${showSettlement?'':'btn-ghost'} btn-block" data-toggle-settlement style="margin-bottom:10px;${showSettlement?'background:#0891b2;color:#fff;':''}">${icon('coins')} ${showSettlement?'הסתר הסדר תשלומים':'הסדר תשלומים בין שחקנים'}</button>
@@ -1413,9 +1442,39 @@ function renderActionPanel(g, c, seatedIds){
     ${settlementWarning}
   ` : "";
 
+  // Once everyone's cashed out but the declared chips don't match what was bought in by
+  // more than ₪5, settling up between players off those numbers would just be wrong -
+  // this replaces the paybox/settlement block with a fix instead: the creator picks who
+  // absorbs the difference (split evenly among whoever's checked), or opens "בדוק מאזן"
+  // on an individual player to correct a specific buy-in/chip-count mistake directly.
+  let potFixHtml = "";
+  if (potUnbalanced) {
+    const direction = diff > 0.5 ? "חוסר" : "עודף";
+    potFixHtml = `<div style="background:#450a0a;color:#fca5a5;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;text-align:center;font-weight:700;">הקופה לא מאוזנת - ${direction} של ₪${Math.abs(Math.round(diff))}</div>`;
+    if (admin) {
+      const selectedIds = seatedIds.filter(id => balanceFixSelected[id]);
+      const perPlayer = selectedIds.length ? Math.round((-diff / selectedIds.length) * 100) / 100 : 0;
+      potFixHtml += `
+        <div style="margin-bottom:10px;">
+          ${seatedIds.map(pid => {
+            const pl = g.players.find(pp => pp.id === pid);
+            const checked = !!balanceFixSelected[pid];
+            return `<div class="checkbox-row" style="cursor:pointer;">
+              <input type="checkbox" data-balance-fix-toggle="${pid}" ${checked?'checked':''}>
+              <span class="flex1">${esc(pl ? pl.name : "?")}</span>
+              <button class="btn btn-ghost btn-sm" data-check-balance="${pid}">בדוק מאזן</button>
+            </div>`;
+          }).join("")}
+        </div>
+        ${selectedIds.length ? `<div style="text-align:center;color:var(--muted);font-size:12px;margin-bottom:6px;">${perPlayer>=0?'כל שחקן מסומן יקבל':'מכל שחקן מסומן יילקח'} ₪${Math.abs(perPlayer)}</div>` : ""}
+        <button class="btn btn-primary btn-block" data-fix-pot-balance style="margin-bottom:10px;" ${selectedIds.length?"":"disabled"}>${icon('coins')} סדר קופה</button>
+      `;
+    }
+  }
+
   const pid = selectedSeatPlayerId;
   if (!pid || !seatedIds.includes(pid)) {
-    return (settlementHtml || allCashedOut) ? `<div class="bottom-bar">${settlementHtml}</div>` : "";
+    return (settlementHtml || potFixHtml || allCashedOut) ? `<div class="bottom-bar">${potFixHtml}${settlementHtml}</div>` : "";
   }
   const p = g.players.find(pl => pl.id === pid);
   const isSelf = pid === myPlayerId;
@@ -1451,7 +1510,7 @@ function renderActionPanel(g, c, seatedIds){
       ${canRemove ? `<button class="btn btn-block" style="background:#be123c;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-remove>${icon('trash')} הסר מהשולחן</button>` : ""}
     `;
   }
-  return `<div class="bottom-bar">${settlementHtml}${behalfBadge}${panelBody}</div>`;
+  return `<div class="bottom-bar">${potFixHtml}${settlementHtml}${behalfBadge}${panelBody}</div>`;
 }
 
 function renderTable(gameId){
@@ -2439,6 +2498,10 @@ function renderModal(m){
       rows += `<div class="section-title" style="padding:0;margin:10px 0 6px;">פירוט התשלומים</div>`;
       rows += buyins.map((b,i) => `<div class="roster-row"><span>תשלום ${i+1}${b.ts?` · ${fmtTime(b.ts)}`:""}</span><span style="display:flex;align-items:center;gap:10px;">₪${b.amount}<button class="icon-btn" style="color:#fda4af;" data-delete-buyin="${b.id}" title="ביטול תשלום">${icon('trash')}</button></span></div>`).join("");
     }
+    if (m.editable) {
+      rows += `<div class="section-title" style="padding:0;margin:14px 0 6px;">הוסף קנייה (לתיקון טעות)</div>`;
+      rows += `<div class="chip-row">${[50,80,100].map(v=>`<button class="chip-btn" data-check-balance-add-buyin="${v}">₪${v}</button>`).join("")}</div>`;
+    }
     const paybox = (g.payboxPayments||[]).filter(b=>b.playerId===m.playerId);
     if (paybox.length) {
       rows += `<div class="section-title" style="padding:0;margin:14px 0 6px;">העברות לקבוצת פייבוקס</div>`;
@@ -2455,7 +2518,7 @@ function renderModal(m){
     const myOut = g.cashouts[m.playerId];
     if (myOut) {
       rows += `<div class="section-title" style="padding:0;margin:14px 0 6px;">יציאה מהמשחק</div>`;
-      rows += `<div class="roster-row"><span>יצא עם${myOut.ts?` (בשעה ${fmtTime(myOut.ts)})`:""}</span><span style="font-weight:700;">₪${myOut.amount}</span></div>`;
+      rows += `<div class="roster-row"><span>יצא עם${myOut.ts?` (בשעה ${fmtTime(myOut.ts)})`:""}</span><span style="display:flex;align-items:center;gap:8px;"><b>₪${myOut.amount}</b>${m.editable ? `<button class="icon-btn" data-check-balance-edit-chips title="עדכן סכום ציפים">${icon('pencil')}</button>` : ""}</span></div>`;
       if (myOut.arrangedWith && myOut.arrangedWith.length) {
         const myProfit = computeArrangementAdjustments(g).adjusted[m.playerId];
         const share = Math.round((myProfit / myOut.arrangedWith.length) * 100) / 100;
@@ -2658,6 +2721,56 @@ function attachHandlers(){
   const panelPayPlayerBtn = app.querySelector("[data-panel-pay-player]");
   if (panelPayPlayerBtn) panelPayPlayerBtn.onclick = () => {
     openModal({type:"payPlayer", gameId: nav.gameId, fromPlayerId: selectedSeatPlayerId, amount: parseFloat(panelPayPlayerBtn.dataset.payPlayerAmount), toPlayerId: null});
+  };
+  app.querySelectorAll("[data-check-balance]").forEach(el => el.onclick = () => {
+    openModal({type:"history", gameId: nav.gameId, playerId: el.dataset.checkBalance, editable: true});
+  });
+  app.querySelectorAll("[data-balance-fix-toggle]").forEach(el => el.onchange = () => {
+    balanceFixSelected[el.dataset.balanceFixToggle] = el.checked;
+    render();
+  });
+  const fixPotBtn = app.querySelector("[data-fix-pot-balance]");
+  if (fixPotBtn) fixPotBtn.onclick = async () => {
+    const g = getGame(nav.gameId);
+    const seats = g.seats || new Array(9).fill(null);
+    const seatedIds = seats.filter(Boolean);
+    const selectedIds = seatedIds.filter(id => balanceFixSelected[id]);
+    if (!selectedIds.length) return;
+    const buyinTotals = {};
+    g.buyins.forEach(b => { buyinTotals[b.playerId] = (buyinTotals[b.playerId]||0) + b.amount; });
+    const totalBuyinAll = seatedIds.reduce((s,pid)=>s+(buyinTotals[pid]||0),0);
+    const totalChipsAll = seatedIds.reduce((s,pid)=>s+((g.liveChips||{})[pid]||0),0);
+    const diff = totalChipsAll - totalBuyinAll;
+    const perPlayer = Math.round((-diff / selectedIds.length) * 100) / 100;
+    fixPotBtn.disabled = true;
+    showButtonLoading(fixPotBtn);
+    // Purely cosmetic - fires one flying badge per selected player, independent of the
+    // real save below (which recomputes everything fresh, see the comment inside it).
+    selectedIds.forEach(pid => flyAmountBadge(fixPotBtn, findSeatCircleEl(g, pid), perPlayer));
+    await mutateAndSave(() => {
+      // Recompute against the freshest known state rather than reusing perPlayer from the
+      // outer closure - if a concurrent save changed the totals since we opened this
+      // panel, the correction must be based on the real current imbalance, not a stale one.
+      const g2 = getGame(nav.gameId);
+      const seats2 = g2.seats || new Array(9).fill(null);
+      const seatedIds2 = seats2.filter(Boolean);
+      const selectedIds2 = selectedIds.filter(pid => seatedIds2.includes(pid));
+      if (!selectedIds2.length) return;
+      const buyinTotals2 = {};
+      g2.buyins.forEach(b => { buyinTotals2[b.playerId] = (buyinTotals2[b.playerId]||0) + b.amount; });
+      const totalBuyinAll2 = seatedIds2.reduce((s,pid)=>s+(buyinTotals2[pid]||0),0);
+      const totalChipsAll2 = seatedIds2.reduce((s,pid)=>s+((g2.liveChips||{})[pid]||0),0);
+      const diff2 = totalChipsAll2 - totalBuyinAll2;
+      const perPlayer2 = Math.round((-diff2 / selectedIds2.length) * 100) / 100;
+      if (!g2.liveChips) g2.liveChips = {};
+      selectedIds2.forEach(pid => {
+        g2.liveChips[pid] = Math.round(((g2.liveChips[pid]||0) + perPlayer2) * 100) / 100;
+        if (g2.cashouts[pid]) g2.cashouts[pid].amount = Math.round(((g2.cashouts[pid].amount||0) + perPlayer2) * 100) / 100;
+      });
+      return true; // checkpoint - a pot-balance correction is worth a history snapshot
+    });
+    balanceFixSelected = {};
+    render();
   };
   app.querySelectorAll("[data-buyin]").forEach(el => el.onclick = () => openModal({type:"buyin", gameId: nav.gameId, playerId: el.dataset.buyin, amount:""}));
   app.querySelectorAll("[data-leave]").forEach(el => el.onclick = () => openModal({type:"leave", gameId: nav.gameId, playerId: el.dataset.leave, amount:""}));
@@ -3091,12 +3204,20 @@ function attachHandlers(){
 
   if (modal && modal.type === "editCashout") {
     const confirmEdit = app.querySelector("[data-confirm-edit-cashout]");
-    if (confirmEdit) confirmEdit.onclick = () => {
+    if (confirmEdit) confirmEdit.onclick = async () => {
       const amt = parseFloat(document.getElementById("edit-cashout-amount").value);
       if (isNaN(amt) || amt < 0) return;
-      const g = getGame(modal.gameId);
-      g.cashouts[modal.playerId].amount = amt;
-      saveState();
+      confirmEdit.disabled = true;
+      showButtonLoading(confirmEdit);
+      await mutateAndSave(() => {
+        const g = getGame(modal.gameId);
+        g.cashouts[modal.playerId].amount = amt;
+        // liveChips backs the pot-balance total shown at the table - keep it in sync with
+        // the corrected cashout so the imbalance check reflects the fix.
+        if (!g.liveChips) g.liveChips = {};
+        g.liveChips[modal.playerId] = amt;
+        return true; // checkpoint - a manual correction is worth a history snapshot
+      });
       closeModal();
     };
   }
@@ -3644,35 +3765,61 @@ function attachHandlers(){
     app.querySelectorAll("[data-delete-player-payment]").forEach(el => el.onclick = () => {
       openModal({type:"deletePlayerPayment", gameId: modal.gameId, playerId: modal.playerId, paymentId: el.dataset.deletePlayerPayment, returnTo: modal});
     });
+    app.querySelectorAll("[data-check-balance-add-buyin]").forEach(el => el.onclick = async () => {
+      const amount = parseFloat(el.dataset.checkBalanceAddBuyin);
+      const gameId = modal.gameId, playerId = modal.playerId;
+      el.disabled = true;
+      await mutateAndSave(() => {
+        const g = getGame(gameId);
+        g.buyins.push({id: uid(), playerId, amount, ts: Date.now()});
+      }, true); // checkpoint - a post-game correction is worth a history snapshot
+      render(); // re-renders the same history modal with the fresh buy-in list/totals
+    });
+    const editChipsBtn = app.querySelector("[data-check-balance-edit-chips]");
+    if (editChipsBtn) editChipsBtn.onclick = () => {
+      openModal({type:"editCashout", gameId: modal.gameId, playerId: modal.playerId});
+    };
   }
 
   if (modal && modal.type === "deleteBuyin") {
     const confirmDelBuyin = app.querySelector("[data-confirm-delete-buyin]");
-    if (confirmDelBuyin) confirmDelBuyin.onclick = () => {
-      const g = getGame(modal.gameId);
-      g.buyins = g.buyins.filter(b => b.id !== modal.buyinId);
-      saveState();
-      openModal(modal.returnTo);
+    if (confirmDelBuyin) confirmDelBuyin.onclick = async () => {
+      confirmDelBuyin.disabled = true;
+      showButtonLoading(confirmDelBuyin);
+      const buyinId = modal.buyinId, returnTo = modal.returnTo;
+      await mutateAndSave(() => {
+        const g = getGame(modal.gameId);
+        g.buyins = g.buyins.filter(b => b.id !== buyinId);
+      });
+      openModal(returnTo);
     };
   }
 
   if (modal && modal.type === "deletePaybox") {
     const confirmDelPaybox = app.querySelector("[data-confirm-delete-paybox]");
-    if (confirmDelPaybox) confirmDelPaybox.onclick = () => {
-      const g = getGame(modal.gameId);
-      g.payboxPayments = (g.payboxPayments||[]).filter(b => b.id !== modal.paymentId);
-      saveState();
-      openModal(modal.returnTo);
+    if (confirmDelPaybox) confirmDelPaybox.onclick = async () => {
+      confirmDelPaybox.disabled = true;
+      showButtonLoading(confirmDelPaybox);
+      const paymentId = modal.paymentId, returnTo = modal.returnTo;
+      await mutateAndSave(() => {
+        const g = getGame(modal.gameId);
+        g.payboxPayments = (g.payboxPayments||[]).filter(b => b.id !== paymentId);
+      });
+      openModal(returnTo);
     };
   }
 
   if (modal && modal.type === "deletePlayerPayment") {
     const confirmDelPP = app.querySelector("[data-confirm-delete-player-payment]");
-    if (confirmDelPP) confirmDelPP.onclick = () => {
-      const g = getGame(modal.gameId);
-      g.playerPayments = (g.playerPayments||[]).filter(b => b.id !== modal.paymentId);
-      saveState();
-      openModal(modal.returnTo);
+    if (confirmDelPP) confirmDelPP.onclick = async () => {
+      confirmDelPP.disabled = true;
+      showButtonLoading(confirmDelPP);
+      const paymentId = modal.paymentId, returnTo = modal.returnTo;
+      await mutateAndSave(() => {
+        const g = getGame(modal.gameId);
+        g.playerPayments = (g.playerPayments||[]).filter(b => b.id !== paymentId);
+      });
+      openModal(returnTo);
     };
   }
 
