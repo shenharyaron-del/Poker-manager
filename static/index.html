@@ -730,6 +730,13 @@ async function doPanelBuyin(amount, btnEl){
   // rebuilds this row from scratch, which re-enables everything on its own.
   document.querySelectorAll("[data-panel-buyin-quick],[data-panel-buyin-confirm],#panel-buyin-custom").forEach(el => el.disabled = true);
   flyBuyinBadge(btnEl, amount);
+  playBuyinSound(); // local-initiator only - other devices get the counting animation instead
+  // Starts the caption's count-up immediately (optimistically), using the seat's current
+  // known total - it doesn't wait for the network round trip below, so it feels instant.
+  // If the confirmed save ends up different (a conflict resolved against someone else's
+  // concurrent change), the render() after it lands corrects toward the true value the
+  // same way any other device's change would - see animateSeatCaptions.
+  optimisticallyAnimateBuyin(nav.gameId, pid, amount);
   // mutateAndSave (the real network save) starts here, immediately - it is NOT waiting
   // on flyBuyinBadge's own setTimeout-driven animation, which is purely decorative and
   // runs independently in parallel.
@@ -1211,6 +1218,100 @@ function computeSettlementTransfers(game){
 // radius so it starts/ends at the nearest edge between the two circles instead of
 // disappearing under them. Called after every render() (table screen only, no-op if
 // settlement isn't showing) since it needs the seats already laid out in the DOM.
+// Whatever a seat's caption is showing (buy-in total while active, profit once cashed
+// out) counts smoothly from its previous value to the new one over ~2s instead of just
+// jumping - on every render, regardless of what caused the change: a local buy-in, a
+// pot-balance correction, or another device's action picked up by the next refresh.
+let lastSeatCaptionValues = {}; // gameId -> {playerId -> number}
+// render() fully replaces the DOM every time, including mid-animation (e.g. the real save
+// landing while an optimistic count from doPanelBuyin is still in flight) - without this,
+// that new render's fresh element would just show the final value statically, cutting the
+// animation short. Tracking the animation's own start time here lets a later render()
+// resume it in place on the new element instead, so the full ~2s always plays out.
+let activeCaptionAnimations = {}; // playerId -> {startTime, duration, from, to}
+function animateSeatCaptions(gameId){
+  const g = gameId && getGame(gameId);
+  if (!g) { return; }
+  const seats = g.seats || [];
+  const buyinTotals = {};
+  g.buyins.forEach(b => { buyinTotals[b.playerId] = (buyinTotals[b.playerId]||0) + b.amount; });
+  const liveChips = g.liveChips || {};
+  const prev = lastSeatCaptionValues[gameId] || {};
+  const next = {};
+  seats.forEach(pid => {
+    if (!pid) return;
+    const cashedOut = pid in g.cashouts;
+    const buyin = buyinTotals[pid] || 0;
+    const value = cashedOut ? Math.round(liveChips[pid]||0) - buyin : buyin;
+    next[pid] = value;
+    const el = document.querySelector(`[data-caption-for="${pid}"]`);
+    if (!el) return;
+    const ongoing = activeCaptionAnimations[pid];
+    if (ongoing && performance.now() - ongoing.startTime < ongoing.duration) {
+      // Resume the still-running animation on the fresh element, same timeline, retargeted
+      // to whatever the true value now is in case it changed since it started.
+      animateCaptionNumber(el, ongoing.from, value, cashedOut, ongoing.startTime);
+    } else {
+      const prevValue = prev[pid];
+      if (prevValue !== undefined && prevValue !== value) animateCaptionNumber(el, prevValue, value, cashedOut);
+    }
+  });
+  lastSeatCaptionValues[gameId] = next;
+}
+// Kicks off a caption's count-up the instant a local buy-in is tapped, before the network
+// save even starts - see doPanelBuyin. Updates the same cache animateSeatCaptions reads,
+// so the real render() once the save lands resumes this animation instead of restarting
+// or cutting it short.
+function optimisticallyAnimateBuyin(gameId, pid, amount){
+  try {
+    const g = getGame(gameId);
+    if (!g || (pid in g.cashouts)) return;
+    const buyinTotals = {};
+    g.buyins.forEach(b => { buyinTotals[b.playerId] = (buyinTotals[b.playerId]||0) + b.amount; });
+    const from = buyinTotals[pid] || 0;
+    const to = from + amount;
+    const el = document.querySelector(`[data-caption-for="${pid}"]`);
+    if (el) animateCaptionNumber(el, from, to, false);
+    if (!lastSeatCaptionValues[gameId]) lastSeatCaptionValues[gameId] = {};
+    lastSeatCaptionValues[gameId][pid] = to;
+  } catch(e) { /* cosmetic only */ }
+}
+// Short, synthesized "coin" blip on a local buy-in - no audio asset to host, and reusing
+// one AudioContext (created lazily, on the first buy-in - the click itself is the user
+// gesture browsers require before audio is allowed to play) avoids accumulating contexts.
+let _sharedAudioCtx = null;
+function playBuyinSound(){
+  try {
+    if (!_sharedAudioCtx) _sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = _sharedAudioCtx;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.08);
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.16);
+  } catch(e) { /* audio unsupported/blocked - never let this block the actual buy-in */ }
+}
+function animateCaptionNumber(el, from, to, isProfit, startTime){
+  const duration = 2000;
+  const start = startTime || performance.now();
+  const pid = el.dataset.captionFor;
+  if (pid) activeCaptionAnimations[pid] = {startTime: start, duration, from, to};
+  function frame(now){
+    const t = Math.min(1, (now - start) / duration);
+    const val = Math.round(from + (to - from) * t);
+    el.textContent = isProfit ? `${val>0?'+':''}₪${val}` : `₪${val}`;
+    if (t < 1) requestAnimationFrame(frame);
+    else if (pid && activeCaptionAnimations[pid] && activeCaptionAnimations[pid].startTime === start) delete activeCaptionAnimations[pid];
+  }
+  requestAnimationFrame(frame);
+}
+
 function drawSettlementArrows(){
   const overlay = document.getElementById("settlement-overlay");
   if (!overlay) return;
@@ -1329,6 +1430,7 @@ function render(){
   app.innerHTML = html;
   attachHandlers();
   drawSettlementArrows();
+  if (nav.screen === "table") animateSeatCaptions(nav.gameId);
 }
 
 function renderHome(){
@@ -1590,12 +1692,12 @@ function renderTable(gameId){
     const chips = liveChips[pid] || 0;
     const rosterP = c.roster.find(rp => rp.id === pid);
     const photo = rosterP && getPlayerPhoto(rosterP);
-    let caption = `קנייה ₪${buyin}`;
+    let caption = `קנייה <span data-caption-for="${pid}">₪${buyin}</span>`;
     if (cashedOut) {
       const profit = chips - buyin;
       const sign = profit > 0 ? "+" : "";
       const profitColor = profit > 0.5 ? "#6ee7b7" : (profit < -0.5 ? "#fda4af" : "inherit");
-      caption = `<span style="color:${profitColor};font-weight:700;">${sign}₪${Math.round(profit)}</span>`;
+      caption = `<span style="color:${profitColor};font-weight:700;" data-caption-for="${pid}">${sign}₪${Math.round(profit)}</span>`;
     }
     const circleStyle = (photo && !cashedOut) ? ` style="background-image:url('${photo}');background-size:cover;background-position:center;"` : "";
     const doorIconBig = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>';
