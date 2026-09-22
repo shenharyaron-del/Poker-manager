@@ -1069,8 +1069,18 @@ async function uploadPhoto(dataUrl){
 // cache with these in the background right after the app loads (not blocking anything,
 // not awaited) means that cost is usually already paid by the time someone actually opens
 // the avatar picker, instead of being felt as a delay right when they tap it.
-function prefetchCustomAvatars(){
+// Called right after init(), even while the login gate is up - a first-time visitor
+// is about to go check their email for the code, which takes at least a few seconds,
+// so warming every avatar image into the browser's cache now means the picker feels
+// instant by the time they actually reach it instead of visibly loading tile by tile.
+function prefetchAvatars(){
   try {
+    AVATAR_CATEGORIES.forEach(cat => {
+      cat.items.forEach((name, i) => {
+        const img = new Image();
+        img.src = `/static/avatars/${cat.folder}/${i+1}.jpg`;
+      });
+    });
     (state.customAvatars || []).forEach(av => {
       if (av.image && av.image.startsWith("/api/photos/")) {
         const img = new Image();
@@ -4806,7 +4816,7 @@ window.addEventListener("popstate", () => {
   render();
   scheduleAutoRefresh();
   connectLiveSync();
-  prefetchCustomAvatars();
+  prefetchAvatars();
   // Keep the server from spinning down (Render's free tier sleeps after 15 minutes with
   // no requests, and the next request then pays a real cold-start delay - tens of
   // seconds). Pings from any open tab regardless of screen, not just the table screen -
