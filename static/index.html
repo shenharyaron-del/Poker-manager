@@ -682,6 +682,48 @@ async function saveIdentity(){
   catch(e){ console.error("identity save failed", e); }
 }
 
+// ---------- Email + code login (optional, additive - see server.py's /api/auth/*) ----------
+// A real account, keyed by email, that can be recovered on a brand new device instead of
+// starting over as a stranger the way the plain per-device clientId always has. Logging in
+// doesn't replace the existing identity system - it just fills myIdentity.name and this
+// device's globalPlayers photo/phone from the account, the same fields either path already
+// sets, so everything downstream (rosters, isTableAdmin, stats) keeps working unchanged
+// whether someone ever logs in at all.
+async function checkLoginSession(){
+  try {
+    const res = await fetch("/api/auth/session?clientId=" + encodeURIComponent(getClientId()));
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.loggedIn ? data : null;
+  } catch(e) { return null; }
+}
+// Applies an account (from checkLoginSession or a fresh verify-code) onto this device's
+// identity/globalPlayer record - the one place both call sites share, so they can't drift.
+function applyAccountToIdentity(account){
+  myIdentity.email = account.email;
+  if (account.name) myIdentity.name = account.name;
+  if (account.photo || account.phone) setGlobalPlayer(myIdentity.id, {
+    ...(account.photo ? {photo: account.photo} : {}),
+    ...(account.phone ? {phone: account.phone} : {}),
+  });
+}
+async function requestLoginCode(email){
+  const res = await fetch("/api/auth/request-code", {
+    method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({email})
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || "שליחת הקוד נכשלה");
+}
+async function verifyLoginCode(email, code){
+  const res = await fetch("/api/auth/verify-code", {
+    method: "POST", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({email, code, clientId: getClientId()})
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || "הקוד שגוי או פג תוקף");
+  return body;
+}
+
 let state = defaultState();
 let myIdentity = { id: getClientId(), name: null };
 let appVersion = null; // filled in by init() from /api/version
@@ -1900,6 +1942,24 @@ function renderModal(m){
   if (m.type === "identityName") {
     title = m.forced ? "ברוכים הבאים" : "עדכון שם";
     const myPhoto = getGlobalPlayer(myIdentity.id).photo;
+    const loginSection = myIdentity.email ? `
+      <p style="color:var(--muted);font-size:12px;text-align:center;margin:18px 0 0;padding-top:14px;border-top:1px solid var(--card-b);">מחוברים כ-<span dir="ltr">${esc(myIdentity.email)}</span> - השם והאווטר שלכם ישוחזרו אוטומטית במכשיר חדש.</p>
+    ` : m.loginStep === "code" ? `
+      <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--card-b);">
+        <p style="color:var(--muted);font-size:12px;margin-bottom:8px;">שלחנו קוד בן 6 ספרות ל-<span dir="ltr">${esc(m.loginEmail)}</span></p>
+        <input type="text" inputmode="numeric" id="login-code-input" placeholder="קוד בן 6 ספרות" style="width:100%;text-align:center;letter-spacing:4px;font-size:18px;margin-bottom:8px;" autofocus>
+        ${m.loginError ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.loginError)}</p>` : ""}
+        <button class="btn btn-primary btn-block" data-confirm-login-code style="margin-bottom:8px;">אשר קוד</button>
+        <button class="btn btn-ghost btn-block" data-resend-login-code>שלח קוד שוב</button>
+      </div>
+    ` : `
+      <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--card-b);">
+        <p style="color:var(--muted);font-size:12px;margin-bottom:8px;">התחברות עם אימייל משחזרת את השם, האווטר והטלפון שלכם גם במכשיר חדש.</p>
+        <input type="email" id="login-email-input" placeholder="האימייל שלך" dir="ltr" style="width:100%;text-align:center;margin-bottom:8px;" value="${esc(m.loginEmail||'')}">
+        ${m.loginError ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.loginError)}</p>` : ""}
+        <button class="btn btn-ghost btn-block" data-send-login-code>${icon('share')} שלח קוד כניסה</button>
+      </div>
+    `;
     body = `
       ${m.forced ? `<p style="color:var(--muted);font-size:13px;">איך קוראים לך?</p>` : `
         <div style="text-align:center;margin-bottom:14px;">
@@ -1912,6 +1972,7 @@ function renderModal(m){
       </div>
       <button class="btn btn-primary btn-block" data-confirm-identity-name style="${m.forced?'':'margin-bottom:12px;'}">שמור</button>
       ${!m.forced ? `<button class="btn btn-ghost btn-block" data-my-stats>${icon('bar')} הביצועים שלי</button>` : ""}
+      ${loginSection}
     `;
   } else if (m.type === "inviteGone") {
     title = "הקישור לא בתוקף";
@@ -3190,6 +3251,47 @@ function attachHandlers(){
     if (changeAvatarBtn) changeAvatarBtn.onclick = () => openModal({type:"photoSource"});
     const myStatsBtn = app.querySelector("[data-my-stats]");
     if (myStatsBtn) myStatsBtn.onclick = () => openModal({type:"stats", clientId: myIdentity.id});
+
+    const sendLoginBtn = app.querySelector("[data-send-login-code]");
+    if (sendLoginBtn) sendLoginBtn.onclick = async () => {
+      const email = document.getElementById("login-email-input").value.trim().toLowerCase();
+      if (!email || !email.includes("@")) { updateModal({loginError: "כתובת אימייל לא תקינה"}); return; }
+      sendLoginBtn.disabled = true;
+      showButtonLoading(sendLoginBtn);
+      try {
+        await requestLoginCode(email);
+        updateModal({loginStep: "code", loginEmail: email, loginError: null});
+      } catch(e) {
+        updateModal({loginError: e.message});
+      }
+    };
+    const resendLoginBtn = app.querySelector("[data-resend-login-code]");
+    if (resendLoginBtn) resendLoginBtn.onclick = async () => {
+      resendLoginBtn.disabled = true;
+      showButtonLoading(resendLoginBtn);
+      try {
+        await requestLoginCode(modal.loginEmail);
+        updateModal({loginError: null});
+      } catch(e) {
+        updateModal({loginError: e.message});
+      }
+    };
+    const confirmLoginBtn = app.querySelector("[data-confirm-login-code]");
+    if (confirmLoginBtn) confirmLoginBtn.onclick = async () => {
+      const code = document.getElementById("login-code-input").value.trim();
+      if (!code) { updateModal({loginError: "צריך להזין קוד."}); return; }
+      confirmLoginBtn.disabled = true;
+      showButtonLoading(confirmLoginBtn);
+      try {
+        const account = await verifyLoginCode(modal.loginEmail, code);
+        applyAccountToIdentity(account);
+        saveIdentity();
+        await saveState();
+        closeModal();
+      } catch(e) {
+        updateModal({loginError: e.message});
+      }
+    };
   }
 
   if (modal && modal.type === "photoSource") {
@@ -4416,12 +4518,23 @@ window.addEventListener("popstate", () => {
   document.getElementById("app").innerHTML =
     '<div style="padding:60px 20px;text-align:center;color:#a8a29e;font-size:14px;">טוען נתונים משותפים...</div>';
   {
-    const [stateResult, identityResult, versionResult] = await Promise.allSettled([loadState(), loadIdentity(), loadVersion()]);
+    const [stateResult, identityResult, versionResult, sessionResult] = await Promise.allSettled([loadState(), loadIdentity(), loadVersion(), checkLoginSession()]);
     // A failed initial load must never be treated as "no data yet" - only fall back to
     // defaultState() here (the one legitimate use of it), never after a save is possible.
     state = stateResult.status === "fulfilled" ? stateResult.value : defaultState();
     myIdentity = identityResult.status === "fulfilled" ? identityResult.value : { id: getClientId(), name: null };
     appVersion = versionResult.status === "fulfilled" ? versionResult.value : null;
+    // This device already verified a login code before (see checkLoginSession) - recover
+    // the name/photo/phone from the account instead of starting over as a stranger. Only
+    // actually saves anything if that recovers data this device didn't already have
+    // locally, so a normal reload with nothing new to apply doesn't write on every load.
+    const account = sessionResult.status === "fulfilled" ? sessionResult.value : null;
+    if (account) {
+      const hadName = !!myIdentity.name, hadPhoto = !!getGlobalPlayer(myIdentity.id).photo;
+      applyAccountToIdentity(account);
+      if (!hadName && myIdentity.name) saveIdentity();
+      if (!hadPhoto && getGlobalPlayer(myIdentity.id).photo) saveState();
+    }
   }
   // One-time cleanup: remove legacy communities that weren't created via the "new community"
   // button (they have no createdBy - e.g. the two starter communities from an earlier version
