@@ -77,7 +77,7 @@ h1.sm{font-size:20px;}
 .icon-btn.danger{background:#450a0a;color:#fca5a5;}
 .icon-btn.gold{color:var(--gold);}
 .icon-btn.ok{background:#065f46;color:#6ee7b7;}
-.bottom-bar{position:fixed;bottom:0;left:0;right:0;max-width:520px;margin:0 auto;padding:16px 20px;background:linear-gradient(to top,var(--bg2) 60%, transparent);}
+.bottom-bar{position:fixed;bottom:0;left:0;right:0;max-width:520px;margin:0 auto;padding:16px 20px calc(20px + env(safe-area-inset-bottom));background:linear-gradient(to top,var(--bg2) 60%, transparent);}
 /* Table screen only: the table circle used to be sized purely from its own width (a
    padding-top percentage trick) with a guessed fixed margin reserved for the fixed
    bottom action panel - on a real phone (especially with browser chrome eating into the
