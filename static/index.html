@@ -328,6 +328,72 @@ function simulatePokerOdds(hands, board, iterations){
     neitherRunPct: neitherRunCount[i]/iterations*100,
   }));
 }
+// ---------- Omaha Hi/Lo pot-split calculator ----------
+// Unlike the hold'em equity calculator above, the whole board is already known (a
+// showdown photo, not a live hand) - so this is a single deterministic best-hand
+// search, not a simulation. Reuses evaluate5/compareHandRank/parsePokerCard as-is;
+// only the Omaha-specific "exactly 2 hole + 3 board" combination rule and the
+// ace-to-8 low hand are new.
+const HIGH_CATEGORY_NAMES = ["קלף גבוה","זוג","שני זוגות","שלישייה","סטרייט","פלאש","פול האוס","רביעייה","סטרייט פלאש"];
+function combinationsOf(arr, k){
+  const results = [];
+  function helper(start, combo){
+    if (combo.length === k) { results.push(combo.slice()); return; }
+    for (let i=start;i<arr.length;i++){ combo.push(arr[i]); helper(i+1, combo); combo.pop(); }
+  }
+  helper(0, []);
+  return results;
+}
+function evaluateLow5(cards){
+  // Ace-to-8 low ("8 or better"): 5 distinct ranks, all 8-or-under (ace counts as low).
+  // Returns a descending-sorted array for comparison (lexicographically smaller = the
+  // better/lower hand), or null if this particular 5-card combo doesn't qualify.
+  const lowVals = cards.map(c => c.rank === 14 ? 1 : c.rank);
+  if (lowVals.some(v => v > 8)) return null;
+  if (new Set(lowVals).size !== 5) return null;
+  return lowVals.slice().sort((a,b)=>b-a);
+}
+function compareLowRank(a, b){
+  for (let i=0;i<5;i++){ if (a[i]!==b[i]) return a[i]-b[i]; }
+  return 0;
+}
+function evaluateOmahaPlayer(holeCards, boardCards){
+  // Omaha's defining rule (unlike hold'em's bestHandRank over any 5 of 7): exactly 2
+  // hole cards + 3 board cards, for high and low independently.
+  let bestHigh = null, bestLow = null;
+  for (const hp of combinationsOf(holeCards, 2)) {
+    for (const bt of combinationsOf(boardCards, 3)) {
+      const five = hp.concat(bt);
+      const high = evaluate5(five);
+      if (!bestHigh || compareHandRank(high, bestHigh) > 0) bestHigh = high;
+      const low = evaluateLow5(five);
+      if (low && (!bestLow || compareLowRank(low, bestLow) < 0)) bestLow = low;
+    }
+  }
+  return {bestHigh, bestLow};
+}
+function computeOmahaHiLoSplit(hands, board){
+  const parsedBoard = board.map(parsePokerCard);
+  const evals = hands.map(h => evaluateOmahaPlayer(h.map(parsePokerCard), parsedBoard));
+  let bestHigh = evals[0].bestHigh;
+  evals.forEach(e => { if (compareHandRank(e.bestHigh, bestHigh) > 0) bestHigh = e.bestHigh; });
+  const highWinners = evals.map((e,i)=>i).filter(i => compareHandRank(evals[i].bestHigh, bestHigh) === 0);
+  const lowCandidates = evals.map((e,i)=>i).filter(i => evals[i].bestLow);
+  let lowWinners = [];
+  if (lowCandidates.length) {
+    let bestLow = evals[lowCandidates[0]].bestLow;
+    lowCandidates.forEach(i => { if (compareLowRank(evals[i].bestLow, bestLow) < 0) bestLow = evals[i].bestLow; });
+    lowWinners = lowCandidates.filter(i => compareLowRank(evals[i].bestLow, bestLow) === 0);
+  }
+  const hasLow = lowWinners.length > 0;
+  const highShare = hasLow ? 50 : 100;
+  const lowShare = hasLow ? 50 : 0;
+  return evals.map((e,i) => ({
+    pct: (highWinners.includes(i) ? highShare/highWinners.length : 0) + (lowWinners.includes(i) ? lowShare/lowWinners.length : 0),
+    bestHigh: e.bestHigh, bestLow: e.bestLow,
+    wonHigh: highWinners.includes(i), wonLow: lowWinners.includes(i), hasLow,
+  }));
+}
 // Resize to Claude's own vision cap before sending, so any pixel coordinates it
 // returns line up exactly with the image we display (no separate resize on their end).
 function resizeImageDataUrl(dataUrl, maxDim, callback){
@@ -2191,10 +2257,16 @@ function renderModal(m){
       `;
     }
   } else if (m.type === "pokerOdds") {
-    title = "מה הסיכויים שלי";
+    title = m.gameType === "omaha" ? "חלוקת קופה — Omaha Hi/Lo" : "מה הסיכויים שלי";
     if (!m.imageSrc) {
       body = `
-        <p style="color:var(--muted);font-size:13px;">צלמו תמונה של מצב האול-אין על השולחן, ונחשב לכם את הסיכויים של כל יד.</p>
+        <div style="display:flex;gap:8px;margin-bottom:14px;">
+          <button class="btn ${m.gameType!=="omaha"?"btn-primary":"btn-ghost"} btn-block" data-odds-game-type="holdem">הולדם</button>
+          <button class="btn ${m.gameType==="omaha"?"btn-primary":"btn-ghost"} btn-block" data-odds-game-type="omaha">Omaha Hi/Lo</button>
+        </div>
+        <p style="color:var(--muted);font-size:13px;">${m.gameType==="omaha"
+          ? "צלמו תמונה של השולחן עם 4 קלפים לכל שחקן (רביעייה) וכל 5 קלפי הקהילה גלויים, ממבט על - ונחשב את חלוקת הקופה בין השחקנים."
+          : "צלמו תמונה של מצב האול-אין על השולחן, ונחשב לכם את הסיכויים של כל יד."}</p>
         <div style="position:relative;">
           <button type="button" class="btn btn-primary btn-block" style="pointer-events:none;">${icon('plus')} צלם תמונה</button>
           <input type="file" accept="image/*" capture="environment" id="odds-camera-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
@@ -2212,7 +2284,22 @@ function renderModal(m){
         <img src="${m.imageSrc}" style="width:100%;aspect-ratio:16/9;object-fit:contain;background:rgba(255,255,255,.05);border-radius:12px;margin-bottom:12px;display:block;">
         ${m.reading ? `<p style="color:var(--muted);text-align:center;">קורא קלפים...</p>` : ""}
         ${m.error ? `<p style="color:#fda4af;text-align:center;">${esc(m.error)}</p>` : ""}
-        ${m.results ? `
+        ${m.results && m.gameType === "omaha" ? `
+          <div style="font-size:12px;color:var(--muted);margin-bottom:10px;text-align:center;">בורד: ${m.board.map(formatCard).join(" ")}</div>
+          <div class="scroll-list">
+            ${m.results.map((r,i) => `
+              <div style="background:rgba(255,255,255,.05);border-radius:10px;padding:10px 12px;margin-bottom:8px;">
+                <div style="margin-bottom:8px;">${m.hands[i].map(formatCard).join("")}</div>
+                <div style="font-size:22px;font-weight:800;color:${r.pct>0?'#6ee7b7':'var(--muted)'};text-align:center;margin-bottom:6px;">${(Math.round(r.pct*10)/10)}%</div>
+                <div style="font-size:12px;color:var(--muted2);">
+                  <div>גבוה: ${HIGH_CATEGORY_NAMES[r.bestHigh[0]]}${r.wonHigh ? ' — זוכה' : ''}</div>
+                  <div>נמוך: ${r.bestLow ? (r.wonLow ? 'זוכה' : 'לא הכי חזקה') : 'אין יד נמוכה כשירה (8 ומטה)'}</div>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        ` : ""}
+        ${m.results && m.gameType !== "omaha" ? `
           <div style="font-size:12px;color:var(--muted);margin-bottom:10px;text-align:center;">
             ${m.board.length ? `בורד: ${m.board.map(formatCard).join(" ")}` : "אין קלפי קהילה (פרה-פלופ)"}
           </div>
@@ -3132,7 +3219,7 @@ function attachHandlers(){
   if (addExtraBtn) addExtraBtn.onclick = () => openModal({type:"addExisting", gameId: nav.gameId});
 
   const openOddsBtn = app.querySelector("[data-open-poker-odds]");
-  if (openOddsBtn) openOddsBtn.onclick = () => openModal({type:"pokerOdds", imageSrc: null, reading: false, error: null, results: null, hands: null, board: null});
+  if (openOddsBtn) openOddsBtn.onclick = () => openModal({type:"pokerOdds", gameType: "holdem", imageSrc: null, reading: false, error: null, results: null, hands: null, board: null});
 
   const toggleSettlementBtn = app.querySelector("[data-toggle-settlement]");
   if (toggleSettlementBtn) toggleSettlementBtn.onclick = () => { showSettlement = !showSettlement; settlementFilterPlayerId = null; render(); };
@@ -3607,21 +3694,38 @@ function attachHandlers(){
   }
 
   if (modal && modal.type === "pokerOdds") {
+    app.querySelectorAll("[data-odds-game-type]").forEach(el => el.onclick = () => updateModal({gameType: el.dataset.oddsGameType}));
     const CARD_READ_PROMPT = "בתמונה יש קלפי פוקר. למעלה יש קלפי יד של שחקנים - 2 קלפים לכל שחקן, יכולים להיות 2 שחקנים או יותר. למטה (אם יש) יש קלפי קהילה משותפים (פלופ/טרן) - 3 או 4 קלפים, ששייכים לכולם ולא לשחקן ספציפי. זהה את כל הקלפים בבירור והחזירו רק JSON בפורמט הבא, בלי טקסט נוסף ובלי markdown: {\"hands\": [[\"Kd\",\"Ks\"], [\"8c\",\"Th\"]], \"board\": [\"9h\",\"7s\",\"8d\"]} - כל קלף מיוצג כדרגה (2-9,T,J,Q,K,A) ואות צבע קטנה (c=תלתן, d=יהלום, h=לב, s=עלה), למשל Kd=מלך יהלום, Th=עשר לב.";
+    const OMAHA_CARD_READ_PROMPT = "בתמונה יש קלפי פוקר Omaha Hi/Lo במצב showdown (כל הקלפים גלויים). למעלה יש קלפי יד של שחקנים - 4 קלפים לכל שחקן (רביעייה), יכולים להיות 2 שחקנים או יותר. למטה יש בדיוק 5 קלפי קהילה משותפים. זהה את כל הקלפים בבירור וקבצו כל רביעייה לפי השחקן שלה, לפי המיקום בתמונה. החזירו רק JSON בפורמט הבא, בלי טקסט נוסף ובלי markdown: {\"hands\": [[\"Kd\",\"Ks\",\"2h\",\"3h\"], [\"8c\",\"Th\",\"9d\",\"Jd\"]], \"board\": [\"9h\",\"7s\",\"8d\",\"2c\",\"5d\"]} - כל קלף מיוצג כדרגה (2-9,T,J,Q,K,A) ואות צבע קטנה (c=תלתן, d=יהלום, h=לב, s=עלה).";
     const processOddsPhoto = async (resizedDataUrl) => {
+      const gameType = modal.gameType;
       updateModal({imageSrc: resizedDataUrl, reading:true, error:null, results:null, hands:null, board:null});
       try {
-        const parsed = await callClaudeVisionMulti([resizedDataUrl], CARD_READ_PROMPT);
-        const hands = parsed && parsed.hands;
-        const board = (parsed && parsed.board) || [];
-        if (!Array.isArray(hands) || hands.length < 2 || !hands.every(h => Array.isArray(h) && h.length === 2) || ![0,3,4,5].includes(board.length)) {
-          throw new Error("unclear card recognition");
+        if (gameType === "omaha") {
+          const parsed = await callClaudeVisionMulti([resizedDataUrl], OMAHA_CARD_READ_PROMPT);
+          const hands = parsed && parsed.hands;
+          const board = (parsed && parsed.board) || [];
+          if (!Array.isArray(hands) || hands.length < 2 || !hands.every(h => Array.isArray(h) && h.length === 4) || board.length !== 5) {
+            throw new Error("unclear card recognition");
+          }
+          const results = computeOmahaHiLoSplit(hands, board);
+          updateModal({reading:false, results, hands, board});
+        } else {
+          const parsed = await callClaudeVisionMulti([resizedDataUrl], CARD_READ_PROMPT);
+          const hands = parsed && parsed.hands;
+          const board = (parsed && parsed.board) || [];
+          if (!Array.isArray(hands) || hands.length < 2 || !hands.every(h => Array.isArray(h) && h.length === 2) || ![0,3,4,5].includes(board.length)) {
+            throw new Error("unclear card recognition");
+          }
+          const results = simulatePokerOdds(hands, board, 12000);
+          updateModal({reading:false, results, hands, board});
         }
-        const results = simulatePokerOdds(hands, board, 12000);
-        updateModal({reading:false, results, hands, board});
       } catch(e) {
         console.error(e);
-        updateModal({reading:false, error:"לא הצלחתי לזהות את הקלפים בבירור - נסו תמונה ברורה וישרה יותר."});
+        const msg = gameType === "omaha"
+          ? "לא הצלחתי לזהות בבירור 4 קלפים לכל שחקן וכל 5 קלפי הקהילה - נסו תמונה ברורה וישרה יותר, ממבט על."
+          : "לא הצלחתי לזהות את הקלפים בבירור - נסו תמונה ברורה וישרה יותר.";
+        updateModal({reading:false, error:msg});
       }
     };
     const oddsCameraInput = app.querySelector("#odds-camera-input");
