@@ -499,12 +499,31 @@ def request_login_code():
     return jsonify({"ok": True})
 
 
+@app.route("/api/auth/check-email")
+def check_email():
+    # Read-only, no side effects - lets the client ask "does this email already have a
+    # device linked?" before ever sending a code, so it can offer "add this device" vs
+    # "replace the existing one" up front instead of surprising the user after the fact.
+    email = str(request.args.get("email", "")).strip().lower()
+    if not EMAIL_RE.match(email):
+        return jsonify({"error": "invalid email"}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM trusted_devices WHERE email = %s LIMIT 1", (email,))
+            has_device = cur.fetchone() is not None
+        conn.commit()
+    return jsonify({"hasDevice": has_device})
+
+
 @app.route("/api/auth/verify-code", methods=["POST"])
 def verify_login_code():
     body = request.get_json(silent=True) or {}
     email = str(body.get("email", "")).strip().lower()
     code = str(body.get("code", "")).strip()
     client_id = str(body.get("clientId", "")).strip()
+    # Only meaningful once the code itself has been verified below - a device choice
+    # made at the email step is just intent until then, never acted on early.
+    replace_existing = bool(body.get("replace"))
     if not email or not code or not client_id:
         return jsonify({"error": "missing email/code/clientId"}), 400
     with get_db() as conn:
@@ -515,6 +534,8 @@ def verify_login_code():
                 conn.commit()
                 return jsonify({"error": "invalid or expired code"}), 400
             cur.execute("DELETE FROM login_codes WHERE email = %s", (email,))
+            if replace_existing:
+                cur.execute("DELETE FROM trusted_devices WHERE email = %s AND client_id != %s", (email, client_id))
             cur.execute(
                 "INSERT INTO trusted_devices (client_id, email) VALUES (%s, %s) "
                 "ON CONFLICT (client_id) DO UPDATE SET email = EXCLUDED.email",

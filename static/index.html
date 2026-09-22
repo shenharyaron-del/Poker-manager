@@ -708,6 +708,15 @@ function applyAccountToIdentity(account){
     ...(account.phone ? {phone: account.phone} : {}),
   });
 }
+// Read-only - lets the login screen offer "add this device" vs "replace the existing
+// one" before ever sending a code, not just after the fact.
+async function checkEmailHasDevice(email){
+  try {
+    const res = await fetch("/api/auth/check-email?email=" + encodeURIComponent(email));
+    if (!res.ok) return false;
+    return (await res.json()).hasDevice === true;
+  } catch(e) { return false; }
+}
 async function requestLoginCode(email){
   const res = await fetch("/api/auth/request-code", {
     method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({email})
@@ -715,10 +724,12 @@ async function requestLoginCode(email){
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || "שליחת הקוד נכשלה");
 }
-async function verifyLoginCode(email, code){
+// replace=true only takes effect once verify-code itself confirms the code is correct -
+// picking it at the email step is just a stated intent until then, server-side.
+async function verifyLoginCode(email, code, replace){
   const res = await fetch("/api/auth/verify-code", {
     method: "POST", headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({email, code, clientId: getClientId()})
+    body: JSON.stringify({email, code, clientId: getClientId(), replace: !!replace})
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || "הקוד שגוי או פג תוקף");
@@ -1657,7 +1668,7 @@ function renderCommunity(communityId){
     const waitingForPlayers = !g.closed && seatedCount < 2;
     return `
     <div class="card ${g.closed?"":"card-open"}" data-open-game="${g.id}">
-      <div class="row flex1"><span style="color:#6ee7b7">${icon('cal')}</span><div class="flex1"><div style="font-weight:600">${esc(g.name || g.date)}</div>${g.name ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${esc(g.date)}</div>` : ""}</div>${g.closed ? "" : (waitingForPlayers ? `<span class="open-badge" style="background:#57534e;color:#f5f5f4;">ממתין לשחקנים</span>` : `<span class="open-badge">פעיל</span>`)}</div>
+      <div class="row flex1"><span style="color:#6ee7b7">${icon('cal')}</span><div class="flex1"><div style="font-weight:600">${esc(g.name || g.date)}</div>${g.name ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${esc(g.date)}</div>` : ""}</div>${(g.closed || waitingForPlayers) ? "" : `<span class="open-badge">פעיל</span>`}</div>
       ${g.closed ? "" : (waitingForPlayers
         ? `<button class="btn btn-primary" data-invite-game="${g.id}" style="padding:8px 12px;font-size:13px;white-space:nowrap;display:flex;align-items:center;gap:6px;">${icon('share')} הזמנת שחקנים</button>`
         : `<button class="icon-btn gold" data-invite-game="${g.id}" title="הזמן שחקן לשולחן">${icon('share')}</button>`)}
@@ -1935,7 +1946,12 @@ function renderModal(m){
   let title = "";
   if (m.type === "loginRequired") {
     title = "ברוכים הבאים";
-    body = m.loginStep === "code" ? `
+    body = m.loginStep === "deviceChoice" ? `
+      <p style="color:var(--muted);font-size:13px;margin-bottom:14px;">הכתובת <span dir="ltr">${esc(m.loginEmail)}</span> כבר רשומה במערכת עם מכשיר מחובר. מה תרצו לעשות?</p>
+      <button class="btn btn-primary btn-block" style="margin-bottom:8px;" data-device-choice="add">${icon('plus')} הוסף את המכשיר הזה בנוסף לקיים</button>
+      <button class="btn btn-ghost btn-block" style="margin-bottom:8px;" data-device-choice="replace">${icon('undo')} החלף - נתק את המכשיר הקיים</button>
+      <button class="btn btn-ghost btn-block" data-device-choice-cancel>ביטול</button>
+    ` : m.loginStep === "code" ? `
       <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">שלחנו קוד בן 6 ספרות ל-<span dir="ltr">${esc(m.loginEmail)}</span></p>
       <input type="text" inputmode="numeric" id="login-code-input" placeholder="קוד בן 6 ספרות" style="width:100%;text-align:center;letter-spacing:4px;font-size:18px;margin-bottom:8px;" autofocus>
       ${m.loginError ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.loginError)}</p>` : ""}
@@ -1950,23 +1966,11 @@ function renderModal(m){
   } else if (m.type === "identityName") {
     title = m.forced ? "ברוכים הבאים" : "עדכון שם";
     const myPhoto = getGlobalPlayer(myIdentity.id).photo;
-    const loginSection = myIdentity.email ? `
+    // Login is mandatory now (see loginRequired) - by the time this modal can ever open,
+    // myIdentity.email is always already set, so this is just a confirmation line, never
+    // an entry form.
+    const loginSection = `
       <p style="color:var(--muted);font-size:12px;text-align:center;margin:18px 0 0;padding-top:14px;border-top:1px solid var(--card-b);">מחוברים כ-<span dir="ltr">${esc(myIdentity.email)}</span> - השם והאווטר שלכם ישוחזרו אוטומטית במכשיר חדש.</p>
-    ` : m.loginStep === "code" ? `
-      <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--card-b);">
-        <p style="color:var(--muted);font-size:12px;margin-bottom:8px;">שלחנו קוד בן 6 ספרות ל-<span dir="ltr">${esc(m.loginEmail)}</span></p>
-        <input type="text" inputmode="numeric" id="login-code-input" placeholder="קוד בן 6 ספרות" style="width:100%;text-align:center;letter-spacing:4px;font-size:18px;margin-bottom:8px;" autofocus>
-        ${m.loginError ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.loginError)}</p>` : ""}
-        <button class="btn btn-primary btn-block" data-confirm-login-code style="margin-bottom:8px;">אשר קוד</button>
-        <button class="btn btn-ghost btn-block" data-resend-login-code>שלח קוד שוב</button>
-      </div>
-    ` : `
-      <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--card-b);">
-        <p style="color:var(--muted);font-size:12px;margin-bottom:8px;">התחברות עם אימייל משחזרת את השם, האווטר והטלפון שלכם גם במכשיר חדש.</p>
-        <input type="email" id="login-email-input" placeholder="האימייל שלך" dir="ltr" style="width:100%;text-align:center;margin-bottom:8px;" value="${esc(m.loginEmail||'')}">
-        ${m.loginError ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.loginError)}</p>` : ""}
-        <button class="btn btn-ghost btn-block" data-send-login-code>${icon('share')} שלח קוד כניסה</button>
-      </div>
     `;
     body = `
       ${m.forced ? `<p style="color:var(--muted);font-size:13px;">איך קוראים לך?</p>` : `
@@ -2244,7 +2248,7 @@ function renderModal(m){
         </div>
         <p style="color:var(--muted);font-size:12px;margin-top:-8px;">משמש לספירת ציפים כוללת בסיום ערב (כמות ציפים ולא לפי צבע) - למשל, יחס של 4 אומר ש-100 ציפים שווים ל-₪25.</p>
         ${editableList}
-        <p style="color:var(--muted);font-size:13px;">כדי להוסיף זוטונים: צלמו/העלו תמונה עם זיטון אחד מכל סוג, ואז הקישו על כל זיטון בתמונה כדי לסמן אותו כדוגמה. אפשר לגרור את המסגרת ולשנות את גודלה כדי שתקיף בדיוק את הזיטון. או, הוסיפו זיטון ידנית בלי תמונה בכלל.</p>
+        <p style="color:var(--muted);font-size:13px;">כדי להוסיף זוטונים: צלמו/העלו תמונה עם כל הזוטונים פרוסים בנפרד על משטח, ממבט על (מלמעלה) - נזהה אותם אוטומטית ונסמן מסגרת סביב כל אחד. אפשר לגרור, לשנות גודל, או להקיש על התמונה כדי להוסיף עוד ידנית. או, הוסיפו זיטון ידנית בלי תמונה בכלל.</p>
         ${pickButtons}
         <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-add-chip-manual>${icon('plus')} הוסף צבע ידנית</button>
         <button class="btn btn-primary btn-block" data-save-chip-values>שמור שינויים</button>
@@ -2263,14 +2267,15 @@ function renderModal(m){
       }).join("") : "";
       body = `
         <div style="width:100%;margin-bottom:10px;position:relative;">
-          <img src="${m.imageSrc}" data-chip-photo style="width:100%;border-radius:12px;display:block;cursor:crosshair;">
+          <img src="${m.imageSrc}" data-chip-photo style="width:100%;border-radius:12px;display:block;cursor:crosshair;${m.analyzingChips?'opacity:.5;':''}">
           ${markers}
+          ${m.analyzingChips ? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;"><span class="poker-loading-spin">${icon('chip')}</span></div>` : ""}
         </div>
-        <p style="color:var(--muted);font-size:12px;margin-top:0;">הקישו על זיטון בתמונה כדי להוסיף מסגרת דוגמה - אפשר לגרור אותה למיקום מדויק, ולגרור את הנקודה הלבנה כדי לשנות את הגודל שיקיף בדיוק את הזיטון. התמונה בטבלה מתעדכנת תוך כדי הגרירה.</p>
+        <p style="color:var(--muted);font-size:12px;margin-top:0;">${m.analyzingChips ? "מזהה זוטונים אוטומטית..." : "הקישו על זיטון בתמונה כדי להוסיף מסגרת דוגמה - אפשר לגרור אותה למיקום מדויק, ולגרור את הנקודה הלבנה כדי לשנות את הגודל שיקיף בדיוק את הזיטון. התמונה בטבלה מתעדכנת תוך כדי הגרירה."}</p>
         ${editableList}
         <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-retake-photo>${icon('plus')} תמונה אחרת</button>
         <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-add-chip-manual>${icon('plus')} הוסף צבע ידנית</button>
-        <button class="btn btn-primary btn-block" data-save-chip-values ${m.points.length===0?"disabled":""}>שמור הגדרות ציפים</button>
+        <button class="btn btn-primary btn-block" data-save-chip-values ${(m.points.length===0||m.analyzingChips)?"disabled":""}>שמור הגדרות ציפים</button>
       `;
     }
   } else if (m.type === "newCommunity") {
@@ -3245,13 +3250,8 @@ function attachHandlers(){
     if (myStatsBtn) myStatsBtn.onclick = () => openModal({type:"stats", clientId: myIdentity.id});
   }
 
-  if (modal && (modal.type === "identityName" || modal.type === "loginRequired")) {
-    const sendLoginBtn = app.querySelector("[data-send-login-code]");
-    if (sendLoginBtn) sendLoginBtn.onclick = async () => {
-      const email = document.getElementById("login-email-input").value.trim().toLowerCase();
-      if (!email || !email.includes("@")) { updateModal({loginError: "כתובת אימייל לא תקינה"}); return; }
-      sendLoginBtn.disabled = true;
-      showButtonLoading(sendLoginBtn);
+  if (modal && modal.type === "loginRequired") {
+    const sendLoginCodeFor = async (email) => {
       try {
         await requestLoginCode(email);
         updateModal({loginStep: "code", loginEmail: email, loginError: null});
@@ -3259,6 +3259,26 @@ function attachHandlers(){
         updateModal({loginError: e.message});
       }
     };
+    const sendLoginBtn = app.querySelector("[data-send-login-code]");
+    if (sendLoginBtn) sendLoginBtn.onclick = async () => {
+      const email = document.getElementById("login-email-input").value.trim().toLowerCase();
+      if (!email || !email.includes("@")) { updateModal({loginError: "כתובת אימייל לא תקינה"}); return; }
+      sendLoginBtn.disabled = true;
+      showButtonLoading(sendLoginBtn);
+      // Checked before ever sending a code - if this email already has a device linked,
+      // ask what to do about it first instead of surprising the user after the fact.
+      const hasDevice = await checkEmailHasDevice(email);
+      if (hasDevice) { updateModal({loginStep: "deviceChoice", loginEmail: email, loginError: null}); return; }
+      await sendLoginCodeFor(email);
+    };
+    app.querySelectorAll("[data-device-choice]").forEach(el => el.onclick = async () => {
+      const choice = el.dataset.deviceChoice;
+      el.disabled = true;
+      updateModal({deviceChoice: choice});
+      await sendLoginCodeFor(modal.loginEmail);
+    });
+    const deviceChoiceCancelBtn = app.querySelector("[data-device-choice-cancel]");
+    if (deviceChoiceCancelBtn) deviceChoiceCancelBtn.onclick = () => updateModal({loginStep: null, loginEmail: null});
     const resendLoginBtn = app.querySelector("[data-resend-login-code]");
     if (resendLoginBtn) resendLoginBtn.onclick = async () => {
       resendLoginBtn.disabled = true;
@@ -3277,15 +3297,14 @@ function attachHandlers(){
       confirmLoginBtn.disabled = true;
       showButtonLoading(confirmLoginBtn);
       try {
-        const account = await verifyLoginCode(modal.loginEmail, code);
+        const account = await verifyLoginCode(modal.loginEmail, code, modal.deviceChoice === "replace");
         applyAccountToIdentity(account);
         saveIdentity();
         await saveState();
-        // A brand new account (or one that never got a display name) still needs one -
-        // the mandatory login gate hands off to the same "what's your name" step every
-        // device already goes through, instead of skipping it.
-        if (!myIdentity.name) { openModal({type:"identityName", forced:true}); return; }
-        closeModal();
+        // Every manual login (typing a code, not the silent auto-login a trusted device
+        // gets on a normal return visit) hands off to the name/avatar screen - a natural
+        // moment to review or fix it, not just for a brand new account with no name yet.
+        openModal({type:"identityName", forced:true});
       } catch(e) {
         updateModal({loginError: e.message});
       }
@@ -3590,6 +3609,40 @@ function attachHandlers(){
   }
 
   if (modal && modal.type === "chipSetup") {
+    // Detects each distinct chip type in the freshly-loaded photo and turns every one
+    // into a marker point, the same shape trySelectSeatPlayer/manual tapping already
+    // produces - the user can still drag/resize/remove each one, or tap to add more,
+    // exactly as if they'd placed it by hand.
+    const detectChipsInPhoto = async (dataUrl, width, height, imgEl) => {
+      try {
+        const prompt = `התמונה מציגה כמה זוטוני פוקר שונים, כל אחד מונח בנפרד על משטח, צולמו ממבט על. זהו את כל הזוטונים השונים הנראים בתמונה (כל צבע/סוג פעם אחת בלבד), ועבור כל אחד תנו תיבה תוחמת (bounding box) בפיקסלים מוחלטים יחסית לתמונה (רוחב ${width}, גובה ${height}) שתוחמת בדיוק את הזוטון עצמו ולא את הרקע. בפורמט [x1,y1,x2,y2] - פינה שמאלית-עליונה ופינה ימנית-תחתונה. החזירו תשובה בפורמט JSON בלבד, בלי טקסט נוסף ובלי markdown, במבנה הזה בדיוק: [{"box":[x1,y1,x2,y2]}]`;
+        const result = await callClaudeVisionMulti([dataUrl], prompt);
+        const boxes = (Array.isArray(result) ? result : []).filter(r => r && Array.isArray(r.box) && r.box.length === 4);
+        if (!boxes.length) { if (modal && modal.type === "chipSetup") updateModal({analyzingChips: false}); return; }
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        canvas.getContext("2d").drawImage(imgEl, 0, 0);
+        const cropAt = (px, py, size) => {
+          const half = Math.max(1, Math.round(size/2));
+          const sx = Math.max(0, px - half), sy = Math.max(0, py - half);
+          const sw = Math.min(width, px + half) - sx, sh = Math.min(height, py + half) - sy;
+          const out = document.createElement("canvas");
+          out.width = 160; out.height = 160;
+          out.getContext("2d").drawImage(canvas, sx, sy, sw, sh, 0, 0, 160, 160);
+          return out.toDataURL("image/jpeg", 0.85);
+        };
+        const newPoints = boxes.map(({box}) => {
+          const [x1,y1,x2,y2] = box;
+          const x = Math.round((x1+x2)/2), y = Math.round((y1+y2)/2);
+          const size = Math.max(8, Math.round(Math.max(x2-x1, y2-y1)));
+          return {id: uid(), value: "", x, y, size, image: cropAt(x, y, size)};
+        });
+        if (modal && modal.type === "chipSetup") updateModal({points: (modal.points||[]).concat(newPoints), analyzingChips: false});
+      } catch(e) {
+        console.error("chip detection failed", e);
+        if (modal && modal.type === "chipSetup") updateModal({analyzingChips: false});
+      }
+    };
     const handleChipSetupFile = (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -3597,7 +3650,8 @@ function attachHandlers(){
       reader.onload = () => {
         const img = new Image();
         img.onload = () => {
-          updateModal({imageSrc: reader.result, imageW: img.naturalWidth, imageH: img.naturalHeight, points: modal.points});
+          updateModal({imageSrc: reader.result, imageW: img.naturalWidth, imageH: img.naturalHeight, points: modal.points, analyzingChips: true});
+          detectChipsInPhoto(reader.result, img.naturalWidth, img.naturalHeight, img);
         };
         img.src = reader.result;
       };
