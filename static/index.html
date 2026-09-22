@@ -4536,10 +4536,14 @@ window.addEventListener("popstate", () => {
   scheduleAutoRefresh();
   connectLiveSync();
   prefetchCustomAvatars();
-  // Keep the server from spinning down (Render's free tier sleeps an idle instance)
-  // while someone's actively at the table - a plain, cheap GET, not tied to whether
-  // anything actually changed.
-  setInterval(() => { if (nav.screen === "table") fetch("/api/version").catch(()=>{}); }, 5*60*1000);
+  // Keep the server from spinning down (Render's free tier sleeps after 15 minutes with
+  // no requests, and the next request then pays a real cold-start delay - tens of
+  // seconds). Pings from any open tab regardless of screen, not just the table screen -
+  // someone just browsing communities/games still counts as "the app is in use." A plain,
+  // cheap GET, not tied to whether anything actually changed. This only helps while at
+  // least one tab is open somewhere - it can't prevent the very first cold open after
+  // everyone's been away for a while.
+  setInterval(() => { fetch("/api/version").catch(()=>{}); }, 5*60*1000);
 })();
 
 if ("serviceWorker" in navigator) {
