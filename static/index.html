@@ -357,20 +357,21 @@ function compareLowRank(a, b){
   for (let i=0;i<5;i++){ if (a[i]!==b[i]) return a[i]-b[i]; }
   return 0;
 }
+function cardToStr(c){ return CARD_RANKS[c.rank-2] + c.suit; }
 function evaluateOmahaPlayer(holeCards, boardCards){
   // Omaha's defining rule (unlike hold'em's bestHandRank over any 5 of 7): exactly 2
   // hole cards + 3 board cards, for high and low independently.
-  let bestHigh = null, bestLow = null;
+  let bestHigh = null, bestHighCards = null, bestLow = null, bestLowCards = null;
   for (const hp of combinationsOf(holeCards, 2)) {
     for (const bt of combinationsOf(boardCards, 3)) {
       const five = hp.concat(bt);
       const high = evaluate5(five);
-      if (!bestHigh || compareHandRank(high, bestHigh) > 0) bestHigh = high;
+      if (!bestHigh || compareHandRank(high, bestHigh) > 0) { bestHigh = high; bestHighCards = five; }
       const low = evaluateLow5(five);
-      if (low && (!bestLow || compareLowRank(low, bestLow) < 0)) bestLow = low;
+      if (low && (!bestLow || compareLowRank(low, bestLow) < 0)) { bestLow = low; bestLowCards = five; }
     }
   }
-  return {bestHigh, bestLow};
+  return {bestHigh, bestHighCards, bestLow, bestLowCards};
 }
 function computeOmahaHiLoSplit(hands, board){
   const parsedBoard = board.map(parsePokerCard);
@@ -390,7 +391,8 @@ function computeOmahaHiLoSplit(hands, board){
   const lowShare = hasLow ? 50 : 0;
   return evals.map((e,i) => ({
     pct: (highWinners.includes(i) ? highShare/highWinners.length : 0) + (lowWinners.includes(i) ? lowShare/lowWinners.length : 0),
-    bestHigh: e.bestHigh, bestLow: e.bestLow,
+    bestHigh: e.bestHigh, bestHighCards: e.bestHighCards.map(cardToStr),
+    bestLow: e.bestLow, bestLowCards: e.bestLowCards ? e.bestLowCards.map(cardToStr) : null,
     wonHigh: highWinners.includes(i), wonLow: lowWinners.includes(i), hasLow,
   }));
 }
@@ -2292,8 +2294,14 @@ function renderModal(m){
                 <div style="margin-bottom:8px;">${m.hands[i].map(formatCard).join("")}</div>
                 <div style="font-size:22px;font-weight:800;color:${r.pct>0?'#6ee7b7':'var(--muted)'};text-align:center;margin-bottom:6px;">${(Math.round(r.pct*10)/10)}%</div>
                 <div style="font-size:12px;color:var(--muted2);">
-                  <div>גבוה: ${HIGH_CATEGORY_NAMES[r.bestHigh[0]]}${r.wonHigh ? ' — זוכה' : ''}</div>
-                  <div>נמוך: ${r.bestLow ? (r.wonLow ? 'זוכה' : 'לא הכי חזקה') : 'אין יד נמוכה כשירה (8 ומטה)'}</div>
+                  <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-bottom:4px;">
+                    <span>גבוה: ${HIGH_CATEGORY_NAMES[r.bestHigh[0]]}${r.wonHigh ? ' — זוכה' : ''}</span>
+                    <span>${r.bestHighCards.map(formatCard).join("")}</span>
+                  </div>
+                  <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">
+                    <span>נמוך: ${r.bestLow ? (r.wonLow ? 'זוכה' : 'לא הכי חזקה') : 'אין יד נמוכה כשירה (8 ומטה)'}</span>
+                    ${r.bestLowCards ? `<span>${r.bestLowCards.map(formatCard).join("")}</span>` : ""}
+                  </div>
                 </div>
               </div>
             `).join("")}
