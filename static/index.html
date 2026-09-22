@@ -4718,6 +4718,7 @@ window.addEventListener("popstate", () => {
 (async function init(){
   document.getElementById("app").innerHTML =
     '<div style="padding:60px 20px;text-align:center;color:#a8a29e;font-size:14px;">טוען נתונים משותפים...</div>';
+  let hasVerifiedSession = false;
   {
     const [stateResult, identityResult, versionResult, sessionResult] = await Promise.allSettled([loadState(), loadIdentity(), loadVersion(), checkLoginSession()]);
     // A failed initial load must never be treated as "no data yet" - only fall back to
@@ -4730,6 +4731,7 @@ window.addEventListener("popstate", () => {
     // actually saves anything if that recovers data this device didn't already have
     // locally, so a normal reload with nothing new to apply doesn't write on every load.
     const account = sessionResult.status === "fulfilled" ? sessionResult.value : null;
+    hasVerifiedSession = !!account;
     if (account) {
       const hadName = !!myIdentity.name, hadPhoto = !!getGlobalPlayer(myIdentity.id).photo;
       const localIdBeforeSync = myIdentity.id;
@@ -4790,10 +4792,16 @@ window.addEventListener("popstate", () => {
     }
   }
   // Login is mandatory - takes priority over any invite-flow modal set above, since
-  // nothing else in the app should be usable (or even visible) before it. An account
-  // that's logged in but somehow still has no display name (shouldn't normally happen,
-  // given confirmLoginBtn's own handoff below) falls back to the existing name step.
-  if (!myIdentity.email) modal = {type:"loginRequired"};
+  // nothing else in the app should be usable (or even visible) before it. Gated on
+  // hasVerifiedSession (this session's actual checkLoginSession result), never on a bare
+  // myIdentity.email check - that field lives in the old per-device identities record and
+  // can be stale (e.g. set by a pre-login version of this app that let people type an
+  // email locally with no server verification at all) or just unrecoverable after a
+  // trusted_devices/account deletion, letting an unverified device silently skip the gate.
+  if (!hasVerifiedSession) {
+    if (myIdentity.email || myIdentity.role) { myIdentity.email = null; myIdentity.role = null; saveIdentity(); }
+    modal = {type:"loginRequired"};
+  }
   else if (!myIdentity.name) modal = {type:"identityName", forced:true};
   render();
   scheduleAutoRefresh();
