@@ -1753,7 +1753,8 @@ function renderHome(){
   return `
     <div class="top">
       <div class="row" style="gap:8px;align-items:center;">
-        <div class="hello-name" data-edit-identity-name style="cursor:pointer;color:var(--muted);font-size:12px;margin-bottom:4px;text-decoration:underline;text-underline-offset:3px;">שלום, ${esc(myIdentity.name || '')}</div>
+        <img src="${getGlobalPlayer(myIdentity.id).photo || '/static/logo-watermark.png'}" data-edit-identity-name style="width:28px;height:28px;border-radius:50%;object-fit:cover;cursor:pointer;flex-shrink:0;border:1px solid var(--card-b);">
+        <div class="hello-name" style="color:var(--muted);font-size:12px;margin-bottom:4px;">שלום, <span data-edit-identity-name style="cursor:pointer;text-decoration:underline;text-underline-offset:3px;">${esc(myIdentity.name || '')}</span></div>
         ${isSuperAdmin() ? `<button class="icon-btn" data-open-admin-settings title="הגדרות">${icon('gear')}</button>` : ""}
       </div>
       <h1 class="serif">הקבוצות שלי</h1>
@@ -2071,7 +2072,11 @@ function renderModal(m){
       <button class="btn btn-primary btn-block" data-send-login-code>${icon('share')} שלח קוד כניסה</button>
     `;
   } else if (m.type === "identityName") {
-    title = m.forced ? "ברוכים הבאים" : "הגדרת שחקן";
+    // Same screen whether this is the mandatory post-login step or an editor-opened
+    // rename - was a separate, reduced "ברוכים הבאים" name-only variant when forced, but
+    // that just meant a first-time user had to come back to this same screen again right
+    // after to pick an avatar instead of doing it once here.
+    title = "הגדרת שחקן";
     const myPhoto = getGlobalPlayer(myIdentity.id).photo;
     // Login is mandatory now (see loginRequired) - by the time this modal can ever open,
     // myIdentity.email is always already set, so this is just a confirmation line, never
@@ -2080,16 +2085,14 @@ function renderModal(m){
       <p style="color:var(--muted);font-size:12px;text-align:center;margin:18px 0 0;padding-top:14px;border-top:1px solid var(--card-b);">מחוברים כ-<span dir="ltr">${esc(myIdentity.email)}</span> - השם והאווטר שלכם ישוחזרו אוטומטית במכשיר חדש.</p>
     `;
     body = `
-      ${m.forced ? `<p style="color:var(--muted);font-size:13px;">איך קוראים לך?</p>` : `
-        <div style="text-align:center;margin-bottom:14px;">
-          <img src="${myPhoto || '/static/logo-watermark.png'}" style="width:76px;height:76px;border-radius:50%;object-fit:cover;display:block;margin:0 auto 8px;border:2px solid var(--gold);">
-          <button class="btn btn-ghost btn-sm" data-change-avatar>${icon('pencil')} שנה אווטר</button>
-        </div>
-      `}
+      <div style="text-align:center;margin-bottom:14px;">
+        <img src="${myPhoto || '/static/logo-watermark.png'}" style="width:76px;height:76px;border-radius:50%;object-fit:cover;display:block;margin:0 auto 8px;border:2px solid var(--gold);">
+        <button class="btn btn-ghost btn-sm" data-change-avatar>${icon('pencil')} שנה אווטר</button>
+      </div>
       <div style="margin-bottom:12px;">
         <input type="text" id="identity-name-input" value="${esc(myIdentity.name || '')}" placeholder="השם שלך" style="width:100%;" autofocus>
       </div>
-      <button class="btn btn-primary btn-block" data-confirm-identity-name style="${m.forced?'':'margin-bottom:12px;'}">שמור</button>
+      <button class="btn btn-primary btn-block" style="margin-bottom:12px;" data-confirm-identity-name>שמור</button>
       ${!m.forced ? `<button class="btn btn-ghost btn-block" data-my-stats>${icon('bar')} הביצועים שלי</button>` : ""}
       ${loginSection}
     `;
@@ -2157,11 +2160,9 @@ function renderModal(m){
             ${rows.map((r,i) => `<div class="roster-row" style="align-items:center;">
               <div class="row" style="gap:10px;flex:1;min-width:0;">
                 <span style="color:var(--muted);font-size:12px;font-weight:700;flex-shrink:0;width:18px;">${i+1}</span>
-                ${r.photo ? `<img src="${r.photo}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;">` : `<div style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.08);flex-shrink:0;"></div>`}
                 <div style="min-width:0;">
                   <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.name || "(ללא שם)")}</div>
                   <div style="color:var(--muted);font-size:11px;" dir="ltr">${esc(r.email)}</div>
-                  ${r.phone ? `<div style="color:var(--muted);font-size:11px;">טלפון: ${esc(r.phone)}</div>` : ""}
                 </div>
               </div>
               <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
