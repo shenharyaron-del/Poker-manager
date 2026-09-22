@@ -430,23 +430,18 @@ let saveInFlight = null;
 // below) needs to wait out the FULL action, not just whichever single POST happens to be
 // running at the moment it checks - see mutateAndSave for where this gets set.
 let actionInFlight = null;
-// checkpoint=true marks this save as a meaningful point worth being able to restore back
-// to (a game ending, a community/game created or deleted) - the server only snapshots
-// history on those, not on every routine action, so the retained versions stay a useful
-// distance apart instead of all getting consumed within seconds of active play.
 // baseHash, when passed, asks the server to reject this save (409) if the shared state
 // has moved on since that hash was read - see mutateAndSave below for the retry loop
 // that uses this. Returns "ok" (saved), "conflict" (rejected, base is stale), or
 // "error" (network/other failure - already alerted). Existing callers that don't pass
 // baseHash are unaffected - the server skips the check entirely when it's absent.
-async function saveState(checkpoint, baseHash){
+async function saveState(baseHash){
   // Serialize saves so overlapping calls don't race each other.
   logSync(`saveState() called, buyins=${(state.games||[]).map(g=>g.buyins.length).join(',')}`);
   const run = async () => {
     logSync("save: POST start");
     try {
       const params = [];
-      if (checkpoint) params.push("checkpoint=1");
       if (baseHash) params.push("baseHash=" + encodeURIComponent(baseHash));
       const res = await fetch("/api/state" + (params.length ? "?" + params.join("&") : ""), {
         method: "POST",
@@ -472,9 +467,6 @@ async function saveState(checkpoint, baseHash){
 // re-applies the SAME mutation on the new base, and retries, rather than losing it.
 // mutatorFn must look its own data up fresh each call (e.g. getGame(id) inside it), not
 // close over references captured before this ran, since those become stale on retry.
-// mutatorFn may optionally return true/false to mark this save as a checkpoint (e.g. "did
-// this action just close the game?") - when it returns undefined, the checkpoint param
-// is used instead.
 // The first attempt skips the explicit re-sync GET and trusts lastStateHash as-is - it's
 // already kept fresh by the periodic/SSE-driven background refresh, so paying for a full
 // extra round trip before every single save just to confirm what we already knew doubled
@@ -485,7 +477,7 @@ async function saveState(checkpoint, baseHash){
 // the very first action if the initial load's hash fetch itself failed) - that must
 // never be sent as a falsy baseHash (the server skips its conflict check entirely when
 // it's absent), so force a real sync in that case too.
-async function mutateAndSave(mutatorFn, checkpoint){
+async function mutateAndSave(mutatorFn){
   // Marks the ENTIRE call (every retry attempt, not just whichever POST happens to be
   // running right now) as in-flight, so a concurrent doRefreshNow waits out the whole
   // thing - see actionInFlight above. Without this, a conflict+retry on a slow connection
@@ -500,9 +492,8 @@ async function mutateAndSave(mutatorFn, checkpoint){
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       if (attempt > 0 || !lastStateHash) await syncBeforeMutate();
       const baseHash = lastStateHash;
-      const mutatorResult = mutatorFn();
-      const effectiveCheckpoint = mutatorResult !== undefined ? mutatorResult : checkpoint;
-      const result = await saveState(effectiveCheckpoint, baseHash);
+      mutatorFn();
+      const result = await saveState(baseHash);
       // true only once the server has actually accepted and stored this save - callers
       // that need to know the mutation is really confirmed (e.g. only playing a sound
       // once the backend confirms a buy-in landed, not just optimistically on click) rely
@@ -1093,14 +1084,12 @@ function getActivePayboxEntry(c){
   return null;
 }
 function getGame(id){ return state.games.find(g => g.id === id); }
-// Returns true only the moment the game actually transitions to closed - callers use
-// that to mark their save as a checkpoint (see saveState), not on every call (this runs
-// after most cashout-related actions, including ones on an already-closed game).
+// Closes the game the moment every seated player has cashed out - called after most
+// cashout-related actions, including ones on an already-closed game (a no-op then).
 function maybeAutoCloseNight(g){
   const seated = (g.seats || []).filter(Boolean);
   const shouldClose = g.players.length > 0 && seated.every(pid => pid in g.cashouts);
-  if (shouldClose && !g.closed) { g.closed = true; return true; }
-  return false;
+  if (shouldClose && !g.closed) g.closed = true;
 }
 function gamesForCommunity(id){ return state.games.filter(g => g.communityId === id).sort((a,b)=> a.date < b.date ? 1 : -1); }
 
@@ -1565,7 +1554,6 @@ function icon(name){ return ICONS[name] || ""; }
 // ---------- Rendering ----------
 function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 function fmtTime(ts){ if(!ts) return ""; const d = new Date(ts); return d.toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'}); }
-function fmtDateTime(isoStr){ if(!isoStr) return ""; const d = new Date(isoStr); return d.toLocaleDateString('he-IL') + " " + d.toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'}); }
 
 // ---------- Screen names (for talking about the app together, and shown in the header) ----------
 const SCREEN_NAMES = {
@@ -1959,9 +1947,8 @@ function renderModal(m){
         <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-open-global-players>${icon('users')} רשימת שחקנים</button>
       </div>
       <div class="section-title" style="padding:0;margin:0 0 8px;">גיבוי ושחזור</div>
-      <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <div style="margin-bottom:8px;">
         <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-download-backup>${icon('download')} הורד גיבוי JSON</button>
-        <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-open-restore>${icon('undo')} שחזור גרסה קודמת</button>
       </div>
       <div style="margin-bottom:18px;position:relative;">
         <button type="button" class="btn btn-ghost btn-block" style="pointer-events:none;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('upload')} שחזר מקובץ גיבוי JSON</button>
@@ -2279,30 +2266,10 @@ function renderModal(m){
         <button class="btn btn-primary" data-add-roster style="padding:11px 16px;">${icon('plus')}</button>
       </div>
     `;
-  } else if (m.type === "restoreHistory") {
-    title = "שחזור גרסה קודמת";
-    if (m.versions === null) {
-      body = `<p style="color:var(--muted);font-size:13px;">טוען...</p>`;
-    } else if (!m.versions.length) {
-      body = `<p style="color:var(--muted);font-size:13px;">אין עדיין גרסאות שמורות - הן נשמרות אוטומטית מרגע שמישהו שומר שינוי.</p>`;
-    } else {
-      body = `
-        <p style="color:var(--muted);font-size:12px;margin-bottom:12px;">שחזור מחליף את כל הנתונים הנוכחיים (המשותפים לכולם) בגרסה שנבחרה. הגרסה הנוכחית תישמר אוטומטית ברשימה, כך שאפשר לחזור ממנה אם צריך.</p>
-        <div class="scroll-list">
-          ${m.versions.map(v => `<div class="roster-row"><span>${fmtDateTime(v.savedAt)}</span><button class="btn" style="background:#be123c;color:#fff;padding:8px 14px;" data-restore-version="${v.id}">שחזר</button></div>`).join("")}
-        </div>
-      `;
-    }
-  } else if (m.type === "confirmRestore") {
-    title = "אישור שחזור";
-    body = `
-      <p style="color:#6ee7b7;font-size:13px;">לשחזר את הגרסה מ-<b>${fmtDateTime(m.savedAt)}</b>? כל הנתונים הנוכחיים (המשותפים לכולם) יוחלפו בגרסה הזו. הגרסה הנוכחית תישמר אוטומטית ואפשר יהיה לחזור אליה.</p>
-      <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-restore>שחזר גרסה</button>
-    `;
   } else if (m.type === "confirmRestoreFromFile") {
     title = "שחזור מקובץ גיבוי";
     body = `
-      <p style="color:#6ee7b7;font-size:13px;">לשחזר מהקובץ <b>${esc(m.fileName)}</b> (${m.numCommunities} קבוצות, ${m.numGames} משחקים)? כל הנתונים הנוכחיים (המשותפים לכולם) יוחלפו בתוכן הקובץ. הגרסה הנוכחית תישמר אוטומטית ואפשר יהיה לחזור אליה.</p>
+      <p style="color:#6ee7b7;font-size:13px;">לשחזר מהקובץ <b>${esc(m.fileName)}</b> (${m.numCommunities} קבוצות, ${m.numGames} משחקים)? כל הנתונים הנוכחיים (המשותפים לכולם) יוחלפו בתוכן הקובץ. פעולה זו אינה הפיכה - אם תרצו לשמור על הנתונים הנוכחיים, הורידו גיבוי JSON שלהם קודם.</p>
       <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-restore-from-file>שחזר מהקובץ</button>
     `;
   } else if (m.type === "stats") {
@@ -2923,18 +2890,6 @@ function attachHandlers(){
     reader.readAsText(file);
   };
 
-  const openRestore = app.querySelector("[data-open-restore]");
-  if (openRestore) openRestore.onclick = async () => {
-    openModal({type:"restoreHistory", versions: null});
-    try {
-      const res = await fetch("/api/state/history");
-      const versions = res.ok ? await res.json() : [];
-      if (modal && modal.type === "restoreHistory") updateModal({versions});
-    } catch(e) {
-      if (modal && modal.type === "restoreHistory") updateModal({versions: []});
-    }
-  };
-
   const openPayboxSettings = app.querySelector("[data-open-paybox-settings]");
   if (openPayboxSettings) openPayboxSettings.onclick = () => {
     const c = getCommunity(openPayboxSettings.dataset.openPayboxSettings);
@@ -3038,7 +2993,6 @@ function attachHandlers(){
         g2.liveChips[pid] = Math.round(((g2.liveChips[pid]||0) + perPlayer2) * 100) / 100;
         if (g2.cashouts[pid]) g2.cashouts[pid].amount = Math.round(((g2.cashouts[pid].amount||0) + perPlayer2) * 100) / 100;
       });
-      return true; // checkpoint - a pot-balance correction is worth a history snapshot
     });
     balanceFixSelected = {};
     render();
@@ -3416,40 +3370,13 @@ function attachHandlers(){
     };
   }
 
-  if (modal && modal.type === "restoreHistory") {
-    app.querySelectorAll("[data-restore-version]").forEach(el => el.onclick = () => {
-      const v = (modal.versions||[]).find(x => String(x.id) === el.dataset.restoreVersion);
-      openModal({type:"confirmRestore", historyId: el.dataset.restoreVersion, savedAt: v ? v.savedAt : ""});
-    });
-  }
-
-  if (modal && modal.type === "confirmRestore") {
-    const confirmRestoreBtn = app.querySelector("[data-confirm-restore]");
-    if (confirmRestoreBtn) confirmRestoreBtn.onclick = async () => {
-      confirmRestoreBtn.disabled = true;
-      confirmRestoreBtn.textContent = "משחזר...";
-      try {
-        const res = await fetch(`/api/state/history/${modal.historyId}`);
-        if (!res.ok) throw new Error("failed to load version: " + res.status);
-        const restored = await res.json();
-        state = restored;
-        await saveState(true);
-        closeModal();
-      } catch(e) {
-        alert("השחזור נכשל - בדוק את החיבור לאינטרנט ונסה שוב.");
-        confirmRestoreBtn.disabled = false;
-        confirmRestoreBtn.textContent = "שחזר גרסה";
-      }
-    };
-  }
-
   if (modal && modal.type === "confirmRestoreFromFile") {
     const confirmBtn = app.querySelector("[data-confirm-restore-from-file]");
     if (confirmBtn) confirmBtn.onclick = async () => {
       confirmBtn.disabled = true;
       confirmBtn.textContent = "משחזר...";
       state = modal.data;
-      await saveState(true);
+      await saveState();
       closeModal();
     };
   }
@@ -3495,7 +3422,6 @@ function attachHandlers(){
         // the corrected cashout so the imbalance check reflects the fix.
         if (!g.liveChips) g.liveChips = {};
         g.liveChips[modal.playerId] = amt;
-        return true; // checkpoint - a manual correction is worth a history snapshot
       });
       closeModal();
     };
@@ -3516,8 +3442,8 @@ function attachHandlers(){
         if (co.arrangedWith) co.arrangedWith = co.arrangedWith.filter(id => id !== modal.playerId);
       });
       if (g.closed && g.players.some(p => !(p.id in g.cashouts))) g.closed = false;
-      const justClosed = maybeAutoCloseNight(g);
-      saveState(justClosed);
+      maybeAutoCloseNight(g);
+      saveState();
       closeModal();
     };
   }
@@ -3893,7 +3819,7 @@ function attachHandlers(){
       myIdentity.myPlayers[communityId] = creatorPlayer.id;
       saveIdentity();
       state.communities.push({ id: communityId, name, roster: [creatorPlayer], createdBy: myIdentity.id, createdByName: myIdentity.name });
-      saveState(true);
+      saveState();
       closeModal();
     };
   }
@@ -3910,7 +3836,7 @@ function attachHandlers(){
       const payboxLinks = (src.payboxLinks||[]).map(pl => { const newId = uid(); idMap[pl.id] = newId; return {...pl, id: newId}; });
       const activePayboxLinkId = src.activePayboxLinkId ? idMap[src.activePayboxLinkId] : undefined;
       state.communities.push({ id: uid(), name, roster, chipValues, payboxLinks, activePayboxLinkId, payboxLink: src.payboxLink, createdBy: myIdentity.id, createdByName: myIdentity.name });
-      saveState(true);
+      saveState();
       closeModal();
     };
   }
@@ -3920,7 +3846,7 @@ function attachHandlers(){
     if (confirmBtn) confirmBtn.onclick = () => {
       state.games = state.games.filter(g => g.communityId !== modal.communityId);
       state.communities = state.communities.filter(c => c.id !== modal.communityId);
-      saveState(true);
+      saveState();
       go("home");
     };
   }
@@ -3931,7 +3857,7 @@ function attachHandlers(){
       const g = getGame(modal.gameId);
       const communityId = g.communityId;
       state.games = state.games.filter(gm => gm.id !== modal.gameId);
-      saveState(true);
+      saveState();
       go("community", {communityId});
     };
   }
@@ -3984,7 +3910,7 @@ function attachHandlers(){
       await mutateAndSave(() => {
         const g = getGame(gameId);
         g.buyins.push({id: uid(), playerId, amount, ts: Date.now()});
-      }, true); // checkpoint - a post-game correction is worth a history snapshot
+      });
       render(); // re-renders the same history modal with the fresh buy-in list/totals
     });
     const addCustomBuyinBtn = app.querySelector("[data-check-balance-add-custom-buyin]");
@@ -4237,7 +4163,7 @@ function attachHandlers(){
         // As if this player never sat down tonight - so if they come back, they start clean.
         g.buyins = g.buyins.filter(b => b.playerId !== modal.playerId);
         if (g.liveChips) delete g.liveChips[modal.playerId];
-        return maybeAutoCloseNight(g);
+        maybeAutoCloseNight(g);
       });
       closeModal();
     };
@@ -4337,7 +4263,7 @@ function attachHandlers(){
         if (!g.liveChips) g.liveChips = {};
         g.liveChips[modal.playerId] = chips;
         g.cashouts[modal.playerId] = {amount: chips, ts: Date.now(), arrangedWith: []};
-        return maybeAutoCloseNight(g);
+        maybeAutoCloseNight(g);
       });
       closeModal();
     };
@@ -4382,7 +4308,7 @@ function attachHandlers(){
         g.cashouts[modal.playerId] = {amount: amt, ts: Date.now(), arrangedWith: []};
         if (!g.liveChips) g.liveChips = {};
         g.liveChips[modal.playerId] = amt;
-        return maybeAutoCloseNight(g);
+        maybeAutoCloseNight(g);
       });
       closeModal();
     };
@@ -4456,7 +4382,6 @@ function attachHandlers(){
         g.closed = true;
         const c = getCommunity(g.communityId);
         c.lastParticipants = g.players.map(p=>p.id);
-        return true; // checkpoint - closing a game is worth a history snapshot
       });
       openModal({type:"summary", gameId});
     };

@@ -59,11 +59,6 @@ _INIT_STATEMENTS = (
     "  client_id TEXT PRIMARY KEY,"
     "  data TEXT NOT NULL"
     ")",
-    "CREATE TABLE IF NOT EXISTS state_history ("
-    "  id SERIAL PRIMARY KEY,"
-    "  data TEXT NOT NULL,"
-    "  saved_at TIMESTAMP NOT NULL DEFAULT now()"
-    ")",
     # id is a content hash (see upload_photo) - uploading the same bytes twice is a
     # harmless no-op instead of storing a duplicate copy.
     "CREATE TABLE IF NOT EXISTS photos ("
@@ -242,35 +237,20 @@ def get_state_hash():
 def save_state():
     data = request.get_data(as_text=True)
     json.loads(data)  # reject anything that isn't valid JSON before storing it
-    # Every routine action (a buy-in, a seat change) saves too - snapshotting on every one
-    # of those would burn through the retained history within seconds during an active
-    # game and leave nothing useful to restore. The client marks only the saves that
-    # follow a meaningful checkpoint (a game ending, a community/game created or deleted)
-    # with ?checkpoint=1 - only those get a history entry.
-    checkpoint = request.args.get("checkpoint") == "1"
     # Optional optimistic-concurrency check: the client sends the hash of the state it
     # built this save on top of. If the shared state has moved on since then (another
     # device saved first), reject instead of silently overwriting whatever they just
     # changed - the client re-syncs, reapplies its own change on the new base, and
     # retries. Callers that don't pass this skip the check entirely (unchanged behavior).
-    #
-    # This check MUST happen inside the get_db() lock, not before it: get_db() serializes
-    # every request onto one connection, so checking-then-writing atomically under that
-    # same lock is what actually closes the race. Checking against the in-memory cache
-    # before acquiring the lock looked equivalent but wasn't - two requests built on the
-    # identical base hash could both pass that check before either one's write updated
-    # the cache, then both proceed to write once the lock let them through one at a time,
-    # the second blindly overwriting the first despite its own check having "passed".
     base_hash = request.args.get("baseHash")
     with get_db() as conn:
         with conn.cursor() as cur:
-            if base_hash and not checkpoint:
-                # Hot path (routine actions - buy-ins, seating, etc.): fold the check
-                # into the write itself as a single atomic statement instead of a
-                # separate SELECT then WRITE - Postgres's own row lock makes this
-                # check-and-write atomic on its own, one round trip instead of two.
-                # rowcount is 0 only when a row already existed and its hash didn't
-                # match (a real conflict) - a first-ever insert always proceeds.
+            if base_hash:
+                # Fold the check into the write itself as a single atomic statement
+                # instead of a separate SELECT then WRITE - Postgres's own row lock
+                # makes this check-and-write atomic on its own, one round trip instead
+                # of two. rowcount is 0 only when a row already existed and its hash
+                # didn't match (a real conflict) - a first-ever insert always proceeds.
                 cur.execute(
                     "INSERT INTO shared_state (id, data) VALUES (1, %s) "
                     "ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data "
@@ -281,34 +261,6 @@ def save_state():
                     conn.commit()
                     return jsonify({"conflict": True}), 409
             else:
-                # Rarer path: a checkpoint save needs the pre-overwrite value anyway
-                # (to snapshot into history), so reuse that same read for the baseHash
-                # comparison too instead of reading twice.
-                row_existed = False
-                prev_data = None
-                if checkpoint or base_hash:
-                    cur.execute("SELECT data FROM shared_state WHERE id = 1")
-                    row = cur.fetchone()
-                    row_existed = row is not None
-                    prev_data = row[0] if row else _default_state_json()
-                if base_hash:
-                    current_hash = hashlib.md5(prev_data.encode("utf-8")).hexdigest()
-                    if base_hash != current_hash:
-                        # Close out this read-only transaction before returning - this
-                        # connection is reused for the next request, not closed here.
-                        conn.commit()
-                        return jsonify({"conflict": True}), 409
-                if checkpoint:
-                    # Snapshot whatever was there before this overwrites it, so a bad
-                    # save (accidental or a bug) can be rolled back - keep only the
-                    # last few, a safety net for undoing a recent mistake, not a full
-                    # audit log. Nothing to snapshot yet on the very first-ever save.
-                    if row_existed:
-                        cur.execute("INSERT INTO state_history (data) VALUES (%s)", (prev_data,))
-                        cur.execute(
-                            "DELETE FROM state_history WHERE id NOT IN "
-                            "(SELECT id FROM state_history ORDER BY saved_at DESC LIMIT 3)"
-                        )
                 cur.execute(
                     "INSERT INTO shared_state (id, data) VALUES (1, %s) "
                     "ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data",
@@ -323,28 +275,6 @@ def save_state():
     # request could update that cache in between and hand back the wrong hash.
     new_hash = hashlib.md5(data.encode("utf-8")).hexdigest()
     return jsonify({"ok": True, "hash": new_hash})
-
-
-@app.route("/api/state/history")
-def get_state_history():
-    with get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT id, saved_at FROM state_history ORDER BY saved_at DESC")
-            rows = cur.fetchall()
-        conn.commit()
-    return jsonify([{"id": r[0], "savedAt": r[1].isoformat()} for r in rows])
-
-
-@app.route("/api/state/history/<int:history_id>", methods=["GET"])
-def get_state_history_entry(history_id):
-    with get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT data FROM state_history WHERE id = %s", (history_id,))
-            row = cur.fetchone()
-        conn.commit()
-    if not row:
-        return jsonify({"error": "not found"}), 404
-    return row[0], 200, {"Content-Type": "application/json"}
 
 
 @app.route("/api/events")
