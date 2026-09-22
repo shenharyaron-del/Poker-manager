@@ -4,8 +4,12 @@ import json
 import os
 import queue
 import re
+import secrets
 import threading
+import urllib.error
+import urllib.request
 from contextlib import contextmanager
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import anthropic
@@ -23,9 +27,15 @@ BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 DATABASE_URL = os.environ["DATABASE_URL"]
 DATA_URL_RE = re.compile(r"^data:(image/[a-zA-Z0-9.+-]+);base64,(.+)$", re.DOTALL)
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 # Render sets this automatically to the deployed commit's SHA - lets Settings show
 # exactly which version is live, with no separate manual version number to keep in sync.
 APP_VERSION = os.environ.get("RENDER_GIT_COMMIT", "local")[:7]
+# The one account that's a super admin from the moment it's ever created, with no other
+# admin needed to grant it - every other account's role defaults to plain "user".
+SUPER_ADMIN_EMAIL = os.environ.get("SUPER_ADMIN_EMAIL", "").strip().lower()
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
+LOGIN_CODE_TTL_MINUTES = 10
 
 app = Flask(__name__, static_folder=None)
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10MB, enough for a chip photo
@@ -64,6 +74,26 @@ _INIT_STATEMENTS = (
     "CREATE TABLE IF NOT EXISTS photos ("
     "  id TEXT PRIMARY KEY,"
     "  data TEXT NOT NULL"
+    ")",
+    # A person's real identity, keyed by email instead of a per-device id - name/photo/
+    # phone/role/myPlayers live here so they follow the person across devices, not just
+    # the one they first set them up on.
+    "CREATE TABLE IF NOT EXISTS accounts ("
+    "  email TEXT PRIMARY KEY,"
+    "  data TEXT NOT NULL"
+    ")",
+    # Which device (clientId) is allowed to act as which account without re-entering a
+    # login code - written once, right after that device verifies a code for that email.
+    "CREATE TABLE IF NOT EXISTS trusted_devices ("
+    "  client_id TEXT PRIMARY KEY,"
+    "  email TEXT NOT NULL"
+    ")",
+    # One outstanding login code per email at a time - requesting a new one replaces
+    # whatever was there before, and a used or expired code is deleted outright.
+    "CREATE TABLE IF NOT EXISTS login_codes ("
+    "  email TEXT PRIMARY KEY,"
+    "  code TEXT NOT NULL,"
+    "  expires_at TIMESTAMP NOT NULL"
     ")",
 )
 
@@ -377,6 +407,169 @@ def get_photo(photo_id):
     # ever overwriting this one.
     response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     return response
+
+
+def _get_account(email):
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT data FROM accounts WHERE email = %s", (email,))
+            row = cur.fetchone()
+        conn.commit()
+    return json.loads(row[0]) if row else None
+
+
+def _default_account(email):
+    return {
+        "name": None,
+        "photo": None,
+        "phone": None,
+        "role": "superAdmin" if email == SUPER_ADMIN_EMAIL else "user",
+        "myPlayers": {},
+    }
+
+
+def _save_account(email, account):
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO accounts (email, data) VALUES (%s, %s) "
+                "ON CONFLICT (email) DO UPDATE SET data = EXCLUDED.data",
+                (email, json.dumps(account)),
+            )
+        conn.commit()
+
+
+def _trusted_email(client_id):
+    if not client_id:
+        return None
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT email FROM trusted_devices WHERE client_id = %s", (client_id,))
+            row = cur.fetchone()
+        conn.commit()
+    return row[0] if row else None
+
+
+def _send_login_code_email(email, code):
+    if not BREVO_API_KEY:
+        raise RuntimeError("BREVO_API_KEY not configured")
+    payload = json.dumps({
+        # Must be a sender verified in the Brevo account - an unverified/made-up address
+        # is silently never delivered (no bounce, no event logged) rather than rejected.
+        "sender": {"name": "Poker Manager", "email": "Poker.Manager44@gmail.com"},
+        "to": [{"email": email}],
+        "subject": f"קוד הכניסה שלך: {code}",
+        "htmlContent": (
+            f"<div dir='rtl' style='font-family:sans-serif;font-size:16px;'>"
+            f"קוד הכניסה שלך ל-Poker Manager:<br>"
+            f"<b style='font-size:28px;letter-spacing:4px;'>{code}</b><br>"
+            f"בתוקף ל-{LOGIN_CODE_TTL_MINUTES} דקות.</div>"
+        ),
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        "https://api.brevo.com/v3/smtp/email",
+        data=payload,
+        method="POST",
+        headers={"api-key": BREVO_API_KEY, "Content-Type": "application/json", "Accept": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        resp.read()
+
+
+@app.route("/api/auth/request-code", methods=["POST"])
+def request_login_code():
+    body = request.get_json(silent=True) or {}
+    email = str(body.get("email", "")).strip().lower()
+    if not EMAIL_RE.match(email):
+        return jsonify({"error": "invalid email"}), 400
+    code = f"{secrets.randbelow(1000000):06d}"
+    expires_at = datetime.utcnow() + timedelta(minutes=LOGIN_CODE_TTL_MINUTES)
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO login_codes (email, code, expires_at) VALUES (%s, %s, %s) "
+                "ON CONFLICT (email) DO UPDATE SET code = EXCLUDED.code, expires_at = EXCLUDED.expires_at",
+                (email, code, expires_at),
+            )
+        conn.commit()
+    try:
+        _send_login_code_email(email, code)
+    except (urllib.error.URLError, RuntimeError) as e:
+        return jsonify({"error": f"failed to send email: {e}"}), 502
+    return jsonify({"ok": True})
+
+
+@app.route("/api/auth/verify-code", methods=["POST"])
+def verify_login_code():
+    body = request.get_json(silent=True) or {}
+    email = str(body.get("email", "")).strip().lower()
+    code = str(body.get("code", "")).strip()
+    client_id = str(body.get("clientId", "")).strip()
+    if not email or not code or not client_id:
+        return jsonify({"error": "missing email/code/clientId"}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT code, expires_at FROM login_codes WHERE email = %s", (email,))
+            row = cur.fetchone()
+            if not row or row[0] != code or row[1] < datetime.utcnow():
+                conn.commit()
+                return jsonify({"error": "invalid or expired code"}), 400
+            cur.execute("DELETE FROM login_codes WHERE email = %s", (email,))
+            cur.execute(
+                "INSERT INTO trusted_devices (client_id, email) VALUES (%s, %s) "
+                "ON CONFLICT (client_id) DO UPDATE SET email = EXCLUDED.email",
+                (client_id, email),
+            )
+        conn.commit()
+    account = _get_account(email)
+    if account is None:
+        account = _default_account(email)
+        _save_account(email, account)
+    return jsonify({"email": email, **account})
+
+
+@app.route("/api/auth/session")
+def auth_session():
+    email = _trusted_email(request.args.get("clientId", ""))
+    if not email:
+        return jsonify({"loggedIn": False})
+    account = _get_account(email) or _default_account(email)
+    return jsonify({"loggedIn": True, "email": email, **account})
+
+
+@app.route("/api/auth/account", methods=["POST"])
+def update_account():
+    email = _trusted_email(request.args.get("clientId", ""))
+    if not email:
+        return jsonify({"error": "not logged in"}), 401
+    updates = request.get_json(silent=True) or {}
+    account = _get_account(email) or _default_account(email)
+    # role is deliberately not settable here - see set_account_role, which is the only
+    # path allowed to change it, and checks the requester is themselves a super admin.
+    for key in ("name", "photo", "phone", "myPlayers"):
+        if key in updates:
+            account[key] = updates[key]
+    _save_account(email, account)
+    return jsonify({"email": email, **account})
+
+
+@app.route("/api/auth/set-role", methods=["POST"])
+def set_account_role():
+    requester_email = _trusted_email(request.args.get("clientId", ""))
+    if not requester_email:
+        return jsonify({"error": "not logged in"}), 401
+    requester_account = _get_account(requester_email) or _default_account(requester_email)
+    if requester_account.get("role") != "superAdmin":
+        return jsonify({"error": "forbidden"}), 403
+    body = request.get_json(silent=True) or {}
+    target_email = str(body.get("email", "")).strip().lower()
+    new_role = body.get("role")
+    if new_role not in ("user", "superAdmin") or not target_email:
+        return jsonify({"error": "invalid request"}), 400
+    target_account = _get_account(target_email) or _default_account(target_email)
+    target_account["role"] = new_role
+    _save_account(target_email, target_account)
+    return jsonify({"ok": True})
 
 
 @app.route("/api/vision", methods=["POST"])
