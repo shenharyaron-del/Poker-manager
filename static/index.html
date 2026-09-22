@@ -703,10 +703,39 @@ function applyAccountToIdentity(account){
   myIdentity.email = account.email;
   myIdentity.role = account.role;
   if (account.name) myIdentity.name = account.name;
+  // Unify this device's player identity (roster/buy-in linking) with the account's
+  // canonical one, BEFORE writing photo/phone below, so they land on the right
+  // globalPlayers record instead of one about to be abandoned.
+  if (account.playerId) myIdentity.id = account.playerId;
   if (account.photo || account.phone) setGlobalPlayer(myIdentity.id, {
     ...(account.photo ? {photo: account.photo} : {}),
     ...(account.phone ? {phone: account.phone} : {}),
   });
+}
+// Claims this device's own local id as the account's shared player id, only when the
+// account doesn't have one yet (a brand new account, or one from before this field
+// shipped) - a no-op call otherwise. See applyAccountToIdentity for how it's adopted.
+async function claimPlayerId(localId){
+  try {
+    const res = await fetch("/api/auth/claim-player-id", {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({clientId: getClientId(), localId})
+    });
+    if (!res.ok) return null;
+    return (await res.json()).playerId || null;
+  } catch(e) { return null; }
+}
+// Pushes a name/photo/phone change up to the account itself (not just this device's
+// local identity/globalPlayers record) - otherwise the next login or reload pulls the
+// account's still-old value back down via applyAccountToIdentity and silently reverts
+// the change the user just made.
+async function updateAccount(updates){
+  if (!myIdentity.email) return;
+  try {
+    await fetch("/api/auth/account?clientId=" + encodeURIComponent(getClientId()), {
+      method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(updates)
+    });
+  } catch(e) { console.error("account update failed", e); }
 }
 // Read-only - lets the login screen offer "add this device" vs "replace the existing
 // one" before ever sending a code, not just after the fact.
@@ -729,7 +758,7 @@ async function requestLoginCode(email){
 async function verifyLoginCode(email, code, replace){
   const res = await fetch("/api/auth/verify-code", {
     method: "POST", headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({email, code, clientId: getClientId(), replace: !!replace})
+    body: JSON.stringify({email, code, clientId: getClientId(), replace: !!replace, localId: myIdentity.id})
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || "הקוד שגוי או פג תוקף");
@@ -1187,7 +1216,7 @@ function openFilePicker(communityId, playerId, useCamera){
       catch(e) { alert("העלאת התמונה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
       // No communityId means this was opened from the identity/name screen - set the
       // viewer's own global avatar directly rather than a specific roster entry.
-      if (!communityId) { setGlobalPlayer(myIdentity.id, {photo}); saveState(); render(); return; }
+      if (!communityId) { setGlobalPlayer(myIdentity.id, {photo}); saveState(); updateAccount({photo}); render(); return; }
       const c = getCommunity(communityId);
       const rp = c && c.roster.find(pl => pl.id === playerId);
       if (rp && !rp.clientId) { alert("אפשר לקבוע אווטר רק לשחקן שנכנס בעצמו דרך קישור הזמנה."); return; }
@@ -1964,7 +1993,7 @@ function renderModal(m){
       <button class="btn btn-primary btn-block" data-send-login-code>${icon('share')} שלח קוד כניסה</button>
     `;
   } else if (m.type === "identityName") {
-    title = m.forced ? "ברוכים הבאים" : "עדכון שם";
+    title = m.forced ? "ברוכים הבאים" : "הגדרת שחקן";
     const myPhoto = getGlobalPlayer(myIdentity.id).photo;
     // Login is mandatory now (see loginRequired) - by the time this modal can ever open,
     // myIdentity.email is always already set, so this is just a confirmation line, never
@@ -3236,6 +3265,7 @@ function attachHandlers(){
       showButtonLoading(confirmBtn);
       myIdentity.name = name;
       saveIdentity();
+      updateAccount({name});
       renamePlayerEverywhere(myIdentity.id, name);
       await saveState();
       // A first-time visitor via an invite link has no name yet when autoJoinViaInvite
@@ -3327,7 +3357,7 @@ function attachHandlers(){
       // No communityId/playerId means this was opened from the identity/name screen -
       // set the viewer's own global avatar directly rather than a specific roster entry.
       if (!modal.communityId) {
-        if (photo) { setGlobalPlayer(myIdentity.id, {photo}); saveState(); }
+        if (photo) { setGlobalPlayer(myIdentity.id, {photo}); saveState(); updateAccount({photo}); }
         closeModal();
         return;
       }
@@ -4592,8 +4622,18 @@ window.addEventListener("popstate", () => {
     const account = sessionResult.status === "fulfilled" ? sessionResult.value : null;
     if (account) {
       const hadName = !!myIdentity.name, hadPhoto = !!getGlobalPlayer(myIdentity.id).photo;
+      const localIdBeforeSync = myIdentity.id;
       applyAccountToIdentity(account);
-      if (!hadName && myIdentity.name) saveIdentity();
+      if (!account.playerId) {
+        // Doesn't block first paint - claims this device's own id as the account's
+        // shared one if nobody has yet; a harmless no-op if another device just won
+        // this same race first.
+        claimPlayerId(localIdBeforeSync).then(claimed => {
+          if (claimed && claimed !== myIdentity.id) { myIdentity.id = claimed; render(); }
+          if (claimed) saveIdentity();
+        });
+      }
+      if (myIdentity.id !== localIdBeforeSync || (!hadName && myIdentity.name)) saveIdentity();
       if (!hadPhoto && getGlobalPlayer(myIdentity.id).photo) saveState();
     }
   }

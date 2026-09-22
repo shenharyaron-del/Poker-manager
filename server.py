@@ -425,7 +425,19 @@ def _default_account(email):
         "phone": None,
         "role": "superAdmin" if email == SUPER_ADMIN_EMAIL else "user",
         "myPlayers": {},
+        "playerId": None,
     }
+
+
+def _claim_player_id(account, local_id):
+    # The canonical player identity (roster/buy-in linking) shared by every device on
+    # this account - before this, each device kept its own random local id, so logging
+    # into the same account from a second device (or after localStorage got cleared)
+    # silently split one person into two different roster players. Claimed once by
+    # whichever device syncs first; every other device just adopts the same value.
+    if not account.get("playerId") and local_id:
+        account["playerId"] = local_id
+    return account
 
 
 def _save_account(email, account):
@@ -521,6 +533,7 @@ def verify_login_code():
     email = str(body.get("email", "")).strip().lower()
     code = str(body.get("code", "")).strip()
     client_id = str(body.get("clientId", "")).strip()
+    local_id = str(body.get("localId", "")).strip()
     # Only meaningful once the code itself has been verified below - a device choice
     # made at the email step is just intent until then, never acted on early.
     replace_existing = bool(body.get("replace"))
@@ -542,10 +555,9 @@ def verify_login_code():
                 (client_id, email),
             )
         conn.commit()
-    account = _get_account(email)
-    if account is None:
-        account = _default_account(email)
-        _save_account(email, account)
+    account = _get_account(email) or _default_account(email)
+    _claim_player_id(account, local_id)
+    _save_account(email, account)
     return jsonify({"email": email, **account})
 
 
@@ -556,6 +568,22 @@ def auth_session():
         return jsonify({"loggedIn": False})
     account = _get_account(email) or _default_account(email)
     return jsonify({"loggedIn": True, "email": email, **account})
+
+
+@app.route("/api/auth/claim-player-id", methods=["POST"])
+def claim_player_id():
+    # Called only when the session response came back without a playerId yet (a brand
+    # new account, or one that predates this field) - claims this device's own local id
+    # as the account's shared one, or returns whichever id another device already won.
+    body = request.get_json(silent=True) or {}
+    email = _trusted_email(str(body.get("clientId", "")).strip())
+    if not email:
+        return jsonify({"error": "not logged in"}), 401
+    local_id = str(body.get("localId", "")).strip()
+    account = _get_account(email) or _default_account(email)
+    _claim_player_id(account, local_id)
+    _save_account(email, account)
+    return jsonify({"playerId": account.get("playerId")})
 
 
 @app.route("/api/auth/account", methods=["POST"])
