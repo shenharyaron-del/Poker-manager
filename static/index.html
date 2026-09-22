@@ -2353,15 +2353,9 @@ function renderModal(m){
       </div>
     ` : "";
     const pickButtons = `
-      <div style="display:flex;gap:8px;margin-bottom:10px;">
-        <div style="position:relative;flex:1;">
-          <button type="button" class="btn btn-ghost btn-block" style="pointer-events:none;">${icon('plus')} צלם</button>
-          <input type="file" accept="image/*" capture="environment" id="chip-camera-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
-        </div>
-        <div style="position:relative;flex:1;">
-          <button type="button" class="btn btn-primary btn-block" style="pointer-events:none;">${icon('plus')} העלה תמונה</button>
-          <input type="file" accept="image/*" id="chip-upload-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
-        </div>
+      <div style="position:relative;margin-bottom:10px;">
+        <button type="button" class="btn btn-primary btn-block" style="pointer-events:none;">${icon('plus')} צלם</button>
+        <input type="file" accept="image/*" capture="environment" id="chip-camera-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
       </div>
     `;
     if (!m.imageSrc) {
@@ -2372,7 +2366,7 @@ function renderModal(m){
         </div>
         <p style="color:var(--muted);font-size:12px;margin-top:-8px;">משמש לספירת ציפים כוללת בסיום ערב (כמות ציפים ולא לפי צבע) - למשל, יחס של 4 אומר ש-100 ציפים שווים ל-₪25.</p>
         ${editableList}
-        <p style="color:var(--muted);font-size:13px;">כדי להוסיף זוטונים: צלמו/העלו תמונה עם כל הזוטונים פרוסים בנפרד על משטח, ממבט על (מלמעלה) - נזהה אותם אוטומטית ונסמן מסגרת סביב כל אחד. אפשר לגרור, לשנות גודל, או להקיש על התמונה כדי להוסיף עוד ידנית. או, הוסיפו זיטון ידנית בלי תמונה בכלל.</p>
+        <p style="color:var(--muted);font-size:13px;">כדי להוסיף זוטונים: צלמו תמונה עם כל הזוטונים פרוסים בנפרד על משטח, ממבט על (מלמעלה) - נזהה אותם אוטומטית ונסמן מסגרת סביב כל אחד. אפשר לגרור, לשנות גודל, או להקיש על התמונה כדי להוסיף עוד ידנית. או, הוסיפו זיטון ידנית בלי תמונה בכלל.</p>
         ${pickButtons}
         <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-add-chip-manual>${icon('plus')} הוסף צבע ידנית</button>
         <button class="btn btn-primary btn-block" data-save-chip-values>שמור שינויים</button>
@@ -2391,7 +2385,7 @@ function renderModal(m){
       }).join("") : "";
       body = `
         <div style="width:100%;margin-bottom:10px;position:relative;">
-          <img src="${m.imageSrc}" data-chip-photo style="width:100%;border-radius:12px;display:block;cursor:crosshair;${m.analyzingChips?'opacity:.5;':''}">
+          <img src="${m.imageSrc}" data-chip-photo draggable="false" oncontextmenu="return false" style="width:100%;border-radius:12px;display:block;cursor:crosshair;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;${m.analyzingChips?'opacity:.5;':''}">
           ${markers}
           ${m.analyzingChips ? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;"><span class="poker-loading-spin">${icon('chip')}</span></div>` : ""}
         </div>
@@ -3790,19 +3784,23 @@ function attachHandlers(){
       if (!file) return;
       const reader = new FileReader();
       reader.onload = () => {
-        const img = new Image();
-        img.onload = () => {
-          updateModal({imageSrc: reader.result, imageW: img.naturalWidth, imageH: img.naturalHeight, points: modal.points, analyzingChips: true});
-          detectChipsInPhoto(reader.result, img.naturalWidth, img.naturalHeight, img);
-        };
-        img.src = reader.result;
+        // Resized to Claude's own vision cap before sending (see resizeImageDataUrl,
+        // also used by the odds photo) - and this resized version is what's displayed
+        // and cropped too, so the boxes Claude returns land exactly where shown instead
+        // of drifting against whatever internal downscale Claude would otherwise apply.
+        resizeImageDataUrl(reader.result, 1568, (resizedDataUrl) => {
+          const img = new Image();
+          img.onload = () => {
+            updateModal({imageSrc: resizedDataUrl, imageW: img.naturalWidth, imageH: img.naturalHeight, points: modal.points, analyzingChips: true});
+            detectChipsInPhoto(resizedDataUrl, img.naturalWidth, img.naturalHeight, img);
+          };
+          img.src = resizedDataUrl;
+        });
       };
       reader.readAsDataURL(file);
     };
     const cameraInput = app.querySelector("#chip-camera-input");
     if (cameraInput) cameraInput.onchange = handleChipSetupFile;
-    const uploadInput = app.querySelector("#chip-upload-input");
-    if (uploadInput) uploadInput.onchange = handleChipSetupFile;
     const photoEl = app.querySelector("[data-chip-photo]");
     const buildSourceCanvas = () => {
       const canvas = document.createElement("canvas");
