@@ -701,6 +701,7 @@ async function checkLoginSession(){
 // identity/globalPlayer record - the one place both call sites share, so they can't drift.
 function applyAccountToIdentity(account){
   myIdentity.email = account.email;
+  myIdentity.role = account.role;
   if (account.name) myIdentity.name = account.name;
   if (account.photo || account.phone) setGlobalPlayer(myIdentity.id, {
     ...(account.photo ? {photo: account.photo} : {}),
@@ -1222,16 +1223,9 @@ function getAvatarGroups(){
   }
   return visible;
 }
-const SUPER_ADMIN_NAME = "ירון שנהר";
-// A player's role can be set explicitly (state.globalPlayers[clientId].role) via the
-// global players list - until it has been, fall back to the original hardcoded super
-// admin by name, so that person doesn't lose access the moment this ships.
-function getPlayerRole(clientId, resolvedName){
-  const stored = state.globalPlayers && state.globalPlayers[clientId] && state.globalPlayers[clientId].role;
-  if (stored) return stored;
-  return resolvedName === SUPER_ADMIN_NAME ? "superAdmin" : "user";
-}
-function isSuperAdmin(){ return getPlayerRole(myIdentity.id, myIdentity.name) === "superAdmin"; }
+// Role now lives entirely on the logged-in account (see server.py's /api/auth/*), set on
+// myIdentity by applyAccountToIdentity - never the old per-device globalPlayers.role.
+function isSuperAdmin(){ return myIdentity.role === "superAdmin"; }
 
 const PROFIT_BUCKETS = [
   {min:-Infinity, max:-200, label:"-200",     loss:true},
@@ -1939,7 +1933,21 @@ function renderTable(gameId){
 function renderModal(m){
   let body = "";
   let title = "";
-  if (m.type === "identityName") {
+  if (m.type === "loginRequired") {
+    title = "ברוכים הבאים";
+    body = m.loginStep === "code" ? `
+      <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">שלחנו קוד בן 6 ספרות ל-<span dir="ltr">${esc(m.loginEmail)}</span></p>
+      <input type="text" inputmode="numeric" id="login-code-input" placeholder="קוד בן 6 ספרות" style="width:100%;text-align:center;letter-spacing:4px;font-size:18px;margin-bottom:8px;" autofocus>
+      ${m.loginError ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.loginError)}</p>` : ""}
+      <button class="btn btn-primary btn-block" data-confirm-login-code style="margin-bottom:8px;">אשר קוד</button>
+      <button class="btn btn-ghost btn-block" data-resend-login-code>שלח קוד שוב</button>
+    ` : `
+      <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">כדי להשתמש באפליקציה, התחברו עם האימייל שלכם - נשלח לכם קוד בן 6 ספרות.</p>
+      <input type="email" id="login-email-input" placeholder="האימייל שלך" dir="ltr" style="width:100%;text-align:center;margin-bottom:8px;" value="${esc(m.loginEmail||'')}" autofocus>
+      ${m.loginError ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.loginError)}</p>` : ""}
+      <button class="btn btn-primary btn-block" data-send-login-code>${icon('share')} שלח קוד כניסה</button>
+    `;
+  } else if (m.type === "identityName") {
     title = m.forced ? "ברוכים הבאים" : "עדכון שם";
     const myPhoto = getGlobalPlayer(myIdentity.id).photo;
     const loginSection = myIdentity.email ? `
@@ -2019,59 +2027,43 @@ function renderModal(m){
       <div style="text-align:center;margin-top:8px;color:var(--muted);font-size:11px;">גרסה: ${esc(appVersion || "לא ידוע")}</div>
     `;
   } else if (m.type === "globalPlayers") {
-    title = "שחקנים גלובליים";
-    // The list must reflect everyone who's actually linked to a roster somewhere (the
-    // real source of truth for "who joined"), not just clientIds that happen to have a
-    // phone/photo saved - that left genuinely-joined players with neither invisible here,
-    // and separately, still surface any leftover globalPlayers entry no roster points to
-    // anymore (a true orphan) so it can be cleaned up.
-    const rosterClientIds = new Set();
-    state.communities.forEach(c => c.roster.forEach(p => { if (p.clientId) rosterClientIds.add(p.clientId); }));
-    const orphanIds = Object.keys(state.globalPlayers || {}).filter(cid => !rosterClientIds.has(cid));
-    const clientIds = [...rosterClientIds, ...orphanIds];
-    const filter = m.roleFilter || "all";
-    let rows = clientIds.map(cid => {
-      let name = null;
-      const memberOf = [];
-      state.communities.forEach(c => {
-        const match = c.roster.find(p => p.clientId === cid);
-        if (match) { if (!name) name = match.name; memberOf.push(c.name); }
-      });
-      const data = (state.globalPlayers && state.globalPlayers[cid]) || {};
-      return { clientId: cid, name, role: getPlayerRole(cid, name), photo: data.photo, phone: data.phone, memberOf, orphaned: !name };
-    });
-    if (filter !== "all") rows = rows.filter(r => r.role === filter);
-    rows.sort((a,b) => (a.name || "(לא נמצא בשום קבוצה)").localeCompare(b.name || "(לא נמצא בשום קבוצה)", 'he'));
-    body = `
-      <div class="row" style="gap:8px;margin-bottom:14px;">
-        <button class="btn ${filter==="all"?"btn-primary":"btn-ghost"} flex1" data-role-filter="all" style="padding:8px;font-size:12px;">הכל</button>
-        <button class="btn ${filter==="superAdmin"?"btn-primary":"btn-ghost"} flex1" data-role-filter="superAdmin" style="padding:8px;font-size:12px;">Super Admin</button>
-        <button class="btn ${filter==="user"?"btn-primary":"btn-ghost"} flex1" data-role-filter="user" style="padding:8px;font-size:12px;">User</button>
-      </div>
-      ${rows.length ? `
-        <p style="color:var(--muted);font-size:12px;margin-bottom:14px;">שחקנים שנכנסו בעצמם דרך קישור הזמנה - הטלפון והאווטר שלהם משותפים לכל הקבוצות שהם חברים בהן.</p>
-        <div class="scroll-list">
-          ${rows.map((r,i) => `<div class="roster-row" style="align-items:center;">
-            <div class="row" style="gap:10px;flex:1;min-width:0;">
-              <span style="color:var(--muted);font-size:12px;font-weight:700;flex-shrink:0;width:18px;">${i+1}</span>
-              ${r.photo ? `<img src="${r.photo}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;">` : `<div style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.08);flex-shrink:0;"></div>`}
-              <div style="min-width:0;">
-                <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.name || "(לא נמצא בשום קבוצה)")}</div>
-                <div style="color:var(--muted);font-size:11px;" dir="ltr">מכשיר: ${esc(r.clientId)}</div>
-                ${r.phone ? `<div style="color:var(--muted);font-size:11px;">טלפון: ${esc(r.phone)}</div>` : ""}
-                <div style="color:var(--muted);font-size:11px;">${r.memberOf.length ? `חבר ב-${r.memberOf.length} קבוצות: ${esc(r.memberOf.join(", "))}` : "לא חבר באף קבוצה"}</div>
-              </div>
-            </div>
-            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-              ${r.clientId === myIdentity.id
-                ? `<span class="btn btn-ghost" style="padding:6px 10px;font-size:11px;white-space:nowrap;opacity:.6;cursor:default;">${r.role==="superAdmin"?"Super Admin":"User"} (אתה)</span>`
-                : `<button class="btn btn-ghost" data-toggle-role="${r.clientId}" style="padding:6px 10px;font-size:11px;white-space:nowrap;">${r.role==="superAdmin"?"Super Admin":"User"}</button>`}
-              ${r.clientId !== myIdentity.id ? `<button class="icon-btn danger" data-delete-global-player="${r.clientId}" title="מחק רשומה">${icon('trash')}</button>` : ""}
-            </div>
-          </div>`).join("")}
+    title = "משתמשים";
+    if (m.accounts === null) {
+      body = `<p style="color:var(--muted);font-size:13px;">טוען...</p>`;
+    } else {
+      const filter = m.roleFilter || "all";
+      let rows = m.accounts || [];
+      if (filter !== "all") rows = rows.filter(r => r.role === filter);
+      rows = rows.slice().sort((a,b) => (a.name || a.email).localeCompare(b.name || b.email, 'he'));
+      body = `
+        <div class="row" style="gap:8px;margin-bottom:14px;">
+          <button class="btn ${filter==="all"?"btn-primary":"btn-ghost"} flex1" data-role-filter="all" style="padding:8px;font-size:12px;">הכל</button>
+          <button class="btn ${filter==="superAdmin"?"btn-primary":"btn-ghost"} flex1" data-role-filter="superAdmin" style="padding:8px;font-size:12px;">Super Admin</button>
+          <button class="btn ${filter==="user"?"btn-primary":"btn-ghost"} flex1" data-role-filter="user" style="padding:8px;font-size:12px;">User</button>
         </div>
-      ` : `<p style="color:var(--muted);font-size:13px;">${clientIds.length ? "אין שחקנים בסינון הזה." : "עדיין אין שחקנים שנכנסו בעצמם דרך קישור הזמנה."}</p>`}
-    `;
+        ${rows.length ? `
+          <div class="scroll-list">
+            ${rows.map((r,i) => `<div class="roster-row" style="align-items:center;">
+              <div class="row" style="gap:10px;flex:1;min-width:0;">
+                <span style="color:var(--muted);font-size:12px;font-weight:700;flex-shrink:0;width:18px;">${i+1}</span>
+                ${r.photo ? `<img src="${r.photo}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;">` : `<div style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.08);flex-shrink:0;"></div>`}
+                <div style="min-width:0;">
+                  <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.name || "(ללא שם)")}</div>
+                  <div style="color:var(--muted);font-size:11px;" dir="ltr">${esc(r.email)}</div>
+                  ${r.phone ? `<div style="color:var(--muted);font-size:11px;">טלפון: ${esc(r.phone)}</div>` : ""}
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                ${r.email === myIdentity.email
+                  ? `<span class="btn btn-ghost" style="padding:6px 10px;font-size:11px;white-space:nowrap;opacity:.6;cursor:default;">${r.role==="superAdmin"?"Super Admin":"User"} (אתה)</span>`
+                  : `<button class="btn btn-ghost" data-toggle-role="${esc(r.email)}" style="padding:6px 10px;font-size:11px;white-space:nowrap;">${r.role==="superAdmin"?"Super Admin":"User"}</button>`}
+                ${r.email !== myIdentity.email ? `<button class="icon-btn danger" data-delete-global-player="${esc(r.email)}" title="מחק משתמש">${icon('trash')}</button>` : ""}
+              </div>
+            </div>`).join("")}
+          </div>
+        ` : `<p style="color:var(--muted);font-size:13px;">${(m.accounts||[]).length ? "אין משתמשים בסינון הזה." : "עדיין אין משתמשים שהתחברו."}</p>`}
+      `;
+    }
   } else if (m.type === "avatarManage") {
     title = "ניהול אווטרים";
     const groups = getAvatarGroups();
@@ -2857,7 +2849,7 @@ function renderModal(m){
     body = rows;
   }
 
-  const dismissable = !(m.type === "identityName" && m.forced);
+  const dismissable = m.type !== "loginRequired" && !(m.type === "identityName" && m.forced);
   return `
     <div class="overlay">
       <div class="modal" onclick="event.stopPropagation()">
@@ -3251,7 +3243,9 @@ function attachHandlers(){
     if (changeAvatarBtn) changeAvatarBtn.onclick = () => openModal({type:"photoSource"});
     const myStatsBtn = app.querySelector("[data-my-stats]");
     if (myStatsBtn) myStatsBtn.onclick = () => openModal({type:"stats", clientId: myIdentity.id});
+  }
 
+  if (modal && (modal.type === "identityName" || modal.type === "loginRequired")) {
     const sendLoginBtn = app.querySelector("[data-send-login-code]");
     if (sendLoginBtn) sendLoginBtn.onclick = async () => {
       const email = document.getElementById("login-email-input").value.trim().toLowerCase();
@@ -3287,6 +3281,10 @@ function attachHandlers(){
         applyAccountToIdentity(account);
         saveIdentity();
         await saveState();
+        // A brand new account (or one that never got a display name) still needs one -
+        // the mandatory login gate hands off to the same "what's your name" step every
+        // device already goes through, instead of skipping it.
+        if (!myIdentity.name) { openModal({type:"identityName", forced:true}); return; }
         closeModal();
       } catch(e) {
         updateModal({loginError: e.message});
@@ -3334,32 +3332,41 @@ function attachHandlers(){
     const openManageBtn = app.querySelector("[data-open-avatar-manage]");
     if (openManageBtn) openManageBtn.onclick = () => openModal({type:"avatarManage"});
     const openGlobalPlayersBtn = app.querySelector("[data-open-global-players]");
-    if (openGlobalPlayersBtn) openGlobalPlayersBtn.onclick = () => openModal({type:"globalPlayers"});
+    if (openGlobalPlayersBtn) openGlobalPlayersBtn.onclick = async () => {
+      openModal({type:"globalPlayers", accounts: null});
+      try {
+        const res = await fetch("/api/auth/accounts?clientId=" + encodeURIComponent(getClientId()));
+        const accounts = res.ok ? await res.json() : [];
+        if (modal && modal.type === "globalPlayers") updateModal({accounts});
+      } catch(e) {
+        if (modal && modal.type === "globalPlayers") updateModal({accounts: []});
+      }
+    };
   }
 
   if (modal && modal.type === "globalPlayers") {
     app.querySelectorAll("[data-role-filter]").forEach(el => el.onclick = () => updateModal({roleFilter: el.dataset.roleFilter}));
-    app.querySelectorAll("[data-toggle-role]").forEach(el => el.onclick = () => {
-      const cid = el.dataset.toggleRole;
-      let name = null;
-      for (const c of state.communities) {
-        const match = c.roster.find(p => p.clientId === cid);
-        if (match) { name = match.name; break; }
-      }
-      const current = getPlayerRole(cid, name);
-      setGlobalPlayer(cid, {role: current === "superAdmin" ? "user" : "superAdmin"});
-      saveState();
-      updateModal({});
+    app.querySelectorAll("[data-toggle-role]").forEach(el => el.onclick = async (e) => {
+      const email = el.dataset.toggleRole;
+      const account = (modal.accounts||[]).find(a => a.email === email);
+      if (!account) return;
+      const newRole = account.role === "superAdmin" ? "user" : "superAdmin";
+      e.target.disabled = true;
+      const res = await fetch("/api/auth/set-role?clientId=" + encodeURIComponent(getClientId()), {
+        method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({email, role: newRole})
+      });
+      if (!res.ok) { alert("הפעולה נכשלה - רק Super Admin יכול לשנות תפקידים."); updateModal({}); return; }
+      account.role = newRole;
+      updateModal({accounts: modal.accounts});
     });
-    app.querySelectorAll("[data-delete-global-player]").forEach(el => el.onclick = () => {
-      const cid = el.dataset.deleteGlobalPlayer;
-      // Clears the shared profile record only (photo/phone/role) - roster membership,
-      // seat history and buy-ins under that clientId are untouched, so this is a safe
-      // "reset their profile" rather than removing them from any community/game.
-      if (!confirm("למחוק את הרשומה הזו? האווטר, הטלפון והתפקיד המשותפים שלו יאופסו. זה לא מסיר אותו מקבוצות או ממשחקים.")) return;
-      if (state.globalPlayers) delete state.globalPlayers[cid];
-      saveState();
-      updateModal({});
+    app.querySelectorAll("[data-delete-global-player]").forEach(el => el.onclick = async () => {
+      const email = el.dataset.deleteGlobalPlayer;
+      if (!confirm(`למחוק את המשתמש ${email}? הפעולה בלתי הפיכה - הוא ייאלץ להתחבר מחדש ולאבד את הרשומה הנוכחית.`)) return;
+      const res = await fetch("/api/auth/delete-account?clientId=" + encodeURIComponent(getClientId()), {
+        method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({email})
+      });
+      if (!res.ok) { alert("המחיקה נכשלה - רק Super Admin יכול למחוק משתמשים."); return; }
+      updateModal({accounts: (modal.accounts||[]).filter(a => a.email !== email)});
     });
   }
 
@@ -4578,7 +4585,12 @@ window.addEventListener("popstate", () => {
       modal = {type:"inviteGone"};
     }
   }
-  if (!myIdentity.name) modal = {type:"identityName", forced:true};
+  // Login is mandatory - takes priority over any invite-flow modal set above, since
+  // nothing else in the app should be usable (or even visible) before it. An account
+  // that's logged in but somehow still has no display name (shouldn't normally happen,
+  // given confirmLoginBtn's own handoff below) falls back to the existing name step.
+  if (!myIdentity.email) modal = {type:"loginRequired"};
+  else if (!myIdentity.name) modal = {type:"identityName", forced:true};
   render();
   scheduleAutoRefresh();
   connectLiveSync();

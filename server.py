@@ -555,12 +555,9 @@ def update_account():
 
 @app.route("/api/auth/set-role", methods=["POST"])
 def set_account_role():
-    requester_email = _trusted_email(request.args.get("clientId", ""))
-    if not requester_email:
-        return jsonify({"error": "not logged in"}), 401
-    requester_account = _get_account(requester_email) or _default_account(requester_email)
-    if requester_account.get("role") != "superAdmin":
-        return jsonify({"error": "forbidden"}), 403
+    ok, err = _require_super_admin(request.args.get("clientId", ""))
+    if not ok:
+        return err
     body = request.get_json(silent=True) or {}
     target_email = str(body.get("email", "")).strip().lower()
     new_role = body.get("role")
@@ -569,6 +566,47 @@ def set_account_role():
     target_account = _get_account(target_email) or _default_account(target_email)
     target_account["role"] = new_role
     _save_account(target_email, target_account)
+    return jsonify({"ok": True})
+
+
+def _require_super_admin(client_id):
+    """Returns (True, None) if this device belongs to a super admin, else (False, error_response)."""
+    email = _trusted_email(client_id)
+    if not email:
+        return False, (jsonify({"error": "not logged in"}), 401)
+    account = _get_account(email) or _default_account(email)
+    if account.get("role") != "superAdmin":
+        return False, (jsonify({"error": "forbidden"}), 403)
+    return True, None
+
+
+@app.route("/api/auth/accounts")
+def list_accounts():
+    ok, err = _require_super_admin(request.args.get("clientId", ""))
+    if not ok:
+        return err
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT email, data FROM accounts ORDER BY email")
+            rows = cur.fetchall()
+        conn.commit()
+    return jsonify([{"email": r[0], **json.loads(r[1])} for r in rows])
+
+
+@app.route("/api/auth/delete-account", methods=["POST"])
+def delete_account():
+    ok, err = _require_super_admin(request.args.get("clientId", ""))
+    if not ok:
+        return err
+    body = request.get_json(silent=True) or {}
+    target_email = str(body.get("email", "")).strip().lower()
+    if not target_email:
+        return jsonify({"error": "missing email"}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM accounts WHERE email = %s", (target_email,))
+            cur.execute("DELETE FROM trusted_devices WHERE email = %s", (target_email,))
+        conn.commit()
     return jsonify({"ok": True})
 
 
