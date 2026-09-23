@@ -95,6 +95,13 @@ _INIT_STATEMENTS = (
     "  code TEXT NOT NULL,"
     "  expires_at TIMESTAMP NOT NULL"
     ")",
+    # Small key/value store for global admin toggles (see skip_login_verification,
+    # require_verify_before_admin_settings) - deliberately separate from the client's
+    # shared_state blob, which the server otherwise never has to parse.
+    "CREATE TABLE IF NOT EXISTS app_settings ("
+    "  key TEXT PRIMARY KEY,"
+    "  value TEXT NOT NULL"
+    ")",
 )
 
 
@@ -451,6 +458,26 @@ def _save_account(email, account):
         conn.commit()
 
 
+def _get_setting(key, default=False):
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT value FROM app_settings WHERE key = %s", (key,))
+            row = cur.fetchone()
+        conn.commit()
+    return (row[0] == "true") if row else default
+
+
+def _set_setting(key, value):
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO app_settings (key, value) VALUES (%s, %s) "
+                "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+                (key, "true" if value else "false"),
+            )
+        conn.commit()
+
+
 def _trusted_email(client_id):
     if not client_id:
         return None
@@ -559,6 +586,59 @@ def verify_login_code():
     _claim_player_id(account, local_id)
     _save_account(email, account)
     return jsonify({"email": email, **account})
+
+
+@app.route("/api/auth/quick-login", methods=["POST"])
+def quick_login():
+    # Trusts whatever email was typed with no code at all - only ever active when a
+    # super admin has explicitly turned "כניסה ללא קוד אימות" on. Applies uniformly, even
+    # to the super admin's own address - the thing actually gating real admin access is
+    # require_verify_before_admin_settings (see set_auth_settings/get_auth_settings),
+    # not this endpoint.
+    if not _get_setting("skip_login_verification", False):
+        return jsonify({"error": "not enabled"}), 403
+    body = request.get_json(silent=True) or {}
+    email = str(body.get("email", "")).strip().lower()
+    client_id = str(body.get("clientId", "")).strip()
+    local_id = str(body.get("localId", "")).strip()
+    replace_existing = bool(body.get("replace"))
+    if not EMAIL_RE.match(email) or not client_id:
+        return jsonify({"error": "invalid email/clientId"}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            if replace_existing:
+                cur.execute("DELETE FROM trusted_devices WHERE email = %s AND client_id != %s", (email, client_id))
+            cur.execute(
+                "INSERT INTO trusted_devices (client_id, email) VALUES (%s, %s) "
+                "ON CONFLICT (client_id) DO UPDATE SET email = EXCLUDED.email",
+                (client_id, email),
+            )
+        conn.commit()
+    account = _get_account(email) or _default_account(email)
+    _claim_player_id(account, local_id)
+    _save_account(email, account)
+    return jsonify({"email": email, **account})
+
+
+@app.route("/api/auth/settings")
+def get_auth_settings():
+    return jsonify({
+        "skipLoginVerification": _get_setting("skip_login_verification", False),
+        "requireVerifyBeforeAdminSettings": _get_setting("require_verify_before_admin_settings", False),
+    })
+
+
+@app.route("/api/auth/settings", methods=["POST"])
+def set_auth_settings():
+    ok, err = _require_super_admin(request.args.get("clientId", ""))
+    if not ok:
+        return err
+    body = request.get_json(silent=True) or {}
+    if "skipLoginVerification" in body:
+        _set_setting("skip_login_verification", bool(body["skipLoginVerification"]))
+    if "requireVerifyBeforeAdminSettings" in body:
+        _set_setting("require_verify_before_admin_settings", bool(body["requireVerifyBeforeAdminSettings"]))
+    return jsonify({"ok": True})
 
 
 @app.route("/api/auth/session")

@@ -739,6 +739,13 @@ async function loadVersion(){
   } catch(e) { /* not critical - Settings just won't show a version */ }
   return null;
 }
+async function loadAuthSettings(){
+  try {
+    const res = await fetch("/api/auth/settings");
+    if (res.ok) return await res.json();
+  } catch(e) { /* keep the safe defaults */ }
+  return null;
+}
 async function saveIdentity(){
   try {
     await fetch("/api/identity?clientId=" + encodeURIComponent(getClientId()), {
@@ -832,10 +839,26 @@ async function verifyLoginCode(email, code, replace){
   if (!res.ok) throw new Error(body.error || "הקוד שגוי או פג תוקף");
   return body;
 }
+// "כניסה ללא קוד אימות" (see adminSettings) - trusts the typed email with no code at
+// all, uniformly including the super admin's own address. What actually protects real
+// admin capability is requireVerifyBeforeAdminSettings's step-up check before opening
+// the setup screen, not this endpoint refusing anyone.
+async function quickLogin(email, replace){
+  const res = await fetch("/api/auth/quick-login", {
+    method: "POST", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({email, clientId: getClientId(), replace: !!replace, localId: myIdentity.id})
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || "quick login unavailable");
+  return body;
+}
 
 let state = defaultState();
 let myIdentity = { id: getClientId(), name: null };
 let appVersion = null; // filled in by init() from /api/version
+// Global admin toggles (see adminSettings) - safe defaults (full verification, no
+// bypass) if the fetch itself ever fails, never the other way around.
+let authSettings = { skipLoginVerification: false, requireVerifyBeforeAdminSettings: false };
 
 // ---------- Navigation (not persisted - always starts at home) ----------
 let nav = { screen: "home", communityId: null, gameId: null };
@@ -866,18 +889,7 @@ function trySelectSeatPlayer(pid){
   const c = getCommunity(g.communityId);
   const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
   if (pid === myPlayerId || isTableAdmin(g, c)) {
-    // Tapping your own seat while it's already the one shown - not switching back from
-    // viewing someone else "on behalf", and not a seat you've already left - doubles as
-    // "change my avatar", since there's nothing else useful left for that tap to do.
-    // Returning from behalf mode, or tapping a seat you've cashed out of, just (re)selects
-    // it, same as tapping anyone else's seat.
-    const alreadySelf = pid === myPlayerId && selectedSeatPlayerId === myPlayerId;
-    const leftGame = !!(g.cashouts && g.cashouts[pid]);
     selectedSeatPlayerId = pid;
-    if (alreadySelf && !leftGame) {
-      openModal({type:"photoSource", communityId: g.communityId, playerId: pid});
-      return;
-    }
     render();
   }
 }
@@ -2120,6 +2132,15 @@ function renderModal(m){
   } else if (m.type === "adminSettings") {
     title = "הגדרות מערכת";
     body = `
+      <div class="section-title" style="padding:0;margin:0 0 8px;">כניסה ואבטחה</div>
+      <label class="checkbox-row" style="cursor:pointer;">
+        <input type="checkbox" data-toggle-skip-login-verification ${authSettings.skipLoginVerification?"checked":""}>
+        <span class="flex1">כניסה ללא קוד אימות - שחקנים מתחברים מיד לפי האימייל שהקלידו, בלי לשלוח קוד. חל על כולם, כולל כתובת ה-super admin.</span>
+      </label>
+      <label class="checkbox-row" style="cursor:pointer;margin-bottom:18px;">
+        <input type="checkbox" data-toggle-require-admin-verify ${authSettings.requireVerifyBeforeAdminSettings?"checked":""}>
+        <span class="flex1">דרוש קוד אימות טרי לפני פתיחת הגדרות מערכת, גם ממכשיר שכבר מחובר - מומלץ להדליק יחד עם "כניסה ללא קוד אימות".</span>
+      </label>
       <div class="section-title" style="padding:0;margin:0 0 8px;">אווטרים</div>
       <div style="display:flex;gap:8px;margin-bottom:18px;">
         <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-open-avatar-creator>${icon('plus')} יצירת אווטרים חדשים</button>
@@ -2139,6 +2160,19 @@ function renderModal(m){
       </div>
       <a href="https://console.anthropic.com" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:18px;color:var(--muted);font-size:12px;text-decoration:underline;">console.anthropic.com</a>
       <div style="text-align:center;margin-top:8px;color:var(--muted);font-size:11px;">גרסה: ${esc(appVersion || "לא ידוע")}</div>
+    `;
+  } else if (m.type === "adminVerify") {
+    title = "אימות לפני הגדרות מערכת";
+    body = `
+      <p style="color:var(--muted);font-size:13px;">${m.sending ? "שולח קוד אימות..." : `שלחנו קוד אימות ל-<span dir="ltr">${esc(myIdentity.email)}</span>.`}</p>
+      ${m.error ? `<p style="color:#fda4af;font-size:13px;">${esc(m.error)}</p>` : ""}
+      ${!m.sending ? `
+        <div style="margin:12px 0;">
+          <input type="text" inputmode="numeric" id="admin-verify-code-input" placeholder="קוד בן 6 ספרות" dir="ltr" style="width:100%;text-align:center;letter-spacing:4px;font-size:20px;" autofocus>
+        </div>
+        <button class="btn btn-primary btn-block" style="margin-bottom:8px;" data-confirm-admin-verify>אשר והמשך להגדרות</button>
+        <button class="btn btn-ghost btn-block" data-resend-admin-verify>${icon('undo')} שלח קוד שוב</button>
+      ` : ""}
     `;
   } else if (m.type === "globalPlayers") {
     title = "משתמשים";
@@ -2999,7 +3033,19 @@ function attachHandlers(){
   const app = document.getElementById("app");
 
   app.querySelectorAll("[data-edit-identity-name]").forEach(el => el.onclick = () => openModal({type:"identityName", forced:false}));
-  app.querySelectorAll("[data-open-admin-settings]").forEach(el => el.onclick = () => openModal({type:"adminSettings"}));
+  app.querySelectorAll("[data-open-admin-settings]").forEach(el => el.onclick = async () => {
+    if (!authSettings.requireVerifyBeforeAdminSettings) { openModal({type:"adminSettings"}); return; }
+    // A fresh code every time, regardless of how this device is currently logged in
+    // (even a real, previously-verified super admin) - the point is a step-up check
+    // right before the sensitive screen, not a one-time device trust flag.
+    openModal({type:"adminVerify", sending:true, error:null});
+    try {
+      await requestLoginCode(myIdentity.email);
+      updateModal({sending:false});
+    } catch(e) {
+      updateModal({sending:false, error:e.message});
+    }
+  });
   app.querySelectorAll("[data-open-community]").forEach(el => el.onclick = () => go("community", {communityId: el.dataset.openCommunity}));
   app.querySelectorAll("[data-delete-community]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type:"deleteCommunity", communityId: el.dataset.deleteCommunity}); });
   app.querySelectorAll("[data-duplicate-community]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type:"duplicateCommunity", communityId: el.dataset.duplicateCommunity}); });
@@ -3382,6 +3428,16 @@ function attachHandlers(){
 
   if (modal && modal.type === "loginRequired") {
     const sendLoginCodeFor = async (email) => {
+      if (authSettings.skipLoginVerification) {
+        try {
+          const account = await quickLogin(email, modal.deviceChoice === "replace");
+          applyAccountToIdentity(account);
+          saveIdentity();
+          await saveState();
+          openModal({type:"identityName", forced:true});
+          return;
+        } catch(e) { /* the setting got disabled mid-flight, or a network error - fall through to a real code below */ }
+      }
       try {
         await requestLoginCode(email);
         updateModal({loginStep: "code", loginEmail: email, loginError: null});
@@ -3476,6 +3532,18 @@ function attachHandlers(){
   }
 
   if (modal && modal.type === "adminSettings") {
+    const updateAuthSetting = async (key, value) => {
+      authSettings = {...authSettings, [key]: value};
+      try {
+        await fetch("/api/auth/settings?clientId=" + encodeURIComponent(getClientId()), {
+          method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({[key]: value})
+        });
+      } catch(e) { console.error("auth setting save failed", e); }
+    };
+    const skipVerifyCb = app.querySelector("[data-toggle-skip-login-verification]");
+    if (skipVerifyCb) skipVerifyCb.onchange = () => updateAuthSetting("skipLoginVerification", skipVerifyCb.checked);
+    const requireAdminVerifyCb = app.querySelector("[data-toggle-require-admin-verify]");
+    if (requireAdminVerifyCb) requireAdminVerifyCb.onchange = () => updateAuthSetting("requireVerifyBeforeAdminSettings", requireAdminVerifyCb.checked);
     const openCreatorBtn = app.querySelector("[data-open-avatar-creator]");
     if (openCreatorBtn) openCreatorBtn.onclick = () => openModal({type:"avatarCreator", imageSrc: null, points: []});
     const openManageBtn = app.querySelector("[data-open-avatar-manage]");
@@ -3489,6 +3557,33 @@ function attachHandlers(){
         if (modal && modal.type === "globalPlayers") updateModal({accounts});
       } catch(e) {
         if (modal && modal.type === "globalPlayers") updateModal({accounts: []});
+      }
+    };
+  }
+
+  if (modal && modal.type === "adminVerify") {
+    const confirmBtn = app.querySelector("[data-confirm-admin-verify]");
+    if (confirmBtn) confirmBtn.onclick = async () => {
+      const code = document.getElementById("admin-verify-code-input").value.trim();
+      if (!code) { updateModal({error: "צריך להזין קוד."}); return; }
+      confirmBtn.disabled = true;
+      showButtonLoading(confirmBtn);
+      try {
+        await verifyLoginCode(myIdentity.email, code, false);
+        openModal({type:"adminSettings"});
+      } catch(e) {
+        updateModal({error: e.message});
+      }
+    };
+    const resendBtn = app.querySelector("[data-resend-admin-verify]");
+    if (resendBtn) resendBtn.onclick = async () => {
+      resendBtn.disabled = true;
+      showButtonLoading(resendBtn);
+      try {
+        await requestLoginCode(myIdentity.email);
+        updateModal({error: null});
+      } catch(e) {
+        updateModal({error: e.message});
       }
     };
   }
@@ -4731,12 +4826,13 @@ window.addEventListener("popstate", () => {
     '<div style="padding:60px 20px;text-align:center;color:#a8a29e;font-size:14px;">טוען נתונים משותפים...</div>';
   let hasVerifiedSession = false;
   {
-    const [stateResult, identityResult, versionResult, sessionResult] = await Promise.allSettled([loadState(), loadIdentity(), loadVersion(), checkLoginSession()]);
+    const [stateResult, identityResult, versionResult, sessionResult, authSettingsResult] = await Promise.allSettled([loadState(), loadIdentity(), loadVersion(), checkLoginSession(), loadAuthSettings()]);
     // A failed initial load must never be treated as "no data yet" - only fall back to
     // defaultState() here (the one legitimate use of it), never after a save is possible.
     state = stateResult.status === "fulfilled" ? stateResult.value : defaultState();
     myIdentity = identityResult.status === "fulfilled" ? identityResult.value : { id: getClientId(), name: null };
     appVersion = versionResult.status === "fulfilled" ? versionResult.value : null;
+    if (authSettingsResult.status === "fulfilled" && authSettingsResult.value) authSettings = authSettingsResult.value;
     // This device already verified a login code before (see checkLoginSession) - recover
     // the name/photo/phone from the account instead of starting over as a stranger. Only
     // actually saves anything if that recovers data this device didn't already have
