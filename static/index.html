@@ -137,7 +137,7 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .on-behalf-badge{background:#78350f;color:#fde68a;border-radius:9px;padding:6px 10px;font-size:12px;font-weight:700;text-align:center;margin-bottom:10px;}
 .seat-info{display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;padding:2px 0;}
 .seat-name{font-size:11px;font-weight:700;color:var(--text);text-align:center;white-space:nowrap;max-width:78px;overflow:hidden;text-overflow:ellipsis;}
-.seat-caption{font-size:9.5px;color:#a7f3d0;text-align:center;line-height:1.35;white-space:nowrap;}
+.seat-caption{font-size:13px;color:#a7f3d0;text-align:center;line-height:1.35;white-space:nowrap;}
 .player-name{font-weight:600;}
 .player-meta{color:#059669;font-size:12px;margin-top:2px;}
 .balance-line{font-size:12px;font-weight:700;margin-top:2px;}
@@ -1141,84 +1141,101 @@ function autoSeatSelf(gameId){
   const c = getCommunity(g.communityId);
   if (!c) return;
   const playerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
-  let p = playerId ? c.roster.find(pl => pl.id === playerId) : null;
-  // Self-healing for devices that got mis-linked by an earlier bug (assigning someone
-  // else to a seat used to overwrite this device's own remembered player): if the
-  // remembered player's name doesn't match this device's own identity name, it's wrong -
-  // look up the right one by name instead of trusting a stale link, and fix it going
-  // forward.
-  if (myIdentity.name && (!p || p.name !== myIdentity.name)) {
-    const byName = c.roster.find(pl => pl.name === myIdentity.name);
-    if (byName) {
-      p = byName;
-      if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
-      myIdentity.myPlayers[g.communityId] = byName.id;
-      saveIdentity();
-    } else {
-      p = null;
+  const p = playerId ? c.roster.find(pl => pl.id === playerId) : null;
+  // Cheap pre-check against whatever state is already in memory, purely to skip the
+  // network round trip in the overwhelmingly common case (already seated correctly) -
+  // the real, authoritative check runs inside mutateAndSave below either way.
+  if (p && p.name === myIdentity.name && p.clientId && g.seats && g.seats.includes(p.id)) return;
+  // Retry-safe: re-syncs and re-applies this same logic against the freshest state if
+  // another device's save landed in between, instead of this device's stale in-memory
+  // copy silently overwriting (and losing) whatever that other save just added - see
+  // mutateAndSave's own comment for the full explanation of that race.
+  mutateAndSave(() => {
+    const g = getGame(gameId);
+    if (!g || g.closed) return;
+    const c = getCommunity(g.communityId);
+    if (!c) return;
+    let p = playerId ? c.roster.find(pl => pl.id === playerId) : null;
+    // Self-healing for devices that got mis-linked by an earlier bug (assigning someone
+    // else to a seat used to overwrite this device's own remembered player): if the
+    // remembered player's name doesn't match this device's own identity name, it's
+    // wrong - look up the right one by name instead of trusting a stale link, and fix
+    // it going forward.
+    if (myIdentity.name && (!p || p.name !== myIdentity.name)) {
+      const byName = c.roster.find(pl => pl.name === myIdentity.name);
+      if (byName) {
+        p = byName;
+        if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
+        myIdentity.myPlayers[g.communityId] = byName.id;
+        saveIdentity();
+      } else {
+        p = null;
+      }
     }
-  }
-  if (!p) return;
-  // Backfill for players who self-identified before global-player linking existed:
-  // their myPlayers link is already correct, they just never got a clientId.
-  let changed = false;
-  if (!p.clientId) { linkToGlobalPlayer(p); changed = true; }
-  if (seatPlayerIfRoom(g, p.id, p)) changed = true;
-  if (changed) saveState();
+    if (!p) return;
+    // Backfill for players who self-identified before global-player linking existed:
+    // their myPlayers link is already correct, they just never got a clientId.
+    if (!p.clientId) linkToGlobalPlayer(p);
+    seatPlayerIfRoom(g, p.id, p);
+  });
 }
 // For someone opening a game via a shared invite link: if this device isn't already
 // linked to a roster player in this community, find one by matching name (so the same
 // person re-clicking a link doesn't get duplicated) or create a new roster entry for
 // them, then seat them - up to the table's 10-seat capacity.
+//
+// Goes through mutateAndSave (hash-checked, re-synced and retried on conflict) rather
+// than a plain load-mutate-save - two people opening the same invite link within
+// moments of each other used to each build their join on top of their own stale local
+// copy of state, and whoever's save landed second would silently overwrite the first
+// person's brand new roster entry/seat instead of merging with it, typically clobbering
+// whoever had just taken the first empty seat.
 async function autoJoinViaInvite(gameId){
-  // Re-fetch the latest shared state right before mutating and saving, to shrink the
-  // window for a lost-update race against a concurrent save from another device (e.g.
-  // the community admin's own phone saving a snapshot from before this join happened,
-  // silently wiping the new roster entry/seat back out on the shared blob).
-  try { const fresh = await loadState(); if (fresh !== null) state = fresh; } catch(e) { /* fall back to what's already in memory */ }
-  const g = getGame(gameId);
-  if (!g || g.closed) return;
-  const c = getCommunity(g.communityId);
-  if (!c) return;
-  let playerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
-  let p = playerId ? c.roster.find(pl => pl.id === playerId) : null;
-  if (!p) {
-    if (!myIdentity.name) return; // no name yet to identify/create with (forced onboarding will ask, then retry)
-    p = c.roster.find(pl => pl.name === myIdentity.name);
-    if (!p) { p = {id: uid(), name: myIdentity.name}; c.roster.push(p); }
-    linkToGlobalPlayer(p);
-    if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
-    myIdentity.myPlayers[g.communityId] = p.id;
-    saveIdentity();
-  } else if (!p.clientId) {
-    // Backfill for a player who self-identified before global-player linking existed.
-    linkToGlobalPlayer(p);
-  }
-  seatPlayerIfRoom(g, p.id, p);
-  await saveState();
+  await mutateAndSave(() => {
+    const g = getGame(gameId);
+    if (!g || g.closed) return;
+    const c = getCommunity(g.communityId);
+    if (!c) return;
+    let playerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+    let p = playerId ? c.roster.find(pl => pl.id === playerId) : null;
+    if (!p) {
+      if (!myIdentity.name) return; // no name yet to identify/create with (forced onboarding will ask, then retry)
+      p = c.roster.find(pl => pl.name === myIdentity.name);
+      if (!p) { p = {id: uid(), name: myIdentity.name}; c.roster.push(p); }
+      linkToGlobalPlayer(p);
+      if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
+      myIdentity.myPlayers[g.communityId] = p.id;
+      saveIdentity();
+    } else if (!p.clientId) {
+      // Backfill for a player who self-identified before global-player linking existed.
+      linkToGlobalPlayer(p);
+    }
+    seatPlayerIfRoom(g, p.id, p);
+  });
   render();
 }
 // Community-level invite (WhatsApp "?community=" link, see data-invite-community): joins
-// the visitor straight into the community's roster, same identity/linking rules as
-// autoJoinViaInvite, but without seating them at any particular game/table.
+// the visitor straight into the community's roster, same identity/linking rules and
+// same mutateAndSave race protection as autoJoinViaInvite, but without seating them at
+// any particular game/table.
 async function autoJoinViaCommunityInvite(communityId){
-  try { const fresh = await loadState(); if (fresh !== null) state = fresh; } catch(e) { /* fall back to what's already in memory */ }
-  const c = getCommunity(communityId);
-  if (!c) return;
-  let playerId = myIdentity.myPlayers && myIdentity.myPlayers[c.id];
-  let p = playerId ? c.roster.find(pl => pl.id === playerId) : null;
-  if (!p) {
-    if (!myIdentity.name) return; // no name yet to identify/create with (forced onboarding will ask, then retry)
-    p = c.roster.find(pl => pl.name === myIdentity.name);
-    if (!p) { p = {id: uid(), name: myIdentity.name}; c.roster.push(p); }
-    linkToGlobalPlayer(p);
-    if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
-    myIdentity.myPlayers[c.id] = p.id;
-    saveIdentity();
-  } else if (!p.clientId) {
-    linkToGlobalPlayer(p);
-  }
-  await saveState();
+  await mutateAndSave(() => {
+    const c = getCommunity(communityId);
+    if (!c) return;
+    let playerId = myIdentity.myPlayers && myIdentity.myPlayers[c.id];
+    let p = playerId ? c.roster.find(pl => pl.id === playerId) : null;
+    if (!p) {
+      if (!myIdentity.name) return; // no name yet to identify/create with (forced onboarding will ask, then retry)
+      p = c.roster.find(pl => pl.name === myIdentity.name);
+      if (!p) { p = {id: uid(), name: myIdentity.name}; c.roster.push(p); }
+      linkToGlobalPlayer(p);
+      if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
+      myIdentity.myPlayers[c.id] = p.id;
+      saveIdentity();
+    } else if (!p.clientId) {
+      linkToGlobalPlayer(p);
+    }
+  });
   render();
 }
 function openModal(m){ modal = m; render(); }
@@ -1953,8 +1970,8 @@ function renderActionPanel(g, c, seatedIds){
     panelBody = `
       <div style="display:flex;align-items:center;gap:5px;margin-bottom:10px;width:100%;">
         <span style="font-size:12px;font-weight:700;color:var(--muted);flex-shrink:0;">קנייה:</span>
-        ${[50,80,100].map(v=>`<button class="chip-btn" data-panel-buyin-quick="${v}" style="flex:1;padding:7px 4px;font-size:12px;">${v}</button>`).join("")}
-        <input type="number" inputmode="decimal" id="panel-buyin-custom" placeholder="אחר" style="flex:1;min-width:0;padding:7px 4px;font-size:12px;text-align:center;">
+        ${[50,80,100].map(v=>`<button class="chip-btn" data-panel-buyin-quick="${v}" style="flex:1;padding:7px 2px;font-size:17px;">${v}</button>`).join("")}
+        <input type="number" inputmode="decimal" id="panel-buyin-custom" placeholder="אחר" style="flex:1;min-width:0;padding:7px 2px;font-size:17px;text-align:center;">
         <button class="btn btn-primary" data-panel-buyin-confirm disabled style="flex-shrink:0;padding:7px 10px;">${icon('plus')}</button>
       </div>
       <button class="btn btn-ghost btn-block" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-history>${icon('bar')} היסטוריית קניות</button>
@@ -1987,8 +2004,18 @@ function renderTable(gameId){
   if (selectedSeatPlayerId && !seatedIds.includes(selectedSeatPlayerId)) selectedSeatPlayerId = null;
   if (!selectedSeatPlayerId && myPlayerId && seatedIds.includes(myPlayerId)) selectedSeatPlayerId = myPlayerId;
 
+  // Rotate the visual layout only (the underlying seat indices are untouched, so
+  // drag-to-swap and the settlement arrows - both driven by data-seat/DOM position, not
+  // a hardcoded coordinate - keep working unchanged) so the viewer's own seat always
+  // lands at the bottom-center slot (index 5), everyone else arranged around it, rather
+  // than a fixed top-down layout that puts your own seat wherever its raw number happens
+  // to fall. Seat 9, the special "extra player" overflow slot, never rotates.
+  const mySeatIdx = myPlayerId ? seats.indexOf(myPlayerId) : -1;
+  const rotationOffset = (mySeatIdx >= 0 && mySeatIdx < 9) ? ((5 - mySeatIdx) % 9 + 9) % 9 : 0;
+  const visualPos = (i) => i === 9 ? 9 : (i + rotationOffset) % 9;
+
   const seatsHtml = seats.map((pid, i) => {
-    const [x,y] = SEAT_POS[i];
+    const [x,y] = SEAT_POS[visualPos(i)];
     if (!pid) {
       if (i === 9) return ""; // the 10th slot's empty state is handled by the dedicated "add extra player" button instead
       if (allCashedOut) return ""; // once the night is over, empty seats are just clutter
@@ -2009,7 +2036,7 @@ function renderTable(gameId){
       const profit = chips - buyin;
       const sign = profit > 0 ? "+" : "";
       const profitColor = profit > 0.5 ? "#6ee7b7" : (profit < -0.5 ? "#fda4af" : "inherit");
-      caption = `<span style="color:${profitColor};font-weight:700;" data-caption-for="${pid}">${sign}₪${Math.round(profit)}</span>`;
+      caption = `<span style="color:${profitColor};font-weight:700;font-size:22px;" data-caption-for="${pid}">${sign}₪${Math.round(profit)}</span>`;
     }
     const circleStyle = (photo && !cashedOut) ? ` style="background-image:url('${photo}');background-size:cover;background-position:center;"` : "";
     const doorIconBig = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>';
