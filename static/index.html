@@ -2135,7 +2135,7 @@ function renderModal(m){
       <div class="section-title" style="padding:0;margin:0 0 8px;">כניסה ואבטחה</div>
       <label class="checkbox-row" style="cursor:pointer;">
         <input type="checkbox" data-toggle-skip-login-verification ${authSettings.skipLoginVerification?"checked":""}>
-        <span class="flex1">כניסה ללא קוד אימות - שחקנים מתחברים מיד לפי האימייל שהקלידו, בלי לשלוח קוד. חל על כולם, כולל כתובת ה-super admin.</span>
+        <span class="flex1">כניסה ללא קוד אימות - אימייל חדש תמיד נכנס מיד בלי קוד, גם כשזה כבוי. כשדולק, זה חל גם על אימייל שכבר קיים במערכת (כולל super admin); כשכבוי, אימייל קיים עדיין דורש קוד אמיתי.</span>
       </label>
       <label class="checkbox-row" style="cursor:pointer;margin-bottom:18px;">
         <input type="checkbox" data-toggle-require-admin-verify ${authSettings.requireVerifyBeforeAdminSettings?"checked":""}>
@@ -3428,16 +3428,17 @@ function attachHandlers(){
 
   if (modal && modal.type === "loginRequired") {
     const sendLoginCodeFor = async (email) => {
-      if (authSettings.skipLoginVerification) {
-        try {
-          const account = await quickLogin(email, modal.deviceChoice === "replace");
-          applyAccountToIdentity(account);
-          saveIdentity();
-          await saveState();
-          openModal({type:"identityName", forced:true});
-          return;
-        } catch(e) { /* the setting got disabled mid-flight, or a network error - fall through to a real code below */ }
-      }
+      // Always tries the no-code path first and lets the server decide eligibility (a
+      // brand new email always qualifies; an existing one only if a super admin has
+      // turned "כניסה ללא קוד אימות" on) - falls back to a real code either way.
+      try {
+        const account = await quickLogin(email, modal.deviceChoice === "replace");
+        applyAccountToIdentity(account);
+        saveIdentity();
+        await saveState();
+        openModal({type:"identityName", forced:true});
+        return;
+      } catch(e) { /* not eligible, or a network error - fall through to a real code below */ }
       try {
         await requestLoginCode(email);
         updateModal({loginStep: "code", loginEmail: email, loginError: null});

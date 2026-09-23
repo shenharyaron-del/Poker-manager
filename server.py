@@ -590,13 +590,13 @@ def verify_login_code():
 
 @app.route("/api/auth/quick-login", methods=["POST"])
 def quick_login():
-    # Trusts whatever email was typed with no code at all - only ever active when a
-    # super admin has explicitly turned "כניסה ללא קוד אימות" on. Applies uniformly, even
-    # to the super admin's own address - the thing actually gating real admin access is
-    # require_verify_before_admin_settings (see set_auth_settings/get_auth_settings),
-    # not this endpoint.
-    if not _get_setting("skip_login_verification", False):
-        return jsonify({"error": "not enabled"}), 403
+    # Two independent ways in here, either is enough:
+    #  - The email is brand new (no trusted_devices row at all) - nobody's claimed this
+    #    identity yet, so there's nothing a code would protect. Always allowed, no
+    #    setting needed.
+    #  - The email already exists (including the super admin's own) - only allowed when
+    #    a super admin has explicitly turned "כניסה ללא קוד אימות" on; refused otherwise,
+    #    and the client falls back to a real code.
     body = request.get_json(silent=True) or {}
     email = str(body.get("email", "")).strip().lower()
     client_id = str(body.get("clientId", "")).strip()
@@ -606,6 +606,11 @@ def quick_login():
         return jsonify({"error": "invalid email/clientId"}), 400
     with get_db() as conn:
         with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM trusted_devices WHERE email = %s LIMIT 1", (email,))
+            already_registered = cur.fetchone() is not None
+            if already_registered and not _get_setting("skip_login_verification", False):
+                conn.commit()
+                return jsonify({"error": "already registered"}), 409
             if replace_existing:
                 cur.execute("DELETE FROM trusted_devices WHERE email = %s AND client_id != %s", (email, client_id))
             cur.execute(
