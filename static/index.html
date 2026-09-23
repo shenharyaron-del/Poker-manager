@@ -858,7 +858,7 @@ let myIdentity = { id: getClientId(), name: null };
 let appVersion = null; // filled in by init() from /api/version
 // Global admin toggles (see adminSettings) - safe defaults (full verification, no
 // bypass) if the fetch itself ever fails, never the other way around.
-let authSettings = { skipLoginVerification: false, requireVerifyBeforeAdminSettings: false };
+let authSettings = { requireVerifyExistingEmail: true, requireVerifyBeforeAdminSettings: false };
 
 // ---------- Navigation (not persisted - always starts at home) ----------
 let nav = { screen: "home", communityId: null, gameId: null };
@@ -2134,12 +2134,12 @@ function renderModal(m){
     body = `
       <div class="section-title" style="padding:0;margin:0 0 8px;">כניסה ואבטחה</div>
       <label class="checkbox-row" style="cursor:pointer;">
-        <input type="checkbox" data-toggle-skip-login-verification ${authSettings.skipLoginVerification?"checked":""}>
-        <span class="flex1">כניסה ללא קוד אימות - אימייל חדש תמיד נכנס מיד בלי קוד, גם כשזה כבוי. כשדולק, זה חל גם על אימייל שכבר קיים במערכת (כולל super admin); כשכבוי, אימייל קיים עדיין דורש קוד אמיתי.</span>
+        <input type="checkbox" data-toggle-require-verify-existing ${authSettings.requireVerifyExistingEmail?"checked":""}>
+        <span class="flex1">חייב קוד אימות לאימייל קיים</span>
       </label>
       <label class="checkbox-row" style="cursor:pointer;margin-bottom:18px;">
         <input type="checkbox" data-toggle-require-admin-verify ${authSettings.requireVerifyBeforeAdminSettings?"checked":""}>
-        <span class="flex1">דרוש קוד אימות טרי לפני פתיחת הגדרות מערכת, גם ממכשיר שכבר מחובר - מומלץ להדליק יחד עם "כניסה ללא קוד אימות".</span>
+        <span class="flex1">חייב קוד אימות להגדרות מערכת</span>
       </label>
       <div class="section-title" style="padding:0;margin:0 0 8px;">אווטרים</div>
       <div style="display:flex;gap:8px;margin-bottom:18px;">
@@ -3541,8 +3541,8 @@ function attachHandlers(){
         });
       } catch(e) { console.error("auth setting save failed", e); }
     };
-    const skipVerifyCb = app.querySelector("[data-toggle-skip-login-verification]");
-    if (skipVerifyCb) skipVerifyCb.onchange = () => updateAuthSetting("skipLoginVerification", skipVerifyCb.checked);
+    const requireVerifyExistingCb = app.querySelector("[data-toggle-require-verify-existing]");
+    if (requireVerifyExistingCb) requireVerifyExistingCb.onchange = () => updateAuthSetting("requireVerifyExistingEmail", requireVerifyExistingCb.checked);
     const requireAdminVerifyCb = app.querySelector("[data-toggle-require-admin-verify]");
     if (requireAdminVerifyCb) requireAdminVerifyCb.onchange = () => updateAuthSetting("requireVerifyBeforeAdminSettings", requireAdminVerifyCb.checked);
     const openCreatorBtn = app.querySelector("[data-open-avatar-creator]");

@@ -594,9 +594,9 @@ def quick_login():
     #  - The email is brand new (no trusted_devices row at all) - nobody's claimed this
     #    identity yet, so there's nothing a code would protect. Always allowed, no
     #    setting needed.
-    #  - The email already exists (including the super admin's own) - only allowed when
-    #    a super admin has explicitly turned "כניסה ללא קוד אימות" on; refused otherwise,
-    #    and the client falls back to a real code.
+    #  - The email already exists (including the super admin's own) - refused (falls
+    #    back to a real code) unless a super admin has explicitly turned "חייב קוד אימות
+    #    לאימייל קיים" OFF. Defaults to on (secure) if never set.
     body = request.get_json(silent=True) or {}
     email = str(body.get("email", "")).strip().lower()
     client_id = str(body.get("clientId", "")).strip()
@@ -608,7 +608,7 @@ def quick_login():
         with conn.cursor() as cur:
             cur.execute("SELECT 1 FROM trusted_devices WHERE email = %s LIMIT 1", (email,))
             already_registered = cur.fetchone() is not None
-            if already_registered and not _get_setting("skip_login_verification", False):
+            if already_registered and _get_setting("require_verify_existing_email", True):
                 conn.commit()
                 return jsonify({"error": "already registered"}), 409
             if replace_existing:
@@ -628,7 +628,7 @@ def quick_login():
 @app.route("/api/auth/settings")
 def get_auth_settings():
     return jsonify({
-        "skipLoginVerification": _get_setting("skip_login_verification", False),
+        "requireVerifyExistingEmail": _get_setting("require_verify_existing_email", True),
         "requireVerifyBeforeAdminSettings": _get_setting("require_verify_before_admin_settings", False),
     })
 
@@ -639,8 +639,8 @@ def set_auth_settings():
     if not ok:
         return err
     body = request.get_json(silent=True) or {}
-    if "skipLoginVerification" in body:
-        _set_setting("skip_login_verification", bool(body["skipLoginVerification"]))
+    if "requireVerifyExistingEmail" in body:
+        _set_setting("require_verify_existing_email", bool(body["requireVerifyExistingEmail"]))
     if "requireVerifyBeforeAdminSettings" in body:
         _set_setting("require_verify_before_admin_settings", bool(body["requireVerifyBeforeAdminSettings"]))
     return jsonify({"ok": True})
