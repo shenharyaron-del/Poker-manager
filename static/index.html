@@ -3427,16 +3427,30 @@ function attachHandlers(){
   }
 
   if (modal && modal.type === "loginRequired") {
+    // A first-time visitor via an invite link has no name yet when autoJoinViaInvite
+    // first runs in init(), so it bails out - retry now that a login (real or quick)
+    // just filled myIdentity.name in, whether or not the name screen itself shows.
+    const retryInviteJoinIfNeeded = async () => {
+      if (nav.screen === "table" && nav.gameId) await autoJoinViaInvite(nav.gameId);
+      else if (nav.screen === "community" && nav.communityId) await autoJoinViaCommunityInvite(nav.communityId);
+    };
+    // An existing account (returning on a new/other device) already has a name/avatar -
+    // no need to make them pass through that screen again every time; only a genuinely
+    // new account (no name yet) gets sent there.
+    const afterLogin = async (account) => {
+      applyAccountToIdentity(account);
+      saveIdentity();
+      await saveState();
+      if (account.name) { await retryInviteJoinIfNeeded(); closeModal(); }
+      else openModal({type:"identityName", forced:true});
+    };
     const sendLoginCodeFor = async (email) => {
       // Always tries the no-code path first and lets the server decide eligibility (a
       // brand new email always qualifies; an existing one only if a super admin has
       // turned "כניסה ללא קוד אימות" on) - falls back to a real code either way.
       try {
         const account = await quickLogin(email, modal.deviceChoice === "replace");
-        applyAccountToIdentity(account);
-        saveIdentity();
-        await saveState();
-        openModal({type:"identityName", forced:true});
+        await afterLogin(account);
         return;
       } catch(e) { /* not eligible, or a network error - fall through to a real code below */ }
       try {
@@ -3485,13 +3499,7 @@ function attachHandlers(){
       showButtonLoading(confirmLoginBtn);
       try {
         const account = await verifyLoginCode(modal.loginEmail, code, modal.deviceChoice === "replace");
-        applyAccountToIdentity(account);
-        saveIdentity();
-        await saveState();
-        // Every manual login (typing a code, not the silent auto-login a trusted device
-        // gets on a normal return visit) hands off to the name/avatar screen - a natural
-        // moment to review or fix it, not just for a brand new account with no name yet.
-        openModal({type:"identityName", forced:true});
+        await afterLogin(account);
       } catch(e) {
         updateModal({loginError: e.message});
       }
