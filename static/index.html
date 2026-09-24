@@ -126,6 +126,9 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .custom-alert-box{pointer-events:auto;background:#0c3d2e;border:1px solid var(--gold);border-radius:14px;padding:14px 16px;width:100%;max-width:440px;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:12px;box-shadow:0 8px 30px rgba(0,0,0,.5);animation:custom-alert-in .2s ease-out;}
 .custom-alert-close{background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;flex-shrink:0;}
 @keyframes custom-alert-in{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+.custom-confirm{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:201;padding:16px;}
+.custom-confirm-box{background:#0c3d2e;border:1px solid var(--gold);border-radius:14px;padding:18px 16px;width:100%;max-width:400px;color:var(--text);font-size:14px;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.5);animation:custom-alert-in .2s ease-out;}
+.custom-confirm-actions{display:flex;gap:10px;margin-top:16px;}
 .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
 .modal-head h3{margin:0;font-size:18px;}
 .close-x{background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;}
@@ -1296,6 +1299,26 @@ function showAlert(message){
   el.querySelector(".custom-alert-close").onclick = remove;
   setTimeout(remove, 6000);
 }
+// showConfirm() - custom stand-in for the browser's native confirm(), same reasoning as
+// showAlert() above. Async since it has to wait for a click instead of blocking the thread.
+function showConfirm(message){
+  return new Promise((resolve) => {
+    const el = document.createElement("div");
+    el.className = "custom-confirm";
+    el.innerHTML = `<div class="custom-confirm-box">
+      <div>${esc(String(message))}</div>
+      <div class="custom-confirm-actions">
+        <button class="btn btn-ghost btn-block" data-confirm-cancel>ביטול</button>
+        <button class="btn btn-primary btn-block" data-confirm-ok>אישור</button>
+      </div>
+    </div>`;
+    document.body.appendChild(el);
+    const finish = (result) => { el.remove(); resolve(result); };
+    el.querySelector("[data-confirm-ok]").onclick = () => finish(true);
+    el.querySelector("[data-confirm-cancel]").onclick = () => finish(false);
+    el.onclick = (e) => { if (e.target === el) finish(false); };
+  });
+}
 function updateModal(partial){
   // Toggling a checkbox shouldn't jump the scroll back to the top - capture and
   // restore scroll positions of the modal and any inner scrollable list around the re-render.
@@ -2162,9 +2185,8 @@ function renderModal(m){
   if (m.type === "loginRequired") {
     title = "ברוכים הבאים";
     body = m.loginStep === "deviceChoice" ? `
-      <p style="color:var(--muted);font-size:13px;margin-bottom:14px;">הכתובת <span dir="ltr">${esc(m.loginEmail)}</span> כבר רשומה במערכת עם מכשיר מחובר. מה תרצו לעשות?</p>
-      <button class="btn btn-primary btn-block" style="margin-bottom:8px;" data-device-choice="add">${icon('plus')} הוסף את המכשיר הזה בנוסף לקיים</button>
-      <button class="btn btn-ghost btn-block" style="margin-bottom:8px;" data-device-choice="replace">${icon('undo')} החלף - נתק את המכשיר הקיים</button>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:14px;">הכתובת <span dir="ltr">${esc(m.loginEmail)}</span> כבר רשומה במערכת עם מכשיר מחובר. האם להתחבר ממכשיר זה?</p>
+      <button class="btn btn-primary btn-block" style="margin-bottom:8px;" data-device-choice="replace">המשך</button>
       <button class="btn btn-ghost btn-block" data-device-choice-cancel>ביטול</button>
     ` : m.loginStep === "code" ? `
       <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">שלחנו קוד בן 6 ספרות ל-<span dir="ltr">${esc(m.loginEmail)}</span></p>
@@ -3777,7 +3799,7 @@ function attachHandlers(){
     });
     app.querySelectorAll("[data-delete-global-player]").forEach(el => el.onclick = async () => {
       const email = el.dataset.deleteGlobalPlayer;
-      if (!confirm(`למחוק את המשתמש ${email}? הפעולה בלתי הפיכה - הוא ייאלץ להתחבר מחדש ולאבד את הרשומה הנוכחית.`)) return;
+      if (!(await showConfirm(`למחוק את המשתמש ${email}? הפעולה בלתי הפיכה - הוא ייאלץ להתחבר מחדש ולאבד את הרשומה הנוכחית.`))) return;
       const res = await fetch("/api/auth/delete-account?clientId=" + encodeURIComponent(getClientId()), {
         method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({email})
       });
@@ -3787,10 +3809,10 @@ function attachHandlers(){
   }
 
   if (modal && modal.type === "avatarManage") {
-    app.querySelectorAll("[data-delete-avatar]").forEach(el => el.onclick = (e) => {
+    app.querySelectorAll("[data-delete-avatar]").forEach(el => el.onclick = async (e) => {
       e.stopPropagation();
       const key = el.dataset.deleteAvatar;
-      if (!confirm("למחוק את האווטר?")) return;
+      if (!(await showConfirm("למחוק את האווטר?"))) return;
       if (key.startsWith("custom:")) {
         const id = key.slice(7);
         state.customAvatars = (state.customAvatars||[]).filter(a => a.id !== id);
@@ -4648,8 +4670,8 @@ function attachHandlers(){
       saveState();
       render();
     });
-    app.querySelectorAll("[data-delete-paybox-entry]").forEach(el => el.onclick = () => {
-      if (!confirm("למחוק את קבוצת הפייבוקס הזו?")) return;
+    app.querySelectorAll("[data-delete-paybox-entry]").forEach(el => el.onclick = async () => {
+      if (!(await showConfirm("למחוק את קבוצת הפייבוקס הזו?"))) return;
       const c = getCommunity(modal.communityId);
       const id = el.dataset.deletePayboxEntry;
       c.payboxLinks = (c.payboxLinks||[]).filter(pl => pl.id !== id);
@@ -4831,8 +4853,8 @@ function attachHandlers(){
       const el = idByMode[forMode] ? document.getElementById(idByMode[forMode]) : app.querySelector("[data-color-count]");
       if (el) el.focus();
     };
-    app.querySelectorAll("[data-chips-mode]").forEach(el => el.onclick = () => {
-      if (hasEnteredData() && !confirm("יש נתונים שהוקלדו במצב הנוכחי - מעבר למצב אחר ימחק אותם. להמשיך?")) return;
+    app.querySelectorAll("[data-chips-mode]").forEach(el => el.onclick = async () => {
+      if (hasEnteredData() && !(await showConfirm("יש נתונים שהוקלדו במצב הנוכחי - מעבר למצב אחר ימחק אותם. להמשיך?"))) return;
       const newMode = el.dataset.chipsMode;
       updateModal({chipsMode: newMode});
       focusModeInput(newMode);
@@ -5031,8 +5053,8 @@ function attachHandlers(){
 
 // ---------- Guard against accidentally leaving the app via the browser/device back button ----------
 history.pushState({pokerManagerGuard: true}, "");
-window.addEventListener("popstate", () => {
-  if (confirm("לצאת מהאפליקציה?")) {
+window.addEventListener("popstate", async () => {
+  if (await showConfirm("לצאת מהאפליקציה?")) {
     history.back();
   } else {
     history.pushState({pokerManagerGuard: true}, "");
