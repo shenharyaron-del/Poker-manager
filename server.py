@@ -145,7 +145,7 @@ def _ensure_schema(conn):
 # its own). That self-imposed serialization is what turned into multi-second waits to
 # add a player or buy in when several phones were active near-simultaneously at the
 # table. Separate pooled connections remove that artificial bottleneck.
-_MIN_POOL_CONNS = 1
+_MIN_POOL_CONNS = 3
 _MAX_POOL_CONNS = 10
 _db_pool = None
 _db_pool_lock = threading.Lock()
@@ -1750,6 +1750,15 @@ def vision():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
+    # Opens _MIN_POOL_CONNS real connections to Supabase right now, before the app is
+    # reachable at all, instead of lazily on whichever request happens to arrive first.
+    # The initial page load fires several requests at once (state, identity, version,
+    # session, auth settings - see index.html's init()), and each of those used to pay
+    # its own multi-second connection-setup cost in parallel the first time anyone loaded
+    # the app after a cold start - directly observed as a minute-plus "loading" screen
+    # while testing the staging environment. This moves that cost to server startup,
+    # where nobody's watching it happen.
+    _get_pool()
     # threaded=True is required now - an SSE connection (/api/events) stays open
     # indefinitely, and the default single-threaded dev server would block every
     # other request behind it for as long as any one tab stays connected.

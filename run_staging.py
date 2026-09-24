@@ -21,6 +21,10 @@ os.environ["RELATIONAL_API_DEFAULT"] = "true"
 import server
 
 if __name__ == "__main__":
+    # server.py's own pool pre-warming lives inside ITS `if __name__ == "__main__":`
+    # guard, which never runs when imported as a module (exactly what this script does) -
+    # call it explicitly here too, same reasoning as the comment on that call in server.py.
+    server._get_pool()
     # threaded=True is required - see the matching comment at the bottom of server.py.
     # An SSE connection (/api/events) stays open indefinitely; without this, the default
     # single-threaded dev server blocks every other request behind it once any tab opens
