@@ -118,6 +118,14 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 @media(min-width:600px){.overlay.overlay-top .modal{border-radius:20px;}}
 .modal{background:#064e3b;width:100%;max-width:480px;border-radius:20px 20px 0 0;border:1px solid var(--card-b);padding:20px;max-height:85vh;overflow-y:auto;}
 @media(min-width:600px){.modal{border-radius:20px;}}
+/* showAlert() - custom stand-in for the browser's native alert(), which always prefixes
+   its own message with "<hostname> says". Stacks above any open modal (.overlay is
+   z-index:50). */
+.custom-alert{position:fixed;inset:0;pointer-events:none;display:flex;align-items:flex-end;justify-content:center;z-index:200;padding:16px;}
+@media(min-width:600px){.custom-alert{align-items:flex-start;}}
+.custom-alert-box{pointer-events:auto;background:#0c3d2e;border:1px solid var(--gold);border-radius:14px;padding:14px 16px;width:100%;max-width:440px;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:12px;box-shadow:0 8px 30px rgba(0,0,0,.5);animation:custom-alert-in .2s ease-out;}
+.custom-alert-close{background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;flex-shrink:0;}
+@keyframes custom-alert-in{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
 .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
 .modal-head h3{margin:0;font-size:18px;}
 .close-x{background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;}
@@ -530,7 +538,7 @@ async function saveState(baseHash){
       try { const body = await res.json(); if (body && body.hash) lastStateHash = body.hash; } catch(e) { /* fine - next save just re-syncs if needed */ }
       return "ok";
     }
-    catch(e){ logSync("save: POST FAILED " + e); console.error("save failed", e); alert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return "error"; }
+    catch(e){ logSync("save: POST FAILED " + e); console.error("save failed", e); showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return "error"; }
   };
   saveInFlight = (saveInFlight || Promise.resolve()).then(run);
   return saveInFlight;
@@ -576,7 +584,7 @@ async function mutateAndSave(mutatorFn){
       if (result !== "conflict") return result === "ok";
       logSync(`mutateAndSave: conflict on attempt ${attempt+1}, retrying`);
     }
-    alert("לא הצלחנו לשמור בגלל התנגשות עם שמירה אחרת - נסו את הפעולה שוב.");
+    showAlert("לא הצלחנו לשמור בגלל התנגשות עם שמירה אחרת - נסו את הפעולה שוב.");
     return false;
   } finally {
     actionInFlight = null;
@@ -1269,6 +1277,25 @@ async function autoJoinViaCommunityInvite(communityId){
 }
 function openModal(m){ modal = m; render(); }
 function closeModal(){ modal = null; render(); }
+// Drop-in replacement for the browser's native alert() - every existing call site
+// already just shows a message and returns right after (nothing waits on the native
+// dialog's blocking behavior), so a non-blocking custom toast is a safe swap. Skips the
+// native dialog's own "<hostname> says" chrome, which read as a raw/unpolished
+// Render URL rather than part of the app. Stacks above any open modal (higher
+// z-index), auto-dismisses, and can also be tapped away early.
+function showAlert(message){
+  const el = document.createElement("div");
+  el.className = "custom-alert";
+  el.innerHTML = `<div class="custom-alert-box">
+    <span>${esc(String(message))}</span>
+    <button class="custom-alert-close" aria-label="סגור">${icon('x')}</button>
+  </div>`;
+  document.body.appendChild(el);
+  const remove = () => el.remove();
+  el.onclick = (e) => { if (e.target === el) remove(); };
+  el.querySelector(".custom-alert-close").onclick = remove;
+  setTimeout(remove, 6000);
+}
 function updateModal(partial){
   // Toggling a checkbox shouldn't jump the scroll back to the top - capture and
   // restore scroll positions of the modal and any inner scrollable list around the re-render.
@@ -1349,13 +1376,13 @@ function openFilePicker(communityId, playerId, useCamera){
     processSelfieFile(file, async (dataUrl) => {
       let photo;
       try { photo = await uploadPhoto(dataUrl); }
-      catch(e) { alert("העלאת התמונה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+      catch(e) { showAlert("העלאת התמונה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
       // No communityId means this was opened from the identity/name screen - set the
       // viewer's own global avatar directly rather than a specific roster entry.
       if (!communityId) { setGlobalPlayer(myIdentity.id, {photo}); saveState(); updateAccount({photo}); render(); return; }
       const c = getCommunity(communityId);
       const rp = c && c.roster.find(pl => pl.id === playerId);
-      if (rp && !rp.clientId) { alert("אפשר לקבוע אווטר רק לשחקן שנכנס בעצמו דרך קישור הזמנה."); return; }
+      if (rp && !rp.clientId) { showAlert("אפשר לקבוע אווטר רק לשחקן שנכנס בעצמו דרך קישור הזמנה."); return; }
       if (rp) { setPlayerPhoto(rp, photo); saveState(); render(); }
     });
   };
@@ -2868,7 +2895,7 @@ function renderModal(m){
     const chips = (g.liveChips||{})[m.playerId] || 0;
     const buyinTotal = g.buyins.filter(b=>b.playerId===m.playerId).reduce((s,b)=>s+b.amount,0);
     const cashedOut = m.playerId in g.cashouts;
-    title = esc(p ? p.name : "שחקן");
+    title = `סיום ערב: ${esc(p ? p.name : "שחקן")}`;
     const chipValues = c.chipValues || [];
     const ratio = c.chipRatio;
     // Four distinct, mutually-exclusive ways to arrive at the same ₪ total - shown one at
@@ -3200,10 +3227,10 @@ function attachHandlers(){
     if (navigator.share) {
       try { await navigator.share({title: "הזמנה למשחק פוקר", text, url}); } catch(err) { /* user cancelled the share sheet */ }
     } else if (navigator.clipboard && navigator.clipboard.writeText) {
-      try { await navigator.clipboard.writeText(url); alert("הקישור הועתק! שלחו אותו לשחקן."); }
-      catch(err) { alert(url); }
+      try { await navigator.clipboard.writeText(url); showAlert("הקישור הועתק! שלחו אותו לשחקן."); }
+      catch(err) { showAlert(url); }
     } else {
-      alert(url);
+      showAlert(url);
     }
   });
   app.querySelectorAll("[data-invite-community]").forEach(el => el.onclick = (e) => {
@@ -3243,14 +3270,14 @@ function attachHandlers(){
     reader.onload = () => {
       let parsed;
       try { parsed = JSON.parse(reader.result); }
-      catch(e) { alert("הקובץ שנבחר אינו JSON תקין."); return; }
+      catch(e) { showAlert("הקובץ שנבחר אינו JSON תקין."); return; }
       if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.communities) || !Array.isArray(parsed.games)) {
-        alert("הקובץ לא נראה כמו גיבוי תקין של Poker Manager (חסרים communities/games).");
+        showAlert("הקובץ לא נראה כמו גיבוי תקין של Poker Manager (חסרים communities/games).");
         return;
       }
       openModal({type:"confirmRestoreFromFile", data: parsed, fileName: file.name, numCommunities: parsed.communities.length, numGames: parsed.games.length});
     };
-    reader.onerror = () => alert("קריאת הקובץ נכשלה.");
+    reader.onerror = () => showAlert("קריאת הקובץ נכשלה.");
     reader.readAsText(file);
   };
 
@@ -3304,7 +3331,7 @@ function attachHandlers(){
     const c = getCommunity(g.communityId);
     const link = getActivePayboxLink(c);
     const amount = panelPayboxPayBtn.dataset.payboxAmount;
-    if (!link) { alert("לא הוגדרה קבוצת פייבוקס. בקשו מיוצר הקבוצה להגדיר אחת ממסך הקבוצה."); return; }
+    if (!link) { showAlert("לא הוגדרה קבוצת פייבוקס. בקשו מיוצר הקבוצה להגדיר אחת ממסך הקבוצה."); return; }
     const url = link + (link.includes("?") ? "&" : "?") + "amount=" + amount;
     window.open(url, "_blank", "noopener");
   };
@@ -3537,7 +3564,7 @@ function attachHandlers(){
     const confirmBtn = app.querySelector("[data-confirm-identity-name]");
     if (confirmBtn) confirmBtn.onclick = async () => {
       const name = document.getElementById("identity-name-input").value.trim();
-      if (!name) { alert("צריך להזין שם."); return; }
+      if (!name) { showAlert("צריך להזין שם."); return; }
       confirmBtn.disabled = true;
       showButtonLoading(confirmBtn);
       myIdentity.name = name;
@@ -3664,7 +3691,7 @@ function attachHandlers(){
       }
       const c = getCommunity(modal.communityId);
       const rp = c && c.roster.find(pl => pl.id === modal.playerId);
-      if (rp && photo && !rp.clientId) { alert("אפשר לקבוע אווטר רק לשחקן שנכנס בעצמו דרך קישור הזמנה."); closeModal(); return; }
+      if (rp && photo && !rp.clientId) { showAlert("אפשר לקבוע אווטר רק לשחקן שנכנס בעצמו דרך קישור הזמנה."); closeModal(); return; }
       if (rp && photo) { setPlayerPhoto(rp, photo); saveState(); }
       closeModal();
     });
@@ -3744,7 +3771,7 @@ function attachHandlers(){
       const res = await fetch("/api/auth/set-role?clientId=" + encodeURIComponent(getClientId()), {
         method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({email, role: newRole})
       });
-      if (!res.ok) { alert("הפעולה נכשלה - רק Super Admin יכול לשנות תפקידים."); updateModal({}); return; }
+      if (!res.ok) { showAlert("הפעולה נכשלה - רק Super Admin יכול לשנות תפקידים."); updateModal({}); return; }
       account.role = newRole;
       updateModal({accounts: modal.accounts});
     });
@@ -3754,7 +3781,7 @@ function attachHandlers(){
       const res = await fetch("/api/auth/delete-account?clientId=" + encodeURIComponent(getClientId()), {
         method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({email})
       });
-      if (!res.ok) { alert("המחיקה נכשלה - רק Super Admin יכול למחוק משתמשים."); return; }
+      if (!res.ok) { showAlert("המחיקה נכשלה - רק Super Admin יכול למחוק משתמשים."); return; }
       updateModal({accounts: (modal.accounts||[]).filter(a => a.email !== email)});
     });
   }
@@ -4178,7 +4205,7 @@ function attachHandlers(){
       const ratioInp = document.getElementById("chip-ratio-input");
       const ratio = ratioInp ? parseFloat(ratioInp.value) : NaN;
       const validRatio = !isNaN(ratio) && ratio > 0;
-      if (!values.length && !validRatio) { alert("צריך להזין ערך לפחות לזיטון אחד, או יחס ציפים."); return; }
+      if (!values.length && !validRatio) { showAlert("צריך להזין ערך לפחות לזיטון אחד, או יחס ציפים."); return; }
       const communityId = modal.communityId;
       saveBtn.disabled = true;
       showButtonLoading(saveBtn);
@@ -4189,7 +4216,7 @@ function attachHandlers(){
         await Promise.all(values.map(async (v) => {
           if (v.image && v.image.startsWith("data:")) v.image = await uploadPhoto(v.image);
         }));
-      } catch(e) { alert("העלאת תמונות הציפים נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); render(); return; }
+      } catch(e) { showAlert("העלאת תמונות הציפים נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); render(); return; }
       await mutateAndSave(() => {
         const c = getCommunity(communityId);
         if (values.length) c.chipValues = values;
@@ -4344,16 +4371,16 @@ function attachHandlers(){
       for (const pt of modal.points) {
         const name = (pt.name||"").trim();
         const category = (pt.category||"").trim();
-        if (!name || !category) { alert("צריך להזין שם וקטגוריה לכל אווטר."); return; }
+        if (!name || !category) { showAlert("צריך להזין שם וקטגוריה לכל אווטר."); return; }
         pending.push({pt, name, category});
       }
-      if (!pending.length) { alert("צריך לסמן לפחות אווטר אחד."); return; }
+      if (!pending.length) { showAlert("צריך לסמן לפחות אווטר אחד."); return; }
       showButtonLoading(saveAvatarsBtn);
       let newAvatars;
       try {
         newAvatars = await Promise.all(pending.map(async ({pt, name, category}) =>
           ({id: uid(), name, category, image: await uploadPhoto(pt.image)})));
-      } catch(e) { alert("העלאת האווטרים נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); render(); return; }
+      } catch(e) { showAlert("העלאת האווטרים נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); render(); return; }
       state.customAvatars = (state.customAvatars||[]).concat(newAvatars);
       saveState();
       if (modal.communityId) openModal({type:"photoSource", communityId: modal.communityId, playerId: modal.playerId});
@@ -4365,7 +4392,7 @@ function attachHandlers(){
     const confirmBtn = app.querySelector("[data-confirm-new-community]");
     if (confirmBtn) confirmBtn.onclick = async () => {
       const name = document.getElementById("new-community-name").value.trim();
-      if (!name) { alert("צריך להזין שם לקבוצה."); return; }
+      if (!name) { showAlert("צריך להזין שם לקבוצה."); return; }
       const communityId = uid();
       const creatorPlayer = {id: uid(), name: myIdentity.name};
       linkToGlobalPlayer(creatorPlayer);
@@ -4382,7 +4409,7 @@ function attachHandlers(){
     const confirmBtn = app.querySelector("[data-confirm-duplicate-community]");
     if (confirmBtn) confirmBtn.onclick = () => {
       const name = document.getElementById("duplicate-community-name").value.trim();
-      if (!name) { alert("צריך להזין שם לקבוצה."); return; }
+      if (!name) { showAlert("צריך להזין שם לקבוצה."); return; }
       const src = getCommunity(modal.communityId);
       const roster = (src.roster||[]).map(p => ({...p, id: uid()}));
       const chipValues = (src.chipValues||[]).map(cv => ({...cv, id: uid()}));
@@ -4685,7 +4712,7 @@ function attachHandlers(){
     if (addGuestBtn) addGuestBtn.onclick = async () => {
       const nameInput = document.getElementById("pick-seat-guest-name");
       const name = nameInput.value.trim();
-      if (!name) { alert("צריך להזין שם."); return; }
+      if (!name) { showAlert("צריך להזין שם."); return; }
       addGuestBtn.disabled = true;
       showButtonLoading(addGuestBtn);
       await mutateAndSave(() => {
@@ -4962,7 +4989,7 @@ function attachHandlers(){
         if (isNaN(v) || v < 0) allFilled = false;
         values[inp.dataset.endAmount] = v / multiplier;
       });
-      if (!allFilled) { alert("צריך למלא סכום תקין לכל שחקן פעיל."); return; }
+      if (!allFilled) { showAlert("צריך למלא סכום תקין לכל שחקן פעיל."); return; }
       const gameId = modal.gameId;
       confirmBulkBtn.disabled = true;
       showButtonLoading(confirmBulkBtn);
