@@ -1821,6 +1821,7 @@ function icon(name){ return ICONS[name] || ""; }
 
 // ---------- Rendering ----------
 function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function profitColor(v){ return v>0.005 ? '#6ee7b7' : (v<-0.005 ? '#fda4af' : 'inherit'); }
 function fmtTime(ts){ if(!ts) return ""; const d = new Date(ts); return d.toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'}); }
 
 // ---------- Screen names (for talking about the app together, and shown in the header) ----------
@@ -2939,11 +2940,12 @@ function renderModal(m){
     `;
     // Fixed, non-editable recap at the top - same three numbers regardless of which mode
     // is active below, live-updated on every keystroke in that mode's own input(s).
+    const initProfit = Math.round((chips-buyinTotal)*100)/100;
     const headerHtml = `
       <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:12px 4px;margin-bottom:22px;display:grid;grid-template-columns:1fr 1fr 1fr;text-align:center;">
         <div><div style="font-size:11px;color:var(--muted);">סה"כ קנייה</div><div style="font-weight:700;">₪${buyinTotal}</div></div>
         <div><div style="font-size:11px;color:var(--muted);">ציפים שספרנו</div><div id="chips-header-counted" style="font-weight:700;">₪${chips}</div></div>
-        <div><div style="font-size:11px;color:var(--muted);">רווח/הפסד</div><div id="chips-header-profit" style="font-weight:700;">${chips-buyinTotal>0?'+':''}₪${Math.round((chips-buyinTotal)*100)/100}</div></div>
+        <div><div style="font-size:11px;color:var(--muted);">רווח/הפסד</div><div id="chips-header-profit" style="font-weight:700;color:${profitColor(initProfit)};">${initProfit>0?'+':''}₪${initProfit}</div></div>
       </div>
     `;
     let modeBody;
@@ -4897,7 +4899,7 @@ function attachHandlers(){
       const countedEl = document.getElementById("chips-header-counted");
       const profitEl = document.getElementById("chips-header-profit");
       if (countedEl) countedEl.textContent = `₪${counted}`;
-      if (profitEl) { profitEl.textContent = `${profit>0?'+':''}₪${profit}`; }
+      if (profitEl) { profitEl.textContent = `${profit>0?'+':''}₪${profit}`; profitEl.style.color = profitColor(profit); }
     };
     app.querySelectorAll("input[type=number]").forEach(el => el.oninput = refreshHeader);
     refreshHeader();
