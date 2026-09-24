@@ -12,12 +12,16 @@ CREATE TABLE communities (
   created_by TEXT,
   created_by_name TEXT,
   chip_ratio NUMERIC,
-  active_paybox_link_id TEXT
+  active_paybox_link_id TEXT,
+  -- Optimistic-concurrency token for PATCH/PUT writes (see the /api/v2 write
+  -- endpoints in server.py) - the client echoes back the value it last saw;
+  -- a mismatch means someone else edited this community first.
+  updated_at TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE chip_values (
   id TEXT PRIMARY KEY,
-  community_id TEXT REFERENCES communities(id),
+  community_id TEXT REFERENCES communities(id) ON DELETE CASCADE,
   image TEXT,
   value NUMERIC,
   sort_order INT
@@ -25,14 +29,14 @@ CREATE TABLE chip_values (
 
 CREATE TABLE paybox_links (
   id TEXT PRIMARY KEY,
-  community_id TEXT REFERENCES communities(id),
+  community_id TEXT REFERENCES communities(id) ON DELETE CASCADE,
   name TEXT,
   link TEXT
 );
 
 CREATE TABLE roster_players (
   id TEXT PRIMARY KEY,
-  community_id TEXT REFERENCES communities(id),
+  community_id TEXT REFERENCES communities(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   client_id TEXT NULL
 );
@@ -48,7 +52,7 @@ CREATE TABLE global_players (
 
 CREATE TABLE games (
   id TEXT PRIMARY KEY,
-  community_id TEXT REFERENCES communities(id),
+  community_id TEXT REFERENCES communities(id) ON DELETE CASCADE,
   name TEXT,
   date DATE,
   created_by_name TEXT,
@@ -72,7 +76,7 @@ CREATE TABLE games (
 -- FK would either block that removal or force a cascade that destroys
 -- history, neither of which matches current behavior.
 CREATE TABLE game_players (
-  game_id TEXT REFERENCES games(id),
+  game_id TEXT REFERENCES games(id) ON DELETE CASCADE,
   player_id TEXT,
   name TEXT,
   PRIMARY KEY (game_id, player_id)
@@ -80,14 +84,14 @@ CREATE TABLE game_players (
 
 CREATE TABLE buyins (
   id TEXT PRIMARY KEY,
-  game_id TEXT REFERENCES games(id),
+  game_id TEXT REFERENCES games(id) ON DELETE CASCADE,
   player_id TEXT,
   amount NUMERIC,
   ts TIMESTAMPTZ
 );
 
 CREATE TABLE cashouts (
-  game_id TEXT REFERENCES games(id),
+  game_id TEXT REFERENCES games(id) ON DELETE CASCADE,
   player_id TEXT,
   amount NUMERIC,
   ts TIMESTAMPTZ,
@@ -97,7 +101,7 @@ CREATE TABLE cashouts (
 
 CREATE TABLE paybox_payments (
   id TEXT PRIMARY KEY,
-  game_id TEXT REFERENCES games(id),
+  game_id TEXT REFERENCES games(id) ON DELETE CASCADE,
   player_id TEXT,
   amount NUMERIC,
   ts TIMESTAMPTZ
@@ -105,7 +109,7 @@ CREATE TABLE paybox_payments (
 
 CREATE TABLE player_payments (
   id TEXT PRIMARY KEY,
-  game_id TEXT REFERENCES games(id),
+  game_id TEXT REFERENCES games(id) ON DELETE CASCADE,
   from_player_id TEXT,
   to_player_id TEXT,
   amount NUMERIC,

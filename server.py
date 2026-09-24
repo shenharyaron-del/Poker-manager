@@ -360,10 +360,11 @@ def _num(x):
 
 
 def _row_to_community(row):
-    (cid, name, created_by, created_by_name, chip_ratio, active_paybox_link_id) = row
+    (cid, name, created_by, created_by_name, chip_ratio, active_paybox_link_id, updated_at) = row
     return {
         "id": cid, "name": name, "createdBy": created_by, "createdByName": created_by_name,
         "chipRatio": _num(chip_ratio), "activePayboxLinkId": active_paybox_link_id,
+        "updatedAt": updated_at.isoformat() if updated_at else None,
     }
 
 
@@ -372,7 +373,7 @@ def v2_list_communities():
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, name, created_by, created_by_name, chip_ratio, active_paybox_link_id "
+                "SELECT id, name, created_by, created_by_name, chip_ratio, active_paybox_link_id, updated_at "
                 "FROM communities ORDER BY name"
             )
             communities = [_row_to_community(r) for r in cur.fetchall()]
@@ -520,6 +521,296 @@ def v2_community_outcomes(community_id):
             totals = [{"playerId": r[0], "net": _num(r[1]), "gamesPlayed": r[2]} for r in cur.fetchall()]
         conn.commit()
     return jsonify(totals)
+
+
+# ---------- Phase 3: write endpoints for the community/roster feature area ----------
+# Each write is scoped to a single community/row instead of the whole app-state blob, so
+# unrelated concurrent edits (a different community, a different game) never contend.
+# Structural changes (INSERT a new roster row, DELETE one) don't need a conflict token -
+# two people adding different players, or one delete racing another, both resolve fine on
+# their own. Field edits on the community row itself (name/chipRatio/chipValues/
+# activePayboxLinkId) DO use one - the client echoes back the `updatedAt` it last saw
+# (from a GET), and a mismatch (someone else edited first) returns 409 instead of quietly
+# overwriting their change. This replaces mutateAndSave's whole-blob hash retry loop with
+# a plain single-row optimistic-concurrency check, backed by a real DB constraint instead
+# of hand-rolled JS retry logic.
+
+
+@app.route("/api/v2/communities", methods=["POST"])
+def v2_create_community():
+    body = request.get_json(silent=True) or {}
+    cid, name = body.get("id"), body.get("name")
+    if not cid or not name:
+        return jsonify({"error": "id and name required"}), 400
+    created_by, created_by_name = body.get("createdBy"), body.get("createdByName")
+    creator_player_id, creator_player_name = body.get("creatorPlayerId"), body.get("creatorPlayerName")
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO communities (id, name, created_by, created_by_name) VALUES (%s,%s,%s,%s)",
+                (cid, name, created_by, created_by_name),
+            )
+            if creator_player_id:
+                cur.execute(
+                    "INSERT INTO roster_players (id, community_id, name, client_id) VALUES (%s,%s,%s,%s)",
+                    (creator_player_id, cid, creator_player_name, created_by),
+                )
+        conn.commit()
+    return jsonify({"id": cid}), 201
+
+
+@app.route("/api/v2/communities/<community_id>", methods=["PATCH"])
+def v2_update_community(community_id):
+    body = request.get_json(silent=True) or {}
+    updated_at = body.get("updatedAt")
+    if not updated_at:
+        return jsonify({"error": "updatedAt required"}), 400
+    fields, params = [], []
+    if "name" in body:
+        fields.append("name = %s"); params.append(body["name"])
+    if "chipRatio" in body:
+        fields.append("chip_ratio = %s"); params.append(body["chipRatio"])
+    if "activePayboxLinkId" in body:
+        fields.append("active_paybox_link_id = %s"); params.append(body["activePayboxLinkId"])
+    if not fields:
+        return jsonify({"error": "no fields to update"}), 400
+    fields.append("updated_at = now()")
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"UPDATE communities SET {', '.join(fields)} "
+                "WHERE id = %s AND updated_at = %s::timestamptz RETURNING updated_at",
+                (*params, community_id, updated_at),
+            )
+            row = cur.fetchone()
+            if not row:
+                conn.commit()
+                return jsonify({"conflict": True}), 409
+        conn.commit()
+    return jsonify({"ok": True, "updatedAt": row[0].isoformat()})
+
+
+@app.route("/api/v2/communities/<community_id>", methods=["DELETE"])
+def v2_delete_community(community_id):
+    # ON DELETE CASCADE on every community_id/game_id FK takes care of chip_values,
+    # paybox_links, roster_players, games and everything under those games in one
+    # statement - see schema.sql.
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM communities WHERE id = %s", (community_id,))
+            deleted = cur.rowcount
+        conn.commit()
+    if not deleted:
+        return jsonify({"error": "not found"}), 404
+    return jsonify({"ok": True})
+
+
+@app.route("/api/v2/communities/<community_id>/duplicate", methods=["POST"])
+def v2_duplicate_community(community_id):
+    body = request.get_json(silent=True) or {}
+    new_id, new_name = body.get("id"), body.get("name")
+    if not new_id or not new_name:
+        return jsonify({"error": "id and name required"}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT created_by, created_by_name, chip_ratio FROM communities WHERE id = %s",
+                (community_id,),
+            )
+            src = cur.fetchone()
+            if not src:
+                return jsonify({"error": "source community not found"}), 404
+            created_by, created_by_name, chip_ratio = src
+            cur.execute(
+                "INSERT INTO communities (id, name, created_by, created_by_name, chip_ratio) "
+                "VALUES (%s,%s,%s,%s,%s)",
+                (new_id, new_name, created_by, created_by_name, chip_ratio),
+            )
+
+            cur.execute(
+                "SELECT id, image, value, sort_order FROM chip_values WHERE community_id = %s", (community_id,)
+            )
+            for cv_id, image, value, sort_order in cur.fetchall():
+                cur.execute(
+                    "INSERT INTO chip_values (id, community_id, image, value, sort_order) VALUES (%s,%s,%s,%s,%s)",
+                    (secrets.token_hex(4), new_id, image, value, sort_order),
+                )
+
+            cur.execute("SELECT id, name, link FROM paybox_links WHERE community_id = %s", (community_id,))
+            paybox_id_map = {}
+            for pl_id, pl_name, link in cur.fetchall():
+                new_pl_id = secrets.token_hex(4)
+                paybox_id_map[pl_id] = new_pl_id
+                cur.execute(
+                    "INSERT INTO paybox_links (id, community_id, name, link) VALUES (%s,%s,%s,%s)",
+                    (new_pl_id, new_id, pl_name, link),
+                )
+
+            cur.execute("SELECT active_paybox_link_id FROM communities WHERE id = %s", (community_id,))
+            old_active = cur.fetchone()[0]
+            if old_active and old_active in paybox_id_map:
+                cur.execute(
+                    "UPDATE communities SET active_paybox_link_id = %s WHERE id = %s",
+                    (paybox_id_map[old_active], new_id),
+                )
+
+            cur.execute("SELECT id, name, client_id FROM roster_players WHERE community_id = %s", (community_id,))
+            for p_id, p_name, client_id in cur.fetchall():
+                cur.execute(
+                    "INSERT INTO roster_players (id, community_id, name, client_id) VALUES (%s,%s,%s,%s)",
+                    (secrets.token_hex(4), new_id, p_name, client_id),
+                )
+        conn.commit()
+    return jsonify({"id": new_id}), 201
+
+
+@app.route("/api/v2/communities/<community_id>/roster", methods=["POST"])
+def v2_add_roster_player(community_id):
+    # Unconditional insert, no duplicate-name check - matches the client's current
+    # data-add-roster behavior exactly (confirmed during Phase 3 research).
+    body = request.get_json(silent=True) or {}
+    player_id, name = body.get("id"), body.get("name")
+    if not player_id or not name:
+        return jsonify({"error": "id and name required"}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO roster_players (id, community_id, name) VALUES (%s,%s,%s)",
+                (player_id, community_id, name),
+            )
+        conn.commit()
+    return jsonify({"id": player_id, "name": name}), 201
+
+
+@app.route("/api/v2/communities/<community_id>/roster/<player_id>", methods=["DELETE"])
+def v2_remove_roster_player(community_id, player_id):
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT client_id FROM roster_players WHERE id = %s AND community_id = %s",
+                (player_id, community_id),
+            )
+            row = cur.fetchone()
+            if not row:
+                return jsonify({"error": "not found"}), 404
+            client_id = row[0]
+            cur.execute("DELETE FROM roster_players WHERE id = %s AND community_id = %s", (player_id, community_id))
+            if client_id:
+                # Same orphan-cleanup the client does today: only drop global_players once
+                # no roster entry anywhere still points at this account.
+                cur.execute(
+                    "DELETE FROM global_players WHERE client_id = %s "
+                    "AND NOT EXISTS (SELECT 1 FROM roster_players WHERE client_id = %s)",
+                    (client_id, client_id),
+                )
+        conn.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/v2/players/<client_id>/name", methods=["PATCH"])
+def v2_rename_player_everywhere(client_id):
+    # Cross-community by design - a logged-in player's roster entries in every community
+    # they've joined share one clientId and should all show the same name.
+    body = request.get_json(silent=True) or {}
+    name = body.get("name")
+    if not name:
+        return jsonify({"error": "name required"}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE roster_players SET name = %s WHERE client_id = %s", (name, client_id))
+            updated = cur.rowcount
+        conn.commit()
+    return jsonify({"ok": True, "updated": updated})
+
+
+@app.route("/api/v2/communities/<community_id>/chip-values", methods=["PUT"])
+def v2_set_chip_values(community_id):
+    # Full replace, not incremental - matches the client's chipSetup save exactly (it
+    # always sends the complete list, never a delta).
+    body = request.get_json(silent=True) or {}
+    values, chip_ratio, updated_at = body.get("chipValues"), body.get("chipRatio"), body.get("updatedAt")
+    if values is None or not updated_at:
+        return jsonify({"error": "chipValues and updatedAt required"}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE communities SET chip_ratio = %s, updated_at = now() "
+                "WHERE id = %s AND updated_at = %s::timestamptz RETURNING updated_at",
+                (chip_ratio, community_id, updated_at),
+            )
+            row = cur.fetchone()
+            if not row:
+                conn.commit()
+                return jsonify({"conflict": True}), 409
+            cur.execute("DELETE FROM chip_values WHERE community_id = %s", (community_id,))
+            for i, cv in enumerate(values):
+                cur.execute(
+                    "INSERT INTO chip_values (id, community_id, image, value, sort_order) VALUES (%s,%s,%s,%s,%s)",
+                    (cv["id"], community_id, cv.get("image"), cv.get("value"), i),
+                )
+        conn.commit()
+    return jsonify({"ok": True, "updatedAt": row[0].isoformat()})
+
+
+@app.route("/api/v2/communities/<community_id>/paybox-links", methods=["POST"])
+def v2_add_paybox_link(community_id):
+    body = request.get_json(silent=True) or {}
+    link_id, name, link = body.get("id"), body.get("name"), body.get("link")
+    if not link_id or not link:
+        return jsonify({"error": "id and link required"}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO paybox_links (id, community_id, name, link) VALUES (%s,%s,%s,%s)",
+                (link_id, community_id, name, link),
+            )
+            # First link added becomes the active one automatically, same as the client.
+            cur.execute(
+                "UPDATE communities SET active_paybox_link_id = %s "
+                "WHERE id = %s AND active_paybox_link_id IS NULL",
+                (link_id, community_id),
+            )
+        conn.commit()
+    return jsonify({"id": link_id}), 201
+
+
+@app.route("/api/v2/communities/<community_id>/paybox-links", methods=["PUT"])
+def v2_edit_paybox_links(community_id):
+    # Bulk in-place edit of name/link on existing entries - matches data-save-paybox-entries.
+    body = request.get_json(silent=True) or {}
+    links = body.get("links")
+    if links is None:
+        return jsonify({"error": "links required"}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            for pl in links:
+                cur.execute(
+                    "UPDATE paybox_links SET name = %s, link = %s WHERE id = %s AND community_id = %s",
+                    (pl.get("name"), pl.get("link"), pl["id"], community_id),
+                )
+        conn.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/v2/communities/<community_id>/paybox-links/<link_id>", methods=["DELETE"])
+def v2_delete_paybox_link(community_id, link_id):
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM paybox_links WHERE id = %s AND community_id = %s", (link_id, community_id))
+            deleted = cur.rowcount
+            cur.execute("SELECT active_paybox_link_id FROM communities WHERE id = %s", (community_id,))
+            row = cur.fetchone()
+            if row and row[0] == link_id:
+                cur.execute("SELECT id FROM paybox_links WHERE community_id = %s LIMIT 1", (community_id,))
+                fallback = cur.fetchone()
+                cur.execute(
+                    "UPDATE communities SET active_paybox_link_id = %s WHERE id = %s",
+                    (fallback[0] if fallback else None, community_id),
+                )
+        conn.commit()
+    if not deleted:
+        return jsonify({"error": "not found"}), 404
+    return jsonify({"ok": True})
 
 
 @app.route("/api/identity", methods=["GET"])
