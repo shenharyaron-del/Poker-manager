@@ -109,6 +109,13 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .chip-btn:disabled{opacity:.4;cursor:not-allowed;}
 .overlay{position:fixed;inset:0;background:#000;display:flex;align-items:flex-end;justify-content:center;z-index:50;}
 @media(min-width:600px){.overlay{align-items:center;}}
+/* Anchors the sheet to the top of the screen instead of the bottom - used for the
+   chip-counting screen (seatChips), which got long enough (recap header + mode tabs +
+   mode body) that opening from the bottom kept its own top - the part you look at
+   first - furthest from the thumb/eye. */
+.overlay.overlay-top{align-items:flex-start;}
+.overlay.overlay-top .modal{border-radius:0 0 20px 20px;}
+@media(min-width:600px){.overlay.overlay-top .modal{border-radius:20px;}}
 .modal{background:#064e3b;width:100%;max-width:480px;border-radius:20px 20px 0 0;border:1px solid var(--card-b);padding:20px;max-height:85vh;overflow-y:auto;}
 @media(min-width:600px){.modal{border-radius:20px;}}
 .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
@@ -2870,10 +2877,10 @@ function renderModal(m){
     // the others). Only offer a mode the community actually has data for; "direct"
     // (typing the ₪ total by hand) is always available as a fallback.
     const availableModes = [
-      chipValues.length ? {key:"byColor", label:"לפי צבע"} : null,
-      ratio ? {key:"quantity", label:"כמות כוללת"} : null,
-      {key:"direct", label:"סכום ישיר"},
+      ratio ? {key:"quantity", label:"ספירת ז'יטונים"} : null,
+      {key:"direct", label:"סכום ז'יטונים בש\"ח"},
       {key:"profit", label:"רווח/הפסד"},
+      chipValues.length ? {key:"byColor", label:"לפי צבע"} : null,
     ].filter(Boolean);
     const mode = (m.chipsMode && availableModes.some(am => am.key === m.chipsMode)) ? m.chipsMode : availableModes[0].key;
     const modeTabs = `
@@ -2911,16 +2918,23 @@ function renderModal(m){
       `;
     } else if (mode === "quantity") {
       modeBody = `
-        <p style="color:var(--muted);font-size:12px;margin:0 0 6px;">1 ש"ח עבור ${ratio} ציפים</p>
-        <div class="field"><label>סך כל הציפים (כמות)</label><input type="number" inputmode="numeric" id="total-chip-qty" data-chip-ratio="${ratio}" placeholder="0" style="width:100%;"></div>
+        <p style="color:var(--muted);font-size:12px;margin:0 0 6px;">הקלידו לפי הספירה הכוללת שלכם את סך הז'יטונים. נמיר לשקלים לפי 1 ש"ח עבור ${ratio} ז'יטונים.</p>
+        <div class="field"><label>סך כל הז'יטונים (כמות)</label><input type="number" inputmode="numeric" id="total-chip-qty" data-chip-ratio="${ratio}" placeholder="0" style="width:100%;"></div>
       `;
     } else if (mode === "profit") {
+      // Sign picked via a toggle instead of typing a minus sign - a plain numeric keypad
+      // (inputmode="numeric") doesn't reliably offer a "-" key on mobile, and the picked
+      // sign is clearer at a glance than scanning for one anyway.
+      const profitSign = m.profitSign === "loss" ? "loss" : "profit";
       modeBody = `
-        <p style="color:var(--muted);font-size:12px;margin:0 0 6px;">הפסד מוזן כמספר שלילי, למשל ‎-30‎.</p>
-        <div class="field"><label>רווח או הפסד בש"ח</label><input type="number" inputmode="decimal" id="seat-chips-profit" placeholder="0" style="width:100%;"></div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;">
+          <button class="btn ${profitSign==='profit'?'btn-primary':'btn-ghost'} flex1" data-profit-sign="profit">רווח +</button>
+          <button class="btn ${profitSign==='loss'?'btn-primary':'btn-ghost'} flex1" data-profit-sign="loss">הפסד -</button>
+        </div>
+        <div class="field"><label>סכום ה${profitSign==='loss'?'הפסד':'רווח'} בש"ח</label><input type="number" inputmode="numeric" id="seat-chips-profit" placeholder="0" min="0" style="width:100%;" onfocus="this.select()"></div>
       `;
     } else {
-      modeBody = `<div class="field"><label>סה"כ ערך הציפים בש"ח</label><input type="number" inputmode="decimal" id="seat-chips-direct" value="${chips}"></div>`;
+      modeBody = `<div class="field"><label>סכום ז'יטונים בש"ח</label><input type="number" inputmode="numeric" id="seat-chips-direct" value="${chips}" onfocus="this.select()"></div>`;
     }
     body = `
       ${headerHtml}
@@ -3134,8 +3148,9 @@ function renderModal(m){
   }
 
   const dismissable = m.type !== "loginRequired" && !(m.type === "identityName" && m.forced);
+  const topAnchored = m.type === "seatChips";
   return `
-    <div class="overlay">
+    <div class="overlay${topAnchored ? ' overlay-top' : ''}">
       <div class="modal" onclick="event.stopPropagation()">
         <div class="modal-head"><h3 class="serif">${title}</h3>${dismissable ? `<button class="close-x" data-close-modal>${icon('x')}</button>` : ""}</div>
         ${body}
@@ -4767,9 +4782,25 @@ function attachHandlers(){
     const c = getCommunity(g.communityId);
     const ratio = c.chipRatio;
     const chipValues = c.chipValues || [];
-    const availableModes = [chipValues.length&&"byColor", ratio&&"quantity", "direct", "profit"].filter(Boolean);
+    const currentChips = (g.liveChips||{})[modal.playerId] || 0;
+    const availableModes = [ratio&&"quantity", "direct", "profit", chipValues.length&&"byColor"].filter(Boolean);
     const mode = (modal.chipsMode && availableModes.includes(modal.chipsMode)) ? modal.chipsMode : availableModes[0];
-    app.querySelectorAll("[data-chips-mode]").forEach(el => el.onclick = () => updateModal({chipsMode: el.dataset.chipsMode}));
+    const profitSign = modal.profitSign === "loss" ? "loss" : "profit";
+    // Switching modes swaps out the input(s) entirely - anything typed in the mode being
+    // left is about to silently vanish, so warn first rather than losing it with no
+    // chance to notice (e.g. a half-typed per-color count).
+    const hasEnteredData = () => {
+      if (mode === "byColor") return Array.from(app.querySelectorAll("[data-color-count]")).some(el => el.value.trim() !== "");
+      if (mode === "quantity") return (document.getElementById("total-chip-qty")||{}).value?.trim() !== "";
+      if (mode === "profit") return (document.getElementById("seat-chips-profit")||{}).value?.trim() !== "";
+      const el = document.getElementById("seat-chips-direct");
+      return el && el.value.trim() !== "" && parseFloat(el.value) !== currentChips;
+    };
+    app.querySelectorAll("[data-chips-mode]").forEach(el => el.onclick = () => {
+      if (hasEnteredData() && !confirm("יש נתונים שהוקלדו במצב הנוכחי - מעבר למצב אחר ימחק אותם. להמשיך?")) return;
+      updateModal({chipsMode: el.dataset.chipsMode});
+    });
+    app.querySelectorAll("[data-profit-sign]").forEach(el => el.onclick = () => updateModal({profitSign: el.dataset.profitSign}));
     // "Counted" here means today's mode's own current input(s), read fresh each time -
     // used both to keep the fixed recap header live and to compute what actually gets
     // saved on confirm, so the two can never disagree with each other.
@@ -4782,7 +4813,8 @@ function attachHandlers(){
       if (mode === "profit") {
         const el = document.getElementById("seat-chips-profit");
         const v = el ? parseFloat(el.value) : NaN;
-        return buyinTotal + (isNaN(v) ? 0 : v);
+        const magnitude = isNaN(v) ? 0 : Math.abs(v);
+        return buyinTotal + (profitSign === "loss" ? -magnitude : magnitude);
       }
       if (mode === "byColor") {
         let total = 0;
