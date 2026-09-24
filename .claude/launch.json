@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "poker-app",
+      "runtimeExecutable": ".venv\\Scripts\\python.exe",
+      "runtimeArgs": ["server.py"],
+      "port": 5000
+    },
+    {
+      "name": "poker-app-staging",
+      "runtimeExecutable": ".venv\\Scripts\\python.exe",
+      "runtimeArgs": ["run_staging.py"],
+      "port": 5050
+    }
+  ]
+}

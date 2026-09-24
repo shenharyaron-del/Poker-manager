@@ -27,11 +27,24 @@ except ImportError:
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 DATABASE_URL = os.environ["DATABASE_URL"]
+# Unset (the default, real production) means every connection uses Postgres's own default
+# search_path (`public`) - unaffected. Set (a staging/local deployment only) prepends this
+# schema, so the relational-DB migration's v2 tables resolve there while everything else
+# in this file keeps working exactly the same way, just against an isolated copy of the
+# data instead of the live one. See RELATIONAL_API_DEFAULT below and .claude/plans.
+DB_SCHEMA = os.environ.get("DB_SCHEMA")
 DATA_URL_RE = re.compile(r"^data:(image/[a-zA-Z0-9.+-]+);base64,(.+)$", re.DOTALL)
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 # Render sets this automatically to the deployed commit's SHA - lets Settings show
 # exactly which version is live, with no separate manual version number to keep in sync.
 APP_VERSION = os.environ.get("RENDER_GIT_COMMIT", "local")[:7]
+# Per-deployment, not per-database - deliberately read from the environment, not the
+# shared app_settings table (which every deployment pointed at this DB would see alike).
+# Lets a second Render service (or a local run) serve the exact same index.html with the
+# relational-DB migration's client code turned on, for testing, without the real
+# production deployment ever picking it up. See .claude/plans and USE_RELATIONAL_API in
+# index.html.
+RELATIONAL_API_DEFAULT = os.environ.get("RELATIONAL_API_DEFAULT", "false").lower() == "true"
 # The one account that's a super admin from the moment it's ever created, with no other
 # admin needed to grant it - every other account's role defaults to plain "user".
 SUPER_ADMIN_EMAIL = os.environ.get("SUPER_ADMIN_EMAIL", "").strip().lower()
@@ -142,7 +155,8 @@ def _get_pool():
     global _db_pool
     with _db_pool_lock:
         if _db_pool is None:
-            pool = psycopg2.pool.ThreadedConnectionPool(_MIN_POOL_CONNS, _MAX_POOL_CONNS, DATABASE_URL)
+            connect_kwargs = {"options": f"-c search_path={DB_SCHEMA},public"} if DB_SCHEMA else {}
+            pool = psycopg2.pool.ThreadedConnectionPool(_MIN_POOL_CONNS, _MAX_POOL_CONNS, DATABASE_URL, **connect_kwargs)
             conn = pool.getconn()
             try:
                 _ensure_schema(conn)
@@ -245,7 +259,7 @@ def service_worker():
 
 @app.route("/api/version")
 def version():
-    return jsonify({"version": APP_VERSION})
+    return jsonify({"version": APP_VERSION, "relationalApiEnabled": RELATIONAL_API_DEFAULT})
 
 
 @app.route("/api/state", methods=["GET"])

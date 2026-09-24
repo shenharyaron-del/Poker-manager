@@ -602,7 +602,11 @@ async function mutateAndSave(mutatorFn){
 // Phases 3-5, then patches the same local `state` object mutateAndSave's callers already
 // mutate directly, so every existing render function keeps working unchanged regardless
 // of which path is active - only the persistence mechanism differs.
-const USE_RELATIONAL_API = false;
+// Server-controlled (see RELATIONAL_API_DEFAULT in server.py, set from init() below) -
+// per-deployment, not hardcoded, so the exact same file serves production (off) and a
+// staging deployment/local run (on, pointed at an isolated copy of the data) without
+// ever needing to hand-edit this line and remember to revert it before committing.
+let USE_RELATIONAL_API = false;
 
 async function v2Fetch(method, path, body){
   const res = await fetch(`/api/v2${path}`, {
@@ -1053,7 +1057,7 @@ async function loadIdentity(){
 async function loadVersion(){
   try {
     const res = await fetch("/api/version");
-    if (res.ok) return (await res.json()).version;
+    if (res.ok) return await res.json();
   } catch(e) { /* not critical - Settings just won't show a version */ }
   return null;
 }
@@ -5682,14 +5686,19 @@ window.addEventListener("popstate", async () => {
     // A failed initial load must never be treated as "no data yet" - only fall back to
     // defaultState() here (the one legitimate use of it), never after a save is possible.
     state = stateResult.status === "fulfilled" ? stateResult.value : defaultState();
-    // Phase 6/7 (relational-DB migration) testing only - see USE_RELATIONAL_API above.
+    myIdentity = identityResult.status === "fulfilled" ? identityResult.value : { id: getClientId(), name: null };
+    const versionInfo = versionResult.status === "fulfilled" ? versionResult.value : null;
+    appVersion = versionInfo ? versionInfo.version : null;
+    // Server-controlled, per-deployment (see RELATIONAL_API_DEFAULT in server.py) - a
+    // fetch failure here leaves the safe default (false) in place rather than guessing.
+    if (versionInfo && versionInfo.relationalApiEnabled) USE_RELATIONAL_API = true;
     // Overlays v2-sourced communities AND full per-game detail (with their updatedAt
     // concurrency tokens) onto whatever the old blob load produced, so the write helpers
     // have real data to work against. Fetching every game's full detail eagerly here is
-    // deliberately a testing-only shortcut (the real production design is meant to lazily
-    // fetch a game's full detail only when its screen is opened, per the migration plan) -
-    // fine for this small scratch dataset, not how the final cutover should load games at
-    // scale. Never runs with the flag off (the default).
+    // deliberately a shortcut for a staging-sized dataset (the real production design is
+    // meant to lazily fetch a game's full detail only when its screen is opened, per the
+    // migration plan) - fine for testing, not how the final cutover should load games at
+    // scale. Never runs with the flag off (the default, real production).
     if (USE_RELATIONAL_API) {
       try {
         state.communities = await v2Fetch("GET", "/communities");
@@ -5699,8 +5708,6 @@ window.addEventListener("popstate", async () => {
         state.games = await Promise.all(gameSummaries.map(g => v2Fetch("GET", `/games/${g.id}`)));
       } catch(e) { logSync("v2 community/game load failed: " + e); }
     }
-    myIdentity = identityResult.status === "fulfilled" ? identityResult.value : { id: getClientId(), name: null };
-    appVersion = versionResult.status === "fulfilled" ? versionResult.value : null;
     if (authSettingsResult.status === "fulfilled" && authSettingsResult.value) authSettings = authSettingsResult.value;
     // This device already verified a login code before (see checkLoginSession) - recover
     // the name/photo/phone from the account instead of starting over as a stranger. Only
