@@ -709,8 +709,21 @@ async function syncBeforeMutate(){
       pending = saveInFlight;
       if (pending) await pending;
     } while (pending !== saveInFlight);
-    const fresh = await loadState();
-    if (fresh !== null) state = fresh;
+    // Deliberately NOT loadState() - its "hash still matches lastStateHash, skip and
+    // return null" shortcut is wrong here. This runs specifically to recover from a
+    // rejected (conflicted) mutateAndSave attempt, whose own mutatorFn() call already
+    // dirtied local `state` even though nothing was actually saved. If the server's real
+    // hash still equals lastStateHash (true whenever every attempt so far has failed -
+    // a rejected save never changes the server's hash), that shortcut would leave the
+    // dirty local mutation in place, and the next retry's mutatorFn() would then push
+    // ANOTHER copy on top of it instead of starting clean - each failed attempt
+    // compounding on the last (e.g. four failed retries of a 100 buy-in locally
+    // ballooning to 400, all client-side only, before the final alert and a real
+    // refresh reveals the true, unaffected server value). Always re-fetch the full
+    // state here, unconditionally, so a dirty local mutation is always discarded.
+    const [hashRes, stateRes] = await Promise.all([fetch("/api/state/hash"), fetch("/api/state")]);
+    if (hashRes.ok) { const {hash} = await hashRes.json(); lastStateHash = hash; }
+    if (stateRes.ok) { state = await stateRes.json(); }
   } catch(e) { /* offline or a hiccup - proceed with what we have rather than block the action */ }
 }
 
@@ -1570,6 +1583,13 @@ function animateSeatCaptions(gameId){
     const buyin = buyinTotals[pid] || 0;
     const value = cashedOut ? Math.round(liveChips[pid]||0) - buyin : buyin;
     next[pid] = value;
+    const prevValue = prev[pid];
+    // A genuine new buy-in someone ELSE just made - this device's own buy-ins already
+    // played the sound at the moment they were confirmed (see doPanelBuyin) and their
+    // optimistic update already moved this cache past the old value before this ever
+    // runs, so this only fires for a change that arrived via sync from another device -
+    // everyone watching the table hears it, not just whoever tapped the button.
+    if (!cashedOut && prevValue !== undefined && value > prevValue) playBuyinSound();
     const el = document.querySelector(`[data-caption-for="${pid}"]`);
     if (!el) return;
     const ongoing = activeCaptionAnimations[pid];
@@ -1578,7 +1598,6 @@ function animateSeatCaptions(gameId){
       // to whatever the true value now is in case it changed since it started.
       animateCaptionNumber(el, ongoing.from, value, cashedOut, ongoing.startTime);
     } else {
-      const prevValue = prev[pid];
       if (prevValue !== undefined && prevValue !== value) animateCaptionNumber(el, prevValue, value, cashedOut);
     }
   });
@@ -2940,6 +2959,12 @@ function renderModal(m){
       g.buyins.forEach(b => { buyinTotals[b.playerId] = (buyinTotals[b.playerId]||0) + b.amount; });
       const paidTotals = {};
       (g.payboxPayments||[]).forEach(pp => { paidTotals[pp.playerId] = (paidTotals[pp.playerId]||0) + pp.amount; });
+      // Players who already cashed out individually during the night, before this
+      // "end the whole night" pass - shown here too (read-only text + edit pencil,
+      // reusing the same editCashout flow as the per-player history screen) so a
+      // mistake can still be caught from this one summary instead of having to go
+      // find each of them again separately.
+      const alreadyOutPlayers = g.players.filter(p => p.id in g.cashouts);
       body = `
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
           <label style="font-size:13px;font-weight:600;color:var(--muted);margin:0;">מכפיל ציפים</label>
@@ -2953,7 +2978,24 @@ function renderModal(m){
             <span style="color:var(--muted);font-size:11px;flex:1;min-width:0;">· קנה ₪${buyinTotals[p.id]||0}${paidTotals[p.id]?` · העביר ₪${paidTotals[p.id]}`:""}</span>
           </div>
         `).join("")}
-        <button class="btn btn-primary btn-block" data-confirm-end-bulk style="margin-top:6px;">סיים ערב וחשב סיכום</button>
+        ${alreadyOutPlayers.length ? `
+          <div class="section-title" style="padding:0;margin:16px 0 8px;">כבר יצאו הערב</div>
+          ${alreadyOutPlayers.map(p => {
+            const co = g.cashouts[p.id];
+            const buyin = buyinTotals[p.id] || 0;
+            const profit = co.amount - buyin;
+            return `
+              <div class="roster-row">
+                <span><b>${esc(p.name)}</b> <span style="color:var(--muted);font-size:11px;">יצא עם ₪${co.amount}</span></span>
+                <span style="display:flex;align-items:center;gap:8px;">
+                  <span style="font-weight:700;color:${profit>0.005?'#6ee7b7':(profit<-0.005?'#fda4af':'inherit')};">${profit>0?'+':''}₪${Math.round(profit*100)/100}</span>
+                  <button class="icon-btn" data-edit-cashout-from-end="${p.id}" title="עדכן סכום ציפים">${icon('pencil')}</button>
+                </span>
+              </div>
+            `;
+          }).join("")}
+        ` : ""}
+        <button class="btn btn-primary btn-block" style="margin-top:6px;" data-confirm-end-bulk>סיים ערב וחשב סיכום</button>
       `;
     }
   } else if (m.type === "summary") {
@@ -4839,6 +4881,9 @@ function attachHandlers(){
       updateLiveBalance();
     });
     updateLiveBalance();
+    app.querySelectorAll("[data-edit-cashout-from-end]").forEach(el => el.onclick = () => {
+      openModal({type:"editCashout", gameId: modal.gameId, playerId: el.dataset.editCashoutFromEnd});
+    });
     const confirmBulkBtn = app.querySelector("[data-confirm-end-bulk]");
     if (confirmBulkBtn) confirmBulkBtn.onclick = async () => {
       const multiplier = getMultiplier();
