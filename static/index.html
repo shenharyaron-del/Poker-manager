@@ -1052,6 +1052,15 @@ function setGlobalPlayer(clientId, updates){
   if (!state.globalPlayers) state.globalPlayers = {};
   state.globalPlayers[clientId] = Object.assign({}, state.globalPlayers[clientId], updates);
 }
+// "המיקום שלי בשולחן" (identityName screen) - which of the 9 seat slots this viewer's
+// own seat should always visually land on at any table (see renderTable's rotation).
+// Stored on globalPlayers (keyed by the canonical playerId, same as photo/phone) so it
+// follows the account across devices, not just the one it was set on. Defaults to 5
+// (bottom-center) for anyone who's never touched it.
+function getMySeatPosition(){
+  const v = getGlobalPlayer(myIdentity.id).seatPosition;
+  return (typeof v === "number" && v >= 0 && v <= 8) ? v : 5;
+}
 function getPlayerPhone(p){ return p.clientId ? (getGlobalPlayer(p.clientId).phone || "") : (p.phone || ""); }
 function setPlayerPhone(p, phone){ if (p.clientId) setGlobalPlayer(p.clientId, {phone}); else p.phone = phone; }
 // Avatars are global-only - a roster entry someone just typed in by hand (no linked
@@ -1982,10 +1991,14 @@ function renderActionPanel(g, c, seatedIds){
   return `<div class="bottom-bar">${settlementHtml}${behalfBadge}${panelBody}</div>`;
 }
 
+// Percentage [x,y] position of each of the 9 main seat slots around the oval table
+// (index 9 is the special "extra player" overflow slot, positioned separately) - shared
+// between the real table render and the small preview in the identityName "המיקום שלי
+// בשולחן" picker, so both draw from the exact same layout.
+const SEAT_POS = [
+  [50,8],[74,18],[85,43],[80,71],[65,90],[35,90],[12,71],[7,43],[22,18],[2,90]
+];
 function renderTable(gameId){
-  const SEAT_POS = [
-    [50,8],[74,18],[85,43],[80,71],[65,90],[35,90],[12,71],[7,43],[22,18],[2,90]
-  ];
   const g = getGame(gameId);
   if (!g) return `<div class="empty">משחק לא נמצא</div>`;
   const c = getCommunity(g.communityId) || {name:"קבוצה", roster:[]};
@@ -2007,11 +2020,11 @@ function renderTable(gameId){
   // Rotate the visual layout only (the underlying seat indices are untouched, so
   // drag-to-swap and the settlement arrows - both driven by data-seat/DOM position, not
   // a hardcoded coordinate - keep working unchanged) so the viewer's own seat always
-  // lands at the bottom-center slot (index 5), everyone else arranged around it, rather
-  // than a fixed top-down layout that puts your own seat wherever its raw number happens
-  // to fall. Seat 9, the special "extra player" overflow slot, never rotates.
+  // lands at their chosen slot (see getMySeatPosition/"המיקום שלי בשולחן" in the
+  // identityName screen - defaults to index 5, bottom-center), everyone else arranged
+  // around it. Seat 9, the special "extra player" overflow slot, never rotates.
   const mySeatIdx = myPlayerId ? seats.indexOf(myPlayerId) : -1;
-  const rotationOffset = (mySeatIdx >= 0 && mySeatIdx < 9) ? ((5 - mySeatIdx) % 9 + 9) % 9 : 0;
+  const rotationOffset = (mySeatIdx >= 0 && mySeatIdx < 9) ? ((getMySeatPosition() - mySeatIdx) % 9 + 9) % 9 : 0;
   const visualPos = (i) => i === 9 ? 9 : (i + rotationOffset) % 9;
 
   const seatsHtml = seats.map((pid, i) => {
@@ -2036,11 +2049,13 @@ function renderTable(gameId){
       const profit = chips - buyin;
       const sign = profit > 0 ? "+" : "";
       const profitColor = profit > 0.5 ? "#6ee7b7" : (profit < -0.5 ? "#fda4af" : "inherit");
-      caption = `<span style="color:${profitColor};font-weight:700;font-size:22px;" data-caption-for="${pid}">${sign}₪${Math.round(profit)}</span>`;
+      caption = `<span style="color:${profitColor};font-weight:700;font-size:16px;" data-caption-for="${pid}">${sign}₪${Math.round(profit)}</span>`;
     }
-    const circleStyle = (photo && !cashedOut) ? ` style="background-image:url('${photo}');background-size:cover;background-position:center;"` : "";
+    // No avatar photo - show the P logo rather than name initials, same fallback already
+    // used for the home-screen avatar and the identityName preview.
+    const circleStyle = cashedOut ? "" : ` style="background-image:url('${photo || '/static/logo-watermark.png'}');background-size:cover;background-position:center;"`;
     const doorIconBig = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>';
-    const circleInner = cashedOut ? doorIconBig : (photo ? "" : esc((name||"?").slice(0,2)));
+    const circleInner = cashedOut ? doorIconBig : "";
     const selected = pid === selectedSeatPlayerId;
     return `<div class="seat-wrap" style="left:${x}%;top:${y}%;" data-seat="${i}">
       <div class="seat-circle filled ${cashedOut?'cashed-out':''}${selected?' selected':''}"${circleStyle}>${circleInner}</div>
@@ -2123,6 +2138,26 @@ function renderModal(m){
     const loginSection = `
       <p style="color:var(--muted);font-size:12px;text-align:center;margin:18px 0 0;padding-top:14px;border-top:1px solid var(--card-b);">מחוברים כ-<span dir="ltr">${esc(myIdentity.email)}</span> - השם והאווטר שלכם ישוחזרו אוטומטית במכשיר חדש.</p>
     `;
+    // A tap on any of the 9 seats sets it immediately (setGlobalPlayer + saveState in the
+    // handler below) - a low-stakes, instantly-visible visual preference, not something
+    // that needs to wait for the name/avatar "שמור" button below to take effect.
+    const mySeatPos = getMySeatPosition();
+    // Reuses the real table screen's own felt/watermark markup (.poker-table-wrap/
+    // .poker-table-felt) at quarter width, so this looks like an actual mini table
+    // instead of a generic diagram - same SEAT_POS coordinates as renderTable, just
+    // plain dots instead of full seat circles since there's no game here to show.
+    const seatPickerHtml = `
+      <div style="width:25%;margin:0 auto 14px;">
+        <div class="poker-table-wrap" style="margin:0;">
+          <div class="poker-table-felt"></div>
+          <img src="/static/logo-watermark.png" style="position:absolute;left:50%;top:39%;transform:translate(-50%,-50%);width:46%;opacity:.6;pointer-events:none;">
+          ${SEAT_POS.slice(0,9).map((pos,i) => {
+            const selected = i === mySeatPos;
+            return `<div data-pick-seat-position="${i}" style="position:absolute;left:${pos[0]}%;top:${pos[1]}%;transform:translate(-50%,-50%);width:20%;aspect-ratio:1;border-radius:50%;cursor:pointer;background:${selected?'var(--gold)':'rgba(255,255,255,.18)'};border:2px solid ${selected?'#fff':'rgba(255,255,255,.4)'};"></div>`;
+          }).join("")}
+        </div>
+      </div>
+    `;
     body = `
       <div style="text-align:center;margin-bottom:14px;">
         <img src="${myPhoto || '/static/logo-watermark.png'}" style="width:76px;height:76px;border-radius:50%;object-fit:cover;display:block;margin:0 auto 8px;border:2px solid var(--gold);">
@@ -2132,7 +2167,10 @@ function renderModal(m){
         <input type="text" id="identity-name-input" value="${esc(myIdentity.name || '')}" placeholder="השם שלך" style="width:100%;" autofocus>
       </div>
       <button class="btn btn-primary btn-block" style="margin-bottom:12px;" data-confirm-identity-name>שמור</button>
-      ${!m.forced ? `<button class="btn btn-ghost btn-block" data-my-stats>${icon('bar')} הביצועים שלי</button>` : ""}
+      ${!m.forced ? `<button class="btn btn-ghost btn-block" style="margin-bottom:12px;" data-my-stats>${icon('bar')} הביצועים שלי</button>` : ""}
+      <div class="section-title" style="padding:0;margin:0 0 6px;">המיקום שלי בשולחן</div>
+      <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">הקישו על מקום כדי לבחור איפה תופיעו תמיד סביב השולחן.</p>
+      ${seatPickerHtml}
       ${loginSection}
     `;
   } else if (m.type === "inviteGone") {
@@ -3451,6 +3489,11 @@ function attachHandlers(){
     if (changeAvatarBtn) changeAvatarBtn.onclick = () => openModal({type:"photoSource"});
     const myStatsBtn = app.querySelector("[data-my-stats]");
     if (myStatsBtn) myStatsBtn.onclick = () => openModal({type:"stats", clientId: myIdentity.id});
+    app.querySelectorAll("[data-pick-seat-position]").forEach(el => el.onclick = () => {
+      setGlobalPlayer(myIdentity.id, {seatPosition: Number(el.dataset.pickSeatPosition)});
+      saveState();
+      render();
+    });
   }
 
   if (modal && modal.type === "loginRequired") {
