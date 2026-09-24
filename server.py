@@ -1155,6 +1155,105 @@ def v2_update_live_chips(game_id):
     return jsonify({"ok": True})
 
 
+# ---------- Phase 5: write endpoints for the settlement/payments feature area ----------
+# Smaller than Phases 3-4 by design - cashout upsert/delete and its optional
+# arrangedWith already landed in Phase 4 (PUT /api/v2/games/:id/cashouts/:playerId
+# already accepts an `arrangedWith` body field), so this phase only needed to add the two
+# payment-record tables. All structural (add/delete by id), so no conflict token needed -
+# same reasoning as buy-ins.
+#
+# One finding worth flagging rather than silently fixing: the client's own
+# removeFromGame purges g.payboxPayments for the removed player but NOT g.playerPayments
+# (confirmed via catalog - lines 3979-3998 filter payboxPayments only). Phase 4's
+# v2_remove_game_player deliberately mirrors that exact (asymmetric) behavior rather than
+# "fixing" it, since that's a pre-existing client bug independent of this migration, not
+# something this phase should quietly change.
+
+
+@app.route("/api/v2/games/<game_id>/paybox-payments", methods=["POST"])
+def v2_add_paybox_payment(game_id):
+    body = request.get_json(silent=True) or {}
+    payment_id, player_id, amount = body.get("id"), body.get("playerId"), body.get("amount")
+    if not payment_id or not player_id or amount is None:
+        return jsonify({"error": "id, playerId and amount required"}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO paybox_payments (id, game_id, player_id, amount, ts) VALUES (%s,%s,%s,%s,now())",
+                (payment_id, game_id, player_id, amount),
+            )
+        conn.commit()
+    return jsonify({"id": payment_id}), 201
+
+
+@app.route("/api/v2/games/<game_id>/paybox-payments/<payment_id>", methods=["DELETE"])
+def v2_delete_paybox_payment(game_id, payment_id):
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM paybox_payments WHERE id = %s AND game_id = %s", (payment_id, game_id)
+            )
+            deleted = cur.rowcount
+        conn.commit()
+    if not deleted:
+        return jsonify({"error": "not found"}), 404
+    return jsonify({"ok": True})
+
+
+@app.route("/api/v2/games/<game_id>/player-payments", methods=["POST"])
+def v2_add_player_payment(game_id):
+    body = request.get_json(silent=True) or {}
+    payment_id = body.get("id")
+    from_player_id, to_player_id, amount = body.get("fromPlayerId"), body.get("toPlayerId"), body.get("amount")
+    if not payment_id or not from_player_id or not to_player_id or amount is None:
+        return jsonify({"error": "id, fromPlayerId, toPlayerId and amount required"}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO player_payments (id, game_id, from_player_id, to_player_id, amount, ts) "
+                "VALUES (%s,%s,%s,%s,%s,now())",
+                (payment_id, game_id, from_player_id, to_player_id, amount),
+            )
+        conn.commit()
+    return jsonify({"id": payment_id}), 201
+
+
+@app.route("/api/v2/games/<game_id>/player-payments/<payment_id>", methods=["DELETE"])
+def v2_delete_player_payment(game_id, payment_id):
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM player_payments WHERE id = %s AND game_id = %s", (payment_id, game_id)
+            )
+            deleted = cur.rowcount
+        conn.commit()
+    if not deleted:
+        return jsonify({"error": "not found"}), 404
+    return jsonify({"ok": True})
+
+
+@app.route("/api/v2/games/<game_id>/payments/player/<player_id>", methods=["DELETE"])
+def v2_reset_player_payments(game_id, player_id):
+    # The "return to game after cashout, reset payment" flow - clears every paybox
+    # payment FROM this player and every player-payment where they're either side
+    # (fromPlayerId or toPlayerId), matching data-confirm-return-reset-payment exactly
+    # (unlike removeFromGame, this one IS symmetric on the client - see the section
+    # comment above for the asymmetric case).
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM paybox_payments WHERE game_id = %s AND player_id = %s", (game_id, player_id)
+            )
+            paybox_deleted = cur.rowcount
+            cur.execute(
+                "DELETE FROM player_payments WHERE game_id = %s AND (from_player_id = %s OR to_player_id = %s)",
+                (game_id, player_id, player_id),
+            )
+            player_deleted = cur.rowcount
+        conn.commit()
+    return jsonify({"ok": True, "payboxDeleted": paybox_deleted, "playerPaymentsDeleted": player_deleted})
+
+
 @app.route("/api/identity", methods=["GET"])
 def get_identity():
     client_id = request.args.get("clientId", "")
