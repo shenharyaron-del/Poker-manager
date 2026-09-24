@@ -595,6 +595,119 @@ async function mutateAndSave(mutatorFn){
   }
 }
 
+// ---------- Relational-DB migration (Phase 6): roster/community write helpers ----------
+// Feature-flagged off - the real production `public` schema doesn't have these tables
+// yet (that only happens at the Phase 7 cutover), so this MUST stay false in anything
+// deployed until then. Every wrapper below calls the /api/v2/... endpoints built in
+// Phases 3-5, then patches the same local `state` object mutateAndSave's callers already
+// mutate directly, so every existing render function keeps working unchanged regardless
+// of which path is active - only the persistence mechanism differs.
+const USE_RELATIONAL_API = false;
+
+async function v2Fetch(method, path, body){
+  const res = await fetch(`/api/v2${path}`, {
+    method,
+    headers: body !== undefined ? {"Content-Type": "application/json"} : undefined,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    if (res.status === 409) return {conflict: true};
+    throw new Error(data.error || `${method} ${path} failed (${res.status})`);
+  }
+  return data;
+}
+
+async function v2AddRosterPlayer(communityId, id, name){
+  await v2Fetch("POST", `/communities/${communityId}/roster`, {id, name});
+  getCommunity(communityId).roster.push({id, name});
+}
+
+async function v2RemoveRosterPlayer(communityId, playerId){
+  await v2Fetch("DELETE", `/communities/${communityId}/roster/${playerId}`);
+  const c = getCommunity(communityId);
+  const removed = c.roster.find(p => p.id === playerId);
+  c.roster = c.roster.filter(p => p.id !== playerId);
+  if (removed && removed.clientId) {
+    const stillLinkedElsewhere = state.communities.some(cm => cm.roster.some(p => p.clientId === removed.clientId));
+    if (!stillLinkedElsewhere && state.globalPlayers) delete state.globalPlayers[removed.clientId];
+  }
+}
+
+async function v2RenamePlayerEverywhere(clientId, name){
+  await v2Fetch("PATCH", `/players/${clientId}/name`, {name});
+  state.communities.forEach(c => c.roster.forEach(p => { if (p.clientId === clientId) p.name = name; }));
+}
+
+// Returns the fresh updatedAt on success, or null on a 409 (caller should re-sync and
+// retry, same shape mutateAndSave's callers already expect from a failed save).
+async function v2UpdateCommunity(communityId, fields){
+  const c = getCommunity(communityId);
+  const result = await v2Fetch("PATCH", `/communities/${communityId}`, {...fields, updatedAt: c.updatedAt});
+  if (result.conflict) return null;
+  Object.assign(c, fields);
+  c.updatedAt = result.updatedAt;
+  return result.updatedAt;
+}
+
+async function v2SetChipValues(communityId, chipValues, chipRatio){
+  const c = getCommunity(communityId);
+  const result = await v2Fetch("PUT", `/communities/${communityId}/chip-values`, {chipValues, chipRatio, updatedAt: c.updatedAt});
+  if (result.conflict) return false;
+  c.chipValues = chipValues;
+  c.chipRatio = chipRatio;
+  c.updatedAt = result.updatedAt;
+  return true;
+}
+
+async function v2AddPayboxLink(communityId, entry){
+  await v2Fetch("POST", `/communities/${communityId}/paybox-links`, entry);
+  const c = getCommunity(communityId);
+  c.payboxLinks.push(entry);
+  if (!c.activePayboxLinkId) c.activePayboxLinkId = entry.id;
+}
+
+async function v2EditPayboxLinks(communityId, links){
+  await v2Fetch("PUT", `/communities/${communityId}/paybox-links`, {links});
+  const c = getCommunity(communityId);
+  links.forEach(edited => {
+    const pl = c.payboxLinks.find(p => p.id === edited.id);
+    if (pl) { pl.name = edited.name; pl.link = edited.link; }
+  });
+}
+
+async function v2DeletePayboxLink(communityId, linkId){
+  await v2Fetch("DELETE", `/communities/${communityId}/paybox-links/${linkId}`);
+  const c = getCommunity(communityId);
+  c.payboxLinks = c.payboxLinks.filter(pl => pl.id !== linkId);
+  if (c.activePayboxLinkId === linkId) c.activePayboxLinkId = (c.payboxLinks[0]||{}).id || null;
+}
+
+async function v2SelectPayboxLink(communityId, linkId){
+  const result = await v2UpdateCommunity(communityId, {activePayboxLinkId: linkId});
+  return result !== null;
+}
+
+async function v2CreateCommunity(id, name, createdBy, createdByName, creatorPlayerId, creatorPlayerName){
+  await v2Fetch("POST", "/communities", {id, name, createdBy, createdByName, creatorPlayerId, creatorPlayerName});
+  state.communities.push({id, name, roster: [{id: creatorPlayerId, name: creatorPlayerName, clientId: createdBy}], createdBy, createdByName});
+}
+
+async function v2DuplicateCommunity(communityId, id, name){
+  await v2Fetch("POST", `/communities/${communityId}/duplicate`, {id, name});
+  // The server mints its own ids for the cloned roster/chipValues/payboxLinks rows
+  // (see v2_duplicate_community) rather than reusing client-generated ones, so the
+  // simplest correct way to reflect the result locally is to re-fetch the community
+  // list rather than trying to replicate that id mapping in JS too.
+  state.communities = await v2Fetch("GET", "/communities");
+}
+
+async function v2DeleteCommunity(communityId){
+  await v2Fetch("DELETE", `/communities/${communityId}`);
+  state.games = state.games.filter(g => g.communityId !== communityId);
+  state.communities = state.communities.filter(c => c.id !== communityId);
+}
+
 // Swaps a button's content for a spinning poker chip while mutateAndSave is working -
 // syncing/saving/retrying can take a moment, and a merely-disabled button with no other
 // feedback reads as frozen rather than busy.
@@ -3594,8 +3707,13 @@ function attachHandlers(){
       myIdentity.name = name;
       saveIdentity();
       updateAccount({name});
-      renamePlayerEverywhere(myIdentity.id, name);
-      await saveState();
+      if (USE_RELATIONAL_API) {
+        try { await v2RenamePlayerEverywhere(myIdentity.id, name); }
+        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+      } else {
+        renamePlayerEverywhere(myIdentity.id, name);
+        await saveState();
+      }
       // A first-time visitor via an invite link has no name yet when autoJoinViaInvite
       // first runs in init(), so it bails out - retry now that we have one.
       if (nav.screen === "table" && nav.gameId) await autoJoinViaInvite(nav.gameId);
@@ -3891,17 +4009,22 @@ function attachHandlers(){
       const playerId = el.dataset.removePlayer;
       const communityId = modal.communityId;
       el.disabled = true;
-      await mutateAndSave(() => {
-        const c = getCommunity(communityId);
-        const removed = c.roster.find(p => p.id === playerId);
-        c.roster = c.roster.filter(p => p.id !== playerId);
-        // If this was their last linked community, clean up the now-orphaned global
-        // registry entry instead of leaving a ghost record with no community to trace to.
-        if (removed && removed.clientId) {
-          const stillLinkedElsewhere = state.communities.some(cm => cm.roster.some(p => p.clientId === removed.clientId));
-          if (!stillLinkedElsewhere && state.globalPlayers) delete state.globalPlayers[removed.clientId];
-        }
-      });
+      if (USE_RELATIONAL_API) {
+        try { await v2RemoveRosterPlayer(communityId, playerId); }
+        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); el.disabled = false; return; }
+      } else {
+        await mutateAndSave(() => {
+          const c = getCommunity(communityId);
+          const removed = c.roster.find(p => p.id === playerId);
+          c.roster = c.roster.filter(p => p.id !== playerId);
+          // If this was their last linked community, clean up the now-orphaned global
+          // registry entry instead of leaving a ghost record with no community to trace to.
+          if (removed && removed.clientId) {
+            const stillLinkedElsewhere = state.communities.some(cm => cm.roster.some(p => p.clientId === removed.clientId));
+            if (!stillLinkedElsewhere && state.globalPlayers) delete state.globalPlayers[removed.clientId];
+          }
+        });
+      }
       updateModal({});
     });
     const addRosterBtn = app.querySelector("[data-add-roster]");
@@ -3911,10 +4034,15 @@ function attachHandlers(){
       if (!name) return;
       const communityId = modal.communityId;
       addRosterBtn.disabled = true;
-      await mutateAndSave(() => {
-        const c = getCommunity(communityId);
-        c.roster.push({id:uid(), name});
-      });
+      if (USE_RELATIONAL_API) {
+        try { await v2AddRosterPlayer(communityId, uid(), name); }
+        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); addRosterBtn.disabled = false; return; }
+      } else {
+        await mutateAndSave(() => {
+          const c = getCommunity(communityId);
+          c.roster.push({id:uid(), name});
+        });
+      }
       updateModal({});
     };
   }
@@ -4241,11 +4369,21 @@ function attachHandlers(){
           if (v.image && v.image.startsWith("data:")) v.image = await uploadPhoto(v.image);
         }));
       } catch(e) { showAlert("העלאת תמונות הציפים נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); render(); return; }
-      await mutateAndSave(() => {
+      if (USE_RELATIONAL_API) {
         const c = getCommunity(communityId);
-        if (values.length) c.chipValues = values;
-        if (validRatio) c.chipRatio = ratio;
-      });
+        const finalValues = values.length ? values : c.chipValues;
+        const finalRatio = validRatio ? ratio : c.chipRatio;
+        try {
+          const ok = await v2SetChipValues(communityId, finalValues, finalRatio);
+          if (!ok) { showAlert("לא הצלחנו לשמור בגלל התנגשות עם שמירה אחרת - נסו את הפעולה שוב."); saveBtn.disabled = false; return; }
+        } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); saveBtn.disabled = false; return; }
+      } else {
+        await mutateAndSave(() => {
+          const c = getCommunity(communityId);
+          if (values.length) c.chipValues = values;
+          if (validRatio) c.chipRatio = ratio;
+        });
+      }
       closeModal();
     };
   }
@@ -4423,35 +4561,51 @@ function attachHandlers(){
       if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
       myIdentity.myPlayers[communityId] = creatorPlayer.id;
       saveIdentity();
-      state.communities.push({ id: communityId, name, roster: [creatorPlayer], createdBy: myIdentity.id, createdByName: myIdentity.name });
-      saveState();
+      if (USE_RELATIONAL_API) {
+        try {
+          await v2CreateCommunity(communityId, name, myIdentity.id, myIdentity.name, creatorPlayer.id, creatorPlayer.name);
+        } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+      } else {
+        state.communities.push({ id: communityId, name, roster: [creatorPlayer], createdBy: myIdentity.id, createdByName: myIdentity.name });
+        saveState();
+      }
       closeModal();
     };
   }
 
   if (modal && modal.type === "duplicateCommunity") {
     const confirmBtn = app.querySelector("[data-confirm-duplicate-community]");
-    if (confirmBtn) confirmBtn.onclick = () => {
+    if (confirmBtn) confirmBtn.onclick = async () => {
       const name = document.getElementById("duplicate-community-name").value.trim();
       if (!name) { showAlert("צריך להזין שם לקבוצה."); return; }
-      const src = getCommunity(modal.communityId);
-      const roster = (src.roster||[]).map(p => ({...p, id: uid()}));
-      const chipValues = (src.chipValues||[]).map(cv => ({...cv, id: uid()}));
-      const idMap = {};
-      const payboxLinks = (src.payboxLinks||[]).map(pl => { const newId = uid(); idMap[pl.id] = newId; return {...pl, id: newId}; });
-      const activePayboxLinkId = src.activePayboxLinkId ? idMap[src.activePayboxLinkId] : undefined;
-      state.communities.push({ id: uid(), name, roster, chipValues, payboxLinks, activePayboxLinkId, payboxLink: src.payboxLink, createdBy: myIdentity.id, createdByName: myIdentity.name });
-      saveState();
+      if (USE_RELATIONAL_API) {
+        try { await v2DuplicateCommunity(modal.communityId, uid(), name); }
+        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+      } else {
+        const src = getCommunity(modal.communityId);
+        const roster = (src.roster||[]).map(p => ({...p, id: uid()}));
+        const chipValues = (src.chipValues||[]).map(cv => ({...cv, id: uid()}));
+        const idMap = {};
+        const payboxLinks = (src.payboxLinks||[]).map(pl => { const newId = uid(); idMap[pl.id] = newId; return {...pl, id: newId}; });
+        const activePayboxLinkId = src.activePayboxLinkId ? idMap[src.activePayboxLinkId] : undefined;
+        state.communities.push({ id: uid(), name, roster, chipValues, payboxLinks, activePayboxLinkId, payboxLink: src.payboxLink, createdBy: myIdentity.id, createdByName: myIdentity.name });
+        saveState();
+      }
       closeModal();
     };
   }
 
   if (modal && modal.type === "deleteCommunity") {
     const confirmBtn = app.querySelector("[data-confirm-delete-community]");
-    if (confirmBtn) confirmBtn.onclick = () => {
-      state.games = state.games.filter(g => g.communityId !== modal.communityId);
-      state.communities = state.communities.filter(c => c.id !== modal.communityId);
-      saveState();
+    if (confirmBtn) confirmBtn.onclick = async () => {
+      if (USE_RELATIONAL_API) {
+        try { await v2DeleteCommunity(modal.communityId); }
+        catch(e) { showAlert("מחיקה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+      } else {
+        state.games = state.games.filter(g => g.communityId !== modal.communityId);
+        state.communities = state.communities.filter(c => c.id !== modal.communityId);
+        saveState();
+      }
       go("home");
     };
   }
@@ -4666,44 +4820,67 @@ function attachHandlers(){
   }
 
   if (modal && modal.type === "payboxSettings") {
-    app.querySelectorAll("[data-select-paybox]").forEach(el => el.onclick = () => {
+    app.querySelectorAll("[data-select-paybox]").forEach(el => el.onclick = async () => {
       const c = getCommunity(modal.communityId);
-      c.activePayboxLinkId = el.dataset.selectPaybox;
-      saveState();
+      if (USE_RELATIONAL_API) {
+        try { await v2SelectPayboxLink(modal.communityId, el.dataset.selectPaybox); }
+        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+      } else {
+        c.activePayboxLinkId = el.dataset.selectPaybox;
+        saveState();
+      }
       render();
     });
     app.querySelectorAll("[data-delete-paybox-entry]").forEach(el => el.onclick = async () => {
       if (!(await showConfirm("למחוק את קבוצת הפייבוקס הזו?"))) return;
       const c = getCommunity(modal.communityId);
       const id = el.dataset.deletePayboxEntry;
-      c.payboxLinks = (c.payboxLinks||[]).filter(pl => pl.id !== id);
-      if (c.activePayboxLinkId === id) c.activePayboxLinkId = (c.payboxLinks[0]||{}).id;
-      saveState();
+      if (USE_RELATIONAL_API) {
+        try { await v2DeletePayboxLink(modal.communityId, id); }
+        catch(e) { showAlert("מחיקה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+      } else {
+        c.payboxLinks = (c.payboxLinks||[]).filter(pl => pl.id !== id);
+        if (c.activePayboxLinkId === id) c.activePayboxLinkId = (c.payboxLinks[0]||{}).id;
+        saveState();
+      }
       render();
     });
     const saveEntriesBtn = app.querySelector("[data-save-paybox-entries]");
-    if (saveEntriesBtn) saveEntriesBtn.onclick = () => {
+    if (saveEntriesBtn) saveEntriesBtn.onclick = async () => {
       const c = getCommunity(modal.communityId);
-      (c.payboxLinks||[]).forEach(pl => {
+      const edited = (c.payboxLinks||[]).map(pl => {
         const nameInp = document.querySelector(`[data-paybox-name-input="${pl.id}"]`);
         const linkInp = document.querySelector(`[data-paybox-link-input="${pl.id}"]`);
-        if (nameInp) pl.name = nameInp.value.trim() || pl.name;
-        if (linkInp) pl.link = linkInp.value.trim() || pl.link;
+        return {id: pl.id, name: (nameInp && nameInp.value.trim()) || pl.name, link: (linkInp && linkInp.value.trim()) || pl.link};
       });
-      saveState();
+      if (USE_RELATIONAL_API) {
+        try { await v2EditPayboxLinks(modal.communityId, edited); }
+        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+      } else {
+        edited.forEach(({id, name, link}) => {
+          const pl = c.payboxLinks.find(p => p.id === id);
+          if (pl) { pl.name = name; pl.link = link; }
+        });
+        saveState();
+      }
       render();
     };
     const addEntryBtn = app.querySelector("[data-add-paybox-entry]");
-    if (addEntryBtn) addEntryBtn.onclick = () => {
+    if (addEntryBtn) addEntryBtn.onclick = async () => {
       const name = document.getElementById("new-paybox-name").value.trim();
       const link = document.getElementById("new-paybox-link").value.trim();
       if (!name || !link) return;
       const c = getCommunity(modal.communityId);
-      if (!c.payboxLinks) c.payboxLinks = [];
       const newEntry = {id: uid(), name, link};
-      c.payboxLinks.push(newEntry);
-      if (!c.activePayboxLinkId) c.activePayboxLinkId = newEntry.id;
-      saveState();
+      if (USE_RELATIONAL_API) {
+        try { await v2AddPayboxLink(modal.communityId, newEntry); }
+        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+      } else {
+        if (!c.payboxLinks) c.payboxLinks = [];
+        c.payboxLinks.push(newEntry);
+        if (!c.activePayboxLinkId) c.activePayboxLinkId = newEntry.id;
+        saveState();
+      }
       render();
     };
   }
@@ -5072,6 +5249,14 @@ window.addEventListener("popstate", async () => {
     // A failed initial load must never be treated as "no data yet" - only fall back to
     // defaultState() here (the one legitimate use of it), never after a save is possible.
     state = stateResult.status === "fulfilled" ? stateResult.value : defaultState();
+    // Phase 6 (relational-DB migration) testing only - see USE_RELATIONAL_API above.
+    // Overlays the v2-sourced communities (with their updatedAt concurrency token) onto
+    // whatever the old blob load produced, so the roster/community write helpers have
+    // real data to work against. Never runs with the flag off (the default).
+    if (USE_RELATIONAL_API) {
+      try { state.communities = await v2Fetch("GET", "/communities"); }
+      catch(e) { logSync("v2 community load failed: " + e); }
+    }
     myIdentity = identityResult.status === "fulfilled" ? identityResult.value : { id: getClientId(), name: null };
     appVersion = versionResult.status === "fulfilled" ? versionResult.value : null;
     if (authSettingsResult.status === "fulfilled" && authSettingsResult.value) authSettings = authSettingsResult.value;
