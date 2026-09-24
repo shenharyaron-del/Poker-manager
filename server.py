@@ -15,6 +15,7 @@ from pathlib import Path
 import anthropic
 import psycopg2
 import psycopg2.pool
+from psycopg2.extras import Json
 from flask import Flask, Response, jsonify, request, send_from_directory
 
 try:
@@ -413,18 +414,11 @@ def v2_list_games(community_id):
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, community_id, name, date, created_by_name, closed "
+                "SELECT id, community_id, name, date, created_by_name, closed, updated_at "
                 "FROM games WHERE community_id = %s ORDER BY date DESC",
                 (community_id,),
             )
-            games = [
-                {
-                    "id": r[0], "communityId": r[1], "name": r[2],
-                    "date": r[3].isoformat() if r[3] else None,
-                    "createdByName": r[4], "closed": r[5],
-                }
-                for r in cur.fetchall()
-            ]
+            games = [_row_to_game_summary(r) for r in cur.fetchall()]
         conn.commit()
     return jsonify(games)
 
@@ -434,14 +428,14 @@ def v2_get_game(game_id):
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, community_id, name, date, created_by_name, closed, seats, live_chips "
+                "SELECT id, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at "
                 "FROM games WHERE id = %s",
                 (game_id,),
             )
             row = cur.fetchone()
             if not row:
                 return jsonify({"error": "not found"}), 404
-            gid, community_id, name, date, created_by_name, closed, seats, live_chips = row
+            gid, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at = row
 
             cur.execute("SELECT player_id, name FROM game_players WHERE game_id = %s", (gid,))
             players = [{"id": r[0], "name": r[1]} for r in cur.fetchall()]
@@ -487,6 +481,7 @@ def v2_get_game(game_id):
         "id": gid, "communityId": community_id, "name": name,
         "date": date.isoformat() if date else None,
         "createdByName": created_by_name, "closed": closed,
+        "updatedAt": updated_at.isoformat() if updated_at else None,
         "seats": seats, "liveChips": live_chips,
         "players": players, "buyins": buyins, "cashouts": cashouts,
         "payboxPayments": paybox_payments, "playerPayments": player_payments,
@@ -809,6 +804,353 @@ def v2_delete_paybox_link(community_id, link_id):
                 )
         conn.commit()
     if not deleted:
+        return jsonify({"error": "not found"}), 404
+    return jsonify({"ok": True})
+
+
+# ---------- Phase 4: write endpoints for the seating/buy-in feature area ----------
+# Buy-ins/cashouts/game_players are separate rows, so structural writes (add, delete-by-id)
+# need no conflict token, same reasoning as Phase 3's roster endpoints.
+#
+# Seats are different: `games.seats` is one JSONB array column, and two players seating
+# themselves in the SAME game at the SAME time is exactly the scenario that caused the
+# real invite-join lost-update race fixed earlier this app's life (one save's seats array
+# silently overwriting the other's). Rather than a read-modify-write + updated_at token
+# (which would just rebuild that same race at smaller scope), every seat mutation below is
+# a single atomic UPDATE using jsonb_set against the CURRENT row under Postgres's own row
+# lock - "claim this seat only if it's still empty" is one statement with a WHERE guard, so
+# two concurrent claims of the same seat resolve to exactly one winner with no app-level
+# retry loop at all.
+
+
+def _row_to_game_summary(row):
+    return {
+        "id": row[0], "communityId": row[1], "name": row[2],
+        "date": row[3].isoformat() if row[3] else None,
+        "createdByName": row[4], "closed": row[5],
+        "updatedAt": row[6].isoformat() if row[6] else None,
+    }
+
+
+@app.route("/api/v2/games", methods=["POST"])
+def v2_create_game():
+    body = request.get_json(silent=True) or {}
+    gid, community_id = body.get("id"), body.get("communityId")
+    if not gid or not community_id:
+        return jsonify({"error": "id and communityId required"}), 400
+    name, date, created_by_name = body.get("name"), body.get("date"), body.get("createdByName")
+    creator_player_id, creator_player_name = body.get("creatorPlayerId"), body.get("creatorPlayerName")
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            seats = [None] * 9
+            if creator_player_id:
+                seats[0] = creator_player_id
+            cur.execute(
+                "INSERT INTO games (id, community_id, name, date, created_by_name, seats, live_chips) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s)",
+                (gid, community_id, name, date, created_by_name, Json(seats),
+                 Json({creator_player_id: 0} if creator_player_id else {})),
+            )
+            if creator_player_id:
+                cur.execute(
+                    "INSERT INTO game_players (game_id, player_id, name) VALUES (%s,%s,%s) "
+                    "ON CONFLICT (game_id, player_id) DO NOTHING",
+                    (gid, creator_player_id, creator_player_name),
+                )
+        conn.commit()
+    return jsonify({"id": gid}), 201
+
+
+@app.route("/api/v2/games/<game_id>", methods=["PATCH"])
+def v2_update_game(game_id):
+    body = request.get_json(silent=True) or {}
+    updated_at = body.get("updatedAt")
+    if not updated_at:
+        return jsonify({"error": "updatedAt required"}), 400
+    fields, params = [], []
+    if "name" in body:
+        fields.append("name = %s"); params.append(body["name"])
+    if "closed" in body:
+        fields.append("closed = %s"); params.append(bool(body["closed"]))
+    if not fields:
+        return jsonify({"error": "no fields to update"}), 400
+    fields.append("updated_at = now()")
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"UPDATE games SET {', '.join(fields)} "
+                "WHERE id = %s AND updated_at = %s::timestamptz RETURNING updated_at",
+                (*params, game_id, updated_at),
+            )
+            row = cur.fetchone()
+            if not row:
+                conn.commit()
+                return jsonify({"conflict": True}), 409
+        conn.commit()
+    return jsonify({"ok": True, "updatedAt": row[0].isoformat()})
+
+
+@app.route("/api/v2/games/<game_id>", methods=["DELETE"])
+def v2_delete_game(game_id):
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM games WHERE id = %s", (game_id,))
+            deleted = cur.rowcount
+        conn.commit()
+    if not deleted:
+        return jsonify({"error": "not found"}), 404
+    return jsonify({"ok": True})
+
+
+@app.route("/api/v2/games/<game_id>/players", methods=["POST"])
+def v2_add_game_player(game_id):
+    # The "everyone who's ever sat here" list - upsert, never removed just because a seat
+    # gets cleared (only the full remove-from-game purge below drops someone from it).
+    body = request.get_json(silent=True) or {}
+    player_id, name = body.get("id"), body.get("name")
+    if not player_id:
+        return jsonify({"error": "id required"}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO game_players (game_id, player_id, name) VALUES (%s,%s,%s) "
+                "ON CONFLICT (game_id, player_id) DO NOTHING",
+                (game_id, player_id, name),
+            )
+        conn.commit()
+    return jsonify({"ok": True}), 201
+
+
+@app.route("/api/v2/games/<game_id>/seats/<int:seat_index>", methods=["POST"])
+def v2_claim_seat(game_id, seat_index):
+    # Atomic "sit here only if it's still empty" - see the section comment above. Also
+    # upserts game_players and initializes live_chips for this player, in the same
+    # transaction, matching seatPlayerIfRoom's bundled side effects client-side.
+    body = request.get_json(silent=True) or {}
+    player_id, name = body.get("playerId"), body.get("name")
+    if not player_id:
+        return jsonify({"error": "playerId required"}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            # `seats -> i` returns SQL NULL (not JSON null) for an out-of-range index, so
+            # the "slot is empty" check alone rejects the append case (growing 9->10
+            # seats) - the array_length branch below covers exactly that: the slot is the
+            # very next position past the current end. Anything further out of range
+            # falls through to the conflict branch rather than risking jsonb_set silently
+            # appending at the wrong position.
+            cur.execute(
+                "UPDATE games SET seats = jsonb_set(seats, %s, %s::jsonb, true), updated_at = now() "
+                "WHERE id = %s AND ("
+                "  jsonb_array_length(seats) = %s "
+                "  OR (jsonb_array_length(seats) > %s AND seats -> %s = 'null'::jsonb)"
+                ") RETURNING seats",
+                ([str(seat_index)], json.dumps(player_id), game_id, seat_index, seat_index, seat_index),
+            )
+            row = cur.fetchone()
+            if not row:
+                conn.commit()
+                return jsonify({"conflict": True}), 409
+            cur.execute(
+                "INSERT INTO game_players (game_id, player_id, name) VALUES (%s,%s,%s) "
+                "ON CONFLICT (game_id, player_id) DO NOTHING",
+                (game_id, player_id, name),
+            )
+            cur.execute(
+                "UPDATE games SET live_chips = live_chips || %s::jsonb "
+                "WHERE id = %s AND NOT (live_chips ? %s)",
+                (json.dumps({player_id: 0}), game_id, player_id),
+            )
+        conn.commit()
+    return jsonify({"ok": True, "seats": row[0]})
+
+
+@app.route("/api/v2/games/<game_id>/seats/<int:seat_index>", methods=["DELETE"])
+def v2_clear_seat(game_id, seat_index):
+    # Clearing a seat also drops that player's buy-ins in THIS game and their live_chips
+    # entry, matching removeSeat/"clear seat" - but NOT game_players, which keeps their
+    # history visible (see the removeFromGame purge below for the full-removal version).
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            # Read the OLD occupant before clearing - RETURNING on the same UPDATE would
+            # read the value after it's already been set to null (confirmed by testing:
+            # the cleared player's buy-ins and live_chips entry silently survived).
+            cur.execute("SELECT seats -> %s FROM games WHERE id = %s", (seat_index, game_id))
+            row = cur.fetchone()
+            if not row:
+                return jsonify({"error": "not found"}), 404
+            player_id = row[0]  # psycopg2 decodes the jsonb scalar directly - str or None
+            cur.execute(
+                "UPDATE games SET seats = jsonb_set(seats, %s, 'null'::jsonb), updated_at = now() "
+                "WHERE id = %s",
+                ([str(seat_index)], game_id),
+            )
+            if player_id:
+                cur.execute("DELETE FROM buyins WHERE game_id = %s AND player_id = %s", (game_id, player_id))
+                cur.execute(
+                    "UPDATE games SET live_chips = live_chips - %s WHERE id = %s", (player_id, game_id)
+                )
+        conn.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/v2/games/<game_id>/seats/swap", methods=["PUT"])
+def v2_swap_seats(game_id):
+    # Single atomic UPDATE reading both old values off the same row image under the row
+    # lock - no read-then-write round trip, so nothing to race against.
+    body = request.get_json(silent=True) or {}
+    from_index, to_index = body.get("fromIndex"), body.get("toIndex")
+    if from_index is None or to_index is None:
+        return jsonify({"error": "fromIndex and toIndex required"}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE games SET seats = jsonb_set(jsonb_set(seats, %s, seats -> %s), %s, seats -> %s), "
+                "updated_at = now() WHERE id = %s RETURNING seats",
+                ([str(to_index)], from_index, [str(from_index)], to_index, game_id),
+            )
+            row = cur.fetchone()
+            if not row:
+                return jsonify({"error": "not found"}), 404
+        conn.commit()
+    return jsonify({"ok": True, "seats": row[0]})
+
+
+@app.route("/api/v2/games/<game_id>/players/<player_id>", methods=["DELETE"])
+def v2_remove_game_player(game_id, player_id):
+    # Full purge - the removeFromGame flow: drops game_players, buy-ins, paybox payments,
+    # the cashout, live_chips, and clears their seat, all in one transaction. Reopens a
+    # closed game if it was closed only because everyone (including this player) had
+    # cashed out - matches maybeAutoCloseNight's inverse.
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT seats, closed FROM games WHERE id = %s", (game_id,))
+            row = cur.fetchone()
+            if not row:
+                return jsonify({"error": "not found"}), 404
+            seats, closed = row
+
+            cur.execute("DELETE FROM game_players WHERE game_id = %s AND player_id = %s", (game_id, player_id))
+            cur.execute("DELETE FROM buyins WHERE game_id = %s AND player_id = %s", (game_id, player_id))
+            cur.execute("DELETE FROM paybox_payments WHERE game_id = %s AND player_id = %s", (game_id, player_id))
+            cur.execute("DELETE FROM cashouts WHERE game_id = %s AND player_id = %s", (game_id, player_id))
+            cur.execute(
+                "UPDATE games SET live_chips = live_chips - %s WHERE id = %s", (player_id, game_id)
+            )
+            if player_id in (seats or []):
+                # Clear every matching seat, not just the first - defensive against a
+                # player somehow ending up in more than one seat rather than leaving a
+                # stray duplicate behind.
+                new_seats = [None if s == player_id else s for s in seats]
+                cur.execute("UPDATE games SET seats = %s WHERE id = %s", (Json(new_seats), game_id))
+            if closed:
+                cur.execute("UPDATE games SET closed = false, updated_at = now() WHERE id = %s", (game_id,))
+        conn.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/v2/games/<game_id>/buyins", methods=["POST"])
+def v2_add_buyin(game_id):
+    body = request.get_json(silent=True) or {}
+    buyin_id, player_id, amount = body.get("id"), body.get("playerId"), body.get("amount")
+    if not buyin_id or not player_id or amount is None:
+        return jsonify({"error": "id, playerId and amount required"}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO buyins (id, game_id, player_id, amount, ts) VALUES (%s,%s,%s,%s,now())",
+                (buyin_id, game_id, player_id, amount),
+            )
+        conn.commit()
+    return jsonify({"id": buyin_id}), 201
+
+
+@app.route("/api/v2/games/<game_id>/buyins/bulk", methods=["POST"])
+def v2_add_buyins_bulk(game_id):
+    body = request.get_json(silent=True) or {}
+    buyins = body.get("buyins")
+    if not buyins:
+        return jsonify({"error": "buyins required"}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            for b in buyins:
+                cur.execute(
+                    "INSERT INTO buyins (id, game_id, player_id, amount, ts) VALUES (%s,%s,%s,%s,now())",
+                    (b["id"], game_id, b["playerId"], b["amount"]),
+                )
+        conn.commit()
+    return jsonify({"ok": True, "count": len(buyins)}), 201
+
+
+@app.route("/api/v2/games/<game_id>/buyins/<buyin_id>", methods=["DELETE"])
+def v2_delete_buyin(game_id, buyin_id):
+    # The only single-buy-in mutation the client has is delete - there's no edit-in-place
+    # for a buy-in (only for a cashout, see PUT cashouts below); correcting one is always
+    # delete-then-re-add on the client side.
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM buyins WHERE id = %s AND game_id = %s", (buyin_id, game_id))
+            deleted = cur.rowcount
+        conn.commit()
+    if not deleted:
+        return jsonify({"error": "not found"}), 404
+    return jsonify({"ok": True})
+
+
+@app.route("/api/v2/games/<game_id>/cashouts/<player_id>", methods=["PUT"])
+def v2_set_cashout(game_id, player_id):
+    # Upsert - covers both a fresh cash-out (quickEnd/leave) and the edit-pencil on an
+    # already-cashed-out player's amount. `chips` is optional and, when given, updates
+    # live_chips in the same transaction (editCashout/quickEnd/leave all do this together
+    # client-side today).
+    body = request.get_json(silent=True) or {}
+    amount, arranged_with, chips = body.get("amount"), body.get("arrangedWith"), body.get("chips")
+    if amount is None:
+        return jsonify({"error": "amount required"}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO cashouts (game_id, player_id, amount, ts, arranged_with) "
+                "VALUES (%s,%s,%s,now(),%s) "
+                "ON CONFLICT (game_id, player_id) DO UPDATE SET amount = EXCLUDED.amount, "
+                "arranged_with = EXCLUDED.arranged_with",
+                (game_id, player_id, amount, Json(arranged_with or [])),
+            )
+            if chips is not None:
+                cur.execute(
+                    "UPDATE games SET live_chips = live_chips || %s::jsonb WHERE id = %s",
+                    (json.dumps({player_id: chips}), game_id),
+                )
+        conn.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/v2/games/<game_id>/cashouts/<player_id>", methods=["DELETE"])
+def v2_delete_cashout(game_id, player_id):
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM cashouts WHERE game_id = %s AND player_id = %s", (game_id, player_id))
+            deleted = cur.rowcount
+        conn.commit()
+    if not deleted:
+        return jsonify({"error": "not found"}), 404
+    return jsonify({"ok": True})
+
+
+@app.route("/api/v2/games/<game_id>/live-chips", methods=["PATCH"])
+def v2_update_live_chips(game_id):
+    body = request.get_json(silent=True) or {}
+    player_id, chips = body.get("playerId"), body.get("chips")
+    if not player_id or chips is None:
+        return jsonify({"error": "playerId and chips required"}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE games SET live_chips = live_chips || %s::jsonb WHERE id = %s",
+                (json.dumps({player_id: chips}), game_id),
+            )
+            updated = cur.rowcount
+        conn.commit()
+    if not updated:
         return jsonify({"error": "not found"}), 404
     return jsonify({"ok": True})
 
