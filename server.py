@@ -340,6 +340,188 @@ def events():
     )
 
 
+# ---------- Phase 2 of the relational-DB migration: new read-only endpoints ----------
+# Query the tables from schema.sql (see migrate_to_relational.py and
+# .claude/plans/virtual-cuddling-wreath.md). Nothing in the app calls these yet - they sit
+# dormant alongside the existing /api/state blob until a later phase wires index.html to
+# them. Kept under /api/v2/ so the eventual cutover is just switching which prefix the
+# client calls, with the old endpoints untouched until then.
+#
+# The real `public` schema doesn't have these tables yet (that only happens at the final
+# production migration, Phase 7) - these routes will 500 until then, which is fine since
+# nothing reachable from the UI calls them.
+
+
+def _num(x):
+    # NUMERIC columns come back from psycopg2 as Decimal, which Flask's JSON encoder
+    # silently renders as a JSON string ("0.25") instead of a number - matches neither
+    # the original blob's plain numbers nor what client-side arithmetic expects.
+    return float(x) if x is not None else None
+
+
+def _row_to_community(row):
+    (cid, name, created_by, created_by_name, chip_ratio, active_paybox_link_id) = row
+    return {
+        "id": cid, "name": name, "createdBy": created_by, "createdByName": created_by_name,
+        "chipRatio": _num(chip_ratio), "activePayboxLinkId": active_paybox_link_id,
+    }
+
+
+@app.route("/api/v2/communities", methods=["GET"])
+def v2_list_communities():
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, name, created_by, created_by_name, chip_ratio, active_paybox_link_id "
+                "FROM communities ORDER BY name"
+            )
+            communities = [_row_to_community(r) for r in cur.fetchall()]
+
+            for c in communities:
+                cur.execute(
+                    "SELECT id, image, value FROM chip_values WHERE community_id = %s ORDER BY sort_order",
+                    (c["id"],),
+                )
+                c["chipValues"] = [{"id": r[0], "image": r[1], "value": _num(r[2])} for r in cur.fetchall()]
+
+                cur.execute(
+                    "SELECT id, name, link FROM paybox_links WHERE community_id = %s",
+                    (c["id"],),
+                )
+                c["payboxLinks"] = [{"id": r[0], "name": r[1], "link": r[2]} for r in cur.fetchall()]
+
+                cur.execute(
+                    "SELECT id, name, client_id FROM roster_players WHERE community_id = %s",
+                    (c["id"],),
+                )
+                roster = []
+                for pid, pname, client_id in cur.fetchall():
+                    entry = {"id": pid, "name": pname}
+                    if client_id:
+                        entry["clientId"] = client_id
+                    roster.append(entry)
+                c["roster"] = roster
+        conn.commit()
+    return jsonify(communities)
+
+
+@app.route("/api/v2/communities/<community_id>/games", methods=["GET"])
+def v2_list_games(community_id):
+    # Summaries only (no buyins/cashouts) - matches the games-list view, which never
+    # needs a game's full detail, only enough to render one row per game.
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, community_id, name, date, created_by_name, closed "
+                "FROM games WHERE community_id = %s ORDER BY date DESC",
+                (community_id,),
+            )
+            games = [
+                {
+                    "id": r[0], "communityId": r[1], "name": r[2],
+                    "date": r[3].isoformat() if r[3] else None,
+                    "createdByName": r[4], "closed": r[5],
+                }
+                for r in cur.fetchall()
+            ]
+        conn.commit()
+    return jsonify(games)
+
+
+@app.route("/api/v2/games/<game_id>", methods=["GET"])
+def v2_get_game(game_id):
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, community_id, name, date, created_by_name, closed, seats, live_chips "
+                "FROM games WHERE id = %s",
+                (game_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return jsonify({"error": "not found"}), 404
+            gid, community_id, name, date, created_by_name, closed, seats, live_chips = row
+
+            cur.execute("SELECT player_id, name FROM game_players WHERE game_id = %s", (gid,))
+            players = [{"id": r[0], "name": r[1]} for r in cur.fetchall()]
+
+            cur.execute("SELECT id, player_id, amount, ts FROM buyins WHERE game_id = %s ORDER BY ts", (gid,))
+            buyins = [
+                {"id": r[0], "playerId": r[1], "amount": _num(r[2]), "ts": int(r[3].timestamp() * 1000) if r[3] else None}
+                for r in cur.fetchall()
+            ]
+
+            cur.execute("SELECT player_id, amount, ts, arranged_with FROM cashouts WHERE game_id = %s", (gid,))
+            cashouts = {}
+            for player_id, amount, ts, arranged_with in cur.fetchall():
+                cashouts[player_id] = {
+                    "amount": _num(amount),
+                    "ts": int(ts.timestamp() * 1000) if ts else None,
+                    "arrangedWith": arranged_with or [],
+                }
+
+            cur.execute(
+                "SELECT id, player_id, amount, ts FROM paybox_payments WHERE game_id = %s ORDER BY ts", (gid,)
+            )
+            paybox_payments = [
+                {"id": r[0], "playerId": r[1], "amount": _num(r[2]), "ts": int(r[3].timestamp() * 1000) if r[3] else None}
+                for r in cur.fetchall()
+            ]
+
+            cur.execute(
+                "SELECT id, from_player_id, to_player_id, amount, ts FROM player_payments "
+                "WHERE game_id = %s ORDER BY ts",
+                (gid,),
+            )
+            player_payments = [
+                {
+                    "id": r[0], "fromPlayerId": r[1], "toPlayerId": r[2], "amount": _num(r[3]),
+                    "ts": int(r[4].timestamp() * 1000) if r[4] else None,
+                }
+                for r in cur.fetchall()
+            ]
+        conn.commit()
+
+    return jsonify({
+        "id": gid, "communityId": community_id, "name": name,
+        "date": date.isoformat() if date else None,
+        "createdByName": created_by_name, "closed": closed,
+        "seats": seats, "liveChips": live_chips,
+        "players": players, "buyins": buyins, "cashouts": cashouts,
+        "payboxPayments": paybox_payments, "playerPayments": player_payments,
+    })
+
+
+@app.route("/api/v2/games/<game_id>/outcomes", methods=["GET"])
+def v2_game_outcomes(game_id):
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT player_id, outcome FROM player_outcomes WHERE game_id = %s",
+                (game_id,),
+            )
+            outcomes = [{"playerId": r[0], "outcome": _num(r[1])} for r in cur.fetchall()]
+        conn.commit()
+    return jsonify(outcomes)
+
+
+@app.route("/api/v2/communities/<community_id>/outcomes", methods=["GET"])
+def v2_community_outcomes(community_id):
+    # Per-player lifetime net across the whole community - the SQL equivalent of the
+    # client's playerNetProfit(), computed by the DB instead of looping over every game's
+    # JSON in JS.
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT player_id, SUM(outcome) AS net, COUNT(*) AS games_played "
+                "FROM player_outcomes WHERE community_id = %s GROUP BY player_id",
+                (community_id,),
+            )
+            totals = [{"playerId": r[0], "net": _num(r[1]), "gamesPlayed": r[2]} for r in cur.fetchall()]
+        conn.commit()
+    return jsonify(totals)
+
+
 @app.route("/api/identity", methods=["GET"])
 def get_identity():
     client_id = request.args.get("clientId", "")
