@@ -2891,7 +2891,7 @@ function renderModal(m){
     // Fixed, non-editable recap at the top - same three numbers regardless of which mode
     // is active below, live-updated on every keystroke in that mode's own input(s).
     const headerHtml = `
-      <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:12px 4px;margin-bottom:14px;display:grid;grid-template-columns:1fr 1fr 1fr;text-align:center;">
+      <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:12px 4px;margin-bottom:22px;display:grid;grid-template-columns:1fr 1fr 1fr;text-align:center;">
         <div><div style="font-size:11px;color:var(--muted);">סה"כ קנייה</div><div style="font-weight:700;">₪${buyinTotal}</div></div>
         <div><div style="font-size:11px;color:var(--muted);">ציפים שספרנו</div><div id="chips-header-counted" style="font-weight:700;">₪${chips}</div></div>
         <div><div style="font-size:11px;color:var(--muted);">רווח/הפסד</div><div id="chips-header-profit" style="font-weight:700;">${chips-buyinTotal>0?'+':''}₪${Math.round((chips-buyinTotal)*100)/100}</div></div>
@@ -2918,7 +2918,7 @@ function renderModal(m){
       `;
     } else if (mode === "quantity") {
       modeBody = `
-        <p style="color:var(--muted);font-size:12px;margin:0 0 6px;">הקלידו לפי הספירה הכוללת שלכם את סך הז'יטונים. נמיר לשקלים לפי 1 ש"ח עבור ${ratio} ז'יטונים.</p>
+        <p style="color:var(--muted);font-size:12px;margin:0 0 6px;">הקלידו לפי הספירה הכוללת שלכם את סך הז'יטונים.<br>נמיר לשקלים לפי 1 ש"ח עבור ${ratio} ז'יטונים.</p>
         <div class="field"><label>סך כל הז'יטונים (כמות)</label><input type="number" inputmode="numeric" id="total-chip-qty" data-chip-ratio="${ratio}" placeholder="0" style="width:100%;"></div>
       `;
     } else if (mode === "profit") {
@@ -4796,9 +4796,19 @@ function attachHandlers(){
       const el = document.getElementById("seat-chips-direct");
       return el && el.value.trim() !== "" && parseFloat(el.value) !== currentChips;
     };
+    // Jumps straight to typing after picking a mode - one less tap before the keyboard
+    // is actually up. updateModal() renders synchronously, so the new mode's input
+    // already exists in the DOM by the time this runs.
+    const focusModeInput = (forMode) => {
+      const idByMode = {quantity:"total-chip-qty", direct:"seat-chips-direct", profit:"seat-chips-profit"};
+      const el = idByMode[forMode] ? document.getElementById(idByMode[forMode]) : app.querySelector("[data-color-count]");
+      if (el) el.focus();
+    };
     app.querySelectorAll("[data-chips-mode]").forEach(el => el.onclick = () => {
       if (hasEnteredData() && !confirm("יש נתונים שהוקלדו במצב הנוכחי - מעבר למצב אחר ימחק אותם. להמשיך?")) return;
-      updateModal({chipsMode: el.dataset.chipsMode});
+      const newMode = el.dataset.chipsMode;
+      updateModal({chipsMode: newMode});
+      focusModeInput(newMode);
     });
     app.querySelectorAll("[data-profit-sign]").forEach(el => el.onclick = () => updateModal({profitSign: el.dataset.profitSign}));
     // "Counted" here means today's mode's own current input(s), read fresh each time -
