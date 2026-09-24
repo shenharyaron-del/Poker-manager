@@ -2859,46 +2859,73 @@ function renderModal(m){
     const c = getCommunity(g.communityId);
     const p = g.players.find(pl=>pl.id===m.playerId);
     const chips = (g.liveChips||{})[m.playerId] || 0;
+    const buyinTotal = g.buyins.filter(b=>b.playerId===m.playerId).reduce((s,b)=>s+b.amount,0);
     const cashedOut = m.playerId in g.cashouts;
     title = esc(p ? p.name : "שחקן");
     const chipValues = c.chipValues || [];
     const ratio = c.chipRatio;
-    // Both manual methods (a total chip quantity, and/or a count per color) live inline
-    // here now instead of a separate modal, and combine into one number - typing into
-    // either recomputes the total-value field at the bottom, which is still a plain,
-    // directly-editable field itself (so a manual override always still works).
-    const qtyRow = ratio ? `
-      <p style="color:var(--muted);font-size:12px;margin:0 0 6px;">אפשר להזין את סך הציפים הכולל, או להזין למטה את כמות הציפים לפי צבע</p>
-      <div class="section-title" style="padding:0;margin:0 0 6px;">חישוב ידני של סך ערך ציפים</div>
-      <div class="field">
-        <div class="row" style="gap:8px;">
-          <input type="number" inputmode="numeric" id="total-chip-qty" data-chip-ratio="${ratio}" placeholder="0" style="flex:1;">
-          <span id="total-chip-qty-value" class="badge badge-ok" style="white-space:nowrap;flex-shrink:0;">= ₪0</span>
-        </div>
+    // Four distinct, mutually-exclusive ways to arrive at the same ₪ total - shown one at
+    // a time behind a mode switch instead of several inline together, which read as one
+    // confusing combined form (unclear which field to actually use, leftover values in
+    // the others). Only offer a mode the community actually has data for; "direct"
+    // (typing the ₪ total by hand) is always available as a fallback.
+    const availableModes = [
+      chipValues.length ? {key:"byColor", label:"לפי צבע"} : null,
+      ratio ? {key:"quantity", label:"כמות כוללת"} : null,
+      {key:"direct", label:"סכום ישיר"},
+      {key:"profit", label:"רווח/הפסד"},
+    ].filter(Boolean);
+    const mode = (m.chipsMode && availableModes.some(am => am.key === m.chipsMode)) ? m.chipsMode : availableModes[0].key;
+    const modeTabs = `
+      <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">
+        ${availableModes.map(am => `<button class="btn ${mode===am.key?'btn-primary':'btn-ghost'} flex1" data-chips-mode="${am.key}" style="padding:8px;font-size:12px;min-width:80px;">${am.label}</button>`).join("")}
       </div>
-    ` : "";
-    const colorRows = chipValues.length ? `
-      <div class="section-title" style="padding:0;margin:0 0 6px;">ציפים לפי צבע</div>
-      <div class="scroll-list" style="margin-bottom:14px;">
-        ${chipValues.map((cv) => `
-          <div class="roster-row">
-            <div class="row" style="gap:10px;">
-              ${cv.image ? `<img src="${cv.image}" style="width:28px;height:28px;object-fit:cover;border-radius:6px;border:1px solid rgba(255,255,255,.3);flex-shrink:0;">` : ""}
-              <input type="number" inputmode="numeric" data-color-count="${cv.id}" data-color-value="${cv.value}" placeholder="0" style="width:56px;height:34px;font-size:15px;text-align:center;">
-              <span>ציפים × ₪${cv.value}</span>
+    `;
+    // Fixed, non-editable recap at the top - same three numbers regardless of which mode
+    // is active below, live-updated on every keystroke in that mode's own input(s).
+    const headerHtml = `
+      <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:12px 4px;margin-bottom:14px;display:grid;grid-template-columns:1fr 1fr 1fr;text-align:center;">
+        <div><div style="font-size:11px;color:var(--muted);">סה"כ קנייה</div><div style="font-weight:700;">₪${buyinTotal}</div></div>
+        <div><div style="font-size:11px;color:var(--muted);">ציפים שספרנו</div><div id="chips-header-counted" style="font-weight:700;">₪${chips}</div></div>
+        <div><div style="font-size:11px;color:var(--muted);">רווח/הפסד</div><div id="chips-header-profit" style="font-weight:700;">${chips-buyinTotal>0?'+':''}₪${Math.round((chips-buyinTotal)*100)/100}</div></div>
+      </div>
+    `;
+    let modeBody;
+    if (mode === "byColor") {
+      modeBody = `
+        <div class="scroll-list" style="margin-bottom:14px;">
+          ${chipValues.map((cv) => `
+            <div class="roster-row">
+              <div class="row" style="gap:10px;">
+                ${cv.image ? `<img src="${cv.image}" style="width:28px;height:28px;object-fit:cover;border-radius:6px;border:1px solid rgba(255,255,255,.3);flex-shrink:0;">` : ""}
+                <input type="number" inputmode="numeric" data-color-count="${cv.id}" data-color-value="${cv.value}" placeholder="0" style="width:56px;height:34px;font-size:15px;text-align:center;">
+                <span>ציפים × ₪${cv.value}</span>
+              </div>
+              <span class="badge badge-ok" style="display:flex;flex-direction:column;align-items:center;line-height:1.25;flex-shrink:0;">
+                <span style="font-size:10px;">+</span>
+                <span data-color-count-value="${cv.id}">= ₪0</span>
+              </span>
             </div>
-            <span class="badge badge-ok" style="display:flex;flex-direction:column;align-items:center;line-height:1.25;flex-shrink:0;">
-              <span style="font-size:10px;">+</span>
-              <span data-color-count-value="${cv.id}">= ₪0</span>
-            </span>
-          </div>
-        `).join("")}
-      </div>
-    ` : "";
+          `).join("")}
+        </div>
+      `;
+    } else if (mode === "quantity") {
+      modeBody = `
+        <p style="color:var(--muted);font-size:12px;margin:0 0 6px;">1 ש"ח עבור ${ratio} ציפים</p>
+        <div class="field"><label>סך כל הציפים (כמות)</label><input type="number" inputmode="numeric" id="total-chip-qty" data-chip-ratio="${ratio}" placeholder="0" style="width:100%;"></div>
+      `;
+    } else if (mode === "profit") {
+      modeBody = `
+        <p style="color:var(--muted);font-size:12px;margin:0 0 6px;">הפסד מוזן כמספר שלילי, למשל ‎-30‎.</p>
+        <div class="field"><label>רווח או הפסד בש"ח</label><input type="number" inputmode="decimal" id="seat-chips-profit" placeholder="0" style="width:100%;"></div>
+      `;
+    } else {
+      modeBody = `<div class="field"><label>סה"כ ערך הציפים בש"ח</label><input type="number" inputmode="decimal" id="seat-chips-direct" value="${chips}"></div>`;
+    }
     body = `
-      ${qtyRow}
-      ${colorRows}
-      <div class="field"><label>סה"כ ערך הציפים בש"ח (מחושב אוטומטי)</label><input type="number" inputmode="decimal" id="seat-chips" value="${chips}"></div>
+      ${headerHtml}
+      ${modeTabs}
+      ${modeBody}
       ${cashedOut ? `
         <p style="color:var(--muted);font-size:12px;">השחקן כבר יצא מהמשחק.</p>
         <button class="btn btn-ghost btn-block" data-return-to-game="${m.playerId}" style="margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('undo')} החזר למשחק</button>
@@ -4735,38 +4762,57 @@ function attachHandlers(){
   }
 
   if (modal && modal.type === "seatChips") {
-    // Recomputes the bottom total-value field from the qty/per-color rows whenever either
-    // changes - it stays a plain input otherwise, so directly typing into it still works
-    // as a manual override (until a source row is touched again and resyncs it).
-    const recomputeChipTotal = () => {
-      const seatChipsInput = document.getElementById("seat-chips");
-      if (!seatChipsInput) return;
-      let total = 0;
-      const qtyInput = document.getElementById("total-chip-qty");
-      if (qtyInput) {
-        const qty = parseFloat(qtyInput.value);
-        const ratio = parseFloat(qtyInput.dataset.chipRatio);
-        if (!isNaN(qty) && ratio > 0) total += qty / ratio;
-        const qtyValueEl = document.getElementById("total-chip-qty-value");
-        if (qtyValueEl) qtyValueEl.textContent = `= ₪${Math.round(((!isNaN(qty) && ratio>0) ? qty/ratio : 0)*100)/100}`;
+    const g = getGame(modal.gameId);
+    const buyinTotal = g.buyins.filter(b=>b.playerId===modal.playerId).reduce((s,b)=>s+b.amount,0);
+    const c = getCommunity(g.communityId);
+    const ratio = c.chipRatio;
+    const chipValues = c.chipValues || [];
+    const availableModes = [chipValues.length&&"byColor", ratio&&"quantity", "direct", "profit"].filter(Boolean);
+    const mode = (modal.chipsMode && availableModes.includes(modal.chipsMode)) ? modal.chipsMode : availableModes[0];
+    app.querySelectorAll("[data-chips-mode]").forEach(el => el.onclick = () => updateModal({chipsMode: el.dataset.chipsMode}));
+    // "Counted" here means today's mode's own current input(s), read fresh each time -
+    // used both to keep the fixed recap header live and to compute what actually gets
+    // saved on confirm, so the two can never disagree with each other.
+    const computeCounted = () => {
+      if (mode === "quantity") {
+        const qtyInput = document.getElementById("total-chip-qty");
+        const qty = qtyInput ? parseFloat(qtyInput.value) : NaN;
+        return (!isNaN(qty) && ratio > 0) ? qty / ratio : 0;
       }
-      app.querySelectorAll("[data-color-count]").forEach(el => {
-        const cnt = parseFloat(el.value);
-        const val = parseFloat(el.dataset.colorValue);
-        const sub = (!isNaN(cnt) && !isNaN(val)) ? cnt * val : 0;
-        total += sub;
-        const rowValueEl = app.querySelector(`[data-color-count-value="${el.dataset.colorCount}"]`);
-        if (rowValueEl) rowValueEl.textContent = `= ₪${Math.round(sub*100)/100}`;
-      });
-      seatChipsInput.value = Math.round(total * 100) / 100;
+      if (mode === "profit") {
+        const el = document.getElementById("seat-chips-profit");
+        const v = el ? parseFloat(el.value) : NaN;
+        return buyinTotal + (isNaN(v) ? 0 : v);
+      }
+      if (mode === "byColor") {
+        let total = 0;
+        app.querySelectorAll("[data-color-count]").forEach(el => {
+          const cnt = parseFloat(el.value);
+          const val = parseFloat(el.dataset.colorValue);
+          const sub = (!isNaN(cnt) && !isNaN(val)) ? cnt * val : 0;
+          total += sub;
+          const rowValueEl = app.querySelector(`[data-color-count-value="${el.dataset.colorCount}"]`);
+          if (rowValueEl) rowValueEl.textContent = `= ₪${Math.round(sub*100)/100}`;
+        });
+        return total;
+      }
+      const el = document.getElementById("seat-chips-direct");
+      const v = el ? parseFloat(el.value) : NaN;
+      return isNaN(v) ? 0 : v;
     };
-    const qtyInput = app.querySelector("#total-chip-qty");
-    if (qtyInput) qtyInput.oninput = recomputeChipTotal;
-    app.querySelectorAll("[data-color-count]").forEach(el => el.oninput = recomputeChipTotal);
+    const refreshHeader = () => {
+      const counted = Math.round(computeCounted() * 100) / 100;
+      const profit = Math.round((counted - buyinTotal) * 100) / 100;
+      const countedEl = document.getElementById("chips-header-counted");
+      const profitEl = document.getElementById("chips-header-profit");
+      if (countedEl) countedEl.textContent = `₪${counted}`;
+      if (profitEl) { profitEl.textContent = `${profit>0?'+':''}₪${profit}`; }
+    };
+    app.querySelectorAll("input[type=number]").forEach(el => el.oninput = refreshHeader);
+    refreshHeader();
     const quickEndBtn = app.querySelector("[data-quick-end]");
     if (quickEndBtn) quickEndBtn.onclick = async () => {
-      const inputEl = document.getElementById("seat-chips");
-      const v = inputEl ? parseFloat(inputEl.value) : NaN;
+      const v = Math.round(computeCounted() * 100) / 100;
       quickEndBtn.disabled = true;
       showButtonLoading(quickEndBtn);
       await mutateAndSave(() => {
