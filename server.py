@@ -361,11 +361,12 @@ def _num(x):
 
 
 def _row_to_community(row):
-    (cid, name, created_by, created_by_name, chip_ratio, active_paybox_link_id, updated_at) = row
+    (cid, name, created_by, created_by_name, chip_ratio, active_paybox_link_id, updated_at, last_participants) = row
     return {
         "id": cid, "name": name, "createdBy": created_by, "createdByName": created_by_name,
         "chipRatio": _num(chip_ratio), "activePayboxLinkId": active_paybox_link_id,
         "updatedAt": updated_at.isoformat() if updated_at else None,
+        "lastParticipants": last_participants,
     }
 
 
@@ -374,7 +375,7 @@ def v2_list_communities():
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, name, created_by, created_by_name, chip_ratio, active_paybox_link_id, updated_at "
+                "SELECT id, name, created_by, created_by_name, chip_ratio, active_paybox_link_id, updated_at, last_participants "
                 "FROM communities ORDER BY name"
             )
             communities = [_row_to_community(r) for r in cur.fetchall()]
@@ -567,6 +568,8 @@ def v2_update_community(community_id):
         fields.append("chip_ratio = %s"); params.append(body["chipRatio"])
     if "activePayboxLinkId" in body:
         fields.append("active_paybox_link_id = %s"); params.append(body["activePayboxLinkId"])
+    if "lastParticipants" in body:
+        fields.append("last_participants = %s"); params.append(Json(body["lastParticipants"]))
     if not fields:
         return jsonify({"error": "no fields to update"}), 400
     fields.append("updated_at = now()")
@@ -675,6 +678,28 @@ def v2_add_roster_player(community_id):
             )
         conn.commit()
     return jsonify({"id": player_id, "name": name}), 201
+
+
+@app.route("/api/v2/communities/<community_id>/roster/<player_id>", methods=["PATCH"])
+def v2_update_roster_player(community_id, player_id):
+    # Added during Phase 7: linking an existing roster row to an account (clientId) after
+    # the fact - the backfill path in autoSeatSelf/autoJoinViaInvite for a player who
+    # self-identified before global-player linking existed. Structural (single row,
+    # single field), so no conflict token needed, same reasoning as the rest of Phase 3.
+    body = request.get_json(silent=True) or {}
+    if "clientId" not in body:
+        return jsonify({"error": "clientId required"}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE roster_players SET client_id = %s WHERE id = %s AND community_id = %s",
+                (body["clientId"], player_id, community_id),
+            )
+            updated = cur.rowcount
+        conn.commit()
+    if not updated:
+        return jsonify({"error": "not found"}), 404
+    return jsonify({"ok": True})
 
 
 @app.route("/api/v2/communities/<community_id>/roster/<player_id>", methods=["DELETE"])

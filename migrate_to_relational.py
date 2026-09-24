@@ -107,10 +107,10 @@ def insert_data(conn, state):
             paybox_links, active_paybox_link_id = resolve_paybox_links(c)
 
             cur.execute(
-                "INSERT INTO communities (id, name, created_by, created_by_name, chip_ratio, active_paybox_link_id) "
-                "VALUES (%s,%s,%s,%s,%s,%s)",
+                "INSERT INTO communities (id, name, created_by, created_by_name, chip_ratio, active_paybox_link_id, last_participants) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s)",
                 (c["id"], c.get("name"), c.get("createdBy"), c.get("createdByName"),
-                 c.get("chipRatio"), active_paybox_link_id),
+                 c.get("chipRatio"), active_paybox_link_id, Json(c.get("lastParticipants")) if c.get("lastParticipants") is not None else None),
             )
 
             for i, cv in enumerate(c.get("chipValues") or []):
@@ -198,9 +198,9 @@ def reconstruct_state(conn):
     with conn.cursor() as cur:
         cur.execute(f"SET search_path TO {SCRATCH_SCHEMA}")
 
-        cur.execute("SELECT id, name, created_by, created_by_name, chip_ratio, active_paybox_link_id FROM communities")
+        cur.execute("SELECT id, name, created_by, created_by_name, chip_ratio, active_paybox_link_id, last_participants FROM communities")
         communities = []
-        for cid, name, created_by, created_by_name, chip_ratio, active_id in cur.fetchall():
+        for cid, name, created_by, created_by_name, chip_ratio, active_id, last_participants in cur.fetchall():
             cur.execute("SELECT id, image, value FROM chip_values WHERE community_id=%s ORDER BY sort_order", (cid,))
             chip_values = [{"id": r[0], "image": r[1], "value": r[2]} for r in cur.fetchall()]
 
@@ -219,6 +219,7 @@ def reconstruct_state(conn):
                 "id": cid, "name": name, "createdBy": created_by, "createdByName": created_by_name,
                 "chipRatio": chip_ratio, "activePayboxLinkId": active_id,
                 "chipValues": chip_values, "payboxLinks": paybox_links, "roster": roster,
+                "lastParticipants": last_participants,
             })
 
         cur.execute("SELECT client_id, photo, phone, seat_position FROM global_players")
@@ -287,6 +288,7 @@ def normalize_original(state):
                            for cv in (c.get("chipValues") or [])],
             "payboxLinks": [{"id": pl["id"], "name": pl.get("name"), "link": pl.get("link")} for pl in paybox_links],
             "roster": roster,
+            "lastParticipants": c.get("lastParticipants"),
         })
 
     global_players = {}

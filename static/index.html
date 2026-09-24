@@ -634,6 +634,12 @@ async function v2RemoveRosterPlayer(communityId, playerId){
   }
 }
 
+async function v2LinkRosterPlayer(communityId, playerId, clientId){
+  await v2Fetch("PATCH", `/communities/${communityId}/roster/${playerId}`, {clientId});
+  const p = getCommunity(communityId).roster.find(pl => pl.id === playerId);
+  if (p) p.clientId = clientId;
+}
+
 async function v2RenamePlayerEverywhere(clientId, name){
   await v2Fetch("PATCH", `/players/${clientId}/name`, {name});
   state.communities.forEach(c => c.roster.forEach(p => { if (p.clientId === clientId) p.name = name; }));
@@ -706,6 +712,174 @@ async function v2DeleteCommunity(communityId){
   await v2Fetch("DELETE", `/communities/${communityId}`);
   state.games = state.games.filter(g => g.communityId !== communityId);
   state.communities = state.communities.filter(c => c.id !== communityId);
+}
+
+// ---------- Phase 7: seating/buy-in/settlement write helpers (same pattern as Phase 6's
+// roster/community ones above - call the /api/v2 endpoint, then patch the same local
+// `state` object mutateAndSave's callers already mutate directly). Still behind
+// USE_RELATIONAL_API - see that flag's own comment for why this can't be a partial cutover.
+
+async function v2LoadGameFull(gameId){
+  const g = await v2Fetch("GET", `/games/${gameId}`);
+  const idx = state.games.findIndex(x => x.id === gameId);
+  if (idx === -1) state.games.push(g); else state.games[idx] = g;
+  return g;
+}
+
+async function v2CreateGame(id, communityId, name, date, createdByName, creatorPlayerId, creatorPlayerName){
+  await v2Fetch("POST", "/games", {id, communityId, name, date, createdByName, creatorPlayerId, creatorPlayerName});
+  return v2LoadGameFull(id);
+}
+
+// Returns the fresh updatedAt on success, null on a 409 (same shape as v2UpdateCommunity).
+async function v2UpdateGame(gameId, fields){
+  const g = getGame(gameId);
+  const result = await v2Fetch("PATCH", `/games/${gameId}`, {...fields, updatedAt: g.updatedAt});
+  if (result.conflict) return null;
+  Object.assign(g, fields);
+  g.updatedAt = result.updatedAt;
+  return result.updatedAt;
+}
+
+async function v2DeleteGame(gameId){
+  await v2Fetch("DELETE", `/games/${gameId}`);
+  state.games = state.games.filter(g => g.id !== gameId);
+}
+
+async function v2AddGamePlayer(gameId, id, name){
+  await v2Fetch("POST", `/games/${gameId}/players`, {id, name});
+  const g = getGame(gameId);
+  if (!g.players.some(p => p.id === id)) g.players.push({id, name});
+}
+
+// Returns true on success, false if the seat was already taken (caller re-syncs that one
+// seat and lets the user pick another - see the section comment on the server side for
+// why this is a single atomic DB check rather than a read-modify-write).
+async function v2ClaimSeat(gameId, seatIndex, playerId, name){
+  const result = await v2Fetch("POST", `/games/${gameId}/seats/${seatIndex}`, {playerId, name});
+  if (result.conflict) return false;
+  const g = getGame(gameId);
+  g.seats = result.seats;
+  if (!g.players.some(p => p.id === playerId)) g.players.push({id: playerId, name});
+  if (g.liveChips[playerId] === undefined) g.liveChips[playerId] = 0;
+  return true;
+}
+
+// v2 equivalent of seatPlayerIfRoom - finds an empty seat client-side and claims it via
+// the atomic per-seat endpoint, retrying the next empty index on a 409 (someone else took
+// that exact seat in the interim) instead of a whole-blob retry loop. Returns true if
+// seated (including "already seated"), false if the table is genuinely full.
+async function v2SeatPlayerIfRoom(gameId, playerId, name){
+  const g = getGame(gameId);
+  if (g.seats.includes(playerId)) return true;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const freshSeats = attempt === 0 ? g.seats : (await v2LoadGameFull(gameId)).seats;
+    if (freshSeats.includes(playerId)) return true;
+    let emptyIdx = freshSeats.findIndex((s,i) => i < 9 && !s);
+    if (emptyIdx === -1 && freshSeats.length < 10) emptyIdx = freshSeats.length === 9 ? 9 : -1;
+    if (emptyIdx === -1) return false; // table full (10/10)
+    if (await v2ClaimSeat(gameId, emptyIdx, playerId, name)) return true;
+    // Conflict - someone else claimed that exact seat between our read and our claim;
+    // loop re-fetches and tries the next empty one.
+  }
+  return false;
+}
+
+async function v2ClearSeat(gameId, seatIndex){
+  const g = getGame(gameId);
+  const playerId = g.seats[seatIndex];
+  await v2Fetch("DELETE", `/games/${gameId}/seats/${seatIndex}`);
+  g.seats[seatIndex] = null;
+  if (playerId) {
+    g.buyins = g.buyins.filter(b => b.playerId !== playerId);
+    delete g.liveChips[playerId];
+  }
+}
+
+async function v2SwapSeats(gameId, fromIndex, toIndex){
+  const result = await v2Fetch("PUT", `/games/${gameId}/seats/swap`, {fromIndex, toIndex});
+  getGame(gameId).seats = result.seats;
+}
+
+async function v2RemoveGamePlayer(gameId, playerId){
+  const g = getGame(gameId);
+  const wasClosed = g.closed;
+  await v2Fetch("DELETE", `/games/${gameId}/players/${playerId}`);
+  g.players = g.players.filter(p => p.id !== playerId);
+  g.buyins = g.buyins.filter(b => b.playerId !== playerId);
+  g.payboxPayments = (g.payboxPayments||[]).filter(pp => pp.playerId !== playerId);
+  delete g.cashouts[playerId];
+  delete g.liveChips[playerId];
+  g.seats = g.seats.map(s => s === playerId ? null : s);
+  if (wasClosed) g.closed = false;
+}
+
+async function v2AddBuyin(gameId, id, playerId, amount){
+  await v2Fetch("POST", `/games/${gameId}/buyins`, {id, playerId, amount});
+  getGame(gameId).buyins.push({id, playerId, amount, ts: Date.now()});
+}
+
+async function v2AddBuyinsBulk(gameId, buyins){
+  await v2Fetch("POST", `/games/${gameId}/buyins/bulk`, {buyins});
+  const g = getGame(gameId);
+  const ts = Date.now();
+  buyins.forEach(b => g.buyins.push({...b, ts}));
+}
+
+async function v2DeleteBuyin(gameId, buyinId){
+  await v2Fetch("DELETE", `/games/${gameId}/buyins/${buyinId}`);
+  const g = getGame(gameId);
+  g.buyins = g.buyins.filter(b => b.id !== buyinId);
+}
+
+async function v2SetCashout(gameId, playerId, amount, arrangedWith, chips){
+  await v2Fetch("PUT", `/games/${gameId}/cashouts/${playerId}`, {amount, arrangedWith, chips});
+  const g = getGame(gameId);
+  g.cashouts[playerId] = {amount, ts: Date.now(), arrangedWith: arrangedWith || []};
+  if (chips !== undefined) g.liveChips[playerId] = chips;
+}
+
+async function v2DeleteCashout(gameId, playerId){
+  await v2Fetch("DELETE", `/games/${gameId}/cashouts/${playerId}`);
+  delete getGame(gameId).cashouts[playerId];
+}
+
+async function v2UpdateLiveChips(gameId, playerId, chips){
+  await v2Fetch("PATCH", `/games/${gameId}/live-chips`, {playerId, chips});
+  getGame(gameId).liveChips[playerId] = chips;
+}
+
+async function v2AddPayboxPayment(gameId, id, playerId, amount){
+  await v2Fetch("POST", `/games/${gameId}/paybox-payments`, {id, playerId, amount});
+  const g = getGame(gameId);
+  if (!g.payboxPayments) g.payboxPayments = [];
+  g.payboxPayments.push({id, playerId, amount, ts: Date.now()});
+}
+
+async function v2DeletePayboxPayment(gameId, paymentId){
+  await v2Fetch("DELETE", `/games/${gameId}/paybox-payments/${paymentId}`);
+  const g = getGame(gameId);
+  g.payboxPayments = (g.payboxPayments||[]).filter(pp => pp.id !== paymentId);
+}
+
+async function v2AddPlayerPayment(gameId, id, fromPlayerId, toPlayerId, amount){
+  await v2Fetch("POST", `/games/${gameId}/player-payments`, {id, fromPlayerId, toPlayerId, amount});
+  const g = getGame(gameId);
+  if (!g.playerPayments) g.playerPayments = [];
+  g.playerPayments.push({id, fromPlayerId, toPlayerId, amount, ts: Date.now()});
+}
+
+async function v2DeletePlayerPayment(gameId, paymentId){
+  await v2Fetch("DELETE", `/games/${gameId}/player-payments/${paymentId}`);
+  const g = getGame(gameId);
+  g.playerPayments = (g.playerPayments||[]).filter(pp => pp.id !== paymentId);
+}
+
+async function v2ResetPlayerPayments(gameId, playerId){
+  await v2Fetch("DELETE", `/games/${gameId}/payments/player/${playerId}`);
+  const g = getGame(gameId);
+  g.payboxPayments = (g.payboxPayments||[]).filter(pp => pp.playerId !== playerId);
+  g.playerPayments = (g.playerPayments||[]).filter(pp => pp.fromPlayerId !== playerId && pp.toPlayerId !== playerId);
 }
 
 // Swaps a button's content for a spinning poker chip while mutateAndSave is working -
@@ -1127,10 +1301,16 @@ async function doPanelBuyin(amount, btnEl){
   // mutateAndSave (the real network save) starts here, immediately - it is NOT waiting
   // on flyBuyinBadge's own setTimeout-driven animation, which is purely decorative and
   // runs independently in parallel.
-  const confirmed = await mutateAndSave(() => {
-    const g = getGame(nav.gameId);
-    g.buyins.push({id: uid(), playerId: pid, amount, ts: Date.now()});
-  });
+  let confirmed;
+  if (USE_RELATIONAL_API) {
+    try { await v2AddBuyin(nav.gameId, uid(), pid, amount); confirmed = true; }
+    catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmed = false; }
+  } else {
+    confirmed = await mutateAndSave(() => {
+      const g = getGame(nav.gameId);
+      g.buyins.push({id: uid(), playerId: pid, amount, ts: Date.now()});
+    });
+  }
   // Only once the backend has actually accepted the save, not optimistically on click -
   // a click that ends up failing/never reaching the server shouldn't sound like it worked.
   // Still local-initiator only, same as before - other devices get the counting animation
@@ -1299,6 +1479,27 @@ function autoSeatSelf(gameId){
   // network round trip in the overwhelmingly common case (already seated correctly) -
   // the real, authoritative check runs inside mutateAndSave below either way.
   if (p && p.name === myIdentity.name && p.clientId && g.seats && g.seats.includes(p.id)) return;
+  if (USE_RELATIONAL_API) {
+    (async () => {
+      let p2 = p;
+      if (myIdentity.name && (!p2 || p2.name !== myIdentity.name)) {
+        const byName = c.roster.find(pl => pl.name === myIdentity.name);
+        if (byName) {
+          p2 = byName;
+          if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
+          myIdentity.myPlayers[g.communityId] = byName.id;
+          saveIdentity();
+        } else {
+          p2 = null;
+        }
+      }
+      if (!p2) return;
+      if (!p2.clientId) await v2LinkRosterPlayer(g.communityId, p2.id, myIdentity.id);
+      await v2SeatPlayerIfRoom(gameId, p2.id, p2.name);
+      render();
+    })();
+    return;
+  }
   // Retry-safe: re-syncs and re-applies this same logic against the freshest state if
   // another device's save landed in between, instead of this device's stale in-memory
   // copy silently overwriting (and losing) whatever that other save just added - see
@@ -1344,6 +1545,30 @@ function autoSeatSelf(gameId){
 // person's brand new roster entry/seat instead of merging with it, typically clobbering
 // whoever had just taken the first empty seat.
 async function autoJoinViaInvite(gameId){
+  if (USE_RELATIONAL_API) {
+    const g = getGame(gameId);
+    if (!g || g.closed) { render(); return; }
+    const c = getCommunity(g.communityId);
+    if (!c) { render(); return; }
+    let playerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+    let p = playerId ? c.roster.find(pl => pl.id === playerId) : null;
+    try {
+      if (!p) {
+        if (!myIdentity.name) { render(); return; } // no name yet - forced onboarding will ask, then retry
+        p = c.roster.find(pl => pl.name === myIdentity.name);
+        if (!p) { p = {id: uid(), name: myIdentity.name}; await v2AddRosterPlayer(g.communityId, p.id, p.name); }
+        await v2LinkRosterPlayer(g.communityId, p.id, myIdentity.id);
+        if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
+        myIdentity.myPlayers[g.communityId] = p.id;
+        saveIdentity();
+      } else if (!p.clientId) {
+        await v2LinkRosterPlayer(g.communityId, p.id, myIdentity.id);
+      }
+      await v2SeatPlayerIfRoom(gameId, p.id, p.name);
+    } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+    render();
+    return;
+  }
   await mutateAndSave(() => {
     const g = getGame(gameId);
     if (!g || g.closed) return;
@@ -1372,6 +1597,27 @@ async function autoJoinViaInvite(gameId){
 // same mutateAndSave race protection as autoJoinViaInvite, but without seating them at
 // any particular game/table.
 async function autoJoinViaCommunityInvite(communityId){
+  if (USE_RELATIONAL_API) {
+    const c = getCommunity(communityId);
+    if (!c) { render(); return; }
+    let playerId = myIdentity.myPlayers && myIdentity.myPlayers[c.id];
+    let p = playerId ? c.roster.find(pl => pl.id === playerId) : null;
+    try {
+      if (!p) {
+        if (!myIdentity.name) { render(); return; }
+        p = c.roster.find(pl => pl.name === myIdentity.name);
+        if (!p) { p = {id: uid(), name: myIdentity.name}; await v2AddRosterPlayer(communityId, p.id, p.name); }
+        await v2LinkRosterPlayer(communityId, p.id, myIdentity.id);
+        if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
+        myIdentity.myPlayers[c.id] = p.id;
+        saveIdentity();
+      } else if (!p.clientId) {
+        await v2LinkRosterPlayer(communityId, p.id, myIdentity.id);
+      }
+    } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+    render();
+    return;
+  }
   await mutateAndSave(() => {
     const c = getCommunity(communityId);
     if (!c) return;
@@ -3644,13 +3890,19 @@ function attachHandlers(){
       if (targetEl) {
         const toIdx = parseInt(targetEl.dataset.seat);
         if (toIdx !== fromIdx) {
-          const g = getGame(nav.gameId);
-          if (!g.seats) g.seats = new Array(9).fill(null);
-          const tmp = g.seats[toIdx];
-          g.seats[toIdx] = g.seats[fromIdx];
-          g.seats[fromIdx] = tmp;
-          saveState();
-          render();
+          if (USE_RELATIONAL_API) {
+            v2SwapSeats(nav.gameId, fromIdx, toIdx)
+              .then(render)
+              .catch(() => showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."));
+          } else {
+            const g = getGame(nav.gameId);
+            if (!g.seats) g.seats = new Array(9).fill(null);
+            const tmp = g.seats[toIdx];
+            g.seats[toIdx] = g.seats[fromIdx];
+            g.seats[fromIdx] = tmp;
+            saveState();
+            render();
+          }
         }
       }
     });
@@ -4060,9 +4312,29 @@ function attachHandlers(){
 
   if (modal && modal.type === "newGame") {
     const createBtn = app.querySelector("[data-create-game]");
-    if (createBtn) createBtn.onclick = () => {
+    if (createBtn) createBtn.onclick = async () => {
       const c = getCommunity(modal.communityId);
       const name = document.getElementById("new-game-name").value.trim();
+      if (USE_RELATIONAL_API) {
+        const gid = uid();
+        let creatorPlayer = null;
+        if (myIdentity.name) {
+          creatorPlayer = c.roster.find(pl => pl.name === myIdentity.name);
+          try {
+            if (!creatorPlayer) {
+              creatorPlayer = {id: uid(), name: myIdentity.name};
+              await v2AddRosterPlayer(c.id, creatorPlayer.id, creatorPlayer.name);
+            }
+            await v2LinkRosterPlayer(c.id, creatorPlayer.id, myIdentity.id);
+            await v2CreateGame(gid, c.id, name || null, modal.date, myIdentity.name, creatorPlayer.id, creatorPlayer.name);
+          } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+        } else {
+          try { await v2CreateGame(gid, c.id, name || null, modal.date, myIdentity.name, null, null); }
+          catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+        }
+        go("community", {communityId:c.id});
+        return;
+      }
       // The date is kept only for sort order, defaulting to today - there's no picker
       // for it, the table's identity is its name (or falls back to the community name).
       const g = {id:uid(), communityId:c.id, date:modal.date, players: [], buyins:[], cashouts:{}, payboxPayments:[], playerPayments:[], seats:new Array(9).fill(null), liveChips:{}, closed:false, createdByName: myIdentity.name};
@@ -4092,21 +4364,33 @@ function attachHandlers(){
       if (isNaN(amt) || amt < 0) return;
       confirmEdit.disabled = true;
       showButtonLoading(confirmEdit);
-      await mutateAndSave(() => {
+      if (USE_RELATIONAL_API) {
         const g = getGame(modal.gameId);
-        g.cashouts[modal.playerId].amount = amt;
-        // liveChips backs the pot-balance total shown at the table - keep it in sync with
-        // the corrected cashout so the imbalance check reflects the fix.
-        if (!g.liveChips) g.liveChips = {};
-        g.liveChips[modal.playerId] = amt;
-      });
+        try { await v2SetCashout(modal.gameId, modal.playerId, amt, (g.cashouts[modal.playerId]||{}).arrangedWith, amt); }
+        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmEdit.disabled = false; return; }
+      } else {
+        await mutateAndSave(() => {
+          const g = getGame(modal.gameId);
+          g.cashouts[modal.playerId].amount = amt;
+          // liveChips backs the pot-balance total shown at the table - keep it in sync with
+          // the corrected cashout so the imbalance check reflects the fix.
+          if (!g.liveChips) g.liveChips = {};
+          g.liveChips[modal.playerId] = amt;
+        });
+      }
       closeModal();
     };
   }
 
   if (modal && modal.type === "removeFromGame") {
     const confirmRemove = app.querySelector("[data-confirm-remove-from-game]");
-    if (confirmRemove) confirmRemove.onclick = () => {
+    if (confirmRemove) confirmRemove.onclick = async () => {
+      if (USE_RELATIONAL_API) {
+        try { await v2RemoveGamePlayer(modal.gameId, modal.playerId); }
+        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+        closeModal();
+        return;
+      }
       const g = getGame(modal.gameId);
       g.players = g.players.filter(p => p.id !== modal.playerId);
       g.buyins = g.buyins.filter(b => b.playerId !== modal.playerId);
@@ -4612,11 +4896,16 @@ function attachHandlers(){
 
   if (modal && modal.type === "deleteGame") {
     const confirmDel = app.querySelector("[data-confirm-delete-game]");
-    if (confirmDel) confirmDel.onclick = () => {
+    if (confirmDel) confirmDel.onclick = async () => {
       const g = getGame(modal.gameId);
       const communityId = g.communityId;
-      state.games = state.games.filter(gm => gm.id !== modal.gameId);
-      saveState();
+      if (USE_RELATIONAL_API) {
+        try { await v2DeleteGame(modal.gameId); }
+        catch(e) { showAlert("מחיקה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+      } else {
+        state.games = state.games.filter(gm => gm.id !== modal.gameId);
+        saveState();
+      }
       go("community", {communityId});
     };
   }
@@ -4666,10 +4955,15 @@ function attachHandlers(){
       const amount = parseFloat(el.dataset.checkBalanceAddBuyin);
       const gameId = modal.gameId, playerId = modal.playerId;
       el.disabled = true;
-      await mutateAndSave(() => {
-        const g = getGame(gameId);
-        g.buyins.push({id: uid(), playerId, amount, ts: Date.now()});
-      });
+      if (USE_RELATIONAL_API) {
+        try { await v2AddBuyin(gameId, uid(), playerId, amount); }
+        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+      } else {
+        await mutateAndSave(() => {
+          const g = getGame(gameId);
+          g.buyins.push({id: uid(), playerId, amount, ts: Date.now()});
+        });
+      }
       render(); // re-renders the same history modal with the fresh buy-in list/totals
     });
     const addCustomBuyinBtn = app.querySelector("[data-check-balance-add-custom-buyin]");
@@ -4678,10 +4972,15 @@ function attachHandlers(){
       if (!amount || amount <= 0) return;
       const gameId = modal.gameId, playerId = modal.playerId;
       addCustomBuyinBtn.disabled = true;
-      await mutateAndSave(() => {
-        const g = getGame(gameId);
-        g.buyins.push({id: uid(), playerId, amount, ts: Date.now()});
-      }, true);
+      if (USE_RELATIONAL_API) {
+        try { await v2AddBuyin(gameId, uid(), playerId, amount); }
+        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+      } else {
+        await mutateAndSave(() => {
+          const g = getGame(gameId);
+          g.buyins.push({id: uid(), playerId, amount, ts: Date.now()});
+        }, true);
+      }
       render();
     };
     const editChipsBtn = app.querySelector("[data-check-balance-edit-chips]");
@@ -4696,10 +4995,15 @@ function attachHandlers(){
       confirmDelBuyin.disabled = true;
       showButtonLoading(confirmDelBuyin);
       const buyinId = modal.buyinId, returnTo = modal.returnTo;
-      await mutateAndSave(() => {
-        const g = getGame(modal.gameId);
-        g.buyins = g.buyins.filter(b => b.id !== buyinId);
-      });
+      if (USE_RELATIONAL_API) {
+        try { await v2DeleteBuyin(modal.gameId, buyinId); }
+        catch(e) { showAlert("מחיקה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+      } else {
+        await mutateAndSave(() => {
+          const g = getGame(modal.gameId);
+          g.buyins = g.buyins.filter(b => b.id !== buyinId);
+        });
+      }
       openModal(returnTo);
     };
   }
@@ -4710,10 +5014,15 @@ function attachHandlers(){
       confirmDelPaybox.disabled = true;
       showButtonLoading(confirmDelPaybox);
       const paymentId = modal.paymentId, returnTo = modal.returnTo;
-      await mutateAndSave(() => {
-        const g = getGame(modal.gameId);
-        g.payboxPayments = (g.payboxPayments||[]).filter(b => b.id !== paymentId);
-      });
+      if (USE_RELATIONAL_API) {
+        try { await v2DeletePayboxPayment(modal.gameId, paymentId); }
+        catch(e) { showAlert("מחיקה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+      } else {
+        await mutateAndSave(() => {
+          const g = getGame(modal.gameId);
+          g.payboxPayments = (g.payboxPayments||[]).filter(b => b.id !== paymentId);
+        });
+      }
       openModal(returnTo);
     };
   }
@@ -4724,26 +5033,35 @@ function attachHandlers(){
       confirmDelPP.disabled = true;
       showButtonLoading(confirmDelPP);
       const paymentId = modal.paymentId, returnTo = modal.returnTo;
-      await mutateAndSave(() => {
-        const g = getGame(modal.gameId);
-        g.playerPayments = (g.playerPayments||[]).filter(b => b.id !== paymentId);
-      });
+      if (USE_RELATIONAL_API) {
+        try { await v2DeletePlayerPayment(modal.gameId, paymentId); }
+        catch(e) { showAlert("מחיקה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+      } else {
+        await mutateAndSave(() => {
+          const g = getGame(modal.gameId);
+          g.playerPayments = (g.playerPayments||[]).filter(b => b.id !== paymentId);
+        });
+      }
       openModal(returnTo);
     };
   }
 
   if (modal && modal.type === "addExisting") {
-    app.querySelectorAll("[data-add-to-game]").forEach(el => el.onclick = () => {
+    app.querySelectorAll("[data-add-to-game]").forEach(el => el.onclick = async () => {
       const g = getGame(modal.gameId);
       const c = getCommunity(g.communityId);
       const p = c.roster.find(pl=>pl.id===el.dataset.addToGame);
-      if (p && !g.players.some(gp=>gp.id===p.id)) {
+      if (!p || g.players.some(gp=>gp.id===p.id)) { closeModal(); return; }
+      if (USE_RELATIONAL_API) {
+        try { await v2SeatPlayerIfRoom(modal.gameId, p.id, p.name); }
+        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+      } else {
         g.players.push({id:p.id, name:p.name});
         if (!g.seats) g.seats = new Array(9).fill(null);
         while (g.seats.length < 10) g.seats.push(null);
         if (g.seats[9] == null) g.seats[9] = p.id;
+        saveState();
       }
-      saveState();
       closeModal();
     });
   }
@@ -4756,11 +5074,16 @@ function attachHandlers(){
       if (!amt || amt <= 0) return;
       confirmBtn.disabled = true;
       showButtonLoading(confirmBtn);
-      await mutateAndSave(() => {
-        const g = getGame(modal.gameId);
-        g.buyins.push({id:uid(), playerId: modal.playerId, amount: amt, ts: Date.now()});
-        logSync(`buyin confirmed player=${modal.playerId} amt=${amt} -> game now has ${g.buyins.length} buyins`);
-      });
+      if (USE_RELATIONAL_API) {
+        try { await v2AddBuyin(modal.gameId, uid(), modal.playerId, amt); }
+        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmBtn.disabled = false; return; }
+      } else {
+        await mutateAndSave(() => {
+          const g = getGame(modal.gameId);
+          g.buyins.push({id:uid(), playerId: modal.playerId, amount: amt, ts: Date.now()});
+          logSync(`buyin confirmed player=${modal.playerId} amt=${amt} -> game now has ${g.buyins.length} buyins`);
+        });
+      }
       closeModal();
     };
   }
@@ -4774,11 +5097,16 @@ function attachHandlers(){
       if (!amt || amt <= 0 || !playerId) return;
       confirmPaybox.disabled = true;
       showButtonLoading(confirmPaybox);
-      await mutateAndSave(() => {
-        const g = getGame(modal.gameId);
-        if (!g.payboxPayments) g.payboxPayments = [];
-        g.payboxPayments.push({id:uid(), playerId, amount: amt, ts: Date.now()});
-      });
+      if (USE_RELATIONAL_API) {
+        try { await v2AddPayboxPayment(modal.gameId, uid(), playerId, amt); }
+        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmPaybox.disabled = false; return; }
+      } else {
+        await mutateAndSave(() => {
+          const g = getGame(modal.gameId);
+          if (!g.payboxPayments) g.payboxPayments = [];
+          g.payboxPayments.push({id:uid(), playerId, amount: amt, ts: Date.now()});
+        });
+      }
       closeModal();
     };
   }
@@ -4810,11 +5138,16 @@ function attachHandlers(){
       if (!modal.toPlayerId) return;
       confirmPayPlayer.disabled = true;
       showButtonLoading(confirmPayPlayer);
-      await mutateAndSave(() => {
-        const g = getGame(modal.gameId);
-        if (!g.playerPayments) g.playerPayments = [];
-        g.playerPayments.push({id:uid(), fromPlayerId: modal.fromPlayerId, toPlayerId: modal.toPlayerId, amount: modal.amount, ts: Date.now()});
-      });
+      if (USE_RELATIONAL_API) {
+        try { await v2AddPlayerPayment(modal.gameId, uid(), modal.fromPlayerId, modal.toPlayerId, modal.amount); }
+        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmPayPlayer.disabled = false; return; }
+      } else {
+        await mutateAndSave(() => {
+          const g = getGame(modal.gameId);
+          if (!g.playerPayments) g.playerPayments = [];
+          g.playerPayments.push({id:uid(), fromPlayerId: modal.fromPlayerId, toPlayerId: modal.toPlayerId, amount: modal.amount, ts: Date.now()});
+        });
+      }
       closeModal();
     };
   }
@@ -4889,6 +5222,19 @@ function attachHandlers(){
     app.querySelectorAll("[data-pick-player]").forEach(el => el.onclick = async () => {
       el.style.pointerEvents = "none";
       showButtonLoading(el);
+      if (USE_RELATIONAL_API) {
+        const g = getGame(modal.gameId);
+        const c = getCommunity(g.communityId);
+        const p = c.roster.find(pl => pl.id === el.dataset.pickPlayer);
+        if (p) {
+          try {
+            const ok = await v2ClaimSeat(modal.gameId, modal.seatIndex, p.id, p.name);
+            if (!ok) showAlert("המושב הזה כבר תפוס - בחרו מושב אחר.");
+          } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+        }
+        closeModal();
+        return;
+      }
       await mutateAndSave(() => {
         const g = getGame(modal.gameId);
         const c = getCommunity(g.communityId);
@@ -4916,6 +5262,18 @@ function attachHandlers(){
       if (!name) { showAlert("צריך להזין שם."); return; }
       addGuestBtn.disabled = true;
       showButtonLoading(addGuestBtn);
+      if (USE_RELATIONAL_API) {
+        // A one-off guest for this game only - not added to the community's roster (no
+        // roster_players row at all - game_players.player_id isn't a foreign key into it
+        // by design, see schema.sql), so they won't show up as a permanent group member.
+        const guestId = uid();
+        try {
+          const ok = await v2ClaimSeat(modal.gameId, modal.seatIndex, guestId, name);
+          if (!ok) showAlert("המושב הזה כבר תפוס - בחרו מושב אחר.");
+        } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+        closeModal();
+        return;
+      }
       await mutateAndSave(() => {
         const g = getGame(modal.gameId);
         // A one-off guest for this game only - not added to the community's roster, so
@@ -4936,6 +5294,16 @@ function attachHandlers(){
     if (confirmClear) confirmClear.onclick = async () => {
       confirmClear.disabled = true;
       showButtonLoading(confirmClear);
+      if (USE_RELATIONAL_API) {
+        const g = getGame(modal.gameId);
+        const idx = g.seats.indexOf(modal.playerId);
+        if (idx !== -1) {
+          try { await v2ClearSeat(modal.gameId, idx); }
+          catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmClear.disabled = false; return; }
+        }
+        closeModal();
+        return;
+      }
       await mutateAndSave(() => {
         const g = getGame(modal.gameId);
         if (g.seats) {
@@ -4952,7 +5320,18 @@ function attachHandlers(){
   }
 
   if (modal && modal.type === "returnToGamePayment") {
-    const doReturn = (resetPayment) => {
+    const doReturn = async (resetPayment) => {
+      if (USE_RELATIONAL_API) {
+        try {
+          if (resetPayment) await v2ResetPlayerPayments(modal.gameId, modal.playerId);
+          await v2DeleteCashout(modal.gameId, modal.playerId);
+          await v2UpdateLiveChips(modal.gameId, modal.playerId, 0);
+          const g = getGame(modal.gameId);
+          if (g.closed) await v2UpdateGame(modal.gameId, {closed: false});
+        } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+        closeModal();
+        return;
+      }
       const g = getGame(modal.gameId);
       if (resetPayment) {
         g.payboxPayments = (g.payboxPayments||[]).filter(pp => pp.playerId !== modal.playerId);
@@ -4976,10 +5355,15 @@ function attachHandlers(){
       const amt = parseFloat(el.dataset.seatInstantChip);
       el.disabled = true;
       showButtonLoading(el);
-      await mutateAndSave(() => {
-        const g = getGame(modal.gameId);
-        g.buyins.push({id:uid(), playerId: modal.playerId, amount: amt, ts: Date.now()});
-      });
+      if (USE_RELATIONAL_API) {
+        try { await v2AddBuyin(modal.gameId, uid(), modal.playerId, amt); }
+        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+      } else {
+        await mutateAndSave(() => {
+          const g = getGame(modal.gameId);
+          g.buyins.push({id:uid(), playerId: modal.playerId, amount: amt, ts: Date.now()});
+        });
+      }
       closeModal();
     });
     const otherToggle = app.querySelector("[data-seat-other-toggle]");
@@ -4994,10 +5378,15 @@ function attachHandlers(){
       if (!amt || amt <= 0) return;
       confirmSeatBuyin.disabled = true;
       showButtonLoading(confirmSeatBuyin);
-      await mutateAndSave(() => {
-        const g = getGame(modal.gameId);
-        g.buyins.push({id:uid(), playerId: modal.playerId, amount: amt, ts: Date.now()});
-      });
+      if (USE_RELATIONAL_API) {
+        try { await v2AddBuyin(modal.gameId, uid(), modal.playerId, amt); }
+        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmSeatBuyin.disabled = false; return; }
+      } else {
+        await mutateAndSave(() => {
+          const g = getGame(modal.gameId);
+          g.buyins.push({id:uid(), playerId: modal.playerId, amount: amt, ts: Date.now()});
+        });
+      }
       closeModal();
     };
     const seatHistoryBtn = app.querySelector("[data-seat-history]");
@@ -5085,14 +5474,21 @@ function attachHandlers(){
       const v = Math.round(computeCounted() * 100) / 100;
       quickEndBtn.disabled = true;
       showButtonLoading(quickEndBtn);
-      await mutateAndSave(() => {
+      if (USE_RELATIONAL_API) {
         const g = getGame(modal.gameId);
         const chips = (!isNaN(v) && v >= 0) ? v : ((g.liveChips||{})[modal.playerId] || 0);
-        if (!g.liveChips) g.liveChips = {};
-        g.liveChips[modal.playerId] = chips;
-        g.cashouts[modal.playerId] = {amount: chips, ts: Date.now(), arrangedWith: []};
-        maybeAutoCloseNight(g);
-      });
+        try { await v2SetCashout(modal.gameId, modal.playerId, chips, [], chips); }
+        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); quickEndBtn.disabled = false; return; }
+      } else {
+        await mutateAndSave(() => {
+          const g = getGame(modal.gameId);
+          const chips = (!isNaN(v) && v >= 0) ? v : ((g.liveChips||{})[modal.playerId] || 0);
+          if (!g.liveChips) g.liveChips = {};
+          g.liveChips[modal.playerId] = chips;
+          g.cashouts[modal.playerId] = {amount: chips, ts: Date.now(), arrangedWith: []};
+          maybeAutoCloseNight(g);
+        });
+      }
       closeModal();
     };
   }
@@ -5110,12 +5506,17 @@ function attachHandlers(){
       if (!amt || amt <= 0) return;
       confirmBulkBuyin.disabled = true;
       showButtonLoading(confirmBulkBuyin);
-      await mutateAndSave(() => {
-        const g = getGame(modal.gameId);
-        const ids = Object.keys(modal.selected).filter(k => modal.selected[k]);
-        const now = Date.now();
-        ids.forEach(pid => { g.buyins.push({id:uid(), playerId: pid, amount: amt, ts: now}); });
-      });
+      const ids = Object.keys(modal.selected).filter(k => modal.selected[k]);
+      if (USE_RELATIONAL_API) {
+        try { await v2AddBuyinsBulk(modal.gameId, ids.map(pid => ({id: uid(), playerId: pid, amount: amt}))); }
+        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmBulkBuyin.disabled = false; return; }
+      } else {
+        await mutateAndSave(() => {
+          const g = getGame(modal.gameId);
+          const now = Date.now();
+          ids.forEach(pid => { g.buyins.push({id:uid(), playerId: pid, amount: amt, ts: now}); });
+        });
+      }
       closeModal();
     };
   }
@@ -5131,13 +5532,18 @@ function attachHandlers(){
       const amt = Math.round((raw / multiplier) * 100) / 100;
       confirmBtn.disabled = true;
       showButtonLoading(confirmBtn);
-      await mutateAndSave(() => {
-        const g = getGame(modal.gameId);
-        g.cashouts[modal.playerId] = {amount: amt, ts: Date.now(), arrangedWith: []};
-        if (!g.liveChips) g.liveChips = {};
-        g.liveChips[modal.playerId] = amt;
-        maybeAutoCloseNight(g);
-      });
+      if (USE_RELATIONAL_API) {
+        try { await v2SetCashout(modal.gameId, modal.playerId, amt, [], amt); }
+        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmBtn.disabled = false; return; }
+      } else {
+        await mutateAndSave(() => {
+          const g = getGame(modal.gameId);
+          g.cashouts[modal.playerId] = {amount: amt, ts: Date.now(), arrangedWith: []};
+          if (!g.liveChips) g.liveChips = {};
+          g.liveChips[modal.playerId] = amt;
+          maybeAutoCloseNight(g);
+        });
+      }
       closeModal();
     };
   }
@@ -5194,6 +5600,24 @@ function attachHandlers(){
       const gameId = modal.gameId;
       confirmBulkBtn.disabled = true;
       showButtonLoading(confirmBulkBtn);
+      if (USE_RELATIONAL_API) {
+        const g = getGame(gameId);
+        try {
+          // Re-check against the FRESH state, not the (possibly stale) snapshot the form
+          // was built from - same reasoning as the non-relational path below.
+          const fresh = await v2LoadGameFull(gameId);
+          for (const p of fresh.players) {
+            if (p.id in fresh.cashouts) continue;
+            if (!(p.id in values)) continue;
+            const amt = Math.round(values[p.id]*100)/100;
+            await v2SetCashout(gameId, p.id, amt, [], amt);
+          }
+          await v2UpdateGame(gameId, {closed: true});
+          await v2UpdateCommunity(g.communityId, {lastParticipants: fresh.players.map(p=>p.id)});
+        } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmBulkBtn.disabled = false; return; }
+        openModal({type:"summary", gameId});
+        return;
+      }
       await mutateAndSave(() => {
         const g = getGame(gameId);
         if (!g.liveChips) g.liveChips = {};
@@ -5218,6 +5642,15 @@ function attachHandlers(){
       const gameId = modal.gameId;
       confirmBtn.disabled = true;
       showButtonLoading(confirmBtn);
+      if (USE_RELATIONAL_API) {
+        const g = getGame(gameId);
+        try {
+          await v2UpdateGame(gameId, {closed: true});
+          await v2UpdateCommunity(g.communityId, {lastParticipants: g.players.map(p=>p.id)});
+        } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmBtn.disabled = false; return; }
+        openModal({type:"summary", gameId});
+        return;
+      }
       await mutateAndSave(() => {
         const g = getGame(gameId);
         g.closed = true;
@@ -5249,13 +5682,22 @@ window.addEventListener("popstate", async () => {
     // A failed initial load must never be treated as "no data yet" - only fall back to
     // defaultState() here (the one legitimate use of it), never after a save is possible.
     state = stateResult.status === "fulfilled" ? stateResult.value : defaultState();
-    // Phase 6 (relational-DB migration) testing only - see USE_RELATIONAL_API above.
-    // Overlays the v2-sourced communities (with their updatedAt concurrency token) onto
-    // whatever the old blob load produced, so the roster/community write helpers have
-    // real data to work against. Never runs with the flag off (the default).
+    // Phase 6/7 (relational-DB migration) testing only - see USE_RELATIONAL_API above.
+    // Overlays v2-sourced communities AND full per-game detail (with their updatedAt
+    // concurrency tokens) onto whatever the old blob load produced, so the write helpers
+    // have real data to work against. Fetching every game's full detail eagerly here is
+    // deliberately a testing-only shortcut (the real production design is meant to lazily
+    // fetch a game's full detail only when its screen is opened, per the migration plan) -
+    // fine for this small scratch dataset, not how the final cutover should load games at
+    // scale. Never runs with the flag off (the default).
     if (USE_RELATIONAL_API) {
-      try { state.communities = await v2Fetch("GET", "/communities"); }
-      catch(e) { logSync("v2 community load failed: " + e); }
+      try {
+        state.communities = await v2Fetch("GET", "/communities");
+        const gameSummaries = (await Promise.all(
+          state.communities.map(c => v2Fetch("GET", `/communities/${c.id}/games`))
+        )).flat();
+        state.games = await Promise.all(gameSummaries.map(g => v2Fetch("GET", `/games/${g.id}`)));
+      } catch(e) { logSync("v2 community/game load failed: " + e); }
     }
     myIdentity = identityResult.status === "fulfilled" ? identityResult.value : { id: getClientId(), name: null };
     appVersion = versionResult.status === "fulfilled" ? versionResult.value : null;
