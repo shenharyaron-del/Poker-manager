@@ -1369,20 +1369,38 @@ def upload_photo():
     return jsonify({"id": photo_id})
 
 
+_photo_cache = {}
+_photo_cache_lock = threading.Lock()
+
+
 @app.route("/api/photos/<photo_id>")
 def get_photo(photo_id):
-    with get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT data FROM photos WHERE id = %s", (photo_id,))
-            row = cur.fetchone()
-        conn.commit()
-    if not row:
-        return jsonify({"error": "not found"}), 404
-    match = DATA_URL_RE.match(row[0])
-    if not match:
-        return jsonify({"error": "corrupt photo data"}), 500
-    media_type, b64data = match.group(1), match.group(2)
-    response = Response(base64.b64decode(b64data), mimetype=media_type)
+    # In-process cache, keyed by the same content-hash id upload_photo already uses - safe
+    # to keep forever for the identical reason the Cache-Control header below is safe to
+    # (same id always means same bytes). Every avatar in the picker (60+ of them) fetches
+    # from this endpoint once each on a cold browser cache, and each of those used to be
+    # its own full DB round trip - fine individually, but the avatar picker's own prefetch
+    # (see index.html's prefetchAvatars) fires all of them together, and the connection
+    # pool (10 max) queues the rest, reported live as slow avatar loading. This cache means
+    # only the very FIRST request for a given photo, from anyone, ever hits the DB again.
+    cached = _photo_cache.get(photo_id)
+    if cached is None:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT data FROM photos WHERE id = %s", (photo_id,))
+                row = cur.fetchone()
+            conn.commit()
+        if not row:
+            return jsonify({"error": "not found"}), 404
+        match = DATA_URL_RE.match(row[0])
+        if not match:
+            return jsonify({"error": "corrupt photo data"}), 500
+        media_type, b64data = match.group(1), match.group(2)
+        cached = (media_type, base64.b64decode(b64data))
+        with _photo_cache_lock:
+            _photo_cache[photo_id] = cached
+    media_type, raw = cached
+    response = Response(raw, mimetype=media_type)
     # id is a content hash (see upload_photo) - the same id always means the same bytes,
     # so this is safe to cache forever; a changed photo gets a new id/URL rather than
     # ever overwriting this one.
