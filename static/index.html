@@ -2571,6 +2571,13 @@ function render(){
 let lastCollapsedTableSize = null; // {w,h} in px
 // Kept in sync with the matching CSS offsets on .poker-table-inner.crop-from-* above.
 const TOP_CROP_BUFFER = 20, BOTTOM_CROP_BUFFER = 16;
+// Using the SAME number for the CSS anchor offset (top:20px/bottom:16px) and this sizing
+// buffer worked out algebraically to leave the box's OTHER (floating) edge landing exactly
+// flush with the wrap's edge - zero slack there, even though a seat's avatar/caption
+// overhangs past THAT edge too (see the CSS comment right above the anchor rules).
+// Reported live: the topmost seat's avatar visibly clipped. This is added on top of the
+// anchor offset specifically to give the floating edge real room instead of flush.
+const OVERHANG_CLEARANCE = 16;
 function layoutTableSize(){
   if (nav.screen !== "table") return;
   const wrap = document.querySelector(".poker-table-wrap");
@@ -2582,7 +2589,7 @@ function layoutTableSize(){
     // flush (see the CSS) - that offset eats into the same wrap height being measured
     // here, so it has to come off the collapsed budget too, or the box ends up exactly
     // buffer-px taller than what actually fits and gets clipped anyway.
-    const buffer = inner.classList.contains("crop-from-bottom") ? TOP_CROP_BUFFER : BOTTOM_CROP_BUFFER;
+    const buffer = (inner.classList.contains("crop-from-bottom") ? TOP_CROP_BUFFER : BOTTOM_CROP_BUFFER) + OVERHANG_CLEARANCE;
     const availableW = wrap.getBoundingClientRect().width;
     const availableH = wrap.getBoundingClientRect().height - buffer;
     let w = availableW, h = w * RATIO;
