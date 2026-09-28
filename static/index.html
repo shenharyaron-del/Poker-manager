@@ -207,6 +207,16 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .seat-info{display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;padding:2px 0;}
 .seat-name{font-size:11px;font-weight:700;color:var(--text);text-align:center;white-space:nowrap;max-width:78px;overflow:hidden;text-overflow:ellipsis;}
 .seat-caption{font-size:13px;color:#a7f3d0;text-align:center;line-height:1.35;white-space:nowrap;}
+.seat-history-toggle{background:none;border:none;color:var(--muted);cursor:pointer;padding:2px;display:inline-flex;vertical-align:middle;margin-right:2px;}
+.seat-history-toggle svg{transition:transform .15s ease;}
+.seat-history-toggle.open svg{transform:rotate(180deg);}
+/* top/bottom are set entirely per-instance via inline style (see historyPopupHtml) - never
+   defaulted here, since having both a CSS default and an inline override active at once
+   makes the browser size the box from their gap instead of its own content. */
+.seat-history-popup{position:absolute;z-index:60;background:#0c3d2e;border:1px solid var(--gold);border-radius:12px;padding:6px 10px;min-width:150px;max-height:170px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.5);}
+.seat-history-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.08);font-size:12px;white-space:nowrap;}
+.seat-history-row:last-child{border-bottom:none;}
+.seat-history-row .icon-btn{padding:3px;}
 .player-name{font-weight:600;}
 .player-meta{color:#059669;font-size:12px;margin-top:2px;}
 .balance-line{font-size:12px;font-weight:700;margin-top:2px;}
@@ -1269,6 +1279,11 @@ let currentSettlementTransfers = null; // set by renderTable(), consumed by draw
 // defaults to the viewer's own seat, but the table/community creator can tap any active
 // seat to act "on behalf of" that player instead. UI-only, not persisted, reset on nav.
 let selectedSeatPlayerId = null;
+// A small per-seat popup (chevron next to an active player's name, see renderTable's
+// seatsHtml) listing their buy-in history inline, right on the table - only one open at a
+// time, tapping another player's chevron closes whichever one was open. UI-only, not
+// persisted, reset on nav.
+let openHistorySeatPlayerId = null;
 // Two-step buy-in: tapping 50/80/100/"אחר" only selects an amount (highlights it),
 // the actual buy-in only fires on the separate "הוסף ריביי" confirm button below it.
 // selectedBuyinAmount is either one of the three fixed numbers or the string "custom" -
@@ -1436,6 +1451,7 @@ function go(screen, extra){
   selectedSeatPlayerId = null; // re-defaults to the viewer's own seat on the next table render
   selectedBuyinAmount = MIN_BUYIN_AMOUNT;
   actionPanelExpanded = false;
+  openHistorySeatPlayerId = null;
   clearBehalfInactivityTimer();
   balanceFixSelected = {};
   if (screen === "table" && nav.gameId) autoSeatSelf(nav.gameId);
@@ -2692,11 +2708,40 @@ function renderTable(gameId){
     const doorIconBig = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>';
     const circleInner = cashedOut ? doorIconBig : "";
     const selected = pid === selectedSeatPlayerId;
+    // The buy-in history chevron/popup (only for an active seat - once cashed out, this
+    // is covered by the summary screen instead). First buy-in is labeled "כניסה" (this is
+    // the same buy-in the initialBuyin modal forced - see renderActionPanel), every one
+    // after it "ריביי N". Only the viewed player themselves or the table's creator can
+    // delete a row from here, matching the same admin gate used everywhere else on this
+    // screen (isTableAdmin).
+    let historyToggleHtml = "", historyPopupHtml = "";
+    if (!cashedOut) {
+      const historyOpen = openHistorySeatPlayerId === pid;
+      const canDeleteBuyins = pid === myPlayerId || admin;
+      const sortedBuyins = g.buyins.filter(b => b.playerId === pid).slice().sort((a,b) => (a.ts||0)-(b.ts||0));
+      historyToggleHtml = `<button class="seat-history-toggle${historyOpen?' open':''}" data-toggle-seat-history="${pid}" title="היסטוריית קניות">
+        <svg width="10" height="7" viewBox="0 0 12 8"><path d="M1 1L6 6L11 1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>`;
+      if (historyOpen) {
+        const rows = sortedBuyins.map((b,idx) => `
+          <div class="seat-history-row">
+            <span>${idx===0?'כניסה':`ריביי ${idx}`}${b.ts?` · ${fmtTime(b.ts)}`:''}</span>
+            <span style="display:flex;align-items:center;gap:6px;">₪${b.amount}${canDeleteBuyins ? `<button class="icon-btn" style="color:#fda4af;" data-delete-seat-buyin="${b.id}" title="ביטול תשלום">${icon('trash')}</button>` : ''}</span>
+          </div>`).join("") || `<div class="seat-history-row" style="border:none;color:var(--muted);">אין קניות עדיין</div>`;
+        const hAlign = x > 60 ? 'right:0;' : (x < 40 ? 'left:0;' : 'left:50%;transform:translateX(-50%);');
+        // A seat low enough on the table has too little room below it before hitting
+        // .poker-table-wrap's own overflow:hidden edge - open upward instead so the
+        // popup lands on visible felt instead of getting clipped away.
+        const vAlign = y > 60 ? 'top:auto;bottom:100%;margin-bottom:4px;' : 'top:100%;bottom:auto;margin-top:4px;';
+        historyPopupHtml = `<div class="seat-history-popup" style="${hAlign}${vAlign}" data-seat-history-popup>${rows}</div>`;
+      }
+    }
     return `<div class="seat-wrap" style="left:${x}%;top:${y}%;" data-seat="${i}">
       <div class="seat-circle filled ${cashedOut?'cashed-out':''}${selected?' selected':''}"${circleStyle}>${circleInner}</div>
-      <div class="seat-info" data-seat-info>
-        <div class="seat-name">${esc(name)}</div>
+      <div class="seat-info" data-seat-info style="position:relative;">
+        <div class="seat-name">${esc(name)}${historyToggleHtml}</div>
         <div class="seat-caption">${caption}</div>
+        ${historyPopupHtml}
       </div>
     </div>`;
   }).join("");
@@ -4216,6 +4261,22 @@ function attachHandlers(){
       }
       trySelectSeatPlayer(pid);
     };
+  });
+
+  // The per-seat buy-in history popup (see renderTable's seatsHtml/historyToggleHtml) -
+  // only one open at a time, so opening one just overwrites openHistorySeatPlayerId
+  // rather than needing to explicitly close whatever was open before.
+  app.querySelectorAll("[data-toggle-seat-history]").forEach(el => el.onclick = (e) => {
+    e.stopPropagation();
+    const pid = el.dataset.toggleSeatHistory;
+    openHistorySeatPlayerId = openHistorySeatPlayerId === pid ? null : pid;
+    render();
+  });
+  const seatHistoryPopupEl = app.querySelector("[data-seat-history-popup]");
+  if (seatHistoryPopupEl) seatHistoryPopupEl.onclick = (e) => e.stopPropagation();
+  app.querySelectorAll("[data-delete-seat-buyin]").forEach(el => el.onclick = (e) => {
+    e.stopPropagation();
+    openModal({type:"deleteBuyin", gameId: nav.gameId, playerId: openHistorySeatPlayerId, buyinId: el.dataset.deleteSeatBuyin, returnTo: null});
   });
 
   // modal-level handlers
