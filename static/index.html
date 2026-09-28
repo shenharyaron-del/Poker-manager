@@ -2781,9 +2781,12 @@ function renderActionPanel(g, c, seatedIds){
       }).join("");
       settlementHtml = `
         ${rows}
-        <div class="row" style="gap:8px;margin:10px 0;">
-          <button class="btn btn-block" style="background:#0891b2;color:#fff;" data-open-paybox-generic>פתח פייבוקס לתשלום</button>
-          <button class="btn btn-block" style="background:#0891b2;color:#fff;" data-open-bit-generic>פתח ביט לתשלום</button>
+        <div style="border:1px solid var(--card-b);border-radius:14px;padding:12px;margin:10px 0;">
+          <div style="color:var(--muted);font-size:11px;text-align:center;margin-bottom:8px;">קיצור דרך לפתיחת אפליקציית תשלומים</div>
+          <div class="row" style="gap:8px;">
+            <button class="btn btn-block" style="background:#065f46;color:var(--text);border:1px solid var(--card-b);display:flex;align-items:center;justify-content:center;gap:6px;" data-open-paybox-generic>${icon('share')} פייבוקס</button>
+            <button class="btn btn-block" style="background:#065f46;color:var(--text);border:1px solid var(--card-b);display:flex;align-items:center;justify-content:center;gap:6px;" data-open-bit-generic>${icon('share')} ביט</button>
+          </div>
         </div>
         ${settlementWarning}
       `;
@@ -3969,6 +3972,20 @@ function renderModal(m){
       });
       arrangedNoteHtml = `<p style="color:var(--muted);font-size:12px;margin:-14px 0 16px;text-align:center;">כולל ₪${Math.round(total)} שהועברו ע"י ${names.map(esc).join(', ')} שעזב/ו את השולחן</p>`;
     }
+    // Separate from arrangedNoteHtml above - this is a direct player-to-player payment (see
+    // "שלם לשחקן"/payPlayer), not a cash handoff folded into the group settlement math.
+    // Without this, a player who was paid this way off-app has no way to see it reflected
+    // on their own end-of-night screen at all.
+    const directPaymentsReceived = (g.playerPayments||[]).filter(pp => pp.toPlayerId === m.playerId);
+    let directPaymentsNoteHtml = "";
+    if (directPaymentsReceived.length) {
+      const total = directPaymentsReceived.reduce((s,pp) => s+pp.amount, 0);
+      const names = directPaymentsReceived.map(pp => {
+        const pl = g.players.find(pp2 => pp2.id === pp.fromPlayerId);
+        return pl ? pl.name : "?";
+      });
+      directPaymentsNoteHtml = `<p style="color:var(--muted);font-size:12px;margin:-14px 0 16px;text-align:center;">קיבלת ₪${Math.round(total)} מ-${names.map(esc).join(', ')}</p>`;
+    }
     let modeBody;
     if (mode === "byColor") {
       modeBody = `
@@ -4011,6 +4028,7 @@ function renderModal(m){
     body = `
       ${headerHtml}
       ${arrangedNoteHtml}
+      ${directPaymentsNoteHtml}
       ${modeTabs}
       ${modeBody}
       ${cashedOut ? `
