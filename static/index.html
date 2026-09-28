@@ -1466,8 +1466,12 @@ let authSettings = { requireVerifyExistingEmail: true, requireVerifyBeforeAdminS
 // ---------- Navigation (not persisted - always starts at home) ----------
 let nav = { screen: "home", communityId: null, gameId: null };
 let modal = null; // {type, ...}
-let showSettlement = false; // UI-only toggle, not persisted
-let settlementFilterPlayerId = null; // UI-only, not persisted - null means "show everyone"
+// Which single player's arrows drawSettlementArrows() highlights on the all-cashed-out
+// settlement screen - UI-only, not persisted. null falls back to the viewer's own player
+// (see renderActionPanel) rather than meaning "show everyone"; tapping a seat's avatar/info
+// while settlement arrows are showing (currentSettlementTransfers is set) switches to that
+// player instead.
+let settlementFilterPlayerId = null;
 // Which players the table creator has checked off to share an end-of-night pot
 // imbalance correction (see renderActionPanel's "pot not balanced" branch) - UI-only,
 // not persisted, keyed by playerId, reset on nav.
@@ -2763,24 +2767,20 @@ function renderActionPanel(g, c, seatedIds){
         ...remaining.map(t => ({ fromId: t.from, toId: t.to, amount: t.amount, paid: false })),
         ...alreadyPaid.map(t => ({ fromId: t.fromPlayerId, toId: t.toPlayerId, amount: t.amount, paid: true })),
       ];
-      currentSettlementTransfers = { seats: g.seats || new Array(9).fill(null), transfers: allTransfers, filterId: null };
+      // Defaults to the viewer's own player (not "show everyone") - tapping another
+      // seat's avatar/info switches settlementFilterPlayerId to them instead (see the
+      // data-seat pointerup/info click handlers); tapping the same one again clears it
+      // back to this default.
+      const effectiveFilterId = (settlementFilterPlayerId && seatedIds.includes(settlementFilterPlayerId)) ? settlementFilterPlayerId : myPlayerId;
+      currentSettlementTransfers = { seats: g.seats || new Array(9).fill(null), transfers: allTransfers, filterId: effectiveFilterId };
       if (warning) settlementWarning = `<div style="background:#450a0a;color:#fca5a5;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;text-align:center;">${esc(warning)}</div>`;
-      const rows = seatedIds.map(pid => {
-        const pl = g.players.find(pp => pp.id === pid);
-        const mine = allTransfers.filter(t => t.fromId === pid || t.toId === pid);
-        const lines = mine.length ? mine.map(t => {
-          const otherId = t.fromId === pid ? t.toId : t.fromId;
-          const other = g.players.find(pp => pp.id === otherId);
-          const youPay = t.fromId === pid;
-          return `<div style="font-size:12px;color:${youPay?'#fda4af':'#6ee7b7'};">${youPay?'מעביר ל-':'מקבל מ-'}${esc(other?other.name:'?')}: ₪${Math.round(t.amount)}${t.paid?' (שולם)':''}</div>`;
-        }).join("") : `<div style="font-size:12px;color:var(--muted);">מאוזן</div>`;
-        return `<div class="roster-row" style="flex-direction:column;align-items:flex-start;gap:4px;">
-          <span style="font-weight:700;">${esc(pl?pl.name:"?")}</span>
-          ${lines}
-        </div>`;
-      }).join("");
+      // No per-player text list here - drawSettlementArrows() already shows who pays whom
+      // directly on the table (filtered to the viewer's own player by default, switchable
+      // by tapping another seat - see effectiveFilterId above). A parallel text list ate a
+      // lot of vertical space (one block per seated player) and shrank the table itself to
+      // make room, reported live as "the table got very small" - the arrows are the actual
+      // answer to "who pays who", not a duplicate of it.
       settlementHtml = `
-        ${rows}
         <div style="border:1px solid var(--card-b);border-radius:14px;padding:12px;margin:10px 0;">
           <div style="color:var(--muted);font-size:11px;text-align:center;margin-bottom:8px;">קיצור דרך לפתיחת אפליקציית תשלומים</div>
           <div class="row" style="gap:8px;">
@@ -4627,9 +4627,6 @@ function attachHandlers(){
     openModal({type:"settlementMethod", communityId: g.communityId, hasCashouts: Object.keys(g.cashouts || {}).length > 0});
   };
 
-  const toggleSettlementBtn = app.querySelector("[data-toggle-settlement]");
-  if (toggleSettlementBtn) toggleSettlementBtn.onclick = () => { showSettlement = !showSettlement; settlementFilterPlayerId = null; render(); };
-
   const openActivePayboxBtn = app.querySelector("[data-open-active-paybox]");
   if (openActivePayboxBtn) openActivePayboxBtn.onclick = () => {
     const g = getGame(nav.gameId);
@@ -4677,9 +4674,11 @@ function attachHandlers(){
         const seats = g.seats || new Array(9).fill(null);
         const pid = seats[fromIdx];
         if (!pid) return;
-        if (showSettlement) {
-          // While settlement arrows are showing, tapping a player filters to just
-          // their transfers instead of opening the seat menu - tap again to clear it.
+        if (currentSettlementTransfers) {
+          // While settlement arrows are showing (everyone's cashed out, direct-transfer
+          // mode), tapping a player filters the arrows to just their own transfers instead
+          // of opening the seat menu - tap the same one again to fall back to the viewer's
+          // own default (see renderActionPanel).
           settlementFilterPlayerId = settlementFilterPlayerId === pid ? null : pid;
           render();
           return;
@@ -4736,7 +4735,7 @@ function attachHandlers(){
       const seats = g.seats || new Array(9).fill(null);
       const pid = seats[idx];
       if (!pid) return;
-      if (showSettlement) {
+      if (currentSettlementTransfers) {
         settlementFilterPlayerId = settlementFilterPlayerId === pid ? null : pid;
         render();
         return;
