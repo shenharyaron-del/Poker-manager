@@ -27,7 +27,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@600;700&family=Rubik:wght@400;500;600;700&display=swap');
 
 :root{
-  --bg1:#022c22; --bg2:#0c0a09;
+  --bg1:#04402f; --bg2:#0c0a09;
   --card:#064e3b; --card-b:#065f46;
   --input:#022c22; --input-b:#047857;
   --text:#f5f5f4; --muted:#6ee7b7; --muted2:#34d399;
@@ -194,11 +194,11 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .poker-table-felt{
   position:absolute;inset:4% 11%;border-radius:999px;
   background:
-    radial-gradient(ellipse 38% 22% at 50% 17%, rgba(255,255,255,.28) 0%, rgba(255,255,255,0) 72%),
-    radial-gradient(ellipse 60% 42% at 50% 24%, #26c284 0%, #18965f 28%, #0d6d49 52%, #084c33 76%, #052e1e 92%, #031c12 100%);
+    radial-gradient(ellipse 40% 24% at 50% 15%, rgba(255,255,255,.34) 0%, rgba(255,255,255,0) 70%),
+    radial-gradient(ellipse 62% 46% at 50% 22%, #2fe093 0%, #1ba86a 26%, #0f7a4d 48%, #085636 72%, #052e1e 90%, #020f0a 100%);
   border-width:10px;border-style:solid;
-  border-top-color:#5c3c22;border-left-color:#3c2513;border-right-color:#3c2513;border-bottom-color:#170c05;
-  box-shadow:0 18px 36px rgba(0,0,0,.65),0 -8px 28px rgba(255,214,140,.16),0 0 0 3px rgba(20,12,6,.9),inset 0 14px 34px rgba(255,255,255,.16),inset 0 -28px 54px rgba(0,0,0,.62);
+  border-top-color:#3a3a3a;border-left-color:#202020;border-right-color:#202020;border-bottom-color:#0a0a0a;
+  box-shadow:0 22px 42px rgba(0,0,0,.7),0 -6px 22px rgba(255,255,255,.08),0 0 0 3px rgba(0,0,0,.9),inset 0 16px 38px rgba(255,255,255,.18),inset 0 -32px 60px rgba(0,0,0,.68);
 }
 /* Wraps the felt + seats + everything positioned via SEAT_POS, sized to a fixed aspect
    ratio relative to its own WIDTH only (never its parent's current height) - see the
