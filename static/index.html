@@ -764,6 +764,7 @@ async function v2ClaimSeat(gameId, seatIndex, playerId, name){
   if (result.conflict) return false;
   const g = getGame(gameId);
   g.seats = result.seats;
+  g.updatedAt = result.updatedAt;
   if (!g.players.some(p => p.id === playerId)) g.players.push({id: playerId, name});
   if (g.liveChips[playerId] === undefined) g.liveChips[playerId] = 0;
   return true;
@@ -789,20 +790,40 @@ async function v2SeatPlayerIfRoom(gameId, playerId, name){
   return false;
 }
 
+// v2 equivalent of the local maybeAutoCloseNight(g) mutation - that one just flips
+// g.closed and rides along inside whatever mutateAndSave save is already in flight; here
+// there's no ambient save to ride along with, so this makes its own follow-up PATCH only
+// when the check actually flips something.
+async function v2MaybeAutoCloseNight(gameId){
+  // Re-fetches fresh rather than trusting the local g.updatedAt: v2ClaimSeat/v2ClearSeat/
+  // v2SwapSeats all bump games.updated_at server-side but don't return the new value to
+  // sync locally, so the local copy of that field can be stale here - confirmed by
+  // testing (a claim/clear right before this call made the very next v2UpdateGame below
+  // silently no-op on a spurious 409, since it was still sending the old token).
+  const g = await v2LoadGameFull(gameId);
+  const seated = (g.seats || []).filter(Boolean);
+  const shouldClose = g.players.length > 0 && seated.every(pid => pid in g.cashouts);
+  if (shouldClose && !g.closed) await v2UpdateGame(gameId, {closed: true});
+}
+
 async function v2ClearSeat(gameId, seatIndex){
   const g = getGame(gameId);
   const playerId = g.seats[seatIndex];
-  await v2Fetch("DELETE", `/games/${gameId}/seats/${seatIndex}`);
+  const result = await v2Fetch("DELETE", `/games/${gameId}/seats/${seatIndex}`);
   g.seats[seatIndex] = null;
+  g.updatedAt = result.updatedAt;
   if (playerId) {
     g.buyins = g.buyins.filter(b => b.playerId !== playerId);
     delete g.liveChips[playerId];
   }
+  await v2MaybeAutoCloseNight(gameId);
 }
 
 async function v2SwapSeats(gameId, fromIndex, toIndex){
   const result = await v2Fetch("PUT", `/games/${gameId}/seats/swap`, {fromIndex, toIndex});
-  getGame(gameId).seats = result.seats;
+  const g = getGame(gameId);
+  g.seats = result.seats;
+  g.updatedAt = result.updatedAt;
 }
 
 async function v2RemoveGamePlayer(gameId, playerId){
@@ -816,6 +837,7 @@ async function v2RemoveGamePlayer(gameId, playerId){
   delete g.liveChips[playerId];
   g.seats = g.seats.map(s => s === playerId ? null : s);
   if (wasClosed) g.closed = false;
+  await v2MaybeAutoCloseNight(gameId);
 }
 
 async function v2AddBuyin(gameId, id, playerId, amount){
@@ -5481,8 +5503,10 @@ function attachHandlers(){
       if (USE_RELATIONAL_API) {
         const g = getGame(modal.gameId);
         const chips = (!isNaN(v) && v >= 0) ? v : ((g.liveChips||{})[modal.playerId] || 0);
-        try { await v2SetCashout(modal.gameId, modal.playerId, chips, [], chips); }
-        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); quickEndBtn.disabled = false; return; }
+        try {
+          await v2SetCashout(modal.gameId, modal.playerId, chips, [], chips);
+          await v2MaybeAutoCloseNight(modal.gameId);
+        } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); quickEndBtn.disabled = false; return; }
       } else {
         await mutateAndSave(() => {
           const g = getGame(modal.gameId);
@@ -5537,8 +5561,10 @@ function attachHandlers(){
       confirmBtn.disabled = true;
       showButtonLoading(confirmBtn);
       if (USE_RELATIONAL_API) {
-        try { await v2SetCashout(modal.gameId, modal.playerId, amt, [], amt); }
-        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmBtn.disabled = false; return; }
+        try {
+          await v2SetCashout(modal.gameId, modal.playerId, amt, [], amt);
+          await v2MaybeAutoCloseNight(modal.gameId);
+        } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmBtn.disabled = false; return; }
       } else {
         await mutateAndSave(() => {
           const g = getGame(modal.gameId);

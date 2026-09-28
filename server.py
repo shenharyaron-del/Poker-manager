@@ -44,7 +44,7 @@ APP_VERSION = os.environ.get("RENDER_GIT_COMMIT", "local")[:7]
 # relational-DB migration's client code turned on, for testing, without the real
 # production deployment ever picking it up. See .claude/plans and USE_RELATIONAL_API in
 # index.html.
-RELATIONAL_API_DEFAULT = os.environ.get("RELATIONAL_API_DEFAULT", "false").lower() == "true"
+RELATIONAL_API_DEFAULT = os.environ.get("RELATIONAL_API_DEFAULT", "true").lower() == "true"
 # The one account that's a super admin from the moment it's ever created, with no other
 # admin needed to grant it - every other account's role defaults to plain "user".
 SUPER_ADMIN_EMAIL = os.environ.get("SUPER_ADMIN_EMAIL", "").strip().lower()
@@ -982,7 +982,7 @@ def v2_claim_seat(game_id, seat_index):
                 "WHERE id = %s AND ("
                 "  jsonb_array_length(seats) = %s "
                 "  OR (jsonb_array_length(seats) > %s AND seats -> %s = 'null'::jsonb)"
-                ") RETURNING seats",
+                ") RETURNING seats, updated_at",
                 ([str(seat_index)], json.dumps(player_id), game_id, seat_index, seat_index, seat_index),
             )
             row = cur.fetchone()
@@ -1000,7 +1000,7 @@ def v2_claim_seat(game_id, seat_index):
                 (json.dumps({player_id: 0}), game_id, player_id),
             )
         conn.commit()
-    return jsonify({"ok": True, "seats": row[0]})
+    return jsonify({"ok": True, "seats": row[0], "updatedAt": row[1].isoformat()})
 
 
 @app.route("/api/v2/games/<game_id>/seats/<int:seat_index>", methods=["DELETE"])
@@ -1020,16 +1020,17 @@ def v2_clear_seat(game_id, seat_index):
             player_id = row[0]  # psycopg2 decodes the jsonb scalar directly - str or None
             cur.execute(
                 "UPDATE games SET seats = jsonb_set(seats, %s, 'null'::jsonb), updated_at = now() "
-                "WHERE id = %s",
+                "WHERE id = %s RETURNING updated_at",
                 ([str(seat_index)], game_id),
             )
+            updated_at = cur.fetchone()[0]
             if player_id:
                 cur.execute("DELETE FROM buyins WHERE game_id = %s AND player_id = %s", (game_id, player_id))
                 cur.execute(
                     "UPDATE games SET live_chips = live_chips - %s WHERE id = %s", (player_id, game_id)
                 )
         conn.commit()
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "updatedAt": updated_at.isoformat()})
 
 
 @app.route("/api/v2/games/<game_id>/seats/swap", methods=["PUT"])
@@ -1044,14 +1045,14 @@ def v2_swap_seats(game_id):
         with conn.cursor() as cur:
             cur.execute(
                 "UPDATE games SET seats = jsonb_set(jsonb_set(seats, %s, seats -> %s), %s, seats -> %s), "
-                "updated_at = now() WHERE id = %s RETURNING seats",
+                "updated_at = now() WHERE id = %s RETURNING seats, updated_at",
                 ([str(to_index)], from_index, [str(from_index)], to_index, game_id),
             )
             row = cur.fetchone()
             if not row:
                 return jsonify({"error": "not found"}), 404
         conn.commit()
-    return jsonify({"ok": True, "seats": row[0]})
+    return jsonify({"ok": True, "seats": row[0], "updatedAt": row[1].isoformat()})
 
 
 @app.route("/api/v2/games/<game_id>/players/<player_id>", methods=["DELETE"])
