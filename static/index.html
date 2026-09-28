@@ -195,7 +195,10 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 */
 .poker-table-inner{position:absolute;inset:0;}
 .seat-wrap{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;width:78px;touch-action:none;}
-.seat-circle{position:relative;width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;touch-action:none;}
+/* z-index:1 - .seat-info (the nameplate) is pulled up behind its lower edge (see
+   .seat-info's own negative margin-top) and, being later in the DOM, would otherwise
+   paint over it; this puts the avatar back on top like the reference image. */
+.seat-circle{position:relative;z-index:1;width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;touch-action:none;}
 .seat-circle.vacant{border:2px dashed rgba(255,255,255,.35);color:var(--muted);background:rgba(255,255,255,.05);font-size:20px;}
 .seat-circle.filled{background:var(--gold);color:var(--gold-text);border:2px solid var(--gold);}
 .seat-circle.filled.cashed-out{background:#57534e;border-color:#57534e;color:#fda4af;}
@@ -1371,6 +1374,16 @@ function armBehalfInactivityTimer(){
   }, 30000);
 }
 document.addEventListener("click", () => armBehalfInactivityTimer());
+// Any click outside the open seat-history popup (or its own toggle button) closes it.
+// Capture phase on purpose - it needs to see every click before some OTHER handler
+// further down (a seat tap, a modal, anything) has a chance to stopPropagation() it away,
+// which would otherwise leave the popup open on top of whatever got opened next.
+document.addEventListener("click", (e) => {
+  if (!openHistorySeatPlayerId) return;
+  if (e.target.closest("[data-seat-history-popup]") || e.target.closest("[data-toggle-seat-history]")) return;
+  openHistorySeatPlayerId = null;
+  render();
+}, true);
 
 // Purely cosmetic feedback for a buy-in from the action panel: a small badge flies from
 // the button that was tapped to the selected seat's circle, then turns into "+amount"
@@ -2732,12 +2745,20 @@ function renderTable(gameId){
       if (historyOpen) {
         // The first buy-in ("כניסה") is what got them into the table at all (see the
         // initialBuyin modal in renderActionPanel) - it can't be deleted from here, only
-        // the rebuys after it.
-        const rows = sortedBuyins.map((b,idx) => `
+        // the rebuys after it. The trash icon's own slot is always reserved (even empty,
+        // on the כניסה row) so the label text itself always starts at the same x position
+        // whether or not that row actually has a delete button.
+        const rows = sortedBuyins.map((b,idx) => {
+          const trashBtn = (canDeleteBuyins && idx>0) ? `<button style="background:none;border:none;padding:2px;color:#dc2626;cursor:pointer;display:flex;" data-delete-seat-buyin="${b.id}" title="ביטול תשלום">${icon('trash')}</button>` : '';
+          return `
           <div class="seat-history-row">
-            <span>${idx===0?'כניסה':`ריביי ${idx}`}${b.ts?` · ${fmtTime(b.ts)}`:''}</span>
-            <span style="display:flex;align-items:center;gap:4px;">₪${b.amount}${(canDeleteBuyins && idx>0) ? `<button style="background:none;border:none;padding:4px;color:#dc2626;cursor:pointer;display:flex;" data-delete-seat-buyin="${b.id}" title="ביטול תשלום">${icon('trash')}</button>` : ''}</span>
-          </div>`).join("") || `<div class="seat-history-row" style="border:none;color:#888;">אין קניות עדיין</div>`;
+            <span style="display:flex;align-items:center;gap:4px;">
+              <span style="width:20px;flex-shrink:0;display:inline-flex;justify-content:center;">${trashBtn}</span>
+              <span>${idx===0?'כניסה':`ריביי ${idx}`}${b.ts?` · ${fmtTime(b.ts)}`:''}</span>
+            </span>
+            <span>₪${b.amount}</span>
+          </div>`;
+        }).join("") || `<div class="seat-history-row" style="border:none;color:#888;">אין קניות עדיין</div>`;
         const hAlign = x > 60 ? 'right:0;' : (x < 40 ? 'left:0;' : 'left:50%;transform:translateX(-50%);');
         // A seat low enough on the table has too little room below it before hitting
         // .poker-table-wrap's own overflow:hidden edge - open upward instead (over the
