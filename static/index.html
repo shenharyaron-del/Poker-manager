@@ -128,7 +128,7 @@ input:focus,.select-input:focus{border-color:var(--gold);}
    attachHandlers). touch-action:none stops the browser's own page-scroll gesture from
    competing with the swipe on a touchscreen. */
 .panel-drag-handle{position:relative;display:flex;justify-content:center;align-items:flex-start;padding-top:2px;height:24px;margin-bottom:4px;cursor:grab;touch-action:none;}
-.panel-drag-glow{position:absolute;left:50%;bottom:-10px;transform:translateX(-50%);width:190px;height:80px;background:radial-gradient(ellipse 42% 100% at 50% 100%,rgba(153,246,209,.9) 0%,rgba(153,246,209,.45) 30%,rgba(153,246,209,.16) 55%,transparent 78%);pointer-events:none;}
+.panel-drag-glow{position:absolute;left:50%;top:-46px;transform:translateX(-50%);width:280px;height:70px;background:radial-gradient(ellipse 45% 100% at 50% 100%,rgba(153,246,209,.9) 0%,rgba(153,246,209,.45) 30%,rgba(153,246,209,.16) 55%,transparent 78%);pointer-events:none;}
 .panel-drag-handle svg{position:relative;filter:drop-shadow(0 0 4px rgba(153,246,209,.8));}
 /* Always present in the DOM (both collapsed and expanded) so the drag handler below can
    track max-height continuously with the finger instead of jumping between two fixed
@@ -1362,6 +1362,18 @@ function armBehalfInactivityTimer(){
   }, 30000);
 }
 document.addEventListener("click", () => armBehalfInactivityTimer());
+// Set right before a render() that a tap (not a drag) on the action-panel drag handle
+// triggers (see its pointerup handler) - swallows the browser's own follow-up "click"
+// event for that same tap outright, one-shot, regardless of what it would otherwise land
+// on in the freshly re-rendered DOM. Capture phase + first listener registered, so it
+// runs before anything else gets a chance to act on that click.
+let suppressNextClick = false;
+document.addEventListener("click", (e) => {
+  if (!suppressNextClick) return;
+  suppressNextClick = false;
+  e.preventDefault();
+  e.stopPropagation();
+}, true);
 // Any click outside the open seat-history popup (or its own toggle button) closes it.
 // Capture phase on purpose - it needs to see every click before some OTHER handler
 // further down (a seat tap, a modal, anything) has a chance to stopPropagation() it away,
@@ -2624,7 +2636,7 @@ function renderActionPanel(g, c, seatedIds){
         ${paymentButtonHtml}
       </div>
       <div class="panel-expand-extra" data-panel-expand-extra style="max-height:${actionPanelExpanded?'200px':'0px'};">
-        <div style="height:1px;background:rgba(255,255,255,.14);margin:${needsPayment?'10px':'2px'} 0 10px;"></div>
+        <div style="height:1.5px;background:rgba(255,255,255,.6);margin:${needsPayment?'10px':'2px'} 0 10px;"></div>
         ${admin ? `<button class="btn btn-ghost btn-block" data-return-to-game="${pid}" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('undo')} החזר למשחק</button>` : ""}
         <button class="btn btn-ghost btn-block" data-panel-summary style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('bar')} סיכום ערב</button>
       </div>
@@ -2659,7 +2671,7 @@ function renderActionPanel(g, c, seatedIds){
         <button class="btn btn-primary btn-block" data-panel-buyin-confirm ${canConfirmBuyin?'':'disabled'}>${icon('plus')} הוסף ריביי</button>
       </div>
       <div class="panel-expand-extra" data-panel-expand-extra style="max-height:${actionPanelExpanded?'280px':'0px'};">
-        <div style="height:1px;background:rgba(255,255,255,.14);margin:2px 0 10px;"></div>
+        <div style="height:1.5px;background:rgba(255,255,255,.6);margin:2px 0 10px;"></div>
         <button class="btn btn-ghost btn-block" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-open-my-profile>${icon('user')} הפרופיל שלי</button>
         <button class="btn btn-block" style="background:#57534e;color:#f5f5f4;margin-bottom:${canRemove?'10px':'0'};display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-end-night>${icon('out')} סיים ערב</button>
         ${canRemove ? `<button class="btn btn-block" style="background:#be123c;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-remove>${icon('trash')} הסר מהשולחן</button>` : ""}
@@ -2822,6 +2834,7 @@ function renderTable(gameId){
         <div class="meta" style="color:#6ee7b7;font-size:12px;display:flex;align-items:center;gap:5px;">${icon('cal')}${esc(g.date)}${g.createdByName ? ` · נוצר ע"י ${esc(g.createdByName)}` : ""}</div>
       </div>
       ${!allCashedOut ? `<button class="icon-btn gold" data-open-poker-odds title="מה הסיכויים שלי" style="flex-shrink:0;width:36px;height:36px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;">${icon('percent')}</button>` : ""}
+      ${myIdentity.name && myIdentity.name === g.createdByName ? `<button class="icon-btn gold" data-change-settlement-method title="שנה שיטת תשלומים" style="flex-shrink:0;width:36px;height:36px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;">${icon('coins')}</button>` : ""}
     </div>
     <div class="poker-table-wrap">
       <div class="poker-table-inner ${cropClass}">
@@ -4066,6 +4079,7 @@ function attachHandlers(){
     });
     toggleActionPanelEl.addEventListener("pointerup", (e) => {
       if (dragStartY == null) return;
+      e.preventDefault();
       const dy = dragStartY - e.clientY;
       dragStartY = null;
       const TAP_THRESHOLD_PX = 6;
@@ -4075,6 +4089,14 @@ function attachHandlers(){
         const h = Math.max(0, Math.min(naturalH, dragStartH + dy));
         actionPanelExpanded = naturalH > 0 && h > naturalH / 2;
       }
+      // The render() below can put a brand-new button exactly where this tap physically
+      // landed (once the panel opens, its first button sits right under the handle) - the
+      // browser's own follow-up "click" event (fired right after pointerup, against
+      // whatever's now in the DOM) can then land on and fire THAT button, as if it had
+      // been tapped too. preventDefault() above is the standard suppression for this on a
+      // real touch device, but isn't reliable across every browser/pointer type, so this
+      // is a second, unconditional line of defense: swallow the very next click outright.
+      suppressNextClick = true;
       render();
     });
   }
@@ -4220,6 +4242,19 @@ function attachHandlers(){
 
   const openOddsBtn = app.querySelector("[data-open-poker-odds]");
   if (openOddsBtn) openOddsBtn.onclick = () => openModal({type:"pokerOdds", gameType: "holdem", imageSrc: null, reading: false, error: null, results: null, hands: null, board: null});
+
+  const changeSettlementBtn = app.querySelector("[data-change-settlement-method]");
+  if (changeSettlementBtn) changeSettlementBtn.onclick = async () => {
+    const g = getGame(nav.gameId);
+    // Changing the community's settlement default affects every cashed-out player's panel
+    // right away, including anyone who already cashed out and paid/was paid under the OLD
+    // method - worth a deliberate confirmation rather than a silent switch mid-settlement.
+    if (Object.keys(g.cashouts || {}).length > 0) {
+      const ok = await showConfirm("כבר יש שחקן שיצא מהשולחן והעביר כסף לשחקן אחר או לקבוצת הפייבוקס. שינוי שיטת התשלום עכשיו עלול לבלבל לגבי איך להמשיך. להמשיך בכל זאת?");
+      if (!ok) return;
+    }
+    openModal({type:"payboxSettings", communityId: g.communityId});
+  };
 
   const toggleSettlementBtn = app.querySelector("[data-toggle-settlement]");
   if (toggleSettlementBtn) toggleSettlementBtn.onclick = () => { showSettlement = !showSettlement; settlementFilterPlayerId = null; render(); };
