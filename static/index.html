@@ -556,6 +556,26 @@ async function loadState(){
   return await res.json();
 }
 
+// The relational-API equivalent of loadState(), used by doRefreshNow when
+// USE_RELATIONAL_API is on (production). /api/state GET (loadState above) serves the
+// LEGACY shared_state blob - server.py's _get_cached_state()/_set_cached_state() are only
+// ever touched by the old POST /api/state handler, which nothing calls once writes go
+// through /api/v2/... instead. That blob is therefore frozen from whenever the cutover to
+// the relational API happened and never updates again - every periodic/SSE-triggered
+// refresh was silently reverting the live view back to that one frozen snapshot, wiping
+// out real buy-ins/cashouts/etc. and diverging two devices that each refreshed at a
+// different moment. Same eager-fetch-every-game shape init() already uses (see its own
+// comment on why that's a shortcut, not the final lazy-load design) - consistent with
+// what's actually deployed today rather than half-fixing only the refresh path.
+async function loadStateV2(){
+  const communities = await v2Fetch("GET", "/communities");
+  const gameSummaries = (await Promise.all(
+    communities.map(c => v2Fetch("GET", `/communities/${c.id}/games`))
+  )).flat();
+  const games = await Promise.all(gameSummaries.map(g => v2Fetch("GET", `/games/${g.id}`)));
+  return { communities, games };
+}
+
 // Temporary diagnostic overlay for tracking down a reported sync-flicker bug.
 // Turn on by opening the app with ?debug=1 in the URL. Shows a small scrolling
 // log in the corner of the screen - safe to leave in, does nothing unless the
@@ -682,18 +702,61 @@ async function mutateAndSave(mutatorFn){
 // ever needing to hand-edit this line and remember to revert it before committing.
 let USE_RELATIONAL_API = false;
 
-async function v2Fetch(method, path, body){
-  const res = await fetch(`/api/v2${path}`, {
-    method,
-    headers: body !== undefined ? {"Content-Type": "application/json"} : undefined,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    if (res.status === 409) return {conflict: true};
-    throw new Error(data.error || `${method} ${path} failed (${res.status})`);
+// Mirrors saveInFlight/actionInFlight above, but for THIS (v2Fetch-based) path - the one
+// actually used in production (USE_RELATIONAL_API is on there). doRefreshNow's whole
+// "don't apply a GET that raced a save still in flight" guard was built against
+// mutateAndSave's tracking, which the v2AddBuyin/v2SetCashout/etc. wrappers never call -
+// so in production that guard silently protected nothing, and a refresh landing between a
+// v2 write's request and its local state patch could revert it (or diverge two devices)
+// until the next refresh happened to catch up. Counted, not a single flag, since more
+// than one v2Fetch call can genuinely overlap (e.g. initial load's parallel GETs).
+let v2ActionCount = 0;
+let v2ActionInFlight = null;
+let resolveV2Idle = null;
+function v2ActionBegin(){
+  v2ActionCount++;
+  if (v2ActionCount === 1) v2ActionInFlight = new Promise(res => { resolveV2Idle = res; });
+}
+function v2ActionFinish(){
+  v2ActionCount = Math.max(0, v2ActionCount - 1);
+  if (v2ActionCount === 0 && resolveV2Idle) {
+    const r = resolveV2Idle;
+    resolveV2Idle = null;
+    v2ActionInFlight = null;
+    r();
   }
-  return data;
+}
+// A hung request here (a bad connection, an overloaded/exhausted DB pool - a real
+// possibility with several phones hitting the same small Postgres instance) would
+// otherwise never resolve or reject at all, which - now that doRefreshNow waits out
+// v2ActionInFlight before it's willing to trust a fresh GET - could wedge every future
+// refresh right along with it, not just this one call. AbortController turns that into an
+// ordinary failure after a bounded wait instead.
+const V2_FETCH_TIMEOUT_MS = 20000;
+async function v2Fetch(method, path, body){
+  v2ActionBegin();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), V2_FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(`/api/v2${path}`, {
+      method,
+      headers: body !== undefined ? {"Content-Type": "application/json"} : undefined,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (res.status === 409) return {conflict: true};
+      throw new Error(data.error || `${method} ${path} failed (${res.status})`);
+    }
+    return data;
+  } catch(e) {
+    if (e.name === "AbortError") throw new Error(`${method} ${path} timed out`);
+    throw e;
+  } finally {
+    clearTimeout(timeoutId);
+    v2ActionFinish();
+  }
 }
 
 async function v2AddRosterPlayer(communityId, id, name){
@@ -986,6 +1049,19 @@ function showButtonLoading(btn){
 // primary mechanism. Skip a refresh whenever a modal is open so we never yank away
 // something someone's mid-typing; render() re-draws whatever nav/modal already are, so this
 // never navigates anyone away from the screen (e.g. table) they're currently looking at.
+// Waits for `promise` to settle, but never longer than `ms` - used where giving up on a
+// stuck promise and moving on beats blocking forever (a promise itself can't be
+// cancelled/timed out in JS, so this just stops the CALLER from waiting on it any longer,
+// it doesn't touch the underlying operation, which may still finish or fail on its own).
+function waitAtMost(promise, ms){
+  if (!promise) return Promise.resolve();
+  return new Promise(resolve => {
+    let done = false;
+    const finish = () => { if (!done) { done = true; resolve(); } };
+    setTimeout(finish, ms);
+    promise.then(finish, finish);
+  });
+}
 let refreshInProgress = false;
 let refreshQueued = false;
 async function doRefreshNow(source){
@@ -1021,25 +1097,44 @@ async function doRefreshNow(source){
       // possibility on a slow connection) has a gap between attempts where saveInFlight
       // alone looks settled even though the action as a whole isn't done - fetching and
       // rendering in that gap would redraw the action's controls as fresh/enabled before
-      // it's actually finished, letting a second tap fire a genuine duplicate action.
-      let pending, pendingAction;
+      // it's actually finished, letting a second tap fire a genuine duplicate action. And
+      // v2ActionInFlight, the same idea for the v2Fetch-based path (see its own comment) -
+      // production runs on that path, so skipping this would leave the whole guard below
+      // protecting nothing there.
+      //
+      // Bounded, not an unconditional await: a fetch() with no response yet (network
+      // truly stuck, a hung request) would otherwise leave v2ActionInFlight/actionInFlight
+      // non-null forever, and since this loop only exits once its snapshot stops matching
+      // the live variable, a permanently-stuck one would wedge every future refresh, not
+      // just this one - worse than the flicker this whole wait exists to avoid. Give up
+      // waiting after a few rounds and refresh anyway.
+      let pending, pendingAction, pendingV2Action;
+      let waitRounds = 0;
+      const MAX_WAIT_ROUNDS = 5;
       do {
         pending = saveInFlight;
         pendingAction = actionInFlight;
-        if (pending) await pending;
-        if (pendingAction) await pendingAction;
-      } while (pending !== saveInFlight || pendingAction !== actionInFlight);
+        pendingV2Action = v2ActionInFlight;
+        if (pending) await waitAtMost(pending, 5000);
+        if (pendingAction) await waitAtMost(pendingAction, 5000);
+        if (pendingV2Action) await waitAtMost(pendingV2Action, 5000);
+        waitRounds++;
+      } while ((pending !== saveInFlight || pendingAction !== actionInFlight || pendingV2Action !== v2ActionInFlight) && waitRounds < MAX_WAIT_ROUNDS);
+      const gaveUpWaiting = waitRounds >= MAX_WAIT_ROUNDS;
       const stableFlight = saveInFlight;
-      logSync(`refresh[${callId}] past save-wait, GET start`);
-      const fresh = await loadState();
+      logSync(`refresh[${callId}] past save-wait, GET start${gaveUpWaiting ? ' (gave up waiting on a stuck action)' : ''}`);
+      const fresh = USE_RELATIONAL_API ? await loadStateV2() : await loadState();
       // While that GET was in flight, a new local action could have mutated state and
       // queued its own save (saveInFlight would now differ from what we confirmed was
       // settled right before fetching) - this response was issued before that save
       // existed, so it can't reflect it. Applying it would revert the just-made change
       // (e.g. a removed seat reappearing) until a later refresh catches up - and if
       // another save happens before that, the reverted state becomes real. Discard it
-      // and loop again instead, which will wait for the new save and re-fetch.
-      if (saveInFlight !== stableFlight || actionInFlight) {
+      // and loop again instead, which will wait for the new save and re-fetch. Skipped once
+      // we've already given up waiting once above - otherwise a genuinely stuck action (not
+      // just a slow one) would make this the SAME stale check that keeps saying "retry"
+      // forever, turning one hung request into a permanently broken refresh loop.
+      if (!gaveUpWaiting && (saveInFlight !== stableFlight || actionInFlight || v2ActionInFlight)) {
         logSync(`refresh[${callId}] STALE - a save started mid-fetch, discarding and retrying`);
         refreshQueued = true;
         continue;
@@ -3721,6 +3816,40 @@ function renderModal(m){
         <div><div style="font-size:11px;color:var(--muted);">רווח/הפסד</div><div id="chips-header-profit" style="font-weight:700;color:${profitColor(initProfit)};">${initProfit>0?'+':''}₪${initProfit}</div></div>
       </div>
     `;
+    // If any already-departed player arranged payment directly through THIS player (see
+    // arrangedWith below and computeArrangementAdjustments), note it right under the
+    // recap - otherwise the jump in what this player owes the group looks unexplained.
+    const arrangedByOthers = Object.entries(g.cashouts).filter(([id,co]) => id !== m.playerId && co.arrangedWith && co.arrangedWith.includes(m.playerId));
+    let arrangedNoteHtml = "";
+    if (arrangedByOthers.length) {
+      const rawBalances = computeBalances(g);
+      const names = [];
+      let total = 0;
+      arrangedByOthers.forEach(([id]) => {
+        const pl = g.players.find(pp => pp.id === id);
+        total += Math.abs((rawBalances[id]||{}).profit || 0);
+        if (pl) names.push(pl.name);
+      });
+      arrangedNoteHtml = `<p style="color:var(--muted);font-size:12px;margin:-14px 0 16px;text-align:center;">כולל ₪${Math.round(total)} שהועברו ע"י ${names.map(esc).join(', ')} שעזב/ו את השולחן</p>`;
+    }
+    // Optional - a player who hands their own cash directly to someone still seated
+    // (instead of going through PayBox themselves) picks that person here; it folds
+    // their own profit/loss into that player's own eventual PayBox total instead of
+    // asking for it separately (see computeArrangementAdjustments/arrangedNoteHtml above,
+    // shown on the RECEIVING player's own screen).
+    const otherActivePlayers = (g.seats||[]).filter(Boolean).filter(pid => pid !== m.playerId && !(pid in g.cashouts));
+    const arrangedWithPickerHtml = (!cashedOut && otherActivePlayers.length) ? `
+      <div class="field">
+        <label>העברת את הסכום ישירות למישהו שנשאר בשולחן? (לא חובה)</label>
+        <select class="select-input" id="seat-chips-arranged-with">
+          <option value="">לא - כרגיל דרך פייבוקס/הקבוצה</option>
+          ${otherActivePlayers.map(pid => {
+            const pl = g.players.find(pp => pp.id === pid);
+            return `<option value="${pid}">${esc(pl ? pl.name : "?")}</option>`;
+          }).join("")}
+        </select>
+      </div>
+    ` : "";
     let modeBody;
     if (mode === "byColor") {
       modeBody = `
@@ -3762,12 +3891,14 @@ function renderModal(m){
     }
     body = `
       ${headerHtml}
+      ${arrangedNoteHtml}
       ${modeTabs}
       ${modeBody}
       ${cashedOut ? `
         <p style="color:var(--muted);font-size:12px;">השחקן כבר יצא מהמשחק.</p>
         <button class="btn btn-ghost btn-block" data-return-to-game="${m.playerId}" style="margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('undo')} החזר למשחק</button>
       ` : `
+        ${arrangedWithPickerHtml}
         <button class="btn btn-block" style="background:#57534e;color:#f5f5f4;display:flex;align-items:center;justify-content:center;gap:6px;" data-quick-end="${m.playerId}">${icon('out')} סיים ערב</button>
       `}
     `;
@@ -6012,13 +6143,15 @@ function attachHandlers(){
     const quickEndBtn = app.querySelector("[data-quick-end]");
     if (quickEndBtn) quickEndBtn.onclick = async () => {
       const v = Math.round(computeCounted() * 100) / 100;
+      const arrangedWithSelect = document.getElementById("seat-chips-arranged-with");
+      const arrangedWith = (arrangedWithSelect && arrangedWithSelect.value) ? [arrangedWithSelect.value] : [];
       quickEndBtn.disabled = true;
       showButtonLoading(quickEndBtn);
       if (USE_RELATIONAL_API) {
         const g = getGame(modal.gameId);
         const chips = (!isNaN(v) && v >= 0) ? v : ((g.liveChips||{})[modal.playerId] || 0);
         try {
-          await v2SetCashout(modal.gameId, modal.playerId, chips, [], chips);
+          await v2SetCashout(modal.gameId, modal.playerId, chips, arrangedWith, chips);
           await v2MaybeAutoCloseNight(modal.gameId);
         } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); quickEndBtn.disabled = false; return; }
       } else {
@@ -6027,7 +6160,7 @@ function attachHandlers(){
           const chips = (!isNaN(v) && v >= 0) ? v : ((g.liveChips||{})[modal.playerId] || 0);
           if (!g.liveChips) g.liveChips = {};
           g.liveChips[modal.playerId] = chips;
-          g.cashouts[modal.playerId] = {amount: chips, ts: Date.now(), arrangedWith: []};
+          g.cashouts[modal.playerId] = {amount: chips, ts: Date.now(), arrangedWith};
           maybeAutoCloseNight(g);
         });
       }
@@ -6287,7 +6420,7 @@ window.addEventListener("popstate", async () => {
       // Our initial load may have caught a stale shared-state snapshot (a race with
       // someone else's concurrent save) and missed a game that genuinely exists -
       // try once more with a fresh fetch before giving up and falling back to home.
-      try { const fresh = await loadState(); if (fresh !== null) state = fresh; } catch(e) { /* keep the state we already have */ }
+      try { const fresh = USE_RELATIONAL_API ? await loadStateV2() : await loadState(); if (fresh !== null) state = fresh; } catch(e) { /* keep the state we already have */ }
       invitedGame = getGame(inviteGameId);
     }
     if (invitedGame) {
@@ -6304,7 +6437,7 @@ window.addEventListener("popstate", async () => {
   if (inviteCommunityId && !inviteGameId) {
     let invitedCommunity = getCommunity(inviteCommunityId);
     if (!invitedCommunity) {
-      try { const fresh = await loadState(); if (fresh !== null) state = fresh; } catch(e) { /* keep the state we already have */ }
+      try { const fresh = USE_RELATIONAL_API ? await loadStateV2() : await loadState(); if (fresh !== null) state = fresh; } catch(e) { /* keep the state we already have */ }
       invitedCommunity = getCommunity(inviteCommunityId);
     }
     if (invitedCommunity) {
