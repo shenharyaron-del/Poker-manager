@@ -1285,6 +1285,11 @@ let selectedSeatPlayerId = null;
 // time, tapping another player's chevron closes whichever one was open. UI-only, not
 // persisted, reset on nav.
 let openHistorySeatPlayerId = null;
+// A per-SESSION override of the community's persisted settlementDefault (see the
+// payboxSettings screen) - lets the table's creator pick a different method for just this
+// sitting without touching the permanent default future games will still use. Never saved
+// anywhere, resets on reload. null means "use the community's own default".
+let sessionSettlementOverride = null;
 // Two-step buy-in: tapping 50/80/100/"אחר" only selects an amount (highlights it),
 // the actual buy-in only fires on the separate "הוסף ריביי" confirm button below it.
 // selectedBuyinAmount is either one of the three fixed numbers or the string "custom" -
@@ -2608,13 +2613,15 @@ function renderActionPanel(g, c, seatedIds){
     const owes = fb ? -(fb.profit + alreadyPaidPaybox + alreadyPaidDirect) : 0;
     // Same collapsed/expand-extra split as the active-player panel above: a single
     // payment button (never both) always visible, "מוצג רק אם צריך לשלם" - which one is
-    // driven by the community's configured default (payboxSettings screen), falling back
-    // to a direct transfer when paybox isn't actually usable here (no link configured, or
-    // this is on someone else's behalf, where opening your own PayBox to pay doesn't make
-    // sense). Nothing owed (finished in profit/break-even) means an empty collapsed row -
-    // starts closed either way, same as the active panel always has.
+    // driven by the community's configured default (payboxSettings screen) unless this
+    // session picked a different one just for tonight (sessionSettlementOverride, see
+    // the settlementMethod modal), falling back to a direct transfer when this is on
+    // someone else's behalf (opening your own PayBox to pay doesn't make sense there).
+    // Nothing owed (finished in profit/break-even) means an empty collapsed row - starts
+    // closed either way, same as the active panel always has.
     const needsPayment = owes > 0.005;
-    const useProxyPaybox = needsPayment && !onBehalf && activePaybox && c.settlementDefault === "paybox";
+    const effectiveSettlement = sessionSettlementOverride || c.settlementDefault || "direct";
+    const useProxyPaybox = needsPayment && !onBehalf && effectiveSettlement === "paybox";
     const paymentButtonHtml = !needsPayment ? "" : useProxyPaybox
       ? `<button class="btn btn-block" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-paybox-pay data-paybox-amount="${Math.round(owes*100)/100}"><img src="/static/paybox-icon.png" style="height:18px;width:auto;display:block;"> פתח קבוצת פייבוקס משותפת לתשלום (₪${Math.round(owes*100)/100})</button>`
       : `<button class="btn btn-primary btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-pay-player data-pay-player-amount="${Math.round(owes*100)/100}">${icon('coins')} העבר ₪${Math.round(owes*100)/100} ל...</button>`;
@@ -3589,6 +3596,26 @@ function renderModal(m){
       </div>
       ${link ? `<button class="btn btn-primary btn-block" data-save-paybox-entries>שמור שינויים</button>` : ""}
     `;
+  } else if (m.type === "settlementMethod") {
+    // A per-session pick (see sessionSettlementOverride), not the community's permanent
+    // default - never saved anywhere, so no PayBox group is required to pick "paybox"
+    // here (the pay button itself falls back to PayBox's generic site if there's no group
+    // link to send the payer to - see data-panel-paybox-pay).
+    title = "שיטת תשלומים לערב הזה";
+    const c = getCommunity(m.communityId);
+    const effective = sessionSettlementOverride || c.settlementDefault || "direct";
+    body = `
+      ${m.hasCashouts ? `<div style="background:#78350f;color:#fde68a;border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:13px;text-align:center;">כבר יש שחקן שיצא מהשולחן והעביר כסף לשחקן אחר או לקבוצת הפייבוקס. שינוי שיטת התשלום עכשיו עלול לבלבל לגבי איך להמשיך להסתדר.</div>` : ""}
+      <p style="color:var(--muted);font-size:12px;margin:0 0 12px;">התאמה לערב הזה בלבד - לא משנה את ברירת המחדל הקבועה של הקבוצה.</p>
+      <div class="checkbox-row" style="cursor:pointer;" data-select-session-settlement="paybox">
+        <input type="radio" name="session-settlement" ${effective==='paybox'?'checked':''}>
+        <span class="flex1">תשלום לפייבוקס הקבוצתי</span>
+      </div>
+      <div class="checkbox-row" style="cursor:pointer;" data-select-session-settlement="direct">
+        <input type="radio" name="session-settlement" ${effective==='direct'?'checked':''}>
+        <span class="flex1">העברה ישירות בין שחקנים</span>
+      </div>
+    `;
   } else if (m.type === "pickSeat") {
     const g = getGame(m.gameId);
     const c = getCommunity(g.communityId);
@@ -4143,7 +4170,10 @@ function attachHandlers(){
     const c = getCommunity(g.communityId);
     const link = getActivePayboxLink(c);
     const amount = panelPayboxPayBtn.dataset.payboxAmount;
-    if (!link) { showAlert("לא הוגדרה קבוצת פייבוקס. בקשו מיוצר הקבוצה להגדיר אחת ממסך הקבוצה."); return; }
+    // No group link configured - paybox can still be picked as the settlement method (see
+    // the settlementMethod modal), it just has nowhere specific to send the payer, so open
+    // PayBox's own generic site instead of a group link.
+    if (!link) { window.open("https://links.payboxapp.com/", "_blank", "noopener"); return; }
     const url = link + (link.includes("?") ? "&" : "?") + "amount=" + amount;
     window.open(url, "_blank", "noopener");
   };
@@ -4251,16 +4281,11 @@ function attachHandlers(){
   if (openOddsBtn) openOddsBtn.onclick = () => openModal({type:"pokerOdds", gameType: "holdem", imageSrc: null, reading: false, error: null, results: null, hands: null, board: null});
 
   const changeSettlementBtn = app.querySelector("[data-change-settlement-method]");
-  if (changeSettlementBtn) changeSettlementBtn.onclick = async () => {
+  if (changeSettlementBtn) changeSettlementBtn.onclick = () => {
     const g = getGame(nav.gameId);
-    // Changing the community's settlement default affects every cashed-out player's panel
-    // right away, including anyone who already cashed out and paid/was paid under the OLD
-    // method - worth a deliberate confirmation rather than a silent switch mid-settlement.
-    if (Object.keys(g.cashouts || {}).length > 0) {
-      const ok = await showConfirm("כבר יש שחקן שיצא מהשולחן והעביר כסף לשחקן אחר או לקבוצת הפייבוקס. שינוי שיטת התשלום עכשיו עלול לבלבל לגבי איך להמשיך. להמשיך בכל זאת?");
-      if (!ok) return;
-    }
-    openModal({type:"payboxSettings", communityId: g.communityId});
+    // The warning (someone already cashed out under the current method) lives inline in
+    // the modal itself now, not a separate confirm gate in front of it.
+    openModal({type:"settlementMethod", communityId: g.communityId, hasCashouts: Object.keys(g.cashouts || {}).length > 0});
   };
 
   const toggleSettlementBtn = app.querySelector("[data-toggle-settlement]");
@@ -5614,6 +5639,13 @@ function attachHandlers(){
       }
       closeModal();
     };
+  }
+
+  if (modal && modal.type === "settlementMethod") {
+    app.querySelectorAll("[data-select-session-settlement]").forEach(el => el.onclick = () => {
+      sessionSettlementOverride = el.dataset.selectSessionSettlement;
+      closeModal();
+    });
   }
 
   if (modal && modal.type === "payboxSettings") {
