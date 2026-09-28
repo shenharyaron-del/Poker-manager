@@ -4500,9 +4500,13 @@ function attachHandlers(){
     // No group link configured - paybox can still be picked as the settlement method (see
     // the settlementMethod modal), it just has nowhere specific to send the payer, so open
     // PayBox's own generic site instead of a group link.
-    if (!link) { window.open("https://links.payboxapp.com/", "_blank", "noopener"); return; }
+    // location.href, not window.open - a link opened in a NEW tab/window context doesn't
+    // reliably get the mobile OS's automatic app-link handoff (PayBox's own page then shows
+    // a manual "continue to PayBox?" interstitial instead of opening straight into the app,
+    // reported live) - navigating the current page there does.
+    if (!link) { window.location.href = "https://links.payboxapp.com/"; return; }
     const url = link + (link.includes("?") ? "&" : "?") + "amount=" + amount;
-    window.open(url, "_blank", "noopener");
+    window.location.href = url;
   };
   const panelPayPlayerBtn = app.querySelector("[data-panel-pay-player]");
   if (panelPayPlayerBtn) panelPayPlayerBtn.onclick = () => {
@@ -4646,10 +4650,10 @@ function attachHandlers(){
     const g = getGame(nav.gameId);
     const c = getCommunity(g.communityId);
     const link = getActivePayboxLink(c);
-    window.open(link || "https://links.payboxapp.com/", "_blank", "noopener");
+    window.location.href = link || "https://links.payboxapp.com/";
   };
   const openPayboxGenericBtn = app.querySelector("[data-open-paybox-generic]");
-  if (openPayboxGenericBtn) openPayboxGenericBtn.onclick = () => window.open("https://links.payboxapp.com/", "_blank", "noopener");
+  if (openPayboxGenericBtn) openPayboxGenericBtn.onclick = () => { window.location.href = "https://links.payboxapp.com/"; };
   const openBitGenericBtn = app.querySelector("[data-open-bit-generic]");
   // location.href, not window.open - see the data-pay-via handler's own comment on why
   // window.open silently does nothing for a custom (non-http) scheme like bit://.
@@ -5988,15 +5992,16 @@ function attachHandlers(){
       const url = isBit
         ? (phone ? `bit://transfer?phone=${encodeURIComponent(phone)}&amount=${modal.amount}` : "bit://")
         : (phone ? `https://links.payboxapp.com/?phone=${encodeURIComponent(phone)}&amount=${modal.amount}` : "https://links.payboxapp.com/");
-      // bit:// is a custom (non-http) URL scheme - window.open tries to open a new
-      // browsing context at that address, which most mobile browsers simply can't do for
-      // a scheme that isn't http(s) and silently do nothing instead of the OS's "open in
-      // app?" handoff (reported live: the Bit button did nothing). Navigating the current
-      // page there instead (location.href) is what actually triggers that handoff -
-      // there's no real page to "leave", the OS intercepts the navigation before it would
-      // ever fail as a real request. https:// links (PayBox) still open in a new tab.
-      if (isBit) window.location.href = url;
-      else window.open(url, "_blank", "noopener");
+      // location.href for both, not window.open. bit:// is a custom (non-http) scheme -
+      // window.open tries to open a new browsing context at that address, which most
+      // mobile browsers simply can't do for a non-http(s) scheme and silently do nothing
+      // instead of the OS's "open in app?" handoff (reported live: the Bit button did
+      // nothing). PayBox's own https:// link has a different but related issue opened in a
+      // new tab - it doesn't reliably get the OS's automatic app-link handoff either, so
+      // PayBox's own page shows a manual "continue to PayBox?" interstitial instead of
+      // opening straight into the app (also reported live). Navigating the current page
+      // to either is what actually triggers the real handoff for both.
+      window.location.href = url;
     });
     const confirmPayPlayer = app.querySelector("[data-confirm-pay-player]");
     if (confirmPayPlayer) confirmPayPlayer.onclick = async () => {
