@@ -388,6 +388,13 @@ def _row_to_community(row):
 
 @app.route("/api/v2/communities", methods=["GET"])
 def v2_list_communities():
+    # Batches chip_values/paybox_links/roster_players across EVERY community into one query
+    # each (WHERE community_id = ANY(...)), then groups the rows in Python by community_id -
+    # 4 round trips total regardless of community count. The previous version issued those
+    # same 3 queries separately FOR EACH community in a loop (1 + 3*N round trips) - fine
+    # with a couple of communities, but each round trip pays the full network latency to the
+    # DB, so this was the main reason a normal page load/refresh took several seconds
+    # (measured live: ~10 sequential round trips for just 3 communities).
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -396,31 +403,39 @@ def v2_list_communities():
                 "FROM communities ORDER BY name"
             )
             communities = [_row_to_community(r) for r in cur.fetchall()]
-
+            ids = [c["id"] for c in communities]
             for c in communities:
-                cur.execute(
-                    "SELECT id, image, value FROM chip_values WHERE community_id = %s ORDER BY sort_order",
-                    (c["id"],),
-                )
-                c["chipValues"] = [{"id": r[0], "image": r[1], "value": _num(r[2])} for r in cur.fetchall()]
+                c["chipValues"] = []
+                c["payboxLinks"] = []
+                c["roster"] = []
+
+            if ids:
+                by_id = {c["id"]: c for c in communities}
 
                 cur.execute(
-                    "SELECT id, name, link FROM paybox_links WHERE community_id = %s",
-                    (c["id"],),
+                    "SELECT community_id, id, image, value FROM chip_values "
+                    "WHERE community_id = ANY(%s) ORDER BY sort_order",
+                    (ids,),
                 )
-                c["payboxLinks"] = [{"id": r[0], "name": r[1], "link": r[2]} for r in cur.fetchall()]
+                for community_id, cv_id, image, value in cur.fetchall():
+                    by_id[community_id]["chipValues"].append({"id": cv_id, "image": image, "value": _num(value)})
 
                 cur.execute(
-                    "SELECT id, name, client_id FROM roster_players WHERE community_id = %s",
-                    (c["id"],),
+                    "SELECT community_id, id, name, link FROM paybox_links WHERE community_id = ANY(%s)",
+                    (ids,),
                 )
-                roster = []
-                for pid, pname, client_id in cur.fetchall():
+                for community_id, link_id, name, link in cur.fetchall():
+                    by_id[community_id]["payboxLinks"].append({"id": link_id, "name": name, "link": link})
+
+                cur.execute(
+                    "SELECT community_id, id, name, client_id FROM roster_players WHERE community_id = ANY(%s)",
+                    (ids,),
+                )
+                for community_id, pid, pname, client_id in cur.fetchall():
                     entry = {"id": pid, "name": pname}
                     if client_id:
                         entry["clientId"] = client_id
-                    roster.append(entry)
-                c["roster"] = roster
+                    by_id[community_id]["roster"].append(entry)
         conn.commit()
     return jsonify(communities)
 
