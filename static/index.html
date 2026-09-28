@@ -4530,7 +4530,7 @@ function attachHandlers(){
   app.querySelectorAll("[data-leave]").forEach(el => el.onclick = () => openModal({type:"leave", gameId: nav.gameId, playerId: el.dataset.leave, amount:""}));
   app.querySelectorAll("[data-history]").forEach(el => el.onclick = () => openModal({type:"history", gameId: nav.gameId, playerId: el.dataset.history}));
   app.querySelectorAll("[data-edit-cashout]").forEach(el => el.onclick = () => openModal({type:"editCashout", gameId: nav.gameId, playerId: el.dataset.editCashout}));
-  app.querySelectorAll("[data-return-to-game]").forEach(el => el.onclick = () => {
+  app.querySelectorAll("[data-return-to-game]").forEach(el => el.onclick = async () => {
     const playerId = el.dataset.returnToGame;
     const g = getGame(nav.gameId);
     const paidPaybox = (g.payboxPayments||[]).filter(pp=>pp.playerId===playerId).reduce((s,pp)=>s+pp.amount,0);
@@ -4540,11 +4540,22 @@ function attachHandlers(){
       openModal({type:"returnToGamePayment", gameId: nav.gameId, playerId, paidAmount: Math.round(totalPaid*100)/100});
       return;
     }
-    delete g.cashouts[playerId];
-    if (!g.liveChips) g.liveChips = {};
-    g.liveChips[playerId] = 0; // back in the game with a clean chip count, not their old cashout amount
-    if (g.closed) g.closed = false; // a night with an active player again can't stay "closed"
-    saveState();
+    el.disabled = true;
+    // back in the game with a clean chip count (0), not their old cashout amount
+    if (USE_RELATIONAL_API) {
+      try {
+        await v2DeleteCashout(nav.gameId, playerId);
+        await v2UpdateLiveChips(nav.gameId, playerId, 0);
+        if (g.closed) await v2UpdateGame(nav.gameId, {closed: false}); // a night with an active player again can't stay "closed"
+      } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); el.disabled = false; return; }
+    } else {
+      await mutateAndSave(() => {
+        delete g.cashouts[playerId];
+        if (!g.liveChips) g.liveChips = {};
+        g.liveChips[playerId] = 0;
+        if (g.closed) g.closed = false;
+      });
+    }
     closeModal();
   });
   app.querySelectorAll("[data-remove-from-game]").forEach(el => el.onclick = () => openModal({type:"removeFromGame", gameId: nav.gameId, playerId: el.dataset.removeFromGame}));
