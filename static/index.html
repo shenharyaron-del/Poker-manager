@@ -6548,12 +6548,27 @@ function attachHandlers(){
 }
 
 // ---------- Guard against accidentally leaving the app via the browser/device back button ----------
-history.pushState({pokerManagerGuard: true}, "");
+// Chrome's "History Manipulation Intervention" silently skips a pushState() call - and the
+// popstate it would otherwise fire on back - when it wasn't triggered by a real user gesture,
+// exactly what a plain pushState() at script load is. That's the reported regression: this
+// used to reliably ask "leave the app?" and, on a modern Chrome/Android build enforcing that
+// intervention, started letting the very first back press (as an installed standalone PWA -
+// manifest.json sets exactly that display mode, confirmed live) exit straight out with no
+// prompt. Re-arming the push on the user's own next tap ties it to a genuine gesture, which
+// the intervention doesn't skip; done both immediately (harmless, and still enough on a
+// browser that doesn't enforce this) and again on the next real tap after every cancel, since
+// the cancel branch's own re-push runs after an await (showConfirm) and so may itself land
+// outside the gesture the back press provided.
+function pushBackGuard(){ history.pushState({pokerManagerGuard: true}, ""); }
+function armBackGuardOnNextGesture(){ document.addEventListener("pointerdown", pushBackGuard, {once: true}); }
+pushBackGuard();
+armBackGuardOnNextGesture();
 window.addEventListener("popstate", async () => {
   if (await showConfirm("לצאת מהאפליקציה?")) {
     history.back();
   } else {
-    history.pushState({pokerManagerGuard: true}, "");
+    pushBackGuard();
+    armBackGuardOnNextGesture();
   }
 });
 
