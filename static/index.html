@@ -806,21 +806,46 @@ async function v2RenamePlayerEverywhere(clientId, name){
   state.communities.forEach(c => c.roster.forEach(p => { if (p.clientId === clientId) p.name = name; }));
 }
 
+// Retries an update-with-conflict-token call once after a 409 instead of leaving the
+// caller (and ultimately the user) to treat it as an outright failure. Most of these
+// conflicts are exactly the case doRefreshNow/applyFreshState's own comments describe -
+// the client's locally-held updatedAt going stale between refreshes, not a real
+// simultaneous edit - so re-syncing that one token and reapplying the SAME fields almost
+// always succeeds on the very next attempt. Bounded to a single retry, not unconditional,
+// so a genuinely repeated conflict (two people actually editing this at once) still ends
+// up surfacing to the caller exactly like before. `attempt` must read the current
+// updatedAt fresh each call (not close over a reference captured before `resync` ran) or
+// the retry would just repeat the same stale token and conflict again.
+async function withConflictRetry(attempt, resync){
+  let result = await attempt();
+  if (result.conflict) {
+    await resync();
+    result = await attempt();
+  }
+  return result;
+}
+
 // Returns the fresh updatedAt on success, or null on a 409 (caller should re-sync and
 // retry, same shape mutateAndSave's callers already expect from a failed save).
 async function v2UpdateCommunity(communityId, fields){
-  const c = getCommunity(communityId);
-  const result = await v2Fetch("PATCH", `/communities/${communityId}`, {...fields, updatedAt: c.updatedAt});
+  const result = await withConflictRetry(
+    () => v2Fetch("PATCH", `/communities/${communityId}`, {...fields, updatedAt: getCommunity(communityId).updatedAt}),
+    async () => { state.communities = await v2Fetch("GET", "/communities"); }
+  );
   if (result.conflict) return null;
+  const c = getCommunity(communityId);
   Object.assign(c, fields);
   c.updatedAt = result.updatedAt;
   return result.updatedAt;
 }
 
 async function v2SetChipValues(communityId, chipValues, chipRatio){
-  const c = getCommunity(communityId);
-  const result = await v2Fetch("PUT", `/communities/${communityId}/chip-values`, {chipValues, chipRatio, updatedAt: c.updatedAt});
+  const result = await withConflictRetry(
+    () => v2Fetch("PUT", `/communities/${communityId}/chip-values`, {chipValues, chipRatio, updatedAt: getCommunity(communityId).updatedAt}),
+    async () => { state.communities = await v2Fetch("GET", "/communities"); }
+  );
   if (result.conflict) return false;
+  const c = getCommunity(communityId);
   c.chipValues = chipValues;
   c.chipRatio = chipRatio;
   c.updatedAt = result.updatedAt;
@@ -882,9 +907,12 @@ async function v2CreateGame(id, communityId, name, date, createdByName, creatorP
 
 // Returns the fresh updatedAt on success, null on a 409 (same shape as v2UpdateCommunity).
 async function v2UpdateGame(gameId, fields){
-  const g = getGame(gameId);
-  const result = await v2Fetch("PATCH", `/games/${gameId}`, {...fields, updatedAt: g.updatedAt});
+  const result = await withConflictRetry(
+    () => v2Fetch("PATCH", `/games/${gameId}`, {...fields, updatedAt: getGame(gameId).updatedAt}),
+    () => v2LoadGameFull(gameId)
+  );
   if (result.conflict) return null;
+  const g = getGame(gameId);
   Object.assign(g, fields);
   g.updatedAt = result.updatedAt;
   return result.updatedAt;
