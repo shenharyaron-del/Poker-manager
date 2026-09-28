@@ -6251,7 +6251,11 @@ function attachHandlers(){
       updateModal({chipsMode: newMode});
       focusModeInput(newMode);
     });
-    app.querySelectorAll("[data-profit-sign]").forEach(el => el.onclick = () => updateModal({profitSign: el.dataset.profitSign}));
+    app.querySelectorAll("[data-profit-sign]").forEach(el => el.onclick = () => {
+      updateModal({profitSign: el.dataset.profitSign});
+      const amountInput = document.getElementById("seat-chips-profit");
+      if (amountInput) amountInput.focus();
+    });
     // "Counted" here means today's mode's own current input(s), read fresh each time -
     // used both to keep the fixed recap header live and to compute what actually gets
     // saved on confirm, so the two can never disagree with each other.
