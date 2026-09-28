@@ -3140,11 +3140,12 @@ function renderModal(m){
     // that needs to wait for the name/avatar "שמור" button below to take effect.
     const mySeatPos = getMySeatPosition();
     // Reuses the real table screen's own felt/watermark markup (.poker-table-wrap/
-    // .poker-table-felt) at quarter width, so this looks like an actual mini table
-    // instead of a generic diagram - same SEAT_POS coordinates as renderTable, just
-    // plain dots instead of full seat circles since there's no game here to show.
+    // .poker-table-felt) at 37.5% width (bumped up 50% from an earlier 25%), so this looks
+    // like an actual mini table instead of a generic diagram - same SEAT_POS coordinates
+    // as renderTable, just plain dots instead of full seat circles since there's no game
+    // here to show.
     const seatPickerHtml = `
-      <div style="width:25%;margin:0 auto 14px;">
+      <div style="width:37.5%;margin:0 auto 14px;">
         <div class="poker-table-wrap" style="margin:0;">
           <div class="poker-table-felt"></div>
           <img src="/static/logo-watermark.png" style="position:absolute;left:50%;top:39%;transform:translate(-50%,-50%);width:46%;opacity:.6;pointer-events:none;">
