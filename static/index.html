@@ -576,6 +576,26 @@ async function loadStateV2(){
   return { communities, games };
 }
 
+// Applies a loadState()/loadStateV2() result to the live `state`. loadState()'s result is
+// the complete legacy blob and fully replaces state, same as always - but loadStateV2()
+// only ever carries communities/games (globalPlayers/customAvatars/hiddenAvatarKeys/the
+// avatar-category overrides never got a v2 table or endpoint - see loadStateV2's own
+// comment - they still live ONLY in the legacy blob). A bare `state = fresh` after a
+// loadStateV2() call was wiping every one of those fields back to undefined on every
+// refresh - fine right up until the next refresh landed, at which point a player's own
+// avatar (and any admin-added custom avatars) visibly vanished. Overlaying just
+// communities/games instead - the same "start from the blob, layer v2 on top" shape
+// init() already uses for its own initial load - keeps the rest of state untouched.
+function applyFreshState(fresh){
+  if (fresh === null) return;
+  if (USE_RELATIONAL_API) {
+    state.communities = fresh.communities;
+    state.games = fresh.games;
+  } else {
+    state = fresh;
+  }
+}
+
 // Temporary diagnostic overlay for tracking down a reported sync-flicker bug.
 // Turn on by opening the app with ?debug=1 in the URL. Shows a small scrolling
 // log in the corner of the screen - safe to leave in, does nothing unless the
@@ -1143,7 +1163,7 @@ async function doRefreshNow(source){
         logSync(`refresh[${callId}] 304 not-modified, nothing to apply`);
       } else {
         logSync(`refresh[${callId}] GET done, buyins=${(fresh.games||[]).map(g=>g.buyins.length).join(',')}, applying (modal now=${!!modal})`);
-        state = fresh;
+        applyFreshState(fresh);
         const scrollY = window.scrollY;
         render();
         window.scrollTo(0, scrollY);
@@ -1350,7 +1370,17 @@ async function quickLogin(email, replace){
     body: JSON.stringify({email, clientId: getClientId(), replace: !!replace, localId: myIdentity.id})
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || "quick login unavailable");
+  if (!res.ok) {
+    // 409 ("already registered") is the one genuine "not eligible by the admin's current
+    // setting" outcome - the caller needs to tell that apart from everything else (a
+    // network hiccup, a Render cold start, a DB error) instead of treating every failure
+    // here as "must need a real code", which silently turned an ordinary connectivity
+    // blip into what looked like a code-verification requirement that was never actually
+    // on.
+    const err = new Error(body.error || "quick login unavailable");
+    err.status = res.status;
+    throw err;
+  }
   return body;
 }
 
@@ -4671,12 +4701,18 @@ function attachHandlers(){
     const sendLoginCodeFor = async (email) => {
       // Always tries the no-code path first and lets the server decide eligibility (a
       // brand new email always qualifies; an existing one only if a super admin has
-      // turned "כניסה ללא קוד אימות" on) - falls back to a real code either way.
+      // turned "כניסה ללא קוד אימות" on) - only a real 409 ("not eligible by that
+      // setting") falls through to a real code. Anything else (network hiccup, a Render
+      // cold start, a DB error) is shown as an actual error instead - it used to fall
+      // through the same way, which made an ordinary connectivity failure look exactly
+      // like "a verification code was required", even with the setting off.
       try {
         const account = await quickLogin(email, modal.deviceChoice === "replace");
         await afterLogin(account);
         return;
-      } catch(e) { /* not eligible, or a network error - fall through to a real code below */ }
+      } catch(e) {
+        if (e.status !== 409) { updateModal({loginError: "החיבור לשרת נכשל - נסו שוב."}); return; }
+      }
       try {
         await requestLoginCode(email);
         updateModal({loginStep: "code", loginEmail: email, loginError: null});
@@ -6420,7 +6456,7 @@ window.addEventListener("popstate", async () => {
       // Our initial load may have caught a stale shared-state snapshot (a race with
       // someone else's concurrent save) and missed a game that genuinely exists -
       // try once more with a fresh fetch before giving up and falling back to home.
-      try { const fresh = USE_RELATIONAL_API ? await loadStateV2() : await loadState(); if (fresh !== null) state = fresh; } catch(e) { /* keep the state we already have */ }
+      try { const fresh = USE_RELATIONAL_API ? await loadStateV2() : await loadState(); applyFreshState(fresh); } catch(e) { /* keep the state we already have */ }
       invitedGame = getGame(inviteGameId);
     }
     if (invitedGame) {
@@ -6437,7 +6473,7 @@ window.addEventListener("popstate", async () => {
   if (inviteCommunityId && !inviteGameId) {
     let invitedCommunity = getCommunity(inviteCommunityId);
     if (!invitedCommunity) {
-      try { const fresh = USE_RELATIONAL_API ? await loadStateV2() : await loadState(); if (fresh !== null) state = fresh; } catch(e) { /* keep the state we already have */ }
+      try { const fresh = USE_RELATIONAL_API ? await loadStateV2() : await loadState(); applyFreshState(fresh); } catch(e) { /* keep the state we already have */ }
       invitedCommunity = getCommunity(inviteCommunityId);
     }
     if (invitedCommunity) {
