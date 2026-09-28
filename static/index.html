@@ -93,8 +93,16 @@ body.table-screen .top{flex-shrink:0;}
    below (e.g. a settlement view listing several players' transfers) genuinely needs more
    room than what's left on a short screen, the panel itself scrolls internally instead,
    never the page. */
-body.table-screen .poker-table-wrap{flex:1;min-height:130px;width:auto;padding-top:0;aspect-ratio:1/1.1;max-width:100%;max-height:100%;margin:4px auto 8px;}
-body.table-screen .bottom-bar{position:static;flex-shrink:0;background:none;margin:0;max-width:none;max-height:50vh;max-height:50dvh;overflow-y:auto;}
+body.table-screen .poker-table-wrap{flex:1;min-height:80px;width:100%;padding-top:0;max-width:100%;max-height:100%;margin:4px 0 8px;overflow:hidden;}
+/* The inner box keeps a fixed aspect ratio driven by WIDTH alone, so its height never
+   shrinks just because the outer viewport (.poker-table-wrap, above) got shorter when the
+   action panel expanded - it only ever gets clipped by that viewport's overflow:hidden.
+   Anchoring to top vs bottom (set per-render in renderTable from the viewer's own seat
+   position - see getMySeatPosition) decides which end stays fully visible. */
+body.table-screen .poker-table-inner{position:absolute;left:0;right:0;width:100%;aspect-ratio:1/1.45;}
+body.table-screen .poker-table-inner.crop-from-bottom{top:0;bottom:auto;}
+body.table-screen .poker-table-inner.crop-from-top{bottom:0;top:auto;}
+body.table-screen .bottom-bar{position:static;flex-shrink:0;background:none;margin:0;max-width:none;max-height:70vh;max-height:70dvh;overflow-y:auto;}
 .empty{text-align:center;padding:50px 20px;color:#059669;font-size:14px;}
 .section-title{color:var(--gold);font-size:11px;font-weight:700;letter-spacing:.05em;margin:0 0 8px;padding:0 20px;}
 .field{display:block;margin-bottom:14px;}
@@ -107,6 +115,8 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .chip-row{display:flex;gap:8px;margin-bottom:12px;}
 .chip-btn{flex:1;padding:9px;border-radius:9px;background:var(--input);border:1px solid var(--input-b);color:var(--text);font-family:inherit;cursor:pointer;}
 .chip-btn:disabled{opacity:.4;cursor:not-allowed;}
+.btn:disabled{opacity:.45;cursor:not-allowed;}
+.chip-btn.buyin-selected{background:var(--gold);color:var(--gold-text);border-color:var(--gold);font-weight:700;}
 .overlay{position:fixed;inset:0;background:#000;display:flex;align-items:flex-end;justify-content:center;z-index:50;}
 @media(min-width:600px){.overlay{align-items:center;}}
 /* Anchors the sheet to the top of the screen instead of the bottom - used for the
@@ -141,8 +151,24 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .coin.pos{border-color:#34d399;color:#6ee7b7;}
 .coin.neg{border-color:#fb7185;color:#fda4af;}
 .player-card{display:flex;align-items:center;gap:12px;background:var(--input);border:1px solid #14532d;border-radius:16px;padding:14px;margin-bottom:8px;}
-.poker-table-wrap{position:relative;width:100%;padding-top:110%;margin:4px 0 18px;}
-.poker-table-felt{position:absolute;inset:9% 13% 9% 9%;border-radius:50%;background:radial-gradient(ellipse at 50% 40%, #0f6b48, #073826 75%);border:7px solid #3d2412;box-shadow:inset 0 0 34px rgba(0,0,0,.45);}
+.poker-table-wrap{position:relative;width:100%;padding-top:145%;margin:4px 0 18px;}
+/* Stadium shape (straight sides, fully-rounded caps) rather than a plain ellipse - a
+   border-radius bigger than half the element's own width gets capped there by the CSS
+   spec itself, which is exactly what produces straight vertical sides with round ends on
+   a box taller than it is wide. The 3D read comes from three independent layers: the
+   radial gradient fakes an overhead light (brighter upper-center, darker at the rim), the
+   outer box-shadow lifts the whole table off the page, and the two inset shadows fake a
+   concave felt surface (a soft highlight where the light would catch it, darkening
+   toward the rail) - no pseudo-elements/extra stacking contexts needed. */
+.poker-table-felt{position:absolute;inset:4% 11%;border-radius:999px;background:radial-gradient(ellipse 75% 55% at 50% 34%, #1a8f5f 0%, #0f6b48 42%, #073826 85%, #052a1c 100%);border:9px solid #2a1a0d;box-shadow:0 14px 28px rgba(0,0,0,.55),0 0 0 3px rgba(70,44,22,.85),inset 0 8px 26px rgba(255,255,255,.07),inset 0 -18px 40px rgba(0,0,0,.5);}
+/* Wraps the felt + seats + everything positioned via SEAT_POS, sized to a fixed aspect
+   ratio relative to its own WIDTH only (never its parent's current height) - see the
+   table-screen crop rules below, where the outer .poker-table-wrap becomes a short
+   clipping viewport and this inner box (anchored top or bottom, not stretched) is what
+   makes "smaller viewport" read as "cropped" instead of "shrunk". Outside the table
+   screen it's just a plain full-size box with nothing to crop against.
+*/
+.poker-table-inner{position:absolute;inset:0;}
 .seat-wrap{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;width:78px;touch-action:none;}
 .seat-circle{position:relative;width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;touch-action:none;}
 .seat-circle.vacant{border:2px dashed rgba(255,255,255,.35);color:var(--muted);background:rgba(255,255,255,.05);font-size:20px;}
@@ -1218,6 +1244,20 @@ let currentSettlementTransfers = null; // set by renderTable(), consumed by draw
 // defaults to the viewer's own seat, but the table/community creator can tap any active
 // seat to act "on behalf of" that player instead. UI-only, not persisted, reset on nav.
 let selectedSeatPlayerId = null;
+// Two-step buy-in: tapping 50/80/100/"אחר" only selects an amount (highlights it),
+// the actual buy-in only fires on the separate "הוסף ריביי" confirm button below it.
+// selectedBuyinAmount is either one of the three fixed numbers, the string "custom", or
+// null (nothing picked yet - confirm stays disabled). customBuyinAmount is the last value
+// typed into "אחר" - deliberately NOT reset when the selection changes or after a buy-in
+// confirms, only when the seat selection itself changes (a different player's panel),
+// so it stays available to reuse for the rest of the session as the user asked.
+let selectedBuyinAmount = null;
+let customBuyinAmount = null;
+// Collapsed by default - shows only the two buy-in rows; expanded reveals the rest of
+// the active-seat panel (end-night, remove-from-table). Reset whenever the selected seat
+// changes, same as the buy-in selection above - an expanded/collapsed choice made for one
+// player's panel shouldn't carry over to a different player's.
+let actionPanelExpanded = false;
 // Only the table's or community's creator may seat other people and act on their behalf
 // (buy-ins, ending their night, removing them) - anyone typing someone else's name is
 // just a courtesy elsewhere, but this gate is what keeps that from being used to mess
@@ -1234,6 +1274,8 @@ function trySelectSeatPlayer(pid){
   const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
   if (pid === myPlayerId || isTableAdmin(g, c)) {
     selectedSeatPlayerId = pid;
+    selectedBuyinAmount = null;
+    actionPanelExpanded = false;
     render();
   }
 }
@@ -1261,6 +1303,8 @@ function armBehalfInactivityTimer(){
     if (!isOnBehalf()) return; // left on-behalf mode some other way in the meantime
     const g = getGame(nav.gameId);
     selectedSeatPlayerId = (myIdentity.myPlayers && myIdentity.myPlayers[g.communityId]) || null;
+    selectedBuyinAmount = null;
+    actionPanelExpanded = false;
     render();
   }, 30000);
 }
@@ -1316,7 +1360,7 @@ async function doPanelBuyin(amount, btnEl){
   // second tap could fire (and build its own mutation on top of a not-yet-updated total)
   // before the first save even started reflecting on screen. render() at the end below
   // rebuilds this row from scratch, which re-enables everything on its own.
-  document.querySelectorAll("[data-panel-buyin-quick],[data-panel-buyin-confirm],#panel-buyin-custom").forEach(el => el.disabled = true);
+  document.querySelectorAll("[data-buyin-select],[data-panel-buyin-confirm],#panel-buyin-custom").forEach(el => el.disabled = true);
   flyBuyinBadge(btnEl, amount);
   // Starts the caption's count-up immediately (optimistically), using the seat's current
   // known total - it doesn't wait for the network round trip below, so it feels instant.
@@ -1349,6 +1393,8 @@ function go(screen, extra){
   nav = Object.assign({screen}, extra||{});
   modal = null;
   selectedSeatPlayerId = null; // re-defaults to the viewer's own seat on the next table render
+  selectedBuyinAmount = null;
+  actionPanelExpanded = false;
   clearBehalfInactivityTimer();
   balanceFixSelected = {};
   if (screen === "table" && nav.gameId) autoSeatSelf(nav.gameId);
@@ -2438,27 +2484,44 @@ function renderActionPanel(g, c, seatedIds){
     `;
   } else {
     const canRemove = admin || (isSelf && buyinTotal === 0);
+    // Two-step: tapping an amount only selects/highlights it (selectedBuyinAmount, see
+    // its own declaration for why), the buy-in itself only fires on the confirm button
+    // below. "אחר" swaps into a live number input in place, and whatever's typed both
+    // becomes the pill's own displayed value from then on (sticky for the rest of the
+    // session) and feeds the confirm button, same as the three fixed amounts.
+    const customSelected = selectedBuyinAmount === "custom";
+    const currentAmount = customSelected ? customBuyinAmount : selectedBuyinAmount;
+    const canConfirmBuyin = currentAmount != null && currentAmount > 0;
     panelBody = `
-      <div style="display:flex;align-items:center;gap:5px;margin-bottom:10px;width:100%;">
-        <span style="font-size:12px;font-weight:700;color:var(--muted);flex-shrink:0;">קנייה:</span>
-        ${[50,80,100].map(v=>`<button class="chip-btn" data-panel-buyin-quick="${v}" style="flex:1;padding:7px 2px;font-size:17px;">${v}</button>`).join("")}
-        <input type="number" inputmode="decimal" id="panel-buyin-custom" placeholder="אחר" style="flex:1;min-width:0;padding:7px 2px;font-size:17px;text-align:center;">
-        <button class="btn btn-primary" data-panel-buyin-confirm disabled style="flex-shrink:0;padding:7px 10px;">${icon('plus')}</button>
+      <div data-toggle-action-panel style="display:flex;justify-content:center;padding:2px 0 10px;cursor:pointer;">
+        <svg width="22" height="10" viewBox="0 0 22 10" style="transform:rotate(${actionPanelExpanded?180:0}deg);transition:transform .2s ease;"><path d="M1 9L11 1L21 9" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
-      <button class="btn btn-ghost btn-block" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-history>${icon('bar')} היסטוריית קניות</button>
-      <button class="btn btn-block" style="background:#57534e;color:#f5f5f4;margin-bottom:${canRemove?'10px':'0'};display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-end-night>${icon('out')} סיים ערב</button>
-      ${canRemove ? `<button class="btn btn-block" style="background:#be123c;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-remove>${icon('trash')} הסר מהשולחן</button>` : ""}
+      <div style="display:flex;gap:6px;margin-bottom:8px;width:100%;">
+        ${[50,80,100].map(v=>`<button class="chip-btn${selectedBuyinAmount===v?' buyin-selected':''}" data-buyin-select="${v}" style="flex:1;padding:9px 2px;font-size:16px;">₪${v}</button>`).join("")}
+        ${customSelected
+          ? `<input type="number" inputmode="decimal" id="panel-buyin-custom" value="${customBuyinAmount!=null?customBuyinAmount:''}" placeholder="סכום" onfocus="this.select()" style="flex:1;min-width:0;padding:9px 2px;font-size:16px;text-align:center;border-radius:9px;border:1px solid var(--gold);background:var(--input);color:var(--text);" autofocus>`
+          : `<button class="chip-btn" data-buyin-select="custom" style="flex:1;padding:9px 2px;font-size:16px;">${customBuyinAmount!=null?`₪${customBuyinAmount}`:'אחר'}</button>`
+        }
+      </div>
+      <button class="btn btn-primary btn-block" data-panel-buyin-confirm style="margin-bottom:10px;" ${canConfirmBuyin?'':'disabled'}>${icon('plus')} הוסף ריביי</button>
+      ${actionPanelExpanded ? `
+        <button class="btn btn-block" style="background:#57534e;color:#f5f5f4;margin-bottom:${canRemove?'10px':'0'};display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-end-night>${icon('out')} סיים ערב</button>
+        ${canRemove ? `<button class="btn btn-block" style="background:#be123c;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-remove>${icon('trash')} הסר מהשולחן</button>` : ""}
+      ` : ""}
     `;
   }
   return `<div class="bottom-bar">${settlementHtml}${behalfBadge}${panelBody}</div>`;
 }
 
-// Percentage [x,y] position of each of the 9 main seat slots around the oval table
-// (index 9 is the special "extra player" overflow slot, positioned separately) - shared
-// between the real table render and the small preview in the identityName "המיקום שלי
-// בשולחן" picker, so both draw from the exact same layout.
+// Percentage [x,y] position of each of the 9 main seat slots around the oval table -
+// asymmetric on purpose (2 across the top, 3 down each side, a single seat at the
+// bottom) rather than a mirrored layout, matching a real oval table's own seating.
+// Index 5 (the single bottom seat) is the default "my seat" slot - see
+// getMySeatPosition - and index 9 is the special "extra player" overflow slot,
+// positioned separately. Shared between the real table render and the small preview in
+// the identityName "המיקום שלי בשולחן" picker, so both draw from the exact same layout.
 const SEAT_POS = [
-  [50,8],[74,18],[85,43],[80,71],[65,90],[35,90],[12,71],[7,43],[22,18],[2,90]
+  [32,7],[68,7],[89,26],[89,52],[78,76],[38,92],[22,76],[11,52],[11,26],[3,90]
 ];
 function renderTable(gameId){
   const g = getGame(gameId);
@@ -2536,6 +2599,13 @@ function renderTable(gameId){
 
   const panelHtml = renderActionPanel(g, c, seatedIds);
 
+  // Which half of the table the viewer's own seat slot falls in, so the crop direction
+  // (see .poker-table-inner CSS above) always keeps THEIR seat in view when the action
+  // panel expands and eats into the table's vertical space: a seat in the top half means
+  // the table should crop away from the bottom instead, everyone else crops from the top.
+  const mySlotY = SEAT_POS[getMySeatPosition()][1];
+  const cropClass = mySlotY < 50 ? "crop-from-bottom" : "crop-from-top";
+
   return `
     <div class="top row" style="padding-top:14px;padding-bottom:16px;">
       <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
@@ -2546,20 +2616,22 @@ function renderTable(gameId){
       ${!allCashedOut ? `<button class="icon-btn gold" data-open-poker-odds title="מה הסיכויים שלי" style="flex-shrink:0;width:36px;height:36px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;">${icon('percent')}</button>` : ""}
     </div>
     <div class="poker-table-wrap">
-      <div class="poker-table-felt"></div>
-      <img src="/static/logo-watermark.png" style="position:absolute;left:50%;top:39%;transform:translate(-50%,-50%);width:46%;opacity:.6;pointer-events:none;">
-      ${seatsHtml}
-      <div id="settlement-overlay" style="position:absolute;inset:0;pointer-events:none;"></div>
-      <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) translateY(70px);text-align:center;z-index:3;">
-        <div style="color:var(--muted);font-size:12px;">סה"כ קנייה ₪${totalBuyinAll}</div>
-        <div style="color:var(--muted);font-size:12px;">סה"כ ציפים ₪${totalChipsAll}</div>
-        <div style="color:${diffColor};font-weight:700;font-size:13px;margin-top:4px;">${diffLabel}${Math.abs(diff)>=0.5?` ₪${Math.abs(Math.round(diff))}`:""}</div>
-      </div>
-      ${(seats.slice(0,9).filter(Boolean).length >= 9 && seats[9] == null) ? `
-        <div style="position:absolute;left:2%;top:${SEAT_POS[5][1]}%;transform:translateY(-50%);">
-          <button class="icon-btn gold" data-add-extra-player title="הוסף שחקן נוסף" style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.08);display:inline-flex;align-items:center;justify-content:center;">${icon('plus')}</button>
+      <div class="poker-table-inner ${cropClass}">
+        <div class="poker-table-felt"></div>
+        <img src="/static/logo-watermark.png" style="position:absolute;left:50%;top:39%;transform:translate(-50%,-50%);width:46%;opacity:.6;pointer-events:none;">
+        ${seatsHtml}
+        <div id="settlement-overlay" style="position:absolute;inset:0;pointer-events:none;"></div>
+        <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) translateY(70px);text-align:center;z-index:3;">
+          <div style="color:var(--muted);font-size:12px;">סה"כ קנייה ₪${totalBuyinAll}</div>
+          <div style="color:var(--muted);font-size:12px;">סה"כ ציפים ₪${totalChipsAll}</div>
+          <div style="color:${diffColor};font-weight:700;font-size:13px;margin-top:4px;">${diffLabel}${Math.abs(diff)>=0.5?` ₪${Math.abs(Math.round(diff))}`:""}</div>
         </div>
-      ` : ""}
+        ${(seats.slice(0,9).filter(Boolean).length >= 9 && seats[9] == null) ? `
+          <div style="position:absolute;left:2%;top:${SEAT_POS[5][1]}%;transform:translateY(-50%);">
+            <button class="icon-btn gold" data-add-extra-player title="הוסף שחקן נוסף" style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.08);display:inline-flex;align-items:center;justify-content:center;">${icon('plus')}</button>
+          </div>
+        ` : ""}
+      </div>
     </div>
     ${panelHtml}
   `;
@@ -2599,7 +2671,7 @@ function renderModal(m){
     // myIdentity.email is always already set, so this is just a confirmation line, never
     // an entry form.
     const loginSection = `
-      <p style="color:var(--muted);font-size:12px;text-align:center;margin:18px 0 0;padding-top:14px;border-top:1px solid var(--card-b);">מחוברים כ-<span dir="ltr">${esc(myIdentity.email)}</span> - השם והאווטר שלכם ישוחזרו אוטומטית במכשיר חדש.</p>
+      <p style="color:var(--muted);font-size:12px;text-align:center;margin:18px 0 0;padding-top:14px;border-top:1px solid var(--card-b);">מחוברים כ-<span dir="ltr">${esc(myIdentity.email)}</span></p>
     `;
     // A tap on any of the 9 seats sets it immediately (setGlobalPlayer + saveState in the
     // handler below) - a low-stakes, instantly-visible visual preference, not something
@@ -2629,11 +2701,11 @@ function renderModal(m){
       <div style="margin-bottom:12px;">
         <input type="text" id="identity-name-input" value="${esc(myIdentity.name || '')}" placeholder="השם שלך" style="width:100%;" autofocus>
       </div>
-      <button class="btn btn-primary btn-block" style="margin-bottom:12px;" data-confirm-identity-name>שמור</button>
-      ${!m.forced ? `<button class="btn btn-ghost btn-block" style="margin-bottom:12px;" data-my-stats>${icon('bar')} הביצועים שלי</button>` : ""}
       <div class="section-title" style="padding:0;margin:0 0 6px;">המיקום שלי בשולחן</div>
       <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">הקישו על מקום כדי לבחור איפה תופיעו תמיד סביב השולחן.</p>
       ${seatPickerHtml}
+      ${!m.forced ? `<button class="btn btn-ghost btn-block" style="margin-bottom:12px;" data-my-stats>${icon('bar')} הביצועים שלי</button>` : ""}
+      <button class="btn btn-primary btn-block" style="margin-bottom:12px;" data-confirm-identity-name>שמור</button>
       ${loginSection}
     `;
   } else if (m.type === "inviteGone") {
@@ -3712,24 +3784,25 @@ function attachHandlers(){
     openModal({type:"newGame", communityId: nav.communityId, date: new Date().toISOString().slice(0,10)});
   };
 
-  app.querySelectorAll("[data-panel-buyin-quick]").forEach(el => el.onclick = () => {
-    doPanelBuyin(parseFloat(el.dataset.panelBuyinQuick), el);
+  const toggleActionPanelEl = app.querySelector("[data-toggle-action-panel]");
+  if (toggleActionPanelEl) toggleActionPanelEl.onclick = () => { actionPanelExpanded = !actionPanelExpanded; render(); };
+  app.querySelectorAll("[data-buyin-select]").forEach(el => el.onclick = () => {
+    const v = el.dataset.buyinSelect;
+    selectedBuyinAmount = v === "custom" ? "custom" : parseFloat(v);
+    render();
   });
   const panelBuyinConfirmBtn = app.querySelector("[data-panel-buyin-confirm]");
   const panelBuyinCustomInput = document.getElementById("panel-buyin-custom");
   if (panelBuyinCustomInput && panelBuyinConfirmBtn) panelBuyinCustomInput.oninput = () => {
     const amt = parseFloat(panelBuyinCustomInput.value);
-    panelBuyinConfirmBtn.disabled = !amt || amt <= 0;
+    customBuyinAmount = (!isNaN(amt) && amt > 0) ? amt : null;
+    panelBuyinConfirmBtn.disabled = !customBuyinAmount;
   };
   if (panelBuyinConfirmBtn) panelBuyinConfirmBtn.onclick = () => {
-    const input = document.getElementById("panel-buyin-custom");
-    const amt = input ? parseFloat(input.value) : NaN;
+    const amt = selectedBuyinAmount === "custom" ? customBuyinAmount : selectedBuyinAmount;
     if (!amt || amt <= 0) return;
-    if (input) input.value = "";
     doPanelBuyin(amt, panelBuyinConfirmBtn);
   };
-  const panelHistoryBtn = app.querySelector("[data-panel-history]");
-  if (panelHistoryBtn) panelHistoryBtn.onclick = () => openModal({type:"history", gameId: nav.gameId, playerId: selectedSeatPlayerId});
   const panelSummaryBtn = app.querySelector("[data-panel-summary]");
   if (panelSummaryBtn) panelSummaryBtn.onclick = () => openModal({type:"history", gameId: nav.gameId, playerId: selectedSeatPlayerId});
   const panelEndNightBtn = app.querySelector("[data-panel-end-night]");
@@ -4005,6 +4078,12 @@ function attachHandlers(){
     const myStatsBtn = app.querySelector("[data-my-stats]");
     if (myStatsBtn) myStatsBtn.onclick = () => openModal({type:"stats", clientId: myIdentity.id});
     app.querySelectorAll("[data-pick-seat-position]").forEach(el => el.onclick = () => {
+      // Preserve an unsaved name edit across the re-render below - render() rebuilds
+      // this whole screen from myIdentity.name, which would otherwise silently discard
+      // whatever's typed but not yet written back via the "שמור" button (confirmed bug:
+      // type a new name, tap a seat position, the name reverted to the old one).
+      const nameInput = document.getElementById("identity-name-input");
+      if (nameInput) myIdentity.name = nameInput.value;
       setGlobalPlayer(myIdentity.id, {seatPosition: Number(el.dataset.pickSeatPosition)});
       saveState();
       render();
