@@ -250,16 +250,23 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .seat-circle.vacant{border:2px dashed rgba(255,255,255,.35);color:var(--muted);background:rgba(255,255,255,.05);font-size:20px;}
 .seat-circle.filled{background:var(--gold);color:var(--gold-text);border:2px solid var(--gold);}
 .seat-circle.filled.cashed-out{background:#57534e;border-color:#57534e;color:#fda4af;}
-.seat-circle.selected{box-shadow:0 0 0 3px #22d3ee,0 0 0 6px rgba(34,211,238,.25);}
+/* Gold, not the previous cyan - matches the buy-in selection/confirm buttons' own color
+   (var(--gold)), so the seat currently being acted on (including on someone else's behalf -
+   see .on-behalf-badge below) and the buy-in controls read as one consistent "this is what
+   you're doing right now" color instead of two unrelated accent colors. */
+.seat-circle.selected{box-shadow:0 0 0 3px var(--gold),0 0 0 6px rgba(251,191,36,.25);}
 .buyin-fly{position:absolute;left:0;top:0;z-index:400;pointer-events:none;display:flex;align-items:center;justify-content:center;min-width:34px;height:30px;padding:0 9px;border-radius:15px;background:var(--gold);color:var(--gold-text);font-weight:800;font-size:12px;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.4);transform:translate(-50%,-50%);transition:left .65s cubic-bezier(.22,.7,.3,1),top .65s cubic-bezier(.22,.7,.3,1),opacity .3s ease .55s,transform .3s ease;}
 .buyin-fly.landed{transform:translate(-50%,-50%) scale(1.15);}
 .buyin-fly.fading{opacity:0;}
-.on-behalf-badge{background:#78350f;color:#fde68a;border-radius:9px;padding:6px 10px;font-size:12px;font-weight:700;text-align:center;margin-bottom:10px;}
+.on-behalf-badge{background:#78350f;color:#fde68a;border-radius:9px;padding:8px 10px;font-size:15px;font-weight:700;text-align:center;margin-bottom:10px;}
 /* The dark nameplate: pulled up (negative margin) so it sits partly behind the lower part
    of the avatar circle above it (painted over it too, since seat-info comes after
    seat-circle in the DOM), with padding-top pushing the actual name text back below the
-   avatar's own visible edge. */
-.seat-info{display:flex;flex-direction:column;align-items:center;gap:1px;cursor:pointer;background:rgba(8,8,8,.82);border-radius:10px;padding:13px 10px 5px;margin-top:-13px;}
+   avatar's own visible edge. .selected gets the same gold border as .seat-circle.selected -
+   previously only the circle above it showed which seat was selected, this nameplate never
+   did at all. */
+.seat-info{display:flex;flex-direction:column;align-items:center;gap:1px;cursor:pointer;background:rgba(8,8,8,.82);border-radius:10px;padding:13px 10px 5px;margin-top:-13px;border:2px solid transparent;}
+.seat-info.selected{border-color:var(--gold);}
 .seat-name{font-size:11px;font-weight:700;color:var(--text);text-align:center;white-space:nowrap;max-width:78px;overflow:hidden;text-overflow:ellipsis;}
 .seat-caption{font-size:13px;color:var(--gold);font-weight:700;text-align:center;line-height:1.35;white-space:nowrap;}
 .seat-history-toggle{background:none;border:none;color:var(--muted);cursor:pointer;padding:2px;display:inline-flex;vertical-align:middle;margin-right:2px;}
@@ -3110,7 +3117,7 @@ function renderTable(gameId){
     const wrapZ = openHistorySeatPlayerId === pid ? 'z-index:70;' : '';
     return `<div class="seat-wrap" style="left:${x}%;top:${y}%;${wrapZ}" data-seat="${i}">
       <div class="seat-circle filled ${cashedOut?'cashed-out':''}${selected?' selected':''}"${circleStyle}>${circleInner}</div>
-      <div class="seat-info" data-seat-info style="position:relative;${infoRadius}">
+      <div class="seat-info${selected?' selected':''}" data-seat-info style="position:relative;${infoRadius}">
         <div class="seat-name">${historyToggleHtml}${esc(name)}</div>
         <div class="seat-caption">${caption}</div>
         ${historyPopupHtml}
