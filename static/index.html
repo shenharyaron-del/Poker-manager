@@ -3970,7 +3970,7 @@ function renderModal(m){
         total += Math.abs((rawBalances[id]||{}).profit || 0);
         if (pl) names.push(pl.name);
       });
-      arrangedNoteHtml = `<p style="color:var(--muted);font-size:12px;margin:-14px 0 16px;text-align:center;">כולל ₪${Math.round(total)} שהועברו ע"י ${names.map(esc).join(', ')} שעזב/ו את השולחן</p>`;
+      arrangedNoteHtml = `<p style="color:var(--text);font-size:12px;margin:-14px 0 16px;text-align:center;">כולל ₪${Math.round(total)} שהועברו ע"י ${names.map(esc).join(', ')} שעזב/ו את השולחן</p>`;
     }
     // Separate from arrangedNoteHtml above - this is a direct player-to-player payment (see
     // "שלם לשחקן"/payPlayer), not a cash handoff folded into the group settlement math.
@@ -3984,7 +3984,7 @@ function renderModal(m){
         const pl = g.players.find(pp2 => pp2.id === pp.fromPlayerId);
         return pl ? pl.name : "?";
       });
-      directPaymentsNoteHtml = `<p style="color:var(--muted);font-size:12px;margin:-14px 0 16px;text-align:center;">קיבלת ₪${Math.round(total)} מ-${names.map(esc).join(', ')}</p>`;
+      directPaymentsNoteHtml = `<p style="color:var(--text);font-size:12px;margin:-14px 0 16px;text-align:center;">קיבלת ₪${Math.round(total)} מ-${names.map(esc).join(', ')}</p>`;
     }
     let modeBody;
     if (mode === "byColor") {
@@ -4020,7 +4020,7 @@ function renderModal(m){
           <button class="btn ${profitSign==='profit'?'btn-primary':'btn-ghost'} flex1" data-profit-sign="profit">רווח +</button>
           <button class="btn ${profitSign==='loss'?'btn-primary':'btn-ghost'} flex1" data-profit-sign="loss">הפסד -</button>
         </div>
-        <div class="field"><label>סכום ה${profitSign==='loss'?'הפסד':'רווח'} בש"ח</label><input type="number" inputmode="numeric" id="seat-chips-profit" placeholder="0" min="0" style="width:100%;" onfocus="this.select()"></div>
+        <div class="field"><label>סכום ה${profitSign==='loss'?'הפסד':'רווח'} בש"ח</label><input type="number" inputmode="numeric" id="seat-chips-profit" placeholder="0" min="0" style="width:100%;color:${profitSign==='loss'?'#fda4af':'#6ee7b7'};" onfocus="this.select()"></div>
       `;
     } else {
       modeBody = `<div class="field"><label>סכום ז'יטונים בש"ח</label><input type="number" inputmode="numeric" id="seat-chips-direct" value="${chips}" onfocus="this.select()"></div>`;
