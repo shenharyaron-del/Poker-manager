@@ -3144,7 +3144,7 @@ function renderModal(m){
         : "כדי להשתמש באפליקציה, התחברו עם האימייל שלכם."}</p>
       <input type="email" id="login-email-input" placeholder="האימייל שלך" dir="ltr" style="width:100%;text-align:center;margin-bottom:8px;" value="${esc(m.loginEmail||'')}" autofocus>
       ${m.loginError ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.loginError)}</p>` : ""}
-      <button class="btn btn-primary btn-block" data-send-login-code>${icon('share')} ${authSettings.requireVerifyExistingEmail ? "שלח קוד כניסה" : "כנס ל-Poker Manager"}</button>
+      <button class="btn btn-primary btn-block" data-send-login-code>${authSettings.requireVerifyExistingEmail ? `${icon('share')} שלח קוד כניסה` : "כנס ל-Poker Manager"}</button>
     `;
   } else if (m.type === "initialBuyin") {
     // Forced the moment a player's own seat has zero buy-in (see renderActionPanel) -
