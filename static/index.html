@@ -4520,27 +4520,41 @@ function attachHandlers(){
     // Purely cosmetic - fires one flying badge per selected player, independent of the
     // real save below (which recomputes everything fresh, see the comment inside it).
     selectedIds.forEach(pid => flyAmountBadge(fixPotBtn, findSeatCircleEl(g, pid), perPlayer));
-    await mutateAndSave(() => {
-      // Recompute against the freshest known state rather than reusing perPlayer from the
-      // outer closure - if a concurrent save changed the totals since we opened this
-      // panel, the correction must be based on the real current imbalance, not a stale one.
-      const g2 = getGame(nav.gameId);
-      const seats2 = g2.seats || new Array(9).fill(null);
-      const seatedIds2 = seats2.filter(Boolean);
-      const selectedIds2 = selectedIds.filter(pid => seatedIds2.includes(pid));
-      if (!selectedIds2.length) return;
-      const buyinTotals2 = {};
-      g2.buyins.forEach(b => { buyinTotals2[b.playerId] = (buyinTotals2[b.playerId]||0) + b.amount; });
-      const totalBuyinAll2 = seatedIds2.reduce((s,pid)=>s+(buyinTotals2[pid]||0),0);
-      const totalChipsAll2 = seatedIds2.reduce((s,pid)=>s+((g2.liveChips||{})[pid]||0),0);
-      const diff2 = totalChipsAll2 - totalBuyinAll2;
-      const perPlayer2 = Math.round((-diff2 / selectedIds2.length) * 100) / 100;
-      if (!g2.liveChips) g2.liveChips = {};
-      selectedIds2.forEach(pid => {
-        g2.liveChips[pid] = Math.round(((g2.liveChips[pid]||0) + perPlayer2) * 100) / 100;
-        if (g2.cashouts[pid]) g2.cashouts[pid].amount = Math.round(((g2.cashouts[pid].amount||0) + perPlayer2) * 100) / 100;
+    // Recompute against the freshest known state rather than reusing perPlayer from the
+    // outer closure - if a concurrent save changed the totals since we opened this panel,
+    // the correction must be based on the real current imbalance, not a stale one.
+    const g2 = getGame(nav.gameId);
+    const seats2 = g2.seats || new Array(9).fill(null);
+    const seatedIds2 = seats2.filter(Boolean);
+    const selectedIds2 = selectedIds.filter(pid => seatedIds2.includes(pid));
+    if (!selectedIds2.length) { fixPotBtn.disabled = false; return; }
+    const buyinTotals2 = {};
+    g2.buyins.forEach(b => { buyinTotals2[b.playerId] = (buyinTotals2[b.playerId]||0) + b.amount; });
+    const totalBuyinAll2 = seatedIds2.reduce((s,pid)=>s+(buyinTotals2[pid]||0),0);
+    const totalChipsAll2 = seatedIds2.reduce((s,pid)=>s+((g2.liveChips||{})[pid]||0),0);
+    const diff2 = totalChipsAll2 - totalBuyinAll2;
+    const perPlayer2 = Math.round((-diff2 / selectedIds2.length) * 100) / 100;
+    if (USE_RELATIONAL_API) {
+      try {
+        for (const pid of selectedIds2) {
+          const newChips = Math.round(((g2.liveChips[pid]||0) + perPlayer2) * 100) / 100;
+          if (g2.cashouts[pid]) {
+            const newAmount = Math.round(((g2.cashouts[pid].amount||0) + perPlayer2) * 100) / 100;
+            await v2SetCashout(nav.gameId, pid, newAmount, g2.cashouts[pid].arrangedWith, newChips);
+          } else {
+            await v2UpdateLiveChips(nav.gameId, pid, newChips);
+          }
+        }
+      } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); fixPotBtn.disabled = false; return; }
+    } else {
+      await mutateAndSave(() => {
+        if (!g2.liveChips) g2.liveChips = {};
+        selectedIds2.forEach(pid => {
+          g2.liveChips[pid] = Math.round(((g2.liveChips[pid]||0) + perPlayer2) * 100) / 100;
+          if (g2.cashouts[pid]) g2.cashouts[pid].amount = Math.round(((g2.cashouts[pid].amount||0) + perPlayer2) * 100) / 100;
+        });
       });
-    });
+    }
     balanceFixSelected = {};
     render();
   };
