@@ -6708,6 +6708,18 @@ window.addEventListener("popstate", async () => {
       modal = {type:"inviteGone"};
     }
   }
+  // No invite link at all (plain app open, e.g. from the home-screen icon) - if this
+  // player is seated in a still-open game somewhere, land there directly instead of the
+  // communities list, same as if they'd followed that game's own invite link.
+  if (!inviteGameId && !inviteCommunityId) {
+    const myActiveGames = state.games
+      .filter(g => !g.closed && myIdentity.myPlayers && (g.seats || []).includes(myIdentity.myPlayers[g.communityId]))
+      .sort((a, b) => new Date(b.updatedAt || b.date || 0) - new Date(a.updatedAt || a.date || 0));
+    if (myActiveGames.length) {
+      const g = myActiveGames[0];
+      nav = { screen: "table", gameId: g.id, communityId: g.communityId };
+    }
+  }
   // Login is mandatory - takes priority over any invite-flow modal set above, since
   // nothing else in the app should be usable (or even visible) before it. Gated on
   // hasVerifiedSession (this session's actual checkLoginSession result), never on a bare
