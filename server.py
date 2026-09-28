@@ -375,10 +375,12 @@ def _num(x):
 
 
 def _row_to_community(row):
-    (cid, name, created_by, created_by_name, chip_ratio, active_paybox_link_id, updated_at, last_participants) = row
+    (cid, name, created_by, created_by_name, chip_ratio, active_paybox_link_id,
+     settlement_default, updated_at, last_participants) = row
     return {
         "id": cid, "name": name, "createdBy": created_by, "createdByName": created_by_name,
         "chipRatio": _num(chip_ratio), "activePayboxLinkId": active_paybox_link_id,
+        "settlementDefault": settlement_default,
         "updatedAt": updated_at.isoformat() if updated_at else None,
         "lastParticipants": last_participants,
     }
@@ -389,7 +391,8 @@ def v2_list_communities():
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, name, created_by, created_by_name, chip_ratio, active_paybox_link_id, updated_at, last_participants "
+                "SELECT id, name, created_by, created_by_name, chip_ratio, active_paybox_link_id, "
+                "settlement_default, updated_at, last_participants "
                 "FROM communities ORDER BY name"
             )
             communities = [_row_to_community(r) for r in cur.fetchall()]
@@ -582,6 +585,8 @@ def v2_update_community(community_id):
         fields.append("chip_ratio = %s"); params.append(body["chipRatio"])
     if "activePayboxLinkId" in body:
         fields.append("active_paybox_link_id = %s"); params.append(body["activePayboxLinkId"])
+    if "settlementDefault" in body:
+        fields.append("settlement_default = %s"); params.append(body["settlementDefault"])
     if "lastParticipants" in body:
         fields.append("last_participants = %s"); params.append(Json(body["lastParticipants"]))
     if not fields:

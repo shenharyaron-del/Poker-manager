@@ -763,11 +763,6 @@ async function v2DeletePayboxLink(communityId, linkId){
   if (c.activePayboxLinkId === linkId) c.activePayboxLinkId = (c.payboxLinks[0]||{}).id || null;
 }
 
-async function v2SelectPayboxLink(communityId, linkId){
-  const result = await v2UpdateCommunity(communityId, {activePayboxLinkId: linkId});
-  return result !== null;
-}
-
 async function v2CreateCommunity(id, name, createdBy, createdByName, creatorPlayerId, creatorPlayerName){
   await v2Fetch("POST", "/communities", {id, name, createdBy, createdByName, creatorPlayerId, creatorPlayerName});
   state.communities.push({id, name, roster: [{id: creatorPlayerId, name: creatorPlayerName, clientId: createdBy}], createdBy, createdByName});
@@ -2614,12 +2609,32 @@ function renderActionPanel(g, c, seatedIds){
     const alreadyPaidDirect = (g.playerPayments||[]).filter(dp=>dp.fromPlayerId===pid).reduce((s,dp)=>s+dp.amount,0);
     const fb = finalBalances[pid];
     const owes = fb ? -(fb.profit + alreadyPaidPaybox + alreadyPaidDirect) : 0;
+    // Same collapsed/expand-extra split as the active-player panel above: a single
+    // payment button (never both) always visible, "מוצג רק אם צריך לשלם" - which one is
+    // driven by the community's configured default (payboxSettings screen), falling back
+    // to a direct transfer when paybox isn't actually usable here (no link configured, or
+    // this is on someone else's behalf, where opening your own PayBox to pay doesn't make
+    // sense). Nothing owed (finished in profit/break-even) means an empty collapsed row -
+    // starts closed either way, same as the active panel always has.
+    const needsPayment = owes > 0.005;
+    const useProxyPaybox = needsPayment && !onBehalf && activePaybox && c.settlementDefault === "paybox";
+    const paymentButtonHtml = !needsPayment ? "" : useProxyPaybox
+      ? `<button class="btn btn-block" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-paybox-pay data-paybox-amount="${Math.round(owes*100)/100}"><img src="/static/paybox-icon.png" style="height:18px;width:auto;display:block;"> פתח קבוצת פייבוקס משותפת לתשלום (₪${Math.round(owes*100)/100})</button>`
+      : `<button class="btn btn-primary btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-pay-player data-pay-player-amount="${Math.round(owes*100)/100}">${icon('coins')} העבר ₪${Math.round(owes*100)/100} ל...</button>`;
     panelBody = `
       ${isSelf && !allCashedOut ? `<div style="background:rgba(255,255,255,.05);border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12px;text-align:center;color:var(--muted);">שמרו את הציפים שלכם עד לספירה הסופית של כל השחקנים, לוידוא שהקופה מאוזנת</div>` : ""}
-      <button class="btn btn-ghost btn-block" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-summary>${icon('bar')} סיכום ערב</button>
-      ${owes > 0.005 && !onBehalf && activePaybox ? `<button class="btn btn-block" style="background:#0891b2;color:#fff;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-paybox-pay data-paybox-amount="${Math.round(owes*100)/100}"><img src="/static/paybox-icon.png" style="height:18px;width:auto;display:block;"> פתח קבוצת פייבוקס משותפת לתשלום (₪${Math.round(owes*100)/100})</button>` : ""}
-      ${owes > 0.005 ? `<button class="btn btn-ghost btn-block" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-pay-player data-pay-player-amount="${Math.round(owes*100)/100}">${icon('coins')} העבר ₪${Math.round(owes*100)/100} ל...</button>` : ""}
-      ${admin ? `<button class="btn btn-ghost btn-block" data-return-to-game="${pid}" style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('undo')} החזר למשחק</button>` : ""}
+      <div data-panel-collapsed>
+        <div data-toggle-action-panel class="panel-drag-handle">
+          <div class="panel-drag-glow"></div>
+          <svg width="22" height="10" viewBox="0 0 22 10" style="transform:rotate(${actionPanelExpanded?180:0}deg);transition:transform .2s ease;"><path d="M1 9L11 1L21 9" fill="none" stroke="#a7f3d0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        ${paymentButtonHtml}
+      </div>
+      <div class="panel-expand-extra" data-panel-expand-extra style="max-height:${actionPanelExpanded?'200px':'0px'};">
+        <div style="height:1px;background:rgba(255,255,255,.14);margin:${needsPayment?'10px':'2px'} 0 10px;"></div>
+        ${admin ? `<button class="btn btn-ghost btn-block" data-return-to-game="${pid}" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('undo')} החזר למשחק</button>` : ""}
+        <button class="btn btn-ghost btn-block" data-panel-summary style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('bar')} סיכום ערב</button>
+      </div>
     `;
   } else {
     const canRemove = admin || (isSelf && buyinTotal === 0);
@@ -3539,25 +3554,37 @@ function renderModal(m){
         <span style="font-family:system-ui,sans-serif;font-weight:400;font-size:10px;line-height:1.1;opacity:.65;">Setup</span>
       </div>
     </div>`;
-    const links = c.payboxLinks || [];
+    // Only one PayBox group per community now (was a multi-entry list with a "which one
+    // is active" radio - simplified since a second group never had a real use case here).
+    const link = (c.payboxLinks || [])[0] || null;
+    const settlementDefault = c.settlementDefault || "direct";
     body = `
-      <div class="scroll-list" style="margin-bottom:14px;">
-        ${links.length ? links.map(pl => `
-          <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:10px;margin-bottom:10px;display:flex;gap:8px;align-items:flex-start;">
-            <input type="radio" name="active-paybox" data-select-paybox="${pl.id}" ${c.activePayboxLinkId===pl.id?"checked":""} style="margin-top:12px;flex-shrink:0;width:18px;height:18px;">
-            <div style="flex:1;min-width:0;">
-              <input type="text" value="${esc(pl.name)}" data-paybox-name-input="${pl.id}" placeholder="שם" style="margin-bottom:6px;font-weight:700;">
-              <input type="text" value="${esc(pl.link)}" data-paybox-link-input="${pl.id}" placeholder="קישור" dir="ltr">
-            </div>
-            <button class="icon-btn danger" data-delete-paybox-entry="${pl.id}" style="flex-shrink:0;margin-top:6px;">${icon('trash')}</button>
+      <div class="section-title" style="padding:0;margin:0 0 8px;">קבוצת פייבוקס</div>
+      ${link ? `
+        <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:10px;margin-bottom:18px;">
+          <input type="text" value="${esc(link.name)}" data-paybox-name-input="${link.id}" placeholder="שם" style="margin-bottom:6px;font-weight:700;">
+          <input type="text" value="${esc(link.link)}" data-paybox-link-input="${link.id}" placeholder="קישור" dir="ltr" style="margin-bottom:10px;">
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-primary" style="flex:1;" data-save-paybox-entries>שמור שינויים</button>
+            <button class="icon-btn danger" data-delete-paybox-entry="${link.id}">${icon('trash')}</button>
           </div>
-        `).join("") : `<div class="empty" style="padding:10px 0;">עדיין לא הוגדרו קבוצות פייבוקס</div>`}
+        </div>
+      ` : `
+        <div class="field"><label>שם</label><input type="text" id="new-paybox-name" placeholder="פייבוקס ראשי"></div>
+        <div class="field"><label>קישור</label><input type="text" id="new-paybox-link" placeholder="https://links.payboxapp.com/..." dir="ltr"></div>
+        <button class="btn btn-primary btn-block" style="margin-bottom:18px;" data-add-paybox-entry>${icon('plus')} הוסף</button>
+      `}
+      <div class="section-title" style="padding:0;margin:0 0 6px;">ברירת מחדל לסיום שולחן</div>
+      <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">כשמישהו מסיים ערב, איזו אפשרות תוצע לו כברירת מחדל לתשלום.</p>
+      <div class="checkbox-row" style="cursor:${link?'pointer':'not-allowed'};opacity:${link?'1':'.5'};" ${link?`data-select-settlement-default="paybox"`:''}>
+        <input type="radio" name="settlement-default" ${settlementDefault==='paybox'?'checked':''} ${link?'':'disabled'}>
+        <span class="flex1">תשלום לפייבוקס הקבוצתי</span>
       </div>
-      ${links.length ? `<button class="btn btn-ghost btn-block" style="margin-bottom:16px;" data-save-paybox-entries>שמור שינויים</button>` : ""}
-      <div class="section-title" style="padding:0;margin:0 0 8px;">הוספת קבוצת פייבוקס</div>
-      <div class="field"><label>שם</label><input type="text" id="new-paybox-name" placeholder="פייבוקס ראשי"></div>
-      <div class="field"><label>קישור</label><input type="text" id="new-paybox-link" placeholder="https://links.payboxapp.com/..." dir="ltr"></div>
-      <button class="btn btn-primary btn-block" data-add-paybox-entry>${icon('plus')} הוסף</button>
+      ${!link ? `<p style="color:var(--muted);font-size:11px;margin:-2px 0 10px;">דורש הגדרת קבוצת פייבוקס למעלה</p>` : ""}
+      <div class="checkbox-row" style="cursor:pointer;" data-select-settlement-default="direct">
+        <input type="radio" name="settlement-default" ${settlementDefault==='direct'?'checked':''}>
+        <span class="flex1">העברה ישירות בין שחקנים</span>
+      </div>
     `;
   } else if (m.type === "pickSeat") {
     const g = getGame(m.gameId);
@@ -5552,13 +5579,15 @@ function attachHandlers(){
   }
 
   if (modal && modal.type === "payboxSettings") {
-    app.querySelectorAll("[data-select-paybox]").forEach(el => el.onclick = async () => {
+    app.querySelectorAll("[data-select-settlement-default]").forEach(el => el.onclick = async () => {
+      const value = el.dataset.selectSettlementDefault;
       const c = getCommunity(modal.communityId);
+      if (!value || c.settlementDefault === value) return;
       if (USE_RELATIONAL_API) {
-        try { await v2SelectPayboxLink(modal.communityId, el.dataset.selectPaybox); }
+        try { if ((await v2UpdateCommunity(modal.communityId, {settlementDefault: value})) === null) { showAlert("שמירה נכשלה - נסו שוב."); return; } }
         catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
       } else {
-        c.activePayboxLinkId = el.dataset.selectPaybox;
+        c.settlementDefault = value;
         saveState();
       }
       render();

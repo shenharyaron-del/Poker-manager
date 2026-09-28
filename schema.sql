@@ -13,6 +13,11 @@ CREATE TABLE communities (
   created_by_name TEXT,
   chip_ratio NUMERIC,
   active_paybox_link_id TEXT,
+  -- Which settlement method a cashed-out player's panel defaults to on the table screen -
+  -- 'direct' (player-to-player transfer) or 'paybox' (the community's shared PayBox link,
+  -- only actually offered when active_paybox_link_id is set - see renderActionPanel).
+  -- Added post-Phase-7, not part of the original schema.
+  settlement_default TEXT NOT NULL DEFAULT 'direct',
   -- Who played the last time a night was ended here (endNight/endBulk set this) - used
   -- to quick-preselect the same group when starting a new night. Discovered during
   -- Phase 7 client conversion; not part of the original Phase 3 schema.
