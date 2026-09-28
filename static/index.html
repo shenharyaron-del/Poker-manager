@@ -86,8 +86,23 @@ h1.sm{font-size:20px;}
    exactly the visible viewport tall: the header and action panel keep their natural
    size, and the table circle - now sized from the ACTUAL remaining height, not a guess -
    flexes to fill whatever's left, shrinking on a short screen rather than overflowing it. */
-body.table-screen{height:100vh;height:100dvh;overflow:hidden;}
-body.table-screen #app{height:100vh;height:100dvh;display:flex;flex-direction:column;padding-bottom:0;}
+/* --real-vh (set from JS via the Visual Viewport API - see updateRealVh) overrides 100dvh
+   whenever it's available: some mobile browsers (Samsung Internet reported live, with a
+   screenshot showing the bottom action buttons cut off and unreachable) don't subtract
+   their OWN on-screen toolbar from what they report as the dynamic viewport, so 100dvh
+   ends up taller than what's actually visible - and since this container clips its
+   overflow, whatever's cut off (the bottom of the flex column, i.e. the action buttons)
+   isn't just scrolled out of view, it's genuinely unreachable. Falls back to 100dvh/100vh
+   on a browser with no Visual Viewport API (or before the JS has run once). */
+/* min-height:0 cancels out the general body/#app min-height:100vh rules (see their own
+   definitions) - those act as a FLOOR, so a smaller --real-vh (a real toolbar eating into
+   the visible area) was being overridden right back up to the full, too-tall 100vh/100dvh
+   regardless - the exact same clipping bug this whole var() override exists to fix,
+   just via min-height instead of height. Caught by testing this against a simulated
+   shrunk --real-vh, not visible on a normal desktop browser where real-vh always equals
+   100vh/100dvh anyway. */
+body.table-screen{height:100vh;height:100dvh;height:var(--real-vh, 100dvh);min-height:0;overflow:hidden;}
+body.table-screen #app{height:100vh;height:100dvh;height:var(--real-vh, 100dvh);min-height:0;display:flex;flex-direction:column;padding-bottom:0;}
 body.table-screen .top{flex-shrink:0;}
 /* min-height keeps the table circle from ever fully disappearing - if the action panel
    below (e.g. a settlement view listing several players' transfers) genuinely needs more
@@ -2582,6 +2597,29 @@ function layoutTableSize(){
   inner.style.transform = "translateX(-50%)";
 }
 window.addEventListener("resize", () => requestAnimationFrame(layoutTableSize));
+
+// Sets --real-vh (see body.table-screen's own CSS comment on why) to the ACTUAL visible
+// height, measured via the Visual Viewport API where available - a browser whose own
+// on-screen toolbar isn't correctly subtracted from 100dvh (observed live on Samsung
+// Internet - the table screen's bottom action buttons were clipped and unreachable) still
+// reports the true visible height through window.visualViewport, since that API exists
+// specifically to track the viewport the user can actually see past the browser's own UI.
+// Falls back to innerHeight (then to the CSS dvh/vh chain, via the var()'s own fallback)
+// on a browser with no Visual Viewport API at all.
+function updateRealVh(){
+  const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  document.documentElement.style.setProperty("--real-vh", h + "px");
+}
+updateRealVh();
+if (window.visualViewport) {
+  // "resize" catches the toolbar showing/hiding; "scroll" catches it changing height
+  // without a resize event firing on some browsers (observed inconsistently enough across
+  // mobile browsers to be worth listening for both rather than picking just one).
+  window.visualViewport.addEventListener("resize", () => requestAnimationFrame(updateRealVh));
+  window.visualViewport.addEventListener("scroll", () => requestAnimationFrame(updateRealVh));
+} else {
+  window.addEventListener("resize", () => requestAnimationFrame(updateRealVh));
+}
 
 function renderHome(){
   // Only show communities this device actually belongs to - created it, or is linked to
