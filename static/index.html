@@ -2049,11 +2049,12 @@ function openFilePicker(communityId, playerId, useCamera){
 }
 
 // ---------- Built-in avatar gallery (no camera/AI needed) ----------
-const AVATAR_CATEGORIES = [
-  {folder:"legends", label:"מפורסמים", items:["איינשטיין","גולדה מאיר","בן גוריון","משה דיין","הרצל","דניאל נגרהאנו","פיל אייבי","דויל ברנסון","פיל הלמות'","סטו אונגר"]},
-  {folder:"celebs", label:"ידוענים וספורטאים", items:["מסי","קריסטיאנו","אבדיה","לברון","אמבפה","סינדי","בר רפאלי","בלה","נעמי","ג'יג'י"]},
-  {folder:"cartoons", label:"מצוירים", items:["פיראט","חייזר","חנון","צפרדע נסיך","ג'לי סגול","רובוט","חזיר שף","מפלצת בפאניקה","קוסם","קוף"]}
-];
+// The three built-in categories (legends/celebs/cartoons) and their static/avatars/...
+// image files were removed - the images were invalid/broken. Left as an empty array
+// rather than deleted outright, since getAvatarGroups()/prefetchAvatars() below (and the
+// avatarManage screen) iterate over it generically and work fine with none - only
+// admin-added custom avatars (state.customAvatars) show up in the picker now.
+const AVATAR_CATEGORIES = [];
 // Admin-created avatars (state.customAvatars: {id, name, category, image}) merge into these
 // built-in groups by matching category label, or form new groups of their own.
 function getAvatarGroups(){
