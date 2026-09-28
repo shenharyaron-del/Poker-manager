@@ -1546,6 +1546,31 @@ def check_email():
     return jsonify({"hasDevice": has_device})
 
 
+@app.route("/api/auth/pre-register", methods=["POST"])
+def pre_register_account():
+    # Lets someone seating a new permanent player (see pickSeat's own comment) claim an
+    # account for them by email in advance, rather than waiting for that person to log in
+    # themselves first - the account this creates already has playerId set, so
+    # _claim_player_id leaves it alone the first time they actually do log in with this
+    # email, landing them on the exact roster entry created alongside this call instead of
+    # a fresh, disconnected one. Refuses outright if the email is already registered at
+    # all (not just device-linked, unlike check-email above) - this is meant for a genuinely
+    # new person, not a way to silently overwrite an existing account's own name/identity.
+    body = request.get_json(silent=True) or {}
+    email = str(body.get("email", "")).strip().lower()
+    name = str(body.get("name", "")).strip()
+    player_id = str(body.get("playerId", "")).strip()
+    if not EMAIL_RE.match(email) or not name or not player_id:
+        return jsonify({"error": "email, name and playerId required"}), 400
+    if _get_account(email) is not None:
+        return jsonify({"error": "already registered"}), 409
+    account = _default_account(email)
+    account["name"] = name
+    account["playerId"] = player_id
+    _save_account(email, account)
+    return jsonify({"ok": True})
+
+
 @app.route("/api/auth/verify-code", methods=["POST"])
 def verify_login_code():
     body = request.get_json(silent=True) or {}

@@ -845,6 +845,30 @@ async function v2LinkRosterPlayer(communityId, playerId, clientId){
   if (p) p.clientId = clientId;
 }
 
+// Adds a NEW permanent roster player already linked to an account for the given email,
+// instead of the one-off "guest" path (see pickSeat) that never touches the roster at all.
+// Refuses (throws with .status 409) if that email is already registered - this is for
+// bringing in a genuinely new person, not for silently repointing an existing account.
+// Three calls, not one - the server side deliberately stays three small, already-existing
+// pieces (account pre-registration, roster insert, roster/account link) rather than one
+// new endpoint that duplicates what v2AddRosterPlayer/v2LinkRosterPlayer already do.
+async function v2PreRegisterPlayer(communityId, name, email){
+  const playerId = uid();
+  const res = await fetch("/api/auth/pre-register", {
+    method: "POST", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({email, name, playerId}),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(body.error || "pre-register failed");
+    err.status = res.status;
+    throw err;
+  }
+  await v2AddRosterPlayer(communityId, playerId, name);
+  await v2LinkRosterPlayer(communityId, playerId, playerId);
+  return playerId;
+}
+
 async function v2RenamePlayerEverywhere(clientId, name){
   await v2Fetch("PATCH", `/players/${clientId}/name`, {name});
   state.communities.forEach(c => c.roster.forEach(p => { if (p.clientId === clientId) p.name = name; }));
@@ -3613,10 +3637,6 @@ function renderModal(m){
     }).join("");
     body = `
       <div class="scroll-list" style="margin-bottom:16px;">${rows || '<div class="empty" style="padding:10px 0;">אין עדיין שחקנים ברשימה</div>'}</div>
-      <div class="row">
-        <input type="text" id="new-roster-name" placeholder="שם שחקן חדש" style="flex:1;">
-        <button class="btn btn-primary" data-add-roster style="padding:11px 16px;">${icon('plus')}</button>
-      </div>
     `;
   } else if (m.type === "confirmRestoreFromFile") {
     title = "שחזור מקובץ גיבוי";
@@ -3909,10 +3929,16 @@ function renderModal(m){
       ` : `<div class="empty" style="padding:12px 0;">כל השחקנים בקבוצה כבר יושבים בשולחן.</div>`}
       <div class="section-title" style="padding:0;margin:10px 0 8px;">או הוסיפו שחקן אורח</div>
       <p style="color:var(--muted);font-size:11px;margin:0 0 8px;">שחקן חד-פעמי למשחק הזה בלבד - לא יתווסף לרשימת השחקנים הקבועה של הקבוצה.</p>
-      <div style="display:flex;gap:8px;">
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
         <input type="text" id="pick-seat-guest-name" placeholder="שם האורח" style="flex:1;">
         <button class="btn btn-primary" data-add-guest-seat>${icon('plus')}</button>
       </div>
+      <div class="section-title" style="padding:0;margin:0 0 8px;">או הוסיפו שחקן קבוע לקבוצה</div>
+      <p style="color:var(--muted);font-size:11px;margin:0 0 8px;">יתווסף לרשימת השחקנים הקבועה, ויוכל להתחבר בעתיד עם האימייל הזה.</p>
+      <div class="field"><input type="text" id="pick-seat-permanent-name" placeholder="שם השחקן"></div>
+      <div class="field"><input type="email" id="pick-seat-permanent-email" placeholder="אימייל" dir="ltr"></div>
+      ${m.permanentError ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.permanentError)}</p>` : ""}
+      <button class="btn btn-primary btn-block" data-add-permanent-seat>${icon('plus')} הוסף שחקן קבוע</button>
     `;
   } else if (m.type === "seatBuyins") {
     const g = getGame(m.gameId);
@@ -5141,24 +5167,6 @@ function attachHandlers(){
       }
       updateModal({});
     });
-    const addRosterBtn = app.querySelector("[data-add-roster]");
-    if (addRosterBtn) addRosterBtn.onclick = async () => {
-      const input = document.getElementById("new-roster-name");
-      const name = input.value.trim();
-      if (!name) return;
-      const communityId = modal.communityId;
-      addRosterBtn.disabled = true;
-      if (USE_RELATIONAL_API) {
-        try { await v2AddRosterPlayer(communityId, uid(), name); }
-        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); addRosterBtn.disabled = false; return; }
-      } else {
-        await mutateAndSave(() => {
-          const c = getCommunity(communityId);
-          c.roster.push({id:uid(), name});
-        });
-      }
-      updateModal({});
-    };
   }
 
   if (modal && modal.type === "confirmRestoreFromFile") {
@@ -6162,6 +6170,26 @@ function attachHandlers(){
         g.liveChips[guest.id] = 0;
       });
       closeModal();
+    };
+    const addPermanentBtn = app.querySelector("[data-add-permanent-seat]");
+    if (addPermanentBtn) addPermanentBtn.onclick = async () => {
+      const name = document.getElementById("pick-seat-permanent-name").value.trim();
+      const email = document.getElementById("pick-seat-permanent-email").value.trim().toLowerCase();
+      if (!name) { showAlert("צריך להזין שם."); return; }
+      if (!email || !email.includes("@")) { showAlert("כתובת אימייל לא תקינה."); return; }
+      addPermanentBtn.disabled = true;
+      showButtonLoading(addPermanentBtn);
+      if (!USE_RELATIONAL_API) { showAlert("לא זמין במצב הזה."); addPermanentBtn.disabled = false; return; }
+      try {
+        const playerId = await v2PreRegisterPlayer(getGame(modal.gameId).communityId, name, email);
+        const ok = await v2ClaimSeat(modal.gameId, modal.seatIndex, playerId, name);
+        if (!ok) showAlert("המושב הזה כבר תפוס - בחרו מושב אחר.");
+        else selectedSeatPlayerId = playerId;
+        closeModal();
+      } catch(e) {
+        if (e.status === 409) { updateModal({permanentError: "האימייל הזה כבר רשום במערכת."}); addPermanentBtn.disabled = false; }
+        else { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); addPermanentBtn.disabled = false; }
+      }
     };
   }
 
