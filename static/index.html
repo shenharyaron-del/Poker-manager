@@ -202,15 +202,16 @@ input:focus,.select-input:focus{border-color:var(--gold);}
   position:absolute;inset:4% 11%;border-radius:999px;
   /* A real photographed table (wood rail + felt already baked into one image) replaced
      the earlier all-CSS gradient version - a flat radial-gradient can only fake material,
-     never actually look like one. No border/inset-shadow layered on top of it (an earlier
-     box-shadow added to the button-panel divider already showed what happens when a CSS
-     shadow overlaps something meant to read as a real surface - see that commit): the
-     image already carries its own rail and felt lighting, so all that's left to add is
-     lifting the whole table off the page and a crisp edge. */
+     never actually look like one. The source photo is cropped tight to the oval itself
+     (static/table-felt.jpg), so 100% 100% stretches it to exactly fill this box with no
+     residual black margin from the original photo showing through as a second, misaligned
+     "frame" inside this box's own border-radius clip - background-size:cover was leaving
+     exactly that artifact whenever this box's aspect ratio didn't match the source photo's.
+     No box-shadow/glow layered on top either - the photo already reads as a real object,
+     and a shadow here (as .bottom-bar's own already showed once - see that commit) only
+     risks muddying it, not adding to it. */
   background-image:url('/static/table-felt.jpg');
-  background-size:cover;
-  background-position:center;
-  box-shadow:0 22px 42px rgba(0,0,0,.7),0 0 0 3px rgba(0,0,0,.9);
+  background-size:100% 100%;
 }
 /* Wraps the felt + seats + everything positioned via SEAT_POS, sized to a fixed aspect
    ratio relative to its own WIDTH only (never its parent's current height) - see the
