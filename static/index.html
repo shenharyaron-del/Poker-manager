@@ -1712,6 +1712,26 @@ function getMySeatPosition(){
   const v = getGlobalPlayer(myIdentity.id).seatPosition;
   return (typeof v === "number" && v >= 0 && v <= 8) ? v : 5;
 }
+// Real photographed table images (see .poker-table-felt's own comment on why - a flat
+// CSS gradient can't read as material) - a per-viewer preference, same storage pattern as
+// seatPosition right above, so it follows the account across devices rather than being
+// baked into the CSS as one fixed choice for everyone.
+const TABLE_STYLES = [
+  {file:"table-felt.jpg", label:"ירוק"},
+  {file:"table-felt-2.jpg", label:"כחול"},
+  {file:"table-felt-3.jpg", label:"ירוק בהיר"},
+  {file:"table-felt-4.jpg", label:"ירוק תכלת"},
+];
+function getMyTableStyle(){
+  const v = getGlobalPlayer(myIdentity.id).tableStyle;
+  return (typeof v === "number" && TABLE_STYLES[v]) ? v : 0;
+}
+// Every .poker-table-felt div needs this inline (the CSS class alone only has a fallback
+// background-image) since the class rule is shared by every table on the page - there's no
+// way for a single CSS rule to vary per viewer.
+function tableFeltStyleAttr(){
+  return `background-image:url('/static/${TABLE_STYLES[getMyTableStyle()].file}')`;
+}
 function getPlayerPhone(p){ return p.clientId ? (getGlobalPlayer(p.clientId).phone || "") : (p.phone || ""); }
 function setPlayerPhone(p, phone){ if (p.clientId) setGlobalPlayer(p.clientId, {phone}); else p.phone = phone; }
 // Avatars are global-only - a roster entry someone just typed in by hand (no linked
@@ -3052,7 +3072,7 @@ function renderTable(gameId){
     </div>
     <div class="poker-table-wrap">
       <div class="poker-table-inner ${cropClass}">
-        <div class="poker-table-felt"></div>
+        <div class="poker-table-felt" style="${tableFeltStyleAttr()}"></div>
         <img src="/static/logo-watermark.png" style="position:absolute;left:50%;top:39%;transform:translate(-50%,-50%);width:46%;opacity:.6;pointer-events:none;">
         ${seatsHtml}
         <div id="settlement-overlay" style="position:absolute;inset:0;pointer-events:none;"></div>
@@ -3140,19 +3160,38 @@ function renderModal(m){
     // that needs to wait for the name/avatar "שמור" button below to take effect.
     const mySeatPos = getMySeatPosition();
     // Reuses the real table screen's own felt/watermark markup (.poker-table-wrap/
-    // .poker-table-felt) at quarter width, so this looks like an actual mini table
-    // instead of a generic diagram - same SEAT_POS coordinates as renderTable, just
-    // plain dots instead of full seat circles since there's no game here to show.
+    // .poker-table-felt) at 30% width (bumped up 20% from an earlier 25%), so this looks
+    // like an actual mini table instead of a generic diagram - same SEAT_POS coordinates
+    // as renderTable, just plain dots instead of full seat circles since there's no game
+    // here to show.
     const seatPickerHtml = `
-      <div style="width:25%;margin:0 auto 14px;">
+      <div style="width:30%;margin:0 auto 14px;">
         <div class="poker-table-wrap" style="margin:0;">
-          <div class="poker-table-felt"></div>
+          <div class="poker-table-felt" style="${tableFeltStyleAttr()}"></div>
           <img src="/static/logo-watermark.png" style="position:absolute;left:50%;top:39%;transform:translate(-50%,-50%);width:46%;opacity:.6;pointer-events:none;">
           ${SEAT_POS.slice(0,9).map((pos,i) => {
             const selected = i === mySeatPos;
             return `<div data-pick-seat-position="${i}" style="position:absolute;left:${pos[0]}%;top:${pos[1]}%;transform:translate(-50%,-50%);width:20%;aspect-ratio:1;border-radius:50%;cursor:pointer;background:${selected?'var(--gold)':'rgba(255,255,255,.18)'};border:2px solid ${selected?'#fff':'rgba(255,255,255,.4)'};"></div>`;
           }).join("")}
         </div>
+      </div>
+    `;
+    // Right next to the seat-position picker (same screen, same "tap to set a visual
+    // preference immediately" pattern) - the swatches ARE the actual cropped table images
+    // (see TABLE_STYLES), so picking one shows exactly what it'll look like, not a stand-in.
+    const myTableStyle = getMyTableStyle();
+    const tableStylePickerHtml = `
+      <div class="section-title" style="padding:0;margin:0 0 6px;">סגנון השולחן</div>
+      <div style="display:flex;gap:10px;margin-bottom:14px;justify-content:center;">
+        ${TABLE_STYLES.map((s, i) => {
+          const selected = i === myTableStyle;
+          return `
+            <div data-pick-table-style="${i}" style="text-align:center;cursor:pointer;">
+              <div style="width:44px;height:44px;border-radius:10px;background-image:url('/static/${s.file}');background-size:cover;background-position:center;border:2px solid ${selected?'var(--gold)':'transparent'};"></div>
+              <div style="font-size:10px;color:${selected?'var(--gold)':'var(--muted)'};margin-top:3px;">${esc(s.label)}</div>
+            </div>
+          `;
+        }).join("")}
       </div>
     `;
     body = `
@@ -3166,6 +3205,7 @@ function renderModal(m){
       <div class="section-title" style="padding:0;margin:0 0 6px;">המיקום שלי בשולחן</div>
       <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">הקישו על מקום כדי לבחור איפה תופיעו תמיד סביב השולחן.</p>
       ${seatPickerHtml}
+      ${tableStylePickerHtml}
       ${!m.forced ? `<button class="btn btn-ghost btn-block" style="margin-bottom:12px;" data-my-stats>${icon('bar')} הביצועים שלי</button>` : ""}
       <button class="btn btn-primary btn-block" style="margin-bottom:12px;" data-confirm-identity-name>שמור</button>
       ${loginSection}
@@ -4727,6 +4767,13 @@ function attachHandlers(){
       const nameInput = document.getElementById("identity-name-input");
       if (nameInput) myIdentity.name = nameInput.value;
       setGlobalPlayer(myIdentity.id, {seatPosition: Number(el.dataset.pickSeatPosition)});
+      saveState();
+      render();
+    });
+    app.querySelectorAll("[data-pick-table-style]").forEach(el => el.onclick = () => {
+      const nameInput = document.getElementById("identity-name-input");
+      if (nameInput) myIdentity.name = nameInput.value;
+      setGlobalPlayer(myIdentity.id, {tableStyle: Number(el.dataset.pickTableStyle)});
       saveState();
       render();
     });
