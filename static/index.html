@@ -128,6 +128,16 @@ input:focus,.select-input:focus{border-color:var(--gold);}
    attachHandlers). touch-action:none stops the browser's own page-scroll gesture from
    competing with the swipe on a touchscreen. */
 .panel-drag-handle{position:relative;display:flex;justify-content:center;align-items:flex-start;padding-top:2px;height:24px;margin-bottom:4px;cursor:grab;touch-action:none;}
+/* .panel-drag-glow right below is purely visual (pointer-events:none) and reaches well above
+   this 24px-tall handle - without this, a drag/tap that starts anywhere in that glow (which is
+   exactly what it visually invites) misses the handle's real hit area entirely and falls
+   through to whatever's behind it (the table). This invisible pseudo-element enlarges the
+   handle's actual hit area upward to roughly match the glow, so starting a touch a bit above
+   the chevron still registers as pressing the handle - a pointer event landing on a
+   pseudo-element is reported with the host element itself as e.target, so the existing
+   pointerdown/move/up listeners on .panel-drag-handle fire exactly as if it were tapped
+   directly. */
+.panel-drag-handle::before{content:"";position:absolute;left:50%;bottom:100%;transform:translateX(-50%);width:200px;height:50px;}
 /* Bottom of this box sits right at the handle's own top edge (not overlapping it) so the
    glow visibly starts there and reaches up into the table above, rather than fading out
    just past the chevron. .bottom-bar has no overflow:hidden of its own, so this is free to
