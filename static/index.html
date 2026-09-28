@@ -2304,6 +2304,7 @@ const ICONS = {
   trash: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><line x1="9" y1="10" x2="9" y2="17"/><line x1="12" y1="10" x2="12" y2="17"/><line x1="15" y1="10" x2="15" y2="17"/></svg>',
   bar: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>',
   users: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>',
+  user: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"/></svg>',
   cal: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z"/></svg>',
   out: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>',
   undo: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 015.5 5.5v0a5.5 5.5 0 01-5.5 5.5H11"/></svg>',
@@ -2649,8 +2650,10 @@ function renderActionPanel(g, c, seatedIds){
         <p id="buyin-custom-warning" style="color:#fda4af;font-size:12px;margin:-2px 0 8px;text-align:center;${customSelected && customBuyinAmount != null && customBuyinAmount <= MIN_BUYIN_AMOUNT ? '' : 'display:none;'}">סכום מותאם אישית חייב להיות גדול מ-₪${MIN_BUYIN_AMOUNT}</p>
         <button class="btn btn-primary btn-block" data-panel-buyin-confirm ${canConfirmBuyin?'':'disabled'}>${icon('plus')} הוסף ריביי</button>
       </div>
-      <div class="panel-expand-extra" data-panel-expand-extra style="max-height:${actionPanelExpanded?'240px':'0px'};">
-        <button class="btn btn-block" style="background:#57534e;color:#f5f5f4;margin:10px 0 ${canRemove?'10px':'0'};display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-end-night>${icon('out')} סיים ערב</button>
+      <div class="panel-expand-extra" data-panel-expand-extra style="max-height:${actionPanelExpanded?'280px':'0px'};">
+        <div style="height:1px;background:rgba(255,255,255,.14);margin:2px 0 10px;"></div>
+        <button class="btn btn-ghost btn-block" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-open-my-profile>${icon('user')} הפרופיל שלי</button>
+        <button class="btn btn-block" style="background:#57534e;color:#f5f5f4;margin-bottom:${canRemove?'10px':'0'};display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-end-night>${icon('out')} סיים ערב</button>
         ${canRemove ? `<button class="btn btn-block" style="background:#be123c;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-remove>${icon('trash')} הסר מהשולחן</button>` : ""}
       </div>
     `;
@@ -2889,7 +2892,7 @@ function renderModal(m){
     // rename - was a separate, reduced "ברוכים הבאים" name-only variant when forced, but
     // that just meant a first-time user had to come back to this same screen again right
     // after to pick an avatar instead of doing it once here.
-    title = "הגדרת שחקן";
+    title = m.profileTitle ? "הפרופיל שלי" : "הגדרת שחקן";
     const myPhoto = getGlobalPlayer(myIdentity.id).photo;
     // Login is mandatory now (see loginRequired) - by the time this modal can ever open,
     // myIdentity.email is always already set, so this is just a confirmation line, never
@@ -2920,7 +2923,7 @@ function renderModal(m){
     body = `
       <div style="text-align:center;margin-bottom:14px;">
         <img src="${myPhoto || '/static/logo-watermark.png'}" style="width:76px;height:76px;border-radius:50%;object-fit:cover;display:block;margin:0 auto 8px;border:2px solid var(--gold);">
-        <button class="btn btn-ghost btn-sm" data-change-avatar>${icon('pencil')} שנה אווטר</button>
+        <button class="btn btn-ghost btn-sm" data-change-avatar>${icon('pencil')} שנה אווטאר</button>
       </div>
       <div style="margin-bottom:12px;">
         <input type="text" id="identity-name-input" value="${esc(myIdentity.name || '')}" placeholder="השם שלך" style="width:100%;" autofocus>
@@ -4008,11 +4011,12 @@ function attachHandlers(){
     openModal({type:"newGame", communityId: nav.communityId, date: new Date().toISOString().slice(0,10)});
   };
 
-  // Expand/collapse is a swipe on the handle, not a tap - the extra-buttons block (and,
-  // through it, the table's own crop - see layoutTableSize) grows and shrinks live with
-  // the finger, not in one jump. [data-panel-expand-extra] is always in the DOM (see
-  // renderActionPanel) specifically so its height can be tracked continuously here;
-  // pointerup just decides which end to settle at based on how far it got.
+  // Expand/collapse is a swipe on the handle (the extra-buttons block, and through it the
+  // table's own crop - see layoutTableSize - grows and shrinks live with the finger, not
+  // in one jump), OR a plain tap on it (a drag under TAP_THRESHOLD_PX is treated as a tap
+  // and just flips the current state instead of using the drag-distance snap below).
+  // [data-panel-expand-extra] is always in the DOM (see renderActionPanel) specifically so
+  // its height can be tracked continuously here.
   const toggleActionPanelEl = app.querySelector("[data-toggle-action-panel]");
   const expandExtraEl = app.querySelector("[data-panel-expand-extra]");
   const dragChevronEl = toggleActionPanelEl && toggleActionPanelEl.querySelector("svg");
@@ -4040,9 +4044,14 @@ function attachHandlers(){
     toggleActionPanelEl.addEventListener("pointerup", (e) => {
       if (dragStartY == null) return;
       const dy = dragStartY - e.clientY;
-      const h = Math.max(0, Math.min(naturalH, dragStartH + dy));
       dragStartY = null;
-      actionPanelExpanded = naturalH > 0 && h > naturalH / 2;
+      const TAP_THRESHOLD_PX = 6;
+      if (Math.abs(dy) < TAP_THRESHOLD_PX) {
+        actionPanelExpanded = !actionPanelExpanded;
+      } else {
+        const h = Math.max(0, Math.min(naturalH, dragStartH + dy));
+        actionPanelExpanded = naturalH > 0 && h > naturalH / 2;
+      }
       render();
     });
   }
@@ -4070,6 +4079,8 @@ function attachHandlers(){
   };
   const panelSummaryBtn = app.querySelector("[data-panel-summary]");
   if (panelSummaryBtn) panelSummaryBtn.onclick = () => openModal({type:"history", gameId: nav.gameId, playerId: selectedSeatPlayerId});
+  const panelMyProfileBtn = app.querySelector("[data-open-my-profile]");
+  if (panelMyProfileBtn) panelMyProfileBtn.onclick = () => openModal({type:"identityName", forced:false, profileTitle:true});
   const panelEndNightBtn = app.querySelector("[data-panel-end-night]");
   if (panelEndNightBtn) panelEndNightBtn.onclick = () => openModal({type:"seatChips", gameId: nav.gameId, playerId: selectedSeatPlayerId});
   const panelRemoveBtn = app.querySelector("[data-panel-remove]");
