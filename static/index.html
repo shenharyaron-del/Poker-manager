@@ -110,11 +110,12 @@ body.table-screen .poker-table-inner.crop-from-bottom{top:20px;bottom:auto;}
 body.table-screen .poker-table-inner.crop-from-top{bottom:16px;top:auto;}
 /* A plain background:none here left the button panel blending straight into the page with
    no visible edge - the reference table image has a crisp line where its screen area ends
-   and its button panel starts. border-top alone would look like a flat rule; pairing it
-   with a downward shadow reads as an actual physical edge (the panel sitting slightly
-   forward of/below the table), consistent with every other bevel/shadow already used
-   across the table screen (.poker-table-felt, .panel-drag-handle, etc). */
-body.table-screen .bottom-bar{position:static;flex-shrink:0;background:none;margin:0;max-width:none;max-height:70vh;max-height:70dvh;overflow-y:auto;padding-top:0;border-top:1px solid rgba(255,255,255,.14);box-shadow:0 -6px 16px rgba(0,0,0,.5);}
+   and its button panel starts. Border only, no shadow: an earlier version paired this with
+   a downward box-shadow for a physical-edge look, but that shadow's dark blur reached
+   straight into .panel-drag-glow's zone right above it (same spot, both radiating from this
+   same top edge) and visibly muddied the chevron sitting in the glow - the two effects were
+   never going to coexist there. */
+body.table-screen .bottom-bar{position:static;flex-shrink:0;background:none;margin:0;max-width:none;max-height:70vh;max-height:70dvh;overflow-y:auto;padding-top:0;border-top:1px solid rgba(255,255,255,.14);}
 .empty{text-align:center;padding:50px 20px;color:#059669;font-size:14px;}
 .section-title{color:var(--gold);font-size:11px;font-weight:700;letter-spacing:.05em;margin:0 0 8px;padding:0 20px;}
 .field{display:block;margin-bottom:14px;}
