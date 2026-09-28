@@ -2443,17 +2443,23 @@ function drawSettlementArrows(){
   const data = currentSettlementTransfers;
   if (!data) { overlay.innerHTML = ""; return; }
 
-  const wrap = overlay.closest(".poker-table-wrap");
-  if (!wrap) return;
-  const wrapRect = wrap.getBoundingClientRect();
+  // #settlement-overlay is inset:0 inside .poker-table-inner (its actual CSS positioning
+  // parent - see the markup), NOT .poker-table-wrap - inner is a separately JS-sized
+  // (layoutTableSize) and centered/anchored box that rarely matches wrap's own edges
+  // exactly. Using wrap's rect here to build coordinates the overlay then renders inside
+  // inner's box was the arrows-are-offset bug reported live: right shape, wrong origin
+  // whenever inner and wrap didn't coincide.
+  const inner = overlay.closest(".poker-table-inner");
+  if (!inner) return;
+  const innerRect = inner.getBoundingClientRect();
 
   const centerOf = (playerId) => {
     const idx = data.seats.indexOf(playerId);
     if (idx === -1) return null;
-    const circle = wrap.querySelector(`[data-seat="${idx}"] .seat-circle`);
+    const circle = inner.querySelector(`[data-seat="${idx}"] .seat-circle`);
     if (!circle) return null;
     const r = circle.getBoundingClientRect();
-    return { x: r.left + r.width/2 - wrapRect.left, y: r.top + r.height/2 - wrapRect.top, radius: r.width/2 };
+    return { x: r.left + r.width/2 - innerRect.left, y: r.top + r.height/2 - innerRect.top, radius: r.width/2 };
   };
 
   const items = [];
@@ -2482,7 +2488,7 @@ function drawSettlementArrows(){
     const dash = it.paid ? ` stroke-dasharray="5,4"` : "";
     return `<line x1="${it.x1}" y1="${it.y1}" x2="${it.x2}" y2="${it.y2}" stroke="${color}" stroke-width="${it.paid?2:2.5}" opacity="${it.paid?0.85:0.9}"${dash} marker-end="url(#${marker})"/>`;
   }).join("");
-  const svg = `<svg width="${wrapRect.width}" height="${wrapRect.height}" viewBox="0 0 ${wrapRect.width} ${wrapRect.height}" style="position:absolute;inset:0;z-index:2;pointer-events:none;">
+  const svg = `<svg width="${innerRect.width}" height="${innerRect.height}" viewBox="0 0 ${innerRect.width} ${innerRect.height}" style="position:absolute;inset:0;z-index:2;pointer-events:none;">
     <defs>
       <marker id="arrowhead-gold" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#fbbf24"/></marker>
       <marker id="arrowhead-paid" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#e7e5e4"/></marker>
@@ -4641,6 +4647,29 @@ function attachHandlers(){
 
   app.querySelectorAll("[data-seat]").forEach(el => {
     const dragHandle = el.querySelector(".seat-circle") || el;
+    if (currentSettlementTransfers) {
+      // Once everyone's cashed out and settlement arrows are showing, repositioning seats
+      // is meaningless (the night's over) - skip the drag machinery below entirely instead
+      // of relying on its movement threshold to fall through to a tap. A real touch tap
+      // routinely includes a few px of incidental movement, enough to cross that 14px
+      // threshold and swallow the tap as a (no-op, same-seat) drag instead of a filter
+      // click - reported live as "tapping a player doesn't work well". A plain click
+      // listener has no such threshold.
+      const filterClick = (e) => {
+        if (e) e.stopPropagation();
+        const g = getGame(nav.gameId);
+        const idx = parseInt(el.dataset.seat);
+        const seats = g.seats || new Array(9).fill(null);
+        const pid = seats[idx];
+        if (!pid) return;
+        settlementFilterPlayerId = settlementFilterPlayerId === pid ? null : pid;
+        render();
+      };
+      dragHandle.addEventListener("click", filterClick);
+      const infoEl = el.querySelector("[data-seat-info]");
+      if (infoEl) infoEl.addEventListener("click", filterClick);
+      return;
+    }
     let drag = null;
     dragHandle.addEventListener("pointerdown", (e) => {
       const g = getGame(nav.gameId);
@@ -4674,15 +4703,6 @@ function attachHandlers(){
         const seats = g.seats || new Array(9).fill(null);
         const pid = seats[fromIdx];
         if (!pid) return;
-        if (currentSettlementTransfers) {
-          // While settlement arrows are showing (everyone's cashed out, direct-transfer
-          // mode), tapping a player filters the arrows to just their own transfers instead
-          // of opening the seat menu - tap the same one again to fall back to the viewer's
-          // own default (see renderActionPanel).
-          settlementFilterPlayerId = settlementFilterPlayerId === pid ? null : pid;
-          render();
-          return;
-        }
         // A plain tap selects this seat into the bottom panel, same as tapping the info
         // text below.
         trySelectSeatPlayer(pid);
@@ -4735,11 +4755,6 @@ function attachHandlers(){
       const seats = g.seats || new Array(9).fill(null);
       const pid = seats[idx];
       if (!pid) return;
-      if (currentSettlementTransfers) {
-        settlementFilterPlayerId = settlementFilterPlayerId === pid ? null : pid;
-        render();
-        return;
-      }
       trySelectSeatPlayer(pid);
     };
   });
