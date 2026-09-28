@@ -36,6 +36,12 @@
   --green-box:#065f46;
 }
 *{box-sizing:border-box;}
+/* Blocks pinch-zoom and double-tap-zoom (reported live: pinch-zooming the table screen) -
+   the maximum-scale=1 viewport meta tag alone isn't reliable for this anymore, since modern
+   mobile browsers deliberately ignore it (an accessibility override, so a page can't lock
+   out a low-vision user's zoom) - touch-action is the actual supported way to opt out.
+   pan-x/pan-y still allow normal scrolling/panning, only the zoom gestures are blocked. */
+html,body{touch-action:pan-x pan-y;}
 html,body{margin:0;padding:0;background:var(--bg2);}
 body{
   font-family:'Rubik',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
