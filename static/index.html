@@ -2562,11 +2562,19 @@ function render(){
   if (modal) html += renderModal(modal);
   app.innerHTML = html;
   attachHandlers();
-  drawSettlementArrows();
-  // Scheduled before animateSeatCaptions - a table-sizing bug should never be able to
-  // block the table's own layout from running just because an unrelated caption
-  // animation happened to throw first (they're independent, and both run every render).
-  if (nav.screen === "table") { requestAnimationFrame(layoutTableSize); animateSeatCaptions(nav.gameId); }
+  // drawSettlementArrows() reads .poker-table-inner's actual current size/position to place
+  // its arrows - calling it here, before layoutTableSize() has even run (it's deferred to
+  // next frame below), meant it drew against whatever size inner was LEFT at by the
+  // previous render, not the size it's about to become for THIS one. layoutTableSize()
+  // resizing inner a frame later then left the just-drawn arrows misaligned with the now-
+  // resized table - reported live as "the arrows aren't precise". Moved into the same
+  // rAF callback, after layoutTableSize() actually finishes resizing, instead of before it.
+  if (nav.screen === "table") {
+    requestAnimationFrame(() => { layoutTableSize(); drawSettlementArrows(); });
+    animateSeatCaptions(nav.gameId);
+  } else {
+    drawSettlementArrows(); // no-op on other screens (#settlement-overlay doesn't exist there)
+  }
 }
 
 // Pins the table (.poker-table-inner) to a fixed pixel size that fully fits with the
