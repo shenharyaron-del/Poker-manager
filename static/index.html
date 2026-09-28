@@ -4077,6 +4077,13 @@ function attachHandlers(){
   const toggleActionPanelEl = app.querySelector("[data-toggle-action-panel]");
   const expandExtraEl = app.querySelector("[data-panel-expand-extra]");
   const dragChevronEl = toggleActionPanelEl && toggleActionPanelEl.querySelector("svg");
+  // Any button inside the expanded panel (הפרופיל שלי, סיים ערב, הסר מהשולחן/שנה שיטת
+  // תשלומים, סיכום ערב, החזר למשחק...) collapses it back once tapped - delegated on the
+  // container rather than each button individually, and in the bubble phase so it runs
+  // AFTER that button's own handler (which almost always opens a modal and its own
+  // render() straight away) - setting the flag here just has to land before the NEXT
+  // render, which happens whenever that modal closes.
+  if (expandExtraEl) expandExtraEl.addEventListener("click", () => { actionPanelExpanded = false; });
   if (toggleActionPanelEl && expandExtraEl) {
     let dragStartY = null, dragStartH = 0, naturalH = 0;
     toggleActionPanelEl.addEventListener("pointerdown", (e) => {
