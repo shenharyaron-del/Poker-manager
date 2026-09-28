@@ -150,7 +150,7 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .chip-btn{flex:1;padding:9px;border-radius:9px;background:var(--input);border:1px solid var(--input-b);color:var(--text);font-family:inherit;cursor:pointer;}
 .chip-btn:disabled{opacity:.4;cursor:not-allowed;}
 .btn:disabled{opacity:.45;cursor:not-allowed;}
-.chip-btn.buyin-selected{background:var(--gold);color:var(--gold-text);border-color:var(--gold);font-weight:700;}
+.chip-btn.buyin-selected{background:#78350f;color:#fde68a;border-color:#78350f;font-weight:700;}
 /* The accordion's drag handle - a chevron on a soft upward glow, swiped (not tapped) to
    expand/collapse the panel below it (see the pointerdown/move/up handlers in
    attachHandlers). touch-action:none stops the browser's own page-scroll gesture from
@@ -250,11 +250,12 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .seat-circle.vacant{border:2px dashed rgba(255,255,255,.35);color:var(--muted);background:rgba(255,255,255,.05);font-size:20px;}
 .seat-circle.filled{background:var(--gold);color:var(--gold-text);border:2px solid var(--gold);}
 .seat-circle.filled.cashed-out{background:#57534e;border-color:#57534e;color:#fda4af;}
-/* Gold, not the previous cyan - matches the buy-in selection/confirm buttons' own color
-   (var(--gold)), so the seat currently being acted on (including on someone else's behalf -
-   see .on-behalf-badge below) and the buy-in controls read as one consistent "this is what
-   you're doing right now" color instead of two unrelated accent colors. */
-.seat-circle.selected{box-shadow:0 0 0 3px var(--gold),0 0 0 6px rgba(251,191,36,.25);}
+/* Bordeaux (#78350f), matching .on-behalf-badge exactly - not gold, which is already the
+   app's general-purpose accent (primary buttons, chip amounts everywhere) and so didn't
+   actually read as connected to "you're acting on someone's behalf" specifically. Ring
+   only here (there's a photo/fallback logo filling the circle itself), but .seat-info
+   below gets a full background swap, not just a border - see its own comment. */
+.seat-circle.selected{box-shadow:0 0 0 3px #78350f,0 0 0 6px rgba(120,53,15,.35);}
 .buyin-fly{position:absolute;left:0;top:0;z-index:400;pointer-events:none;display:flex;align-items:center;justify-content:center;min-width:34px;height:30px;padding:0 9px;border-radius:15px;background:var(--gold);color:var(--gold-text);font-weight:800;font-size:12px;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.4);transform:translate(-50%,-50%);transition:left .65s cubic-bezier(.22,.7,.3,1),top .65s cubic-bezier(.22,.7,.3,1),opacity .3s ease .55s,transform .3s ease;}
 .buyin-fly.landed{transform:translate(-50%,-50%) scale(1.15);}
 .buyin-fly.fading{opacity:0;}
@@ -262,11 +263,12 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 /* The dark nameplate: pulled up (negative margin) so it sits partly behind the lower part
    of the avatar circle above it (painted over it too, since seat-info comes after
    seat-circle in the DOM), with padding-top pushing the actual name text back below the
-   avatar's own visible edge. .selected gets the same gold border as .seat-circle.selected -
-   previously only the circle above it showed which seat was selected, this nameplate never
-   did at all. */
-.seat-info{display:flex;flex-direction:column;align-items:center;gap:1px;cursor:pointer;background:rgba(8,8,8,.82);border-radius:10px;padding:13px 10px 5px;margin-top:-13px;border:2px solid transparent;}
-.seat-info.selected{border-color:var(--gold);}
+   avatar's own visible edge. .selected replaces the whole background with the same
+   bordeaux as .on-behalf-badge (not just a border around the existing dark background,
+   which read as too subtle) - previously only the circle above it showed which seat was
+   selected, this nameplate never did at all. */
+.seat-info{display:flex;flex-direction:column;align-items:center;gap:1px;cursor:pointer;background:rgba(8,8,8,.82);border-radius:10px;padding:13px 10px 5px;margin-top:-13px;}
+.seat-info.selected{background:#78350f;}
 .seat-name{font-size:11px;font-weight:700;color:var(--text);text-align:center;white-space:nowrap;max-width:78px;overflow:hidden;text-overflow:ellipsis;}
 .seat-caption{font-size:13px;color:var(--gold);font-weight:700;text-align:center;line-height:1.35;white-space:nowrap;}
 .seat-history-toggle{background:none;border:none;color:var(--muted);cursor:pointer;padding:2px;display:inline-flex;vertical-align:middle;margin-right:2px;}
@@ -2938,6 +2940,7 @@ function renderActionPanel(g, c, seatedIds){
           <div class="panel-drag-glow"></div>
           <svg width="22" height="10" viewBox="0 0 22 10" style="transform:rotate(${actionPanelExpanded?180:0}deg);transition:transform .2s ease;"><path d="M1 9L11 1L21 9" fill="none" stroke="#a7f3d0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </div>
+        ${behalfBadge}
         ${paymentButtonHtml}
       </div>
       <div class="panel-expand-extra" data-panel-expand-extra style="max-height:${actionPanelExpanded?'200px':'0px'};">
@@ -2971,6 +2974,7 @@ function renderActionPanel(g, c, seatedIds){
           <div class="panel-drag-glow"></div>
           <svg width="22" height="10" viewBox="0 0 22 10" style="transform:rotate(${actionPanelExpanded?180:0}deg);transition:transform .2s ease;"><path d="M1 9L11 1L21 9" fill="none" stroke="#a7f3d0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </div>
+        ${behalfBadge}
         <div style="display:flex;gap:6px;margin-bottom:8px;width:100%;">
           ${FIXED_BUYIN_AMOUNTS.map(v=>`<button class="chip-btn${selectedBuyinAmount===v?' buyin-selected':''}" data-buyin-select="${v}" style="flex:1;padding:9px 2px;font-size:16px;">₪${v}</button>`).join("")}
           ${customSelected
@@ -2979,7 +2983,7 @@ function renderActionPanel(g, c, seatedIds){
           }
         </div>
         <p id="buyin-custom-warning" style="color:#fda4af;font-size:12px;margin:-2px 0 8px;text-align:center;${customSelected && customBuyinAmount != null && customBuyinAmount <= MIN_BUYIN_AMOUNT ? '' : 'display:none;'}">סכום מותאם אישית חייב להיות גדול מ-₪${MIN_BUYIN_AMOUNT}</p>
-        <button class="btn btn-primary btn-block" data-panel-buyin-confirm ${canConfirmBuyin?'':'disabled'}>${icon('plus')} הוסף ריביי</button>
+        <button class="btn btn-primary btn-block" style="background:#78350f;color:#fde68a;" data-panel-buyin-confirm ${canConfirmBuyin?'':'disabled'}>${icon('plus')} הוסף ריביי</button>
       </div>
       <div class="panel-expand-extra" data-panel-expand-extra style="max-height:${actionPanelExpanded?'280px':'0px'};">
         <div style="width:50%;margin:18px auto;height:1px;background:rgba(255,255,255,.55);box-shadow:0 1px 0 rgba(0,0,0,.4);"></div>
@@ -2992,7 +2996,7 @@ function renderActionPanel(g, c, seatedIds){
       </div>
     `;
   }
-  return `<div class="bottom-bar">${settlementHtml}${behalfBadge}${panelBody}</div>`;
+  return `<div class="bottom-bar">${settlementHtml}${panelBody}</div>`;
 }
 
 // Percentage [x,y] position of each of the 9 main seat slots around the oval table -
@@ -3219,7 +3223,7 @@ function renderModal(m){
         }
       </div>
       <p id="buyin-custom-warning" style="color:#fda4af;font-size:12px;margin-bottom:10px;text-align:center;${customSelected && customBuyinAmount != null && customBuyinAmount <= MIN_BUYIN_AMOUNT ? '' : 'display:none;'}">סכום מותאם אישית חייב להיות גדול מ-₪${MIN_BUYIN_AMOUNT}</p>
-      <button class="btn btn-primary btn-block" data-panel-buyin-confirm ${canConfirm?'':'disabled'}>${icon('plus')} כניסה לשולחן</button>
+      <button class="btn btn-primary btn-block" style="background:#78350f;color:#fde68a;" data-panel-buyin-confirm ${canConfirm?'':'disabled'}>${icon('plus')} כניסה לשולחן</button>
     `;
   } else if (m.type === "identityName") {
     // Same screen whether this is the mandatory post-login step or an editor-opened
