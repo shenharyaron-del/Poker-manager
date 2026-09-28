@@ -3810,9 +3810,12 @@ function renderModal(m){
         </div>
       ` : `<p style="color:var(--muted);font-size:12px;margin-bottom:14px;">אין שחקנים נוספים במשחק הזה.</p>`}
       ${selected ? `
-        <div class="row" style="gap:10px;margin-bottom:14px;">
-          <button class="btn btn-block" style="background:#000;color:#fff;" data-pay-via="bit">ביט</button>
-          <button class="btn btn-block" style="background:#0891b2;color:#fff;" data-pay-via="paybox">פייבוקס</button>
+        <div style="border:1px solid var(--card-b);border-radius:14px;padding:12px;margin-bottom:14px;">
+          <div style="color:var(--muted);font-size:11px;text-align:center;margin-bottom:8px;">קיצור דרך לפתיחת אפליקציית תשלומים</div>
+          <div class="row" style="gap:10px;">
+            <button class="btn btn-block" style="background:#065f46;color:var(--text);border:1px solid var(--card-b);display:flex;align-items:center;justify-content:center;gap:6px;" data-pay-via="bit">${icon('share')} ביט</button>
+            <button class="btn btn-block" style="background:#065f46;color:var(--text);border:1px solid var(--card-b);display:flex;align-items:center;justify-content:center;gap:6px;" data-pay-via="paybox">${icon('share')} פייבוקס</button>
+          </div>
         </div>
         <button class="btn btn-primary btn-block" data-confirm-pay-player>שולם</button>
       ` : ""}
@@ -3966,24 +3969,6 @@ function renderModal(m){
       });
       arrangedNoteHtml = `<p style="color:var(--muted);font-size:12px;margin:-14px 0 16px;text-align:center;">כולל ₪${Math.round(total)} שהועברו ע"י ${names.map(esc).join(', ')} שעזב/ו את השולחן</p>`;
     }
-    // Optional - a player who hands their own cash directly to someone still seated
-    // (instead of going through PayBox themselves) picks that person here; it folds
-    // their own profit/loss into that player's own eventual PayBox total instead of
-    // asking for it separately (see computeArrangementAdjustments/arrangedNoteHtml above,
-    // shown on the RECEIVING player's own screen).
-    const otherActivePlayers = (g.seats||[]).filter(Boolean).filter(pid => pid !== m.playerId && !(pid in g.cashouts));
-    const arrangedWithPickerHtml = (!cashedOut && otherActivePlayers.length) ? `
-      <div class="field">
-        <label>העברת את הסכום ישירות למישהו שנשאר בשולחן? (לא חובה)</label>
-        <select class="select-input" id="seat-chips-arranged-with">
-          <option value="">לא - כרגיל דרך פייבוקס/הקבוצה</option>
-          ${otherActivePlayers.map(pid => {
-            const pl = g.players.find(pp => pp.id === pid);
-            return `<option value="${pid}">${esc(pl ? pl.name : "?")}</option>`;
-          }).join("")}
-        </select>
-      </div>
-    ` : "";
     let modeBody;
     if (mode === "byColor") {
       modeBody = `
@@ -4032,7 +4017,6 @@ function renderModal(m){
         <p style="color:var(--muted);font-size:12px;">השחקן כבר יצא מהמשחק.</p>
         <button class="btn btn-ghost btn-block" data-return-to-game="${m.playerId}" style="margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('undo')} החזר למשחק</button>
       ` : `
-        ${arrangedWithPickerHtml}
         <button class="btn btn-block" style="background:#57534e;color:#f5f5f4;display:flex;align-items:center;justify-content:center;gap:6px;" data-quick-end="${m.playerId}">${icon('out')} סיים ערב</button>
       `}
     `;
@@ -6283,15 +6267,13 @@ function attachHandlers(){
     const quickEndBtn = app.querySelector("[data-quick-end]");
     if (quickEndBtn) quickEndBtn.onclick = async () => {
       const v = Math.round(computeCounted() * 100) / 100;
-      const arrangedWithSelect = document.getElementById("seat-chips-arranged-with");
-      const arrangedWith = (arrangedWithSelect && arrangedWithSelect.value) ? [arrangedWithSelect.value] : [];
       quickEndBtn.disabled = true;
       showButtonLoading(quickEndBtn);
       if (USE_RELATIONAL_API) {
         const g = getGame(modal.gameId);
         const chips = (!isNaN(v) && v >= 0) ? v : ((g.liveChips||{})[modal.playerId] || 0);
         try {
-          await v2SetCashout(modal.gameId, modal.playerId, chips, arrangedWith, chips);
+          await v2SetCashout(modal.gameId, modal.playerId, chips, [], chips);
           await v2MaybeAutoCloseNight(modal.gameId);
         } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); quickEndBtn.disabled = false; return; }
       } else {
@@ -6300,7 +6282,7 @@ function attachHandlers(){
           const chips = (!isNaN(v) && v >= 0) ? v : ((g.liveChips||{})[modal.playerId] || 0);
           if (!g.liveChips) g.liveChips = {};
           g.liveChips[modal.playerId] = chips;
-          g.cashouts[modal.playerId] = {amount: chips, ts: Date.now(), arrangedWith};
+          g.cashouts[modal.playerId] = {amount: chips, ts: Date.now(), arrangedWith: []};
           maybeAutoCloseNight(g);
         });
       }
