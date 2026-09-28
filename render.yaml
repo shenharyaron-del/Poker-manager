@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: poker-manager-singapore
+    runtime: python
+    region: singapore
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server.py
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: BREVO_API_KEY
+        sync: false
+      - key: SUPER_ADMIN_EMAIL
+        sync: false
+      - key: RELATIONAL_API_DEFAULT
+        value: "true"
