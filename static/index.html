@@ -1290,6 +1290,12 @@ let openHistorySeatPlayerId = null;
 // sitting without touching the permanent default future games will still use. Never saved
 // anywhere, resets on reload. null means "use the community's own default".
 let sessionSettlementOverride = null;
+// Two-step amount pick for the admin "בדיקת מאזן" correction flow (history modal,
+// m.editable) - separate from selectedBuyinAmount/customBuyinAmount (the main table
+// buy-in flow) since a correction has no reason to enforce that flow's "custom must
+// exceed the lowest tier" rule. Reset whenever that modal is opened (see data-check-
+// balance).
+let checkBalanceSelectedAmount = null;
 // Two-step buy-in: tapping 50/80/100/"אחר" only selects an amount (highlights it),
 // the actual buy-in only fires on the separate "הוסף ריביי" confirm button below it.
 // selectedBuyinAmount is either one of the three fixed numbers or the string "custom" -
@@ -2494,7 +2500,6 @@ function renderCommunity(communityId){
 // handler in attachHandlers).
 function renderActionPanel(g, c, seatedIds){
   const admin = isTableAdmin(g, c);
-  const activePaybox = getActivePayboxEntry(c);
   const allCashedOut = seatedIds.length > 0 && seatedIds.every(pid => pid in g.cashouts);
   const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
 
@@ -2512,31 +2517,50 @@ function renderActionPanel(g, c, seatedIds){
 
   // The paybox/settlement group used to live above the table; it's table-wide, not tied
   // to whichever seat is selected, so it always shows first once everyone's cashed out -
-  // but only once the pot is actually balanced (see potFixHtml below otherwise).
+  // but only once the pot is actually balanced (see potFixHtml below otherwise). Which
+  // form it takes follows the community's settlement default (or this session's override
+  // of it, see sessionSettlementOverride/the settlementMethod modal): 'paybox' shows just
+  // the one shared-group button (no "or" toggle to a second option any more), 'direct'
+  // lists each seated player with only THEIR OWN transfer(s), not a single global reveal.
   let settlementWarning = "";
   currentSettlementTransfers = null;
-  if (allCashedOut && !potUnbalanced && showSettlement) {
-    const { remaining, alreadyPaid, warning } = computeSettlementTransfers(g);
-    currentSettlementTransfers = {
-      seats: g.seats || new Array(9).fill(null),
-      transfers: [
+  const effectiveSettlement = sessionSettlementOverride || c.settlementDefault || "direct";
+  let settlementHtml = "";
+  if (allCashedOut && !potUnbalanced) {
+    if (effectiveSettlement === "paybox") {
+      settlementHtml = `<button class="btn btn-block" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;" data-open-active-paybox><img src="/static/paybox-icon.png" style="height:18px;width:auto;display:block;"> פתח קבוצת פייבוקס משותפת לתשלום</button>`;
+    } else {
+      const { remaining, alreadyPaid, warning } = computeSettlementTransfers(g);
+      const allTransfers = [
         ...remaining.map(t => ({ fromId: t.from, toId: t.to, amount: t.amount, paid: false })),
         ...alreadyPaid.map(t => ({ fromId: t.fromPlayerId, toId: t.toPlayerId, amount: t.amount, paid: true })),
-      ],
-      filterId: settlementFilterPlayerId,
-    };
-    if (warning) settlementWarning = `<div style="background:#450a0a;color:#fca5a5;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;text-align:center;">${esc(warning)}</div>`;
+      ];
+      currentSettlementTransfers = { seats: g.seats || new Array(9).fill(null), transfers: allTransfers, filterId: null };
+      if (warning) settlementWarning = `<div style="background:#450a0a;color:#fca5a5;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;text-align:center;">${esc(warning)}</div>`;
+      const rows = seatedIds.map(pid => {
+        const pl = g.players.find(pp => pp.id === pid);
+        const mine = allTransfers.filter(t => t.fromId === pid || t.toId === pid);
+        const lines = mine.length ? mine.map(t => {
+          const otherId = t.fromId === pid ? t.toId : t.fromId;
+          const other = g.players.find(pp => pp.id === otherId);
+          const youPay = t.fromId === pid;
+          return `<div style="font-size:12px;color:${youPay?'#fda4af':'#6ee7b7'};">${youPay?'מעביר ל-':'מקבל מ-'}${esc(other?other.name:'?')}: ₪${Math.round(t.amount)}${t.paid?' (שולם)':''}</div>`;
+        }).join("") : `<div style="font-size:12px;color:var(--muted);">מאוזן</div>`;
+        return `<div class="roster-row" style="flex-direction:column;align-items:flex-start;gap:4px;">
+          <span style="font-weight:700;">${esc(pl?pl.name:"?")}</span>
+          ${lines}
+        </div>`;
+      }).join("");
+      settlementHtml = `
+        ${rows}
+        <div class="row" style="gap:8px;margin:10px 0;">
+          <button class="btn btn-block" style="background:#0891b2;color:#fff;" data-open-paybox-generic>פתח פייבוקס לתשלום</button>
+          <button class="btn btn-block" style="background:#0891b2;color:#fff;" data-open-bit-generic>פתח ביט לתשלום</button>
+        </div>
+        ${settlementWarning}
+      `;
+    }
   }
-  const settlementHtml = (allCashedOut && !potUnbalanced) ? `
-    ${activePaybox ? `<button class="btn btn-block" style="margin-bottom:6px;background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;" data-open-active-paybox><img src="/static/paybox-icon.png" style="height:16px;width:auto;display:block;">העברה לקבוצת פייבוקס משותפת: ${esc(activePaybox.name)}</button>
-    <div style="text-align:center;color:var(--muted);font-size:12px;margin-bottom:6px;">או</div>` : ""}
-    <button class="btn ${showSettlement?'':'btn-ghost'} btn-block" data-toggle-settlement style="margin-bottom:10px;${showSettlement?'background:#0891b2;color:#fff;':''}">${icon('coins')} ${showSettlement?'הסתר הסדר תשלומים':'הסדר תשלומים בין שחקנים'}</button>
-    ${showSettlement ? `<div class="row" style="gap:8px;margin-bottom:10px;">
-      <button class="btn btn-block" style="background:#0891b2;color:#fff;" data-open-paybox-generic>פתח פייבוקס לתשלום</button>
-      <button class="btn btn-block" style="background:#0891b2;color:#fff;" data-open-bit-generic>פתח ביט לתשלום</button>
-    </div>` : ""}
-    ${settlementWarning}
-  ` : "";
 
   // Once everyone's cashed out but the declared chips don't match what was bought in by
   // more than ₪5, settling up between players off those numbers would just be wrong -
@@ -2557,9 +2581,11 @@ function renderActionPanel(g, c, seatedIds){
         ${seatedIds.map(pid => {
           const pl = g.players.find(pp => pp.id === pid);
           const checked = !!balanceFixSelected[pid];
+          const playerProfit = (liveChips[pid]||0) - (buyinTotals[pid]||0);
+          const playerProfitColor = playerProfit > 0.5 ? '#6ee7b7' : (playerProfit < -0.5 ? '#fda4af' : 'var(--muted)');
           return `<div class="checkbox-row" style="cursor:pointer;">
             ${canBalancePot ? `<input type="checkbox" data-balance-fix-toggle="${pid}" ${checked?'checked':''}>` : ""}
-            <span class="flex1">${esc(pl ? pl.name : "?")}</span>
+            <span class="flex1">${esc(pl ? pl.name : "?")} <span style="color:${playerProfitColor};font-weight:700;">${playerProfit>0?'+':''}₪${Math.round(playerProfit)}</span></span>
             <button class="btn btn-ghost btn-sm" data-check-balance="${pid}">בדיקת מאזן</button>
           </div>`;
         }).join("")}
@@ -3867,12 +3893,21 @@ function renderModal(m){
       rows += buyins.map((b,i) => `<div class="roster-row"><span>תשלום ${i+1}${b.ts?` · ${fmtTime(b.ts)}`:""}</span><span style="display:flex;align-items:center;gap:10px;">₪${b.amount}<button class="icon-btn" style="color:#fda4af;" data-delete-buyin="${b.id}" title="ביטול תשלום">${icon('trash')}</button></span></div>`).join("");
     }
     if (m.editable) {
+      // Same select-then-confirm shape as the main table buy-in flow (tap only
+      // highlights, a separate button actually adds it) - just its own state
+      // (checkBalanceSelectedAmount), since a correction has no minimum to enforce on
+      // "אחר" the way the main flow does.
+      const cbCustomSelected = checkBalanceSelectedAmount === "custom";
+      const cbAmount = cbCustomSelected ? null : checkBalanceSelectedAmount;
       rows += `<div class="section-title" style="padding:0;margin:14px 0 6px;">הוסף קנייה (לתיקון טעות)</div>`;
-      rows += `<div class="chip-row">${[50,80,100].map(v=>`<button class="chip-btn" data-check-balance-add-buyin="${v}">₪${v}</button>`).join("")}</div>`;
-      rows += `<div style="display:flex;gap:8px;margin-bottom:14px;">
-        <input type="number" inputmode="decimal" id="check-balance-custom-amount" placeholder="סכום אחר" style="flex:1;">
-        <button class="btn btn-primary" data-check-balance-add-custom-buyin>${icon('plus')} הוסף</button>
+      rows += `<div class="chip-row">
+        ${FIXED_BUYIN_AMOUNTS.map(v=>`<button class="chip-btn${checkBalanceSelectedAmount===v?' buyin-selected':''}" data-check-balance-select="${v}">₪${v}</button>`).join("")}
+        ${cbCustomSelected
+          ? `<input type="number" inputmode="decimal" id="check-balance-custom-amount" placeholder="סכום" onfocus="this.select()" style="flex:1;min-width:0;" autofocus>`
+          : `<button class="chip-btn" data-check-balance-select="custom">אחר</button>`
+        }
       </div>`;
+      rows += `<button class="btn btn-primary btn-block" data-check-balance-confirm style="margin-bottom:14px;" ${(cbAmount>0||cbCustomSelected)?'':'disabled'}>${icon('plus')} הוסף</button>`;
     }
     const paybox = (g.payboxPayments||[]).filter(b=>b.playerId===m.playerId);
     if (paybox.length) {
@@ -4189,6 +4224,7 @@ function attachHandlers(){
     openModal({type:"payPlayer", gameId: nav.gameId, fromPlayerId: selectedSeatPlayerId, amount: parseFloat(panelPayPlayerBtn.dataset.payPlayerAmount), toPlayerId: null});
   };
   app.querySelectorAll("[data-check-balance]").forEach(el => el.onclick = () => {
+    checkBalanceSelectedAmount = null;
     openModal({type:"history", gameId: nav.gameId, playerId: el.dataset.checkBalance, editable: true});
   });
   app.querySelectorAll("[data-balance-fix-toggle]").forEach(el => el.onchange = () => {
@@ -4303,7 +4339,7 @@ function attachHandlers(){
     const g = getGame(nav.gameId);
     const c = getCommunity(g.communityId);
     const link = getActivePayboxLink(c);
-    if (link) window.open(link, "_blank", "noopener");
+    window.open(link || "https://links.payboxapp.com/", "_blank", "noopener");
   };
   const openPayboxGenericBtn = app.querySelector("[data-open-paybox-generic]");
   if (openPayboxGenericBtn) openPayboxGenericBtn.onclick = () => window.open("https://links.payboxapp.com/", "_blank", "noopener");
@@ -5447,27 +5483,24 @@ function attachHandlers(){
     app.querySelectorAll("[data-delete-player-payment]").forEach(el => el.onclick = () => {
       openModal({type:"deletePlayerPayment", gameId: modal.gameId, playerId: modal.playerId, paymentId: el.dataset.deletePlayerPayment, returnTo: modal});
     });
-    app.querySelectorAll("[data-check-balance-add-buyin]").forEach(el => el.onclick = async () => {
-      const amount = parseFloat(el.dataset.checkBalanceAddBuyin);
-      const gameId = modal.gameId, playerId = modal.playerId;
-      el.disabled = true;
-      if (USE_RELATIONAL_API) {
-        try { await v2AddBuyin(gameId, uid(), playerId, amount); }
-        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
-      } else {
-        await mutateAndSave(() => {
-          const g = getGame(gameId);
-          g.buyins.push({id: uid(), playerId, amount, ts: Date.now()});
-        });
-      }
-      render(); // re-renders the same history modal with the fresh buy-in list/totals
+    app.querySelectorAll("[data-check-balance-select]").forEach(el => el.onclick = () => {
+      const v = el.dataset.checkBalanceSelect;
+      checkBalanceSelectedAmount = v === "custom" ? "custom" : parseFloat(v);
+      render();
     });
-    const addCustomBuyinBtn = app.querySelector("[data-check-balance-add-custom-buyin]");
-    if (addCustomBuyinBtn) addCustomBuyinBtn.onclick = async () => {
-      const amount = parseFloat(document.getElementById("check-balance-custom-amount").value);
+    const checkBalanceConfirmBtn = app.querySelector("[data-check-balance-confirm]");
+    const checkBalanceCustomInput = document.getElementById("check-balance-custom-amount");
+    if (checkBalanceCustomInput && checkBalanceConfirmBtn) checkBalanceCustomInput.oninput = () => {
+      const amt = parseFloat(checkBalanceCustomInput.value);
+      checkBalanceConfirmBtn.disabled = !(!isNaN(amt) && amt > 0);
+    };
+    if (checkBalanceConfirmBtn) checkBalanceConfirmBtn.onclick = async () => {
+      const amount = checkBalanceSelectedAmount === "custom"
+        ? parseFloat((document.getElementById("check-balance-custom-amount")||{}).value)
+        : checkBalanceSelectedAmount;
       if (!amount || amount <= 0) return;
       const gameId = modal.gameId, playerId = modal.playerId;
-      addCustomBuyinBtn.disabled = true;
+      checkBalanceConfirmBtn.disabled = true;
       if (USE_RELATIONAL_API) {
         try { await v2AddBuyin(gameId, uid(), playerId, amount); }
         catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
@@ -5477,7 +5510,8 @@ function attachHandlers(){
           g.buyins.push({id: uid(), playerId, amount, ts: Date.now()});
         }, true);
       }
-      render();
+      checkBalanceSelectedAmount = null;
+      render(); // re-renders the same history modal with the fresh buy-in list/totals
     };
     const editChipsBtn = app.querySelector("[data-check-balance-edit-chips]");
     if (editChipsBtn) editChipsBtn.onclick = () => {
