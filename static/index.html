@@ -2641,14 +2641,18 @@ function renderActionPanel(g, c, seatedIds){
     // payment button (never both) always visible, "מוצג רק אם צריך לשלם" - which one is
     // driven by the community's configured default (payboxSettings screen) unless this
     // session picked a different one just for tonight (sessionSettlementOverride, see
-    // the settlementMethod modal), falling back to a direct transfer when this is on
-    // someone else's behalf (opening your own PayBox to pay doesn't make sense there).
-    // Nothing owed (finished in profit/break-even) means an empty collapsed row - starts
-    // closed either way, same as the active panel always has.
+    // the settlementMethod modal). On someone else's behalf (onBehalf), opening your own
+    // PayBox to pay doesn't make sense there - but neither does prompting the admin to
+    // record a manual "transfer to" on that player's behalf when the table's actual
+    // method IS the group PayBox, since the real payment happens outside the app on the
+    // absent player's own phone; show no payment button at all in that specific
+    // combination. Nothing owed (finished in profit/break-even) means an empty collapsed
+    // row too - starts closed either way, same as the active panel always has.
     const needsPayment = owes > 0.005;
     const effectiveSettlement = sessionSettlementOverride || c.settlementDefault || "direct";
     const useProxyPaybox = needsPayment && !onBehalf && effectiveSettlement === "paybox";
-    const paymentButtonHtml = !needsPayment ? "" : useProxyPaybox
+    const hidePaymentButton = needsPayment && onBehalf && effectiveSettlement === "paybox";
+    const paymentButtonHtml = (!needsPayment || hidePaymentButton) ? "" : useProxyPaybox
       ? `<button class="btn btn-block" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-paybox-pay data-paybox-amount="${Math.round(owes*100)/100}"><img src="/static/paybox-icon.png" style="height:18px;width:auto;display:block;"> פתח קבוצת פייבוקס משותפת לתשלום (₪${Math.round(owes*100)/100})</button>`
       : `<button class="btn btn-primary btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-pay-player data-pay-player-amount="${Math.round(owes*100)/100}">${icon('coins')} העבר ₪${Math.round(owes*100)/100} ל...</button>`;
     panelBody = `
@@ -3713,7 +3717,7 @@ function renderModal(m){
     const headerHtml = `
       <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:12px 4px;margin-bottom:22px;display:grid;grid-template-columns:1fr 1fr 1fr;text-align:center;">
         <div><div style="font-size:11px;color:var(--muted);">סה"כ קנייה</div><div style="font-weight:700;">₪${buyinTotal}</div></div>
-        <div><div style="font-size:11px;color:var(--muted);">ציפים שספרנו</div><div id="chips-header-counted" style="font-weight:700;">₪${chips}</div></div>
+        <div><div style="font-size:11px;color:var(--muted);">ז'יטונים שספרנו</div><div id="chips-header-counted" style="font-weight:700;">₪${chips}</div></div>
         <div><div style="font-size:11px;color:var(--muted);">רווח/הפסד</div><div id="chips-header-profit" style="font-weight:700;color:${profitColor(initProfit)};">${initProfit>0?'+':''}₪${initProfit}</div></div>
       </div>
     `;
