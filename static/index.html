@@ -100,11 +100,15 @@ body.table-screen .poker-table-wrap{flex:1;min-height:80px;width:100%;padding-to
    Anchoring to top vs bottom (set per-render in renderTable from the viewer's own seat
    position - see getMySeatPosition) decides which end stays fully visible. */
 body.table-screen .poker-table-inner{position:absolute;left:0;right:0;width:100%;aspect-ratio:1/1.45;}
-/* The 16px offset (instead of a flush 0) leaves a little slack past the seat closest to
-   the crop line, so its caption text never gets sliced mid-glyph right at the edge. */
-body.table-screen .poker-table-inner.crop-from-bottom{top:0;bottom:auto;}
+/* A flush 0 offset clips the closest seat's own content right at the edge - a top-row
+   seat's avatar circle (crop-from-bottom, anchored at the top) and a bottom-row seat's
+   caption text (crop-from-top, anchored at the bottom) both extend a bit past the felt's
+   own nominal edge by design (see .seat-wrap's centered translate). These offsets (kept
+   in sync with layoutTableSize's own TOP_CROP_BUFFER/BOTTOM_CROP_BUFFER) reserve just
+   enough slack for that overhang instead of cropping into it. */
+body.table-screen .poker-table-inner.crop-from-bottom{top:20px;bottom:auto;}
 body.table-screen .poker-table-inner.crop-from-top{bottom:16px;top:auto;}
-body.table-screen .bottom-bar{position:static;flex-shrink:0;background:none;margin:0;max-width:none;max-height:70vh;max-height:70dvh;overflow-y:auto;}
+body.table-screen .bottom-bar{position:static;flex-shrink:0;background:none;margin:0;max-width:none;max-height:70vh;max-height:70dvh;overflow-y:auto;padding-top:2px;}
 .empty{text-align:center;padding:50px 20px;color:#059669;font-size:14px;}
 .section-title{color:var(--gold);font-size:11px;font-weight:700;letter-spacing:.05em;margin:0 0 8px;padding:0 20px;}
 .field{display:block;margin-bottom:14px;}
@@ -123,7 +127,7 @@ input:focus,.select-input:focus{border-color:var(--gold);}
    expand/collapse the panel below it (see the pointerdown/move/up handlers in
    attachHandlers). touch-action:none stops the browser's own page-scroll gesture from
    competing with the swipe on a touchscreen. */
-.panel-drag-handle{position:relative;display:flex;justify-content:center;align-items:center;height:34px;margin-bottom:6px;cursor:grab;touch-action:none;}
+.panel-drag-handle{position:relative;display:flex;justify-content:center;align-items:center;height:24px;margin-bottom:4px;cursor:grab;touch-action:none;}
 .panel-drag-glow{position:absolute;left:50%;bottom:-10px;transform:translateX(-50%);width:190px;height:80px;background:radial-gradient(ellipse 42% 100% at 50% 100%,rgba(153,246,209,.9) 0%,rgba(153,246,209,.45) 30%,rgba(153,246,209,.16) 55%,transparent 78%);pointer-events:none;}
 .panel-drag-handle svg{position:relative;filter:drop-shadow(0 0 4px rgba(153,246,209,.8));}
 /* Always present in the DOM (both collapsed and expanded) so the drag handler below can
@@ -2334,6 +2338,8 @@ function render(){
 // reading is cached and reused while expanded, so the table keeps the exact size it had
 // when last collapsed instead of shrinking to fit less room.
 let lastCollapsedTableSize = null; // {w,h} in px
+// Kept in sync with the matching CSS offsets on .poker-table-inner.crop-from-* above.
+const TOP_CROP_BUFFER = 20, BOTTOM_CROP_BUFFER = 16;
 function layoutTableSize(){
   if (nav.screen !== "table") return;
   const wrap = document.querySelector(".poker-table-wrap");
@@ -2341,8 +2347,13 @@ function layoutTableSize(){
   if (!wrap || !inner) return;
   const RATIO = 1.45; // height/width, matches the CSS aspect-ratio used outside the table screen
   if (!actionPanelExpanded) {
+    // The active crop-from-* class offsets the inner box away from whichever edge is
+    // flush (see the CSS) - that offset eats into the same wrap height being measured
+    // here, so it has to come off the collapsed budget too, or the box ends up exactly
+    // buffer-px taller than what actually fits and gets clipped anyway.
+    const buffer = inner.classList.contains("crop-from-bottom") ? TOP_CROP_BUFFER : BOTTOM_CROP_BUFFER;
     const availableW = wrap.getBoundingClientRect().width;
-    const availableH = wrap.getBoundingClientRect().height;
+    const availableH = wrap.getBoundingClientRect().height - buffer;
     let w = availableW, h = w * RATIO;
     if (h > availableH && availableH > 0) { h = availableH; w = h / RATIO; }
     lastCollapsedTableSize = { w, h };
@@ -2549,10 +2560,11 @@ function renderActionPanel(g, c, seatedIds){
   // A newly-seated player hasn't actually "entered" the table until they've bought in at
   // least once - force the dedicated initialBuyin modal (see renderModal) instead of the
   // normal panel below, same amount state (selectedBuyinAmount/customBuyinAmount) but a
-  // mandatory minimum and no way to dismiss without picking something. Only for the
-  // player's own seat (isSelf) - an admin seating a guest on their behalf isn't "entering"
-  // anything themselves, so the ordinary on-behalf buy-in flow still applies to them.
-  if (isSelf && !cashedOut && buyinTotal === 0 && (!modal || modal.type === "initialBuyin")) {
+  // mandatory minimum and no way to dismiss without picking something. Applies whether
+  // it's the player's own seat or an admin seating someone else (the pickSeat/addGuest
+  // handlers select the new seat right after assigning it specifically so this fires for
+  // them immediately too).
+  if (!cashedOut && buyinTotal === 0 && (!modal || modal.type === "initialBuyin")) {
     modal = { type: "initialBuyin", gameId: g.id, playerId: pid };
     return `<div class="bottom-bar"></div>`;
   } else if (modal && modal.type === "initialBuyin" && modal.playerId === pid) {
@@ -2767,8 +2779,14 @@ function renderModal(m){
     title = "כניסה לשולחן";
     const customSelected = selectedBuyinAmount === "custom";
     const canConfirm = canConfirmSelectedBuyin();
+    const ibG = getGame(m.gameId);
+    const ibMyPlayerId = ibG && myIdentity.myPlayers && myIdentity.myPlayers[ibG.communityId];
+    const ibIsSelf = m.playerId === ibMyPlayerId;
+    const ibPlayerName = ibG && (ibG.players.find(pl => pl.id === m.playerId) || {}).name;
     body = `
-      <p style="color:var(--muted);font-size:13px;margin-bottom:14px;text-align:center;">בחרו סכום קנייה כדי להצטרף לשולחן - מינימום ₪${MIN_BUYIN_AMOUNT}.</p>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:14px;text-align:center;">${ibIsSelf
+        ? `בחרו סכום קנייה כדי להצטרף לשולחן - מינימום ₪${MIN_BUYIN_AMOUNT}.`
+        : `בחרו סכום קנייה כדי להכניס את ${esc(ibPlayerName||'השחקן')} לשולחן - מינימום ₪${MIN_BUYIN_AMOUNT}.`}</p>
       <div style="display:flex;gap:6px;margin-bottom:12px;width:100%;">
         ${FIXED_BUYIN_AMOUNTS.map(v=>`<button class="chip-btn${selectedBuyinAmount===v?' buyin-selected':''}" data-buyin-select="${v}" style="flex:1;padding:9px 2px;font-size:16px;">₪${v}</button>`).join("")}
         ${customSelected
@@ -5497,6 +5515,10 @@ function attachHandlers(){
           try {
             const ok = await v2ClaimSeat(modal.gameId, modal.seatIndex, p.id, p.name);
             if (!ok) showAlert("המושב הזה כבר תפוס - בחרו מושב אחר.");
+            // Select the seat that was just filled so the panel - and, since they haven't
+            // bought in yet, the mandatory initialBuyin modal (see renderActionPanel) -
+            // shows for THIS player right away instead of whoever was selected before.
+            else selectedSeatPlayerId = p.id;
           } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
         }
         closeModal();
@@ -5519,6 +5541,7 @@ function attachHandlers(){
         // player," so the next game they opened auto-seated whoever they'd most recently
         // assigned to a seat instead of themselves. That mapping should only come from
         // genuinely self-identifying (via an invite link, or creating the community).
+        selectedSeatPlayerId = p.id;
       });
       closeModal();
     });
@@ -5537,6 +5560,7 @@ function attachHandlers(){
         try {
           const ok = await v2ClaimSeat(modal.gameId, modal.seatIndex, guestId, name);
           if (!ok) showAlert("המושב הזה כבר תפוס - בחרו מושב אחר.");
+          else selectedSeatPlayerId = guestId; // see the same comment on the pick-player handler above
         } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
         closeModal();
         return;
@@ -5549,6 +5573,7 @@ function attachHandlers(){
         if (!g.seats) g.seats = new Array(9).fill(null);
         g.seats[modal.seatIndex] = guest.id;
         g.players.push(guest);
+        selectedSeatPlayerId = guest.id;
         if (!g.liveChips) g.liveChips = {};
         g.liveChips[guest.id] = 0;
       });
