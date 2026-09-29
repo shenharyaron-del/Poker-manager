@@ -284,7 +284,7 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .seat-info.name-behalf{background:#78350f;}
 .seat-name{font-size:11px;font-weight:700;color:var(--text);text-align:center;white-space:nowrap;max-width:78px;overflow:hidden;text-overflow:ellipsis;}
 .seat-caption{font-size:13px;color:var(--gold);font-weight:700;text-align:center;line-height:1.35;white-space:nowrap;}
-.seat-history-toggle{background:none;border:none;color:var(--muted);cursor:pointer;padding:2px;display:inline-flex;vertical-align:middle;margin-right:2px;}
+.seat-history-toggle{position:absolute;top:3px;right:5px;background:none;border:none;color:var(--muted);cursor:pointer;padding:2px;display:inline-flex;z-index:2;}
 .seat-history-toggle svg{transition:transform .15s ease;}
 .seat-history-toggle.open svg{transform:rotate(180deg);}
 /* White, continuing straight down from the dark nameplate above it (see infoRadius/radius
@@ -3146,7 +3146,8 @@ function renderTable(gameId){
     return `<div class="seat-wrap" style="left:${x}%;top:${y}%;${wrapZ}" data-seat="${i}">
       <div class="seat-circle filled ${cashedOut?'cashed-out':''}${selected?' selected':''}${ringClass}"${circleStyle}>${circleInner}</div>
       <div class="seat-info${selected?' selected':''}${nameClass}" data-seat-info style="position:relative;${infoRadius}">
-        <div class="seat-name">${historyToggleHtml}${esc(name)}</div>
+        ${historyToggleHtml}
+        <div class="seat-name">${esc(name)}</div>
         <div class="seat-caption">${caption}</div>
         ${historyPopupHtml}
       </div>
