@@ -5249,8 +5249,15 @@ function attachHandlers(){
     const createBtn = app.querySelector("[data-create-game]");
     if (createBtn) createBtn.onclick = async () => {
       const c = getCommunity(modal.communityId);
-      const name = document.getElementById("new-game-name").value.trim();
+      const nameInput = document.getElementById("new-game-name");
+      const name = nameInput.value.trim();
       if (USE_RELATIONAL_API) {
+        // A roster/link/create sequence of real network round trips - with no feedback
+        // beforehand this read as the app just sitting there doing nothing, reported live
+        // as "opening a new night is slow and confusing".
+        createBtn.disabled = true;
+        nameInput.disabled = true;
+        showButtonLoading(createBtn);
         const gid = uid();
         let creatorPlayer = null;
         if (myIdentity.name) {
@@ -5262,10 +5269,18 @@ function attachHandlers(){
             }
             await v2LinkRosterPlayer(c.id, creatorPlayer.id, myIdentity.id);
             await v2CreateGame(gid, c.id, name || null, modal.date, myIdentity.name, creatorPlayer.id, creatorPlayer.name);
-          } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+          } catch(e) {
+            showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב.");
+            createBtn.disabled = false; nameInput.disabled = false; createBtn.textContent = "פתח שולחן";
+            return;
+          }
         } else {
           try { await v2CreateGame(gid, c.id, name || null, modal.date, myIdentity.name, null, null); }
-          catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+          catch(e) {
+            showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב.");
+            createBtn.disabled = false; nameInput.disabled = false; createBtn.textContent = "פתח שולחן";
+            return;
+          }
         }
         go("community", {communityId:c.id});
         return;
