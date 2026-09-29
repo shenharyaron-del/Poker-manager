@@ -2822,7 +2822,16 @@ function renderCommunity(communityId){
   const c = getCommunity(communityId);
   if (!c) return `<div class="empty">קבוצה לא נמצאה</div>`;
   const games = gamesForCommunity(communityId);
-  const gamesHtml = games.length ? games.map(g => {
+  const noPlayersYet = c.roster.length === 0;
+  const newGameCard = `
+    <div class="card" data-new-game style="border-style:dashed;border-color:var(--gold);background:rgba(251,191,36,.06);${noPlayersYet ? 'opacity:.5;cursor:not-allowed;' : ''}">
+      <div class="flex1">
+        <div class="name serif">ערב משחק חדש</div>
+        <div class="meta">${icon('plus')} ${noPlayersYet ? "הוסיפו שחקנים תחילה" : "הקישו כדי לפתוח שולחן חדש"}</div>
+      </div>
+      <div class="chev">${icon('chev')}</div>
+    </div>`;
+  const gamesHtml = newGameCard + games.map(g => {
     const seatedCount = (g.seats||[]).filter(Boolean).length;
     const waitingForPlayers = !g.closed && seatedCount < 2;
     return `
@@ -2834,7 +2843,7 @@ function renderCommunity(communityId){
       ${myIdentity.name && (myIdentity.name === g.createdByName || myIdentity.name === c.createdByName) ? `<button class="icon-btn danger" data-delete-game="${g.id}">${icon('trash')}</button>` : ""}
       <div class="chev">${icon('chev')}</div>
     </div>`;
-  }).join("") : `<div class="empty">עדיין אין ערבי משחק בקבוצה הזו</div>`;
+  }).join("");
 
   return `
     <div class="top row" style="padding-bottom:8px;">
@@ -2863,10 +2872,7 @@ function renderCommunity(communityId){
       </div>`;
     })()}
     <div class="section-title">ערבי משחק</div>
-    <div class="px5" style="margin-bottom:80px;">${gamesHtml}</div>
-    <div class="bottom-bar">
-      <button class="btn btn-primary btn-block" data-new-game ${c.roster.length===0 ? "disabled":""}>${icon('plus')} ${c.roster.length===0 ? "הוסיפו שחקנים תחילה" : "ערב משחק חדש"}</button>
-    </div>
+    <div class="px5" style="margin-bottom:20px;">${gamesHtml}</div>
   `;
 }
 
@@ -4543,6 +4549,8 @@ function attachHandlers(){
 
   const newGameBtn = app.querySelector("[data-new-game]");
   if (newGameBtn) newGameBtn.onclick = () => {
+    const c = getCommunity(nav.communityId);
+    if (!c || c.roster.length === 0) return;
     openModal({type:"newGame", communityId: nav.communityId, date: new Date().toISOString().slice(0,10)});
   };
 
