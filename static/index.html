@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-title" content="Poker Manager">
 <meta property="og:title" content="Poker Manager">
 <meta property="og:url" content="https://poker-manager-7irt.onrender.com/">
-<meta property="og:description" content="ניהול ערבי פוקר, ציפים ומאזנים לקבוצה שלכם">
+<meta property="og:description" content="ניהול ערבי פוקר, ג'יטונים ומאזנים לקבוצה שלכם">
 <meta property="og:image" content="https://poker-manager-7irt.onrender.com/static/logo-share.jpg">
 <meta property="og:image:type" content="image/jpeg">
 <meta property="og:image:width" content="630">
@@ -2764,7 +2764,7 @@ function renderCommunity(communityId){
           <span style="font-family:system-ui,sans-serif;font-weight:400;font-size:8px;opacity:.8;">Setup</span>
         </span>
       </button>` : ""}
-      ${c.createdByName && myIdentity.name && c.createdByName === myIdentity.name ? `<button class="icon-btn gold" data-open-chip-setup="${c.id}" title="הגדרת ציפים">${icon('chip')}</button>` : ""}
+      ${c.createdByName && myIdentity.name && c.createdByName === myIdentity.name ? `<button class="icon-btn gold" data-open-chip-setup="${c.id}" title="הגדרת ג'יטונים">${icon('chip')}</button>` : ""}
       ${c.createdByName && myIdentity.name && c.createdByName === myIdentity.name ? `<button class="icon-btn gold" data-invite-community="${c.id}" title="הזמנה דרך WhatsApp">${icon('share')}</button>` : ""}
       <button class="btn btn-ghost btn-sm" data-show-roster style="display:flex;align-items:center;gap:6px;">${icon('users')} שחקנים (${c.roster.length})</button>
     </div>
@@ -2772,8 +2772,8 @@ function renderCommunity(communityId){
       const missingChips = !c.chipValues || !c.chipValues.length;
       const missingPaybox = !getActivePayboxEntry(c);
       if (!missingChips && !missingPaybox) return "";
-      const msg = missingChips && missingPaybox ? "טרם הוגדרו ציפים ופייבוקס לקבוצה זו."
-        : missingChips ? "טרם הוגדרו ציפים לקבוצה זו."
+      const msg = missingChips && missingPaybox ? "טרם הוגדרו ג'יטונים ופייבוקס לקבוצה זו."
+        : missingChips ? "טרם הוגדרו ג'יטונים לקבוצה זו."
         : "טרם הוגדר פייבוקס לקבוצה זו.";
       return `<div style="background:#450a0a;color:#fca5a5;border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:13px;text-align:center;">${msg}</div>`;
     })()}
@@ -2947,7 +2947,7 @@ function renderActionPanel(g, c, seatedIds){
       ? `<button class="btn btn-block" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-paybox-pay data-paybox-amount="${Math.round(owes*100)/100}"><img src="/static/paybox-icon.png" style="height:18px;width:auto;display:block;"> פתח קבוצת פייבוקס משותפת לתשלום (₪${Math.round(owes*100)/100})</button>`
       : `<button class="btn btn-primary btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-pay-player data-pay-player-amount="${Math.round(owes*100)/100}">${icon('coins')} העבר ₪${Math.round(owes*100)/100} ל...</button>`;
     panelBody = `
-      ${isSelf && !allCashedOut ? `<div style="background:rgba(255,255,255,.05);border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12px;text-align:center;color:var(--muted);">שמרו את הציפים שלכם עד לספירה הסופית של כל השחקנים, לוידוא שהקופה מאוזנת</div>` : ""}
+      ${isSelf && !allCashedOut ? `<div style="background:rgba(255,255,255,.05);border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12px;text-align:center;color:var(--muted);">שמרו את הג'יטונים שלכם עד לספירה הסופית של כל השחקנים, לוידוא שהקופה מאוזנת</div>` : ""}
       <div data-panel-collapsed>
         <div data-toggle-action-panel class="panel-drag-handle">
           <div class="panel-drag-glow"></div>
@@ -3181,12 +3181,11 @@ function renderTable(gameId){
     <div class="poker-table-wrap">
       <div class="poker-table-inner ${cropClass}">
         <div class="poker-table-felt"></div>
-        <img src="/static/logo-watermark.png" style="position:absolute;left:50%;top:39%;transform:translate(-50%,-50%);width:46%;opacity:.6;pointer-events:none;">
         ${seatsHtml}
         <div id="settlement-overlay" style="position:absolute;inset:0;pointer-events:none;"></div>
-        <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) translateY(70px);text-align:center;z-index:3;">
+        <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;z-index:3;">
           <div style="color:var(--muted);font-size:12px;">סה"כ קנייה ₪${totalBuyinAll}</div>
-          <div style="color:var(--muted);font-size:12px;">סה"כ ציפים ₪${totalChipsAll}</div>
+          <div style="color:var(--muted);font-size:12px;">סה"כ ג'יטונים ₪${totalChipsAll}</div>
           <div style="color:${diffColor};font-weight:700;font-size:13px;margin-top:4px;">${diffLabel}${Math.abs(diff)>=0.5?` ₪${Math.abs(Math.round(diff))}`:""}</div>
         </div>
       </div>
@@ -3564,9 +3563,9 @@ function renderModal(m){
     }
   } else if (m.type === "chipSetup") {
     const c = getCommunity(m.communityId);
-    title = `הגדרת ציפים — ${esc(c.name)}`;
+    title = `הגדרת ג'יטונים — ${esc(c.name)}`;
     const editableList = m.points.length ? `
-      <div class="section-title" style="padding:0;margin:0 0 6px;">זוטונים וערכים</div>
+      <div class="section-title" style="padding:0;margin:0 0 6px;">ג'יטונים וערכים</div>
       <div class="scroll-list" style="margin-bottom:14px;">
         ${m.points.map((pt,i) => `
           <div class="roster-row">
@@ -3591,13 +3590,13 @@ function renderModal(m){
     `;
     if (!m.imageSrc) {
       body = `
-        <div class="section-title" style="padding:0;margin:0 0 6px;">יחס ציפים</div>
+        <div class="section-title" style="padding:0;margin:0 0 6px;">יחס ג'יטונים</div>
         <div class="field">
-          <label>1 שקל עבור <input type="number" inputmode="decimal" id="chip-ratio-input" value="${esc(c.chipRatio || '')}" placeholder="4" style="width:70px;display:inline-block;text-align:center;"> ציפים</label>
+          <label>1 שקל עבור <input type="number" inputmode="decimal" id="chip-ratio-input" value="${esc(c.chipRatio || '')}" placeholder="4" style="width:70px;display:inline-block;text-align:center;"> ג'יטונים</label>
         </div>
-        <p style="color:var(--muted);font-size:12px;margin-top:-8px;">משמש לספירת ציפים כוללת בסיום ערב (כמות ציפים ולא לפי צבע) - למשל, יחס של 4 אומר ש-100 ציפים שווים ל-₪25.</p>
+        <p style="color:var(--muted);font-size:12px;margin-top:-8px;">משמש לספירת ג'יטונים כוללת בסיום ערב (כמות ג'יטונים ולא לפי צבע) - למשל, יחס של 4 אומר ש-100 ג'יטונים שווים ל-₪25.</p>
         ${editableList}
-        <p style="color:var(--muted);font-size:13px;">כדי להוסיף זוטונים: צלמו תמונה עם כל הזוטונים פרוסים בנפרד על משטח, ממבט על (מלמעלה) - נזהה אותם אוטומטית ונסמן מסגרת סביב כל אחד. אפשר לגרור, לשנות גודל, או להקיש על התמונה כדי להוסיף עוד ידנית. או, הוסיפו זיטון ידנית בלי תמונה בכלל.</p>
+        <p style="color:var(--muted);font-size:13px;">כדי להוסיף ג'יטונים: צלמו תמונה עם כל הג'יטונים פרוסים בנפרד על משטח, ממבט על (מלמעלה) - נזהה אותם אוטומטית ונסמן מסגרת סביב כל אחד. אפשר לגרור, לשנות גודל, או להקיש על התמונה כדי להוסיף עוד ידנית. או, הוסיפו ג'יטון ידנית בלי תמונה בכלל.</p>
         ${pickButtons}
         <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-add-chip-manual>${icon('plus')} הוסף צבע ידנית</button>
         <button class="btn btn-primary btn-block" data-save-chip-values>שמור שינויים</button>
@@ -3620,11 +3619,11 @@ function renderModal(m){
           ${markers}
           ${m.analyzingChips ? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;"><span class="poker-loading-spin">${icon('chip')}</span></div>` : ""}
         </div>
-        <p style="color:var(--muted);font-size:12px;margin-top:0;">${m.analyzingChips ? "מזהה זוטונים אוטומטית..." : "הקישו על זיטון בתמונה כדי להוסיף מסגרת דוגמה - אפשר לגרור אותה למיקום מדויק, ולגרור את הנקודה הלבנה כדי לשנות את הגודל שיקיף בדיוק את הזיטון. התמונה בטבלה מתעדכנת תוך כדי הגרירה."}</p>
+        <p style="color:var(--muted);font-size:12px;margin-top:0;">${m.analyzingChips ? "מזהה ג'יטונים אוטומטית..." : "הקישו על ג'יטון בתמונה כדי להוסיף מסגרת דוגמה - אפשר לגרור אותה למיקום מדויק, ולגרור את הנקודה הלבנה כדי לשנות את הגודל שיקיף בדיוק את הג'יטון. התמונה בטבלה מתעדכנת תוך כדי הגרירה."}</p>
         ${editableList}
         <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-retake-photo>${icon('plus')} תמונה אחרת</button>
         <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-add-chip-manual>${icon('plus')} הוסף צבע ידנית</button>
-        <button class="btn btn-primary btn-block" data-save-chip-values ${(m.points.length===0||m.analyzingChips)?"disabled":""}>שמור הגדרות ציפים</button>
+        <button class="btn btn-primary btn-block" data-save-chip-values ${(m.points.length===0||m.analyzingChips)?"disabled":""}>שמור הגדרות ג'יטונים</button>
       `;
     }
   } else if (m.type === "newCommunity") {
@@ -3640,7 +3639,7 @@ function renderModal(m){
     const c = getCommunity(m.communityId);
     title = "שכפול קבוצה";
     body = `
-      <p style="color:var(--muted);font-size:13px;">תיווצר קבוצה חדשה עם עותק של השחקנים וההגדרות של הזוטונים מ-<b>${esc(c.name)}</b>. ערבי משחק לא ישוכפלו.</p>
+      <p style="color:var(--muted);font-size:13px;">תיווצר קבוצה חדשה עם עותק של השחקנים וההגדרות של הג'יטונים מ-<b>${esc(c.name)}</b>. ערבי משחק לא ישוכפלו.</p>
       <div style="margin-bottom:12px;">
         <label style="display:block;color:#059669;font-size:11px;margin-bottom:4px;">שם הקבוצה החדשה</label>
         <input type="text" id="duplicate-community-name" value="${esc(c.name)} - עותק" style="width:100%;" autofocus>
@@ -4066,7 +4065,7 @@ function renderModal(m){
               <div class="row" style="gap:10px;">
                 ${cv.image ? `<img src="${cv.image}" style="width:28px;height:28px;object-fit:cover;border-radius:6px;border:1px solid rgba(255,255,255,.3);flex-shrink:0;">` : ""}
                 <input type="number" inputmode="numeric" data-color-count="${cv.id}" data-color-value="${cv.value}" placeholder="0" style="width:56px;height:34px;font-size:15px;text-align:center;">
-                <span>ציפים × ₪${cv.value}</span>
+                <span>ג'יטונים × ₪${cv.value}</span>
               </div>
               <span class="badge badge-ok" style="display:flex;flex-direction:column;align-items:center;line-height:1.25;flex-shrink:0;">
                 <span style="font-size:10px;">+</span>
@@ -4117,7 +4116,7 @@ function renderModal(m){
     title = "הסרה מהשולחן";
     body = `
       <p style="color:#6ee7b7;font-size:13px;">להסיר את <b>${esc(p?p.name:"")}</b> מהשולחן?</p>
-      ${(hasBuyins || hasChips) ? `<p style="color:#fbbf24;font-size:12px;">לשחקן יש קניות/ציפים בשולחן - הם יאופסו, כאילו לא ישב בשולחן. אם יחזור, הכל יעמוד על אפס.</p>` : ""}
+      ${(hasBuyins || hasChips) ? `<p style="color:#fbbf24;font-size:12px;">לשחקן יש קניות/ג'יטונים בשולחן - הם יאופסו, כאילו לא ישב בשולחן. אם יחזור, הכל יעמוד על אפס.</p>` : ""}
       <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-clear-seat>הסר מהשולחן</button>
     `;
   } else if (m.type === "returnToGamePayment") {
@@ -4136,7 +4135,7 @@ function renderModal(m){
     body = `
       <p style="color:#6ee7b7;font-size:13px;margin-top:0;">כמה כסף יש ביד עכשיו?</p>
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-        <label style="font-size:13px;font-weight:600;color:var(--muted);margin:0;">מכפיל ציפים</label>
+        <label style="font-size:13px;font-weight:600;color:var(--muted);margin:0;">מכפיל ג'יטונים</label>
         <input type="number" inputmode="numeric" id="leave-multiplier" min="1" max="99" maxlength="2" step="1" value="${m.multiplier || 1}" style="width:52px;flex:none;text-align:center;padding:8px;">
       </div>
       <div class="field"><label>סכום ביציאה בשקלים</label><input type="number" inputmode="decimal" id="leave-amount" value="${m.amount||''}" placeholder="0" autofocus></div>
@@ -4164,7 +4163,7 @@ function renderModal(m){
       (g.payboxPayments||[]).forEach(pp => { paidTotals[pp.playerId] = (paidTotals[pp.playerId]||0) + pp.amount; });
       body = `
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-          <label style="font-size:13px;font-weight:600;color:var(--muted);margin:0;">מכפיל ציפים</label>
+          <label style="font-size:13px;font-weight:600;color:var(--muted);margin:0;">מכפיל ג'יטונים</label>
           <input type="number" inputmode="numeric" id="chip-multiplier" min="1" max="99" maxlength="2" step="1" value="${m.multiplier || 1}" style="width:52px;flex:none;text-align:center;padding:8px;">
         </div>
         <div id="live-balance-box" class="pot-box" style="margin:0 0 14px;" data-total-buyins="${totalBuyins}" data-already-out="${alreadyOut}"></div>
@@ -4271,7 +4270,7 @@ function renderModal(m){
       // The pencil edits the cashout amount itself - shown whenever there's one to edit,
       // not just from the admin "check balance" flow (m.editable), so it's also reachable
       // from the regular "סיכום ערב" summary button a player sees after cashing out.
-      rows += `<div class="roster-row"><span>יצא עם${myOut.ts?` (בשעה ${fmtTime(myOut.ts)})`:""}</span><span style="display:flex;align-items:center;gap:8px;"><b>₪${myOut.amount}</b><button class="icon-btn" data-check-balance-edit-chips title="עדכן סכום ציפים">${icon('pencil')}</button></span></div>`;
+      rows += `<div class="roster-row"><span>יצא עם${myOut.ts?` (בשעה ${fmtTime(myOut.ts)})`:""}</span><span style="display:flex;align-items:center;gap:8px;"><b>₪${myOut.amount}</b><button class="icon-btn" data-check-balance-edit-chips title="עדכן סכום ג'יטונים">${icon('pencil')}</button></span></div>`;
       rows += `<div class="roster-row"><span>סה"כ רווח / הפסד</span><span style="font-weight:700;color:${myProfitTotal>0.005?'#6ee7b7':(myProfitTotal<-0.005?'#fda4af':'inherit')};">${myProfitTotal>0?'+':''}₪${Math.round(myProfitTotal*100)/100}</span></div>`;
       if (myOut.arrangedWith && myOut.arrangedWith.length) {
         const myProfit = computeArrangementAdjustments(g).adjusted[m.playerId];
@@ -5363,7 +5362,7 @@ function attachHandlers(){
     // exactly as if they'd placed it by hand.
     const detectChipsInPhoto = async (dataUrl, width, height, imgEl) => {
       try {
-        const prompt = `התמונה מציגה כמה זוטוני פוקר שונים, כל אחד מונח בנפרד על משטח, צולמו ממבט על. זהו את כל הזוטונים השונים הנראים בתמונה (כל צבע/סוג פעם אחת בלבד), ועבור כל אחד תנו תיבה תוחמת (bounding box) בפיקסלים מוחלטים יחסית לתמונה (רוחב ${width}, גובה ${height}) שתוחמת בדיוק את הזוטון עצמו ולא את הרקע. בפורמט [x1,y1,x2,y2] - פינה שמאלית-עליונה ופינה ימנית-תחתונה. החזירו תשובה בפורמט JSON בלבד, בלי טקסט נוסף ובלי markdown, במבנה הזה בדיוק: [{"box":[x1,y1,x2,y2]}]`;
+        const prompt = `התמונה מציגה כמה זוטוני פוקר שונים, כל אחד מונח בנפרד על משטח, צולמו ממבט על. זהו את כל הג'יטונים השונים הנראים בתמונה (כל צבע/סוג פעם אחת בלבד), ועבור כל אחד תנו תיבה תוחמת (bounding box) בפיקסלים מוחלטים יחסית לתמונה (רוחב ${width}, גובה ${height}) שתוחמת בדיוק את הזוטון עצמו ולא את הרקע. בפורמט [x1,y1,x2,y2] - פינה שמאלית-עליונה ופינה ימנית-תחתונה. החזירו תשובה בפורמט JSON בלבד, בלי טקסט נוסף ובלי markdown, במבנה הזה בדיוק: [{"box":[x1,y1,x2,y2]}]`;
         const result = await callClaudeVisionMulti([dataUrl], prompt);
         const boxes = (Array.isArray(result) ? result : []).filter(r => r && Array.isArray(r.box) && r.box.length === 4);
         if (!boxes.length) { if (modal && modal.type === "chipSetup") updateModal({analyzingChips: false}); return; }
@@ -5539,7 +5538,7 @@ function attachHandlers(){
       const ratioInp = document.getElementById("chip-ratio-input");
       const ratio = ratioInp ? parseFloat(ratioInp.value) : NaN;
       const validRatio = !isNaN(ratio) && ratio > 0;
-      if (!values.length && !validRatio) { showAlert("צריך להזין ערך לפחות לזיטון אחד, או יחס ציפים."); return; }
+      if (!values.length && !validRatio) { showAlert("צריך להזין ערך לפחות לג'יטון אחד, או יחס ג'יטונים."); return; }
       const communityId = modal.communityId;
       saveBtn.disabled = true;
       showButtonLoading(saveBtn);
@@ -5550,7 +5549,7 @@ function attachHandlers(){
         await Promise.all(values.map(async (v) => {
           if (v.image && v.image.startsWith("data:")) v.image = await uploadPhoto(v.image);
         }));
-      } catch(e) { showAlert("העלאת תמונות הציפים נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); render(); return; }
+      } catch(e) { showAlert("העלאת תמונות הג'יטונים נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); render(); return; }
       if (USE_RELATIONAL_API) {
         const c = getCommunity(communityId);
         const finalValues = values.length ? values : c.chipValues;
@@ -6511,7 +6510,7 @@ function attachHandlers(){
       box.innerHTML = `
         <div class="row-between" style="flex-wrap:wrap;gap:10px 16px;">
           <div><div class="pot-label">סה"כ הכנסות</div><div class="pot-val">₪${totalBuyins}</div></div>
-          <div style="text-align:center;"><div class="pot-label">סה"כ ציפים בשולחן</div><div class="pot-val">₪${Math.round(totalOut*100)/100}</div></div>
+          <div style="text-align:center;"><div class="pot-label">סה"כ ג'יטונים בשולחן</div><div class="pot-val">₪${Math.round(totalOut*100)/100}</div></div>
           <div style="text-align:left;"><div class="pot-label">נשאר לשלם</div><div class="pot-val">₪${diff}</div></div>
           ${allFilled ? `<div class="badge ${balancedNow?'badge-ok':'badge-bad'}" style="width:100%;text-align:center;">${balancedNow?'מאוזן ✓':'לא מאוזן'}</div>` : ""}
         </div>
