@@ -249,18 +249,14 @@ input:focus,.select-input:focus{border-color:var(--gold);}
    paint over it; this puts the avatar back on top like the reference image. */
 .seat-circle{position:relative;z-index:1;width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;touch-action:none;}
 .seat-circle.vacant{border:2px dashed rgba(255,255,255,.35);color:var(--muted);background:rgba(255,255,255,.05);font-size:20px;}
-.seat-circle.filled{background:var(--gold);color:var(--gold-text);border:2px solid var(--gold);}
+.seat-circle.filled{background:var(--gold);color:var(--gold-text);border:2px solid #000;}
 .seat-circle.filled.cashed-out{background:#57534e;border-color:#57534e;color:#fda4af;}
-/* Subtle cyan ring just marks which seat the action panel below is currently for
-   (yourself, normally). Bordeaux is reserved for .on-behalf-selected - a genuinely
-   different, rarer state (an admin acting on another player's seat) - so it stays a
-   strong, unambiguous signal instead of showing on every ordinary selection. */
-.seat-circle.selected{box-shadow:0 0 0 3px #22d3ee,0 0 0 6px rgba(34,211,238,.25);}
-/* Bordeaux (#78350f), matching .on-behalf-badge exactly - only for the seat you're
-   actually acting on behalf of (selected AND not your own seat), overriding the plain
-   .selected ring above. Ring only here (there's a photo/fallback logo filling the circle
-   itself), but .seat-info below gets a full background swap, not just a border. */
-.seat-circle.on-behalf-selected{box-shadow:0 0 0 3px #78350f,0 0 0 6px rgba(120,53,15,.35);}
+/* Ring color states, in order of precedence: cashed-out (fixed gray, see above - never
+   overridden below) > .ring-behalf (bordeaux, the one seat an admin is acting on behalf
+   of) > .ring-self (cyan, your own seat, only shown while nobody's on-behalf mode is
+   active) > plain black border, everyone else's default. */
+.seat-circle.filled.ring-self{border-color:#22d3ee;}
+.seat-circle.filled.ring-behalf{border-color:#78350f;}
 .buyin-fly{position:absolute;left:0;top:0;z-index:400;pointer-events:none;display:flex;align-items:center;justify-content:center;min-width:34px;height:30px;padding:0 9px;border-radius:15px;background:var(--gold);color:var(--gold-text);font-weight:800;font-size:12px;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.4);transform:translate(-50%,-50%);transition:left .65s cubic-bezier(.22,.7,.3,1),top .65s cubic-bezier(.22,.7,.3,1),opacity .3s ease .55s,transform .3s ease;}
 .buyin-fly.landed{transform:translate(-50%,-50%) scale(1.15);}
 .buyin-fly.fading{opacity:0;}
@@ -269,10 +265,12 @@ input:focus,.select-input:focus{border-color:var(--gold);}
    of the avatar circle above it (painted over it too, since seat-info comes after
    seat-circle in the DOM), with padding-top pushing the actual name text back below the
    avatar's own visible edge. Stays plain black for an ordinary selection (creator or any
-   regular player) - only .on-behalf-selected replaces the whole background with the same
-   bordeaux as .on-behalf-badge, for the one seat actually being acted on for someone else. */
+   regular player, cashed-out or not) - only .name-behalf replaces the whole background
+   with the same bordeaux as .on-behalf-badge, for the one seat actually being acted on for
+   someone else (applies even if that seat already cashed out - only its ring stays the
+   fixed cashed-out gray in that case, see .ring-behalf above). */
 .seat-info{display:flex;flex-direction:column;align-items:center;gap:1px;cursor:pointer;background:rgba(8,8,8,.82);border-radius:10px;padding:13px 10px 5px;margin-top:-13px;}
-.seat-info.on-behalf-selected{background:#78350f;}
+.seat-info.name-behalf{background:#78350f;}
 .seat-name{font-size:11px;font-weight:700;color:var(--text);text-align:center;white-space:nowrap;max-width:78px;overflow:hidden;text-overflow:ellipsis;}
 .seat-caption{font-size:13px;color:var(--gold);font-weight:700;text-align:center;line-height:1.35;white-space:nowrap;}
 .seat-history-toggle{background:none;border:none;color:var(--muted);cursor:pointer;padding:2px;display:inline-flex;vertical-align:middle;margin-right:2px;}
@@ -3072,10 +3070,17 @@ function renderTable(gameId){
     const doorIconBig = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>';
     const circleInner = cashedOut ? doorIconBig : "";
     const selected = pid === selectedSeatPlayerId;
-    // Bordeaux only for the seat actually being acted on for someone else - a plain
-    // self-selection (the common case, for the creator or any regular player) stays the
-    // subtle cyan ring / black nameplate instead (see .seat-circle.selected above).
-    const selectedOnBehalf = selected && !!myPlayerId && pid !== myPlayerId;
+    // True the moment the currently-selected seat isn't the viewer's own - i.e. an admin
+    // is acting on someone else's behalf (matches isOnBehalf(), inlined here since this
+    // loop already has myPlayerId/selectedSeatPlayerId in scope for every seat, not just
+    // the selected one).
+    const onBehalfActive = !!myPlayerId && selectedSeatPlayerId && selectedSeatPlayerId !== myPlayerId;
+    const isBehalfTarget = selected && onBehalfActive;
+    // The nameplate turns bordeaux for the behalf target regardless of cashed-out status,
+    // but the ring stays the fixed cashed-out gray in that case - only an active seat's
+    // ring actually changes color (self-cyan normally, bordeaux for the behalf target).
+    const ringClass = cashedOut ? "" : (isBehalfTarget ? " ring-behalf" : (!onBehalfActive && pid === myPlayerId ? " ring-self" : ""));
+    const nameClass = isBehalfTarget ? " name-behalf" : "";
     // The buy-in history chevron/popup (only for an active seat - once cashed out, this
     // is covered by the summary screen instead). First buy-in is labeled "כניסה" (this is
     // the same buy-in the initialBuyin modal forced - see renderActionPanel), every one
@@ -3128,8 +3133,8 @@ function renderTable(gameId){
     // seat, regardless of table order.
     const wrapZ = openHistorySeatPlayerId === pid ? 'z-index:70;' : '';
     return `<div class="seat-wrap" style="left:${x}%;top:${y}%;${wrapZ}" data-seat="${i}">
-      <div class="seat-circle filled ${cashedOut?'cashed-out':''}${selected?' selected':''}${selectedOnBehalf?' on-behalf-selected':''}"${circleStyle}>${circleInner}</div>
-      <div class="seat-info${selected?' selected':''}${selectedOnBehalf?' on-behalf-selected':''}" data-seat-info style="position:relative;${infoRadius}">
+      <div class="seat-circle filled ${cashedOut?'cashed-out':''}${selected?' selected':''}${ringClass}"${circleStyle}>${circleInner}</div>
+      <div class="seat-info${selected?' selected':''}${nameClass}" data-seat-info style="position:relative;${infoRadius}">
         <div class="seat-name">${historyToggleHtml}${esc(name)}</div>
         <div class="seat-caption">${caption}</div>
         ${historyPopupHtml}
