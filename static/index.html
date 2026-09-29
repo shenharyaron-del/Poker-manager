@@ -2704,7 +2704,15 @@ function renderHome(){
       <button class="icon-btn" data-duplicate-community="${c.id}" title="שכפל קבוצה">${icon('copy')}</button>
       <div class="chev">${icon('chev')}</div>
     </div>`).join("");
-  if (!cards) cards = `<div class="empty">עדיין אין קבוצות - צרו את הקבוצה הראשונה שלכם</div>`;
+  const newCommunityCard = `
+    <div class="card" data-new-community style="border-style:dashed;border-color:var(--gold);background:rgba(251,191,36,.06);">
+      <div class="flex1">
+        <div class="name serif">קבוצה חדשה</div>
+        <div class="meta">${icon('plus')} עדיין אין לך קבוצות משויכות - הקישו כדי ליצור אחת</div>
+      </div>
+      <div class="chev">${icon('chev')}</div>
+    </div>`;
+  cards = cards + newCommunityCard;
   return `
     <div class="top">
       <div class="row" style="gap:8px;align-items:center;">
@@ -2716,9 +2724,7 @@ function renderHome(){
       <div class="sub">בחרו קבוצה כדי לנהל שחקנים וערבי משחק</div>
     </div>
     <div class="px5" style="margin-bottom:80px;">${cards}</div>
-    <div class="bottom-bar">
-      <button class="btn btn-primary btn-block" data-new-community>${icon('plus')} קבוצה חדשה</button>
-    </div>
+    <button class="icon-btn" data-share-app title="שתפו חברים בוואטסאפ" style="position:fixed;left:20px;bottom:20px;width:48px;height:48px;border-radius:50%;background:#25D366;color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.4);z-index:10;">${icon('share')}</button>
   `;
 }
 
@@ -4370,6 +4376,12 @@ function attachHandlers(){
       showAlert(url);
     }
   });
+  const shareAppBtn = app.querySelector("[data-share-app]");
+  if (shareAppBtn) shareAppBtn.onclick = () => {
+    const url = location.origin + location.pathname;
+    const text = `בואו תנסו את Poker Manager - אפליקציה לניהול ערבי פוקר, ג'יטונים ומאזנים בין חברים - ${url}`;
+    window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank", "noopener");
+  };
   app.querySelectorAll("[data-invite-community]").forEach(el => el.onclick = (e) => {
     e.stopPropagation();
     const c = getCommunity(el.dataset.inviteCommunity);
