@@ -2068,7 +2068,7 @@ function setupTabsHtml(communityId, activeTab){
   const chipsActive = activeTab === "chips";
   const c = getCommunity(communityId);
   return `
-    <div style="text-align:center;color:var(--muted);font-size:13px;margin-bottom:14px;">${esc(c ? c.name : "")}</div>
+    <div style="text-align:center;color:var(--text);font-size:18px;margin-bottom:14px;">${esc(c ? c.name : "")}</div>
     <div style="display:flex;gap:8px;margin-bottom:16px;">
       <button data-setup-tab="chips" data-setup-community="${communityId}" style="flex:1;padding:9px;border-radius:10px;border:1px solid ${chipsActive?'var(--gold)':'var(--card-b)'};background:${chipsActive?'rgba(251,191,36,.12)':'transparent'};color:${chipsActive?'var(--gold)':'var(--muted)'};font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">${icon('chip')} ז'יטונים</button>
       <button data-setup-tab="payments" data-setup-community="${communityId}" style="flex:1;padding:9px;border-radius:10px;border:1px solid ${chipsActive?'var(--card-b)':'#0891b2'};background:${chipsActive?'transparent':'rgba(8,145,178,.15)'};color:${chipsActive?'var(--muted)':'#0891b2'};font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">תשלומים</button>
