@@ -109,12 +109,12 @@ h1.sm{font-size:20px;}
    100vh/100dvh anyway. */
 body.table-screen{height:100vh;height:100dvh;height:var(--real-vh, 100dvh);min-height:0;overflow:hidden;}
 body.table-screen #app{height:100vh;height:100dvh;height:var(--real-vh, 100dvh);min-height:0;display:flex;flex-direction:column;padding-bottom:0;}
-body.table-screen .top{flex-shrink:0;}
+body.table-screen .top{flex-shrink:0;touch-action:none;}
 /* min-height keeps the table circle from ever fully disappearing - if the action panel
    below (e.g. a settlement view listing several players' transfers) genuinely needs more
    room than what's left on a short screen, the panel itself scrolls internally instead,
    never the page. */
-body.table-screen .poker-table-wrap{flex:1;min-height:80px;width:100%;padding-top:0;max-width:100%;max-height:100%;margin:4px 0 8px;overflow:hidden;}
+body.table-screen .poker-table-wrap{flex:1;min-height:80px;width:100%;padding-top:0;max-width:100%;max-height:100%;margin:4px 0 8px;overflow:hidden;transition:height .25s ease;touch-action:none;}
 /* The identityName modal's own mini seat-picker table (see seatPickerHtml) reuses this
    same .poker-table-wrap class for its felt/watermark look, but it's a plain block inside
    a fixed-width wrapper, not the real table screen's flex-fit box above - so when that
@@ -187,7 +187,7 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 /* Always present in the DOM (both collapsed and expanded) so the drag handler below can
    track max-height continuously with the finger instead of jumping between two fixed
    states - see the pointer handlers on [data-toggle-action-panel] in attachHandlers. */
-.panel-expand-extra{overflow:hidden;}
+.panel-expand-extra{overflow:hidden;transition:max-height .25s ease;}
 .overlay{position:fixed;inset:0;background:#000;display:flex;align-items:flex-end;justify-content:center;z-index:50;}
 @media(min-width:600px){.overlay{align-items:center;}}
 /* Anchors the sheet to the top of the screen instead of the bottom - used for the
@@ -2618,6 +2618,17 @@ function render(){
   if (nav.screen === "table") {
     requestAnimationFrame(() => { layoutTableSize(); drawSettlementArrows(); });
     animateSeatCaptions(nav.gameId);
+    // The immediate rAF above can land mid-transition (.poker-table-wrap now animates
+    // its height - see that rule's own comment - so a plain tap's expand/collapse eases
+    // instead of jumping, previously reported as "the table shrinks instead of
+    // cropping"). Measuring while it's still animating would lock in a transiently
+    // smaller height as the new "collapsed" baseline (see layoutTableSize's own
+    // !actionPanelExpanded branch) - catching the real, settled size once the
+    // transition actually finishes corrects that.
+    const wrapEl = app.querySelector(".poker-table-wrap");
+    if (wrapEl) wrapEl.addEventListener("transitionend", (e) => {
+      if (e.propertyName === "height") layoutTableSize();
+    });
   } else {
     drawSettlementArrows(); // no-op on other screens (#settlement-overlay doesn't exist there)
   }
@@ -3020,7 +3031,7 @@ function renderActionPanel(g, c, seatedIds){
 // positioned separately. Shared between the real table render and the small preview in
 // the identityName "המיקום שלי בשולחן" picker, so both draw from the exact same layout.
 const SEAT_POS = [
-  [32,7],[68,7],[89,26],[89,52],[78,76],[38,92],[22,76],[11,52],[11,26],[3,90]
+  [32,7],[68,7],[89,26],[89,52],[78,76],[38,92],[18,76],[7,52],[7,26],[3,90]
 ];
 function renderTable(gameId){
   const g = getGame(gameId);
@@ -4462,10 +4473,16 @@ function attachHandlers(){
   // render, which happens whenever that modal closes.
   if (expandExtraEl) expandExtraEl.addEventListener("click", () => { actionPanelExpanded = false; });
   if (toggleActionPanelEl && expandExtraEl) {
+    const tableWrapEl = app.querySelector(".poker-table-wrap");
     let dragStartY = null, dragStartH = 0, naturalH = 0, dragActive = false;
     const beginDrag = (e) => {
       dragStartY = e.clientY;
       dragStartH = expandExtraEl.getBoundingClientRect().height;
+      // Disabled during a live drag so the table crops 1:1 with the finger instead of
+      // lagging behind the CSS transition below (that transition exists only to smooth
+      // out a plain TAP's instant expand/collapse jump, which otherwise reads as the
+      // table itself shrinking rather than a fixed-size table being cropped).
+      if (tableWrapEl) tableWrapEl.style.transition = "none";
       naturalH = expandExtraEl.scrollHeight;
       expandExtraEl.style.transition = "none";
       dragActive = false;
