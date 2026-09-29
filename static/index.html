@@ -115,6 +115,17 @@ body.table-screen .top{flex-shrink:0;}
    room than what's left on a short screen, the panel itself scrolls internally instead,
    never the page. */
 body.table-screen .poker-table-wrap{flex:1;min-height:80px;width:100%;padding-top:0;max-width:100%;max-height:100%;margin:4px 0 8px;overflow:hidden;}
+/* The identityName modal's own mini seat-picker table (see seatPickerHtml) reuses this
+   same .poker-table-wrap class for its felt/watermark look, but it's a plain block inside
+   a fixed-width wrapper, not the real table screen's flex-fit box above - so when that
+   modal is opened from the table screen itself ("הפרופיל שלי" in the action panel, body
+   already carries table-screen from the screen behind it), the rule above wrongly matched
+   it too and collapsed it to min-height:80px instead of its normal width-based aspect
+   ratio. Reported live as the profile screen's seat picker looking smaller/denser than
+   the same picker opened from the mandatory post-login "הגדרת שחקן" screen (nav.screen
+   isn't "table" yet at that point, so body never had table-screen to begin with there).
+   Needs the extra .modal in the selector to out-specificity the rule above. */
+body.table-screen .modal .poker-table-wrap{flex:none;min-height:0;padding-top:145%;max-width:100%;max-height:none;overflow:visible;}
 /* The inner box keeps a fixed aspect ratio driven by WIDTH alone, so its height never
    shrinks just because the outer viewport (.poker-table-wrap, above) got shorter when the
    action panel expanded - it only ever gets clipped by that viewport's overflow:hidden.
