@@ -3184,10 +3184,10 @@ function renderTable(gameId){
         ${seatsHtml}
         <div id="settlement-overlay" style="position:absolute;inset:0;pointer-events:none;"></div>
         <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;z-index:3;">
+          <img src="/static/logo-p-crown.png" style="width:37px;height:auto;margin-bottom:8px;pointer-events:none;">
           <div style="color:var(--muted);font-size:12px;">סה"כ קנייה ₪${totalBuyinAll}</div>
           <div style="color:var(--muted);font-size:12px;">סה"כ ג'יטונים ₪${totalChipsAll}</div>
           <div style="color:${diffColor};font-weight:700;font-size:13px;margin-top:4px;">${diffLabel}${Math.abs(diff)>=0.5?` ₪${Math.abs(Math.round(diff))}`:""}</div>
-          <img src="/static/logo-p-crown.png" style="width:34px;height:auto;margin-top:8px;pointer-events:none;">
         </div>
       </div>
     </div>
@@ -4462,23 +4462,21 @@ function attachHandlers(){
   // render, which happens whenever that modal closes.
   if (expandExtraEl) expandExtraEl.addEventListener("click", () => { actionPanelExpanded = false; });
   if (toggleActionPanelEl && expandExtraEl) {
-    let dragStartY = null, dragStartH = 0, naturalH = 0;
-    toggleActionPanelEl.addEventListener("pointerdown", (e) => {
-      // Without this, a touch tap here fires a compatibility "click" event right after
-      // pointerup - and since render() below already swapped in the expanded panel's new
-      // buttons by then, that stray click can land on and fire one of them (a real bug:
-      // expanding the panel could silently also trigger whatever button ended up under
-      // the same coordinates). preventDefault() on pointerdown is what suppresses it.
-      e.preventDefault();
+    let dragStartY = null, dragStartH = 0, naturalH = 0, dragActive = false;
+    const beginDrag = (e) => {
       dragStartY = e.clientY;
       dragStartH = expandExtraEl.getBoundingClientRect().height;
       naturalH = expandExtraEl.scrollHeight;
       expandExtraEl.style.transition = "none";
-      toggleActionPanelEl.setPointerCapture(e.pointerId);
-    });
-    toggleActionPanelEl.addEventListener("pointermove", (e) => {
+      dragActive = false;
+    };
+    const updateDrag = (e, threshold) => {
       if (dragStartY == null || naturalH <= 0) return;
       const dy = dragStartY - e.clientY; // positive = dragged up = expanding
+      if (!dragActive) {
+        if (Math.abs(dy) < threshold) return; // still could be a plain tap - don't touch anything yet
+        dragActive = true;
+      }
       const h = Math.max(0, Math.min(naturalH, dragStartH + dy));
       expandExtraEl.style.maxHeight = h + "px";
       if (dragChevronEl) dragChevronEl.style.transform = `rotate(${(h / naturalH) * 180}deg)`;
@@ -4487,15 +4485,19 @@ function attachHandlers(){
       // expandExtraEl grows crops it live via plain flex/overflow reflow. Re-measuring
       // here would treat the transiently-shrunk wrap as if it were the new "collapsed"
       // baseline and permanently shrink the cached table size (see layoutTableSize).
-    });
-    toggleActionPanelEl.addEventListener("pointerup", (e) => {
+    };
+    const TAP_THRESHOLD_PX = 6;
+    const endDrag = (e, allowTapToggle) => {
       if (dragStartY == null) return;
-      e.preventDefault();
       const dy = dragStartY - e.clientY;
       dragStartY = null;
+      dragActive = false;
       const wasExpanded = actionPanelExpanded;
-      const TAP_THRESHOLD_PX = 6;
       if (Math.abs(dy) < TAP_THRESHOLD_PX) {
+        // A plain tap on the handle itself still toggles it (a deliberate button-like
+        // affordance); the same bare tap landing anywhere else on the table screen (empty
+        // felt, header, between seats) does nothing instead of surprising the user.
+        if (!allowTapToggle) return;
         actionPanelExpanded = !actionPanelExpanded;
       } else {
         const h = Math.max(0, Math.min(naturalH, dragStartH + dy));
@@ -4516,6 +4518,39 @@ function attachHandlers(){
         newButtons.forEach(b => b.disabled = true);
         setTimeout(() => newButtons.forEach(b => b.disabled = false), 350);
       }
+    };
+
+    toggleActionPanelEl.addEventListener("pointerdown", (e) => {
+      // Without this, a touch tap here fires a compatibility "click" event right after
+      // pointerup - and since render() below already swapped in the expanded panel's new
+      // buttons by then, that stray click can land on and fire one of them (a real bug:
+      // expanding the panel could silently also trigger whatever button ended up under
+      // the same coordinates). preventDefault() on pointerdown is what suppresses it.
+      e.preventDefault();
+      beginDrag(e);
+      dragActive = true; // the handle itself always tracks from the first pixel, tap-vs-drag is decided on release
+      toggleActionPanelEl.setPointerCapture(e.pointerId);
+    });
+    toggleActionPanelEl.addEventListener("pointermove", (e) => updateDrag(e, 0));
+    toggleActionPanelEl.addEventListener("pointerup", (e) => { e.preventDefault(); endDrag(e, true); });
+
+    // Same expand/collapse gesture from anywhere else on the table screen (the felt,
+    // empty space between seats, the header above it) - reported as too easy to miss the
+    // tiny handle. Seats keep their own drag-to-reposition untouched (excluded below by
+    // data-seat), and real buttons/inputs/links keep their normal taps untouched too -
+    // only an actual vertical drag past the threshold does anything here, a plain tap is
+    // a no-op (see allowTapToggle=false in endDrag above).
+    const screenDragTargets = [app.querySelector(".top"), app.querySelector(".poker-table-wrap")].filter(Boolean);
+    screenDragTargets.forEach(el => {
+      let tracking = false;
+      el.addEventListener("pointerdown", (e) => {
+        if (e.target.closest("[data-seat], button, input, textarea, select, a, [data-toggle-action-panel]")) return;
+        tracking = true;
+        beginDrag(e);
+      });
+      el.addEventListener("pointermove", (e) => { if (tracking) updateDrag(e, 10); });
+      el.addEventListener("pointerup", (e) => { if (!tracking) return; tracking = false; endDrag(e, false); });
+      el.addEventListener("pointercancel", () => { if (!tracking) return; tracking = false; dragStartY = null; dragActive = false; });
     });
   }
   app.querySelectorAll("[data-buyin-select]").forEach(el => el.onclick = () => {
