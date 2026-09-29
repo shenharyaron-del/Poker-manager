@@ -198,6 +198,12 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .overlay.overlay-top{align-items:flex-start;}
 .overlay.overlay-top .modal{border-radius:0 0 20px 20px;}
 @media(min-width:600px){.overlay.overlay-top .modal{border-radius:20px;}}
+/* A dedicated screen, not a sheet - the group-setup flow (chipSetup/payboxSettings) got
+   involved enough (title, tabs, a save flow with its own unsaved-changes guard) that a
+   partial bottom sheet read as cramped and out of place; this fills the whole viewport
+   top to bottom instead, same as a real screen would. */
+.overlay.overlay-fullscreen{align-items:stretch;padding:0;}
+.overlay.overlay-fullscreen .modal{max-width:none;width:100%;height:100%;max-height:none;border-radius:0;border:none;}
 .modal{background:#064e3b;width:100%;max-width:480px;border-radius:20px 20px 0 0;border:1px solid var(--card-b);padding:20px;max-height:85vh;overflow-y:auto;}
 @media(min-width:600px){.modal{border-radius:20px;}}
 /* showAlert() - custom stand-in for the browser's native alert(), which always prefixes
@@ -2015,20 +2021,54 @@ async function autoJoinViaCommunityInvite(communityId){
 }
 function openModal(m){ modal = m; render(); }
 function closeModal(){ modal = null; render(); }
+// Tracks unsaved edits within the community-setup flow (chipSetup/payboxSettings) only -
+// checked before switching tabs or closing, so in-progress edits never silently vanish.
+// Reset to false each time either tab is freshly (re)opened, and never consulted for any
+// other modal type.
+let setupDirty = false;
 // Shared by the community-setup entry points (the home card's gear button, the
 // missing-setup warning banner, and the tab strip inside the modals themselves) so all of
 // them initialize the same way instead of duplicating this state-loading logic.
 function openChipSetupModal(communityId){
   const c = getCommunity(communityId);
   const existing = (c.chipValues||[]).map(cv => ({id: cv.id || uid(), image: cv.image || null, value: String(cv.value)}));
+  setupDirty = false;
   openModal({type:"chipSetup", communityId, imageSrc: null, points: existing});
+}
+// Both called before leaving the setup flow (switching tabs or closing) - if something
+// was edited but not saved, ask first instead of silently discarding it. "Save" reuses
+// the same save button each tab already has, so it stays the one place that logic lives.
+async function trySwitchSetupTab(targetTab, communityId){
+  if (setupDirty) {
+    const shouldSave = await showConfirm("הנתונים שהזנת לא נשמרו. לשמור לפני שממשיכים?");
+    if (shouldSave) {
+      const saveBtn = document.querySelector(modal.type === "chipSetup" ? "[data-save-chip-values]" : "[data-save-paybox-entries]");
+      if (saveBtn) await saveBtn.onclick();
+    }
+  }
+  if (targetTab === "chips") openChipSetupModal(communityId);
+  else openPayboxSettingsModal(communityId);
+}
+async function tryCloseSetupModal(){
+  if (setupDirty) {
+    const shouldSave = await showConfirm("הנתונים שהזנת לא נשמרו. לשמור לפני שסוגרים?");
+    if (shouldSave) {
+      const saveBtn = document.querySelector(modal.type === "chipSetup" ? "[data-save-chip-values]" : "[data-save-paybox-entries]");
+      // Both save handlers already closeModal() themselves on success, and leave the
+      // modal open (with its own alert) on failure - either way, nothing left to do here.
+      if (saveBtn) { await saveBtn.onclick(); return; }
+    }
+  }
+  closeModal();
 }
 // Lets either setup modal jump straight to the other one - two "folders" of the same
 // community-setup flow, opened together from the home card's gear button or the
 // missing-setup warning banner.
 function setupTabsHtml(communityId, activeTab){
   const chipsActive = activeTab === "chips";
+  const c = getCommunity(communityId);
   return `
+    <div style="text-align:center;color:var(--muted);font-size:13px;margin-bottom:14px;">${esc(c ? c.name : "")}</div>
     <div style="display:flex;gap:8px;margin-bottom:16px;">
       <button data-setup-tab="chips" data-setup-community="${communityId}" style="flex:1;padding:9px;border-radius:10px;border:1px solid ${chipsActive?'var(--gold)':'var(--card-b)'};background:${chipsActive?'rgba(251,191,36,.12)':'transparent'};color:${chipsActive?'var(--gold)':'var(--muted)'};font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">${icon('chip')} ז'יטונים</button>
       <button data-setup-tab="payments" data-setup-community="${communityId}" style="flex:1;padding:9px;border-radius:10px;border:1px solid ${chipsActive?'var(--card-b)':'#0891b2'};background:${chipsActive?'transparent':'rgba(8,145,178,.15)'};color:${chipsActive?'var(--muted)':'#0891b2'};font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">תשלומים</button>
@@ -2046,6 +2086,7 @@ function openPayboxSettingsModal(communityId){
     delete c.payboxLink;
     saveState();
   }
+  setupDirty = false;
   openModal({type:"payboxSettings", communityId});
 }
 // Drop-in replacement for the browser's native alert() - every existing call site
@@ -2094,6 +2135,7 @@ function updateModal(partial){
   const listEl = document.querySelector(".scroll-list");
   const modalScroll = modalEl ? modalEl.scrollTop : null;
   const listScroll = listEl ? listEl.scrollTop : null;
+  if (modal && (modal.type === "chipSetup" || modal.type === "payboxSettings")) setupDirty = true;
   modal = Object.assign({}, modal, partial);
   render();
   const modalEl2 = document.querySelector(".modal");
@@ -3593,7 +3635,7 @@ function renderModal(m){
     }
   } else if (m.type === "chipSetup") {
     const c = getCommunity(m.communityId);
-    title = `הגדרת ז'יטונים — ${esc(c.name)}`;
+    title = "הגדרת פרופיל קבוצה";
     const editableList = m.points.length ? `
       <div class="section-title" style="padding:0;margin:0 0 6px;">ז'יטונים וערכים</div>
       <div class="scroll-list" style="margin-bottom:14px;">
@@ -3921,19 +3963,20 @@ function renderModal(m){
     `;
   } else if (m.type === "payboxSettings") {
     const c = getCommunity(m.communityId);
-    title = `<div dir="ltr" style="display:flex;align-items:flex-start;gap:8px;">
-      <span style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;background:#0891b2;flex-shrink:0;"><img src="/static/paybox-icon.png" style="height:22px;width:auto;display:block;"></span>
-      <div style="display:flex;flex-direction:column;align-items:flex-start;">
-        <span style="font-family:system-ui,sans-serif;font-weight:400;font-size:15px;line-height:1.1;">PayBox</span>
-        <span style="font-family:system-ui,sans-serif;font-weight:400;font-size:10px;line-height:1.1;opacity:.65;">Setup</span>
-      </div>
-    </div>`;
+    title = "הגדרת פרופיל קבוצה";
     // Only one PayBox group per community now (was a multi-entry list with a "which one
     // is active" radio - simplified since a second group never had a real use case here).
     const link = (c.payboxLinks || [])[0] || null;
     const settlementDefault = c.settlementDefault || "direct";
     body = `
       ${setupTabsHtml(m.communityId, "payments")}
+      <div dir="ltr" style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+        <span style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;background:#0891b2;flex-shrink:0;"><img src="/static/paybox-icon.png" style="height:22px;width:auto;display:block;"></span>
+        <div style="display:flex;flex-direction:column;align-items:flex-start;">
+          <span style="font-family:system-ui,sans-serif;font-weight:400;font-size:15px;line-height:1.1;">PayBox</span>
+          <span style="font-family:system-ui,sans-serif;font-weight:400;font-size:10px;line-height:1.1;opacity:.65;">Setup</span>
+        </div>
+      </div>
       <div class="section-title" style="padding:0;margin:0 0 8px;">קבוצת פייבוקס</div>
       ${link ? `
         <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:10px;margin-bottom:18px;">
@@ -4356,8 +4399,9 @@ function renderModal(m){
   // blurred behind it (instead of a flat black backdrop, every other modal's default)
   // makes clear you're about to join THIS table, not some disconnected form.
   const blurred = m.type === "initialBuyin";
+  const isSetupFlow = m.type === "chipSetup" || m.type === "payboxSettings";
   return `
-    <div class="overlay${topAnchored ? ' overlay-top' : ''}${blurred ? ' overlay-blur' : ''}">
+    <div class="overlay${topAnchored ? ' overlay-top' : ''}${blurred ? ' overlay-blur' : ''}${isSetupFlow ? ' overlay-fullscreen' : ''}">
       <div class="modal" onclick="event.stopPropagation()">
         <div class="modal-head"><h3 class="serif">${title}</h3>${dismissable ? `<button class="close-x" data-close-modal>${icon('x')}</button>` : ""}</div>
         ${body}
@@ -4396,9 +4440,19 @@ function attachHandlers(){
     openPayboxSettingsModal(el.dataset.openPayboxSettings);
   });
   app.querySelectorAll("[data-setup-tab]").forEach(el => el.onclick = () => {
-    if (el.dataset.setupTab === "chips") openChipSetupModal(el.dataset.setupCommunity);
-    else openPayboxSettingsModal(el.dataset.setupCommunity);
+    trySwitchSetupTab(el.dataset.setupTab, el.dataset.setupCommunity);
   });
+  // Any edit anywhere in the chipSetup/payboxSettings screen marks it dirty - plain text/
+  // number inputs and the settlement-default radios go through native input/change
+  // events; everything else (photo capture, marker drag, add/remove a point) already goes
+  // through updateModal, hooked separately there.
+  if (modal && (modal.type === "chipSetup" || modal.type === "payboxSettings")) {
+    const setupModalEl = app.querySelector(".modal");
+    if (setupModalEl) {
+      setupModalEl.addEventListener("input", () => { setupDirty = true; });
+      setupModalEl.addEventListener("change", () => { setupDirty = true; });
+    }
+  }
   const newCommunityBtn = app.querySelector("[data-new-community]");
   if (newCommunityBtn) newCommunityBtn.onclick = () => openModal({type:"newCommunity"});
   app.querySelectorAll("[data-open-game]").forEach(el => el.onclick = () => go("table", {gameId: el.dataset.openGame, communityId: getGame(el.dataset.openGame).communityId}));
@@ -4930,6 +4984,7 @@ function attachHandlers(){
   // easy to accidentally dismiss a modal (and lose in-progress input) with a stray
   // tap near its edge. Only the explicit X button closes/backs out of a modal.
   const closeModalOrBack = () => {
+    if (modal && (modal.type === "chipSetup" || modal.type === "payboxSettings")) { tryCloseSetupModal(); return; }
     closeModal();
   };
   const closeBtn = app.querySelector("[data-close-modal]");
