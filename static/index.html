@@ -4539,11 +4539,19 @@ function attachHandlers(){
       let tracking = false;
       el.addEventListener("pointerdown", (e) => {
         if (e.target.closest("[data-seat], button, input, textarea, select, a, [data-toggle-action-panel]")) return;
+        // Same reasoning as the handle's own pointerdown above - without this, a real
+        // drag that ends up expanding the panel leaves a compatibility "click" queued
+        // right after pointerup, which then lands on whatever the render() below just
+        // revealed under the finger (often inside data-panel-expand-extra itself) and
+        // immediately collapses it back via that container's own click-to-collapse
+        // listener - reported live as the panel opening and "shrinking by itself" a
+        // moment later.
+        e.preventDefault();
         tracking = true;
         beginDrag(e);
       });
       el.addEventListener("pointermove", (e) => { if (tracking) updateDrag(e, 10); });
-      el.addEventListener("pointerup", (e) => { if (!tracking) return; tracking = false; endDrag(e, false); });
+      el.addEventListener("pointerup", (e) => { if (!tracking) return; tracking = false; e.preventDefault(); endDrag(e, false); });
       el.addEventListener("pointercancel", () => { if (!tracking) return; tracking = false; dragStartY = null; dragActive = false; });
     });
   }
