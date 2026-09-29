@@ -1595,12 +1595,6 @@ function trySelectSeatPlayer(pid){
   }
 }
 // ---------- Auto-return from "on behalf of" after inactivity ----------
-// Acting on behalf of another seated player is meant to be a quick in-and-out (a buy-in,
-// ending their night) - leaving it selected indefinitely is an easy way to accidentally
-// keep acting as someone else. A single delegated click listener (added once, below) both
-// arms this on any click while on-behalf and clears it once back on your own seat, so no
-// individual action handler needs to know about it.
-let behalfInactivityTimer = null;
 function isOnBehalf(){
   if (nav.screen !== "table" || !nav.gameId) return false;
   const g = getGame(nav.gameId);
@@ -1608,22 +1602,6 @@ function isOnBehalf(){
   const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
   return !!(selectedSeatPlayerId && myPlayerId && selectedSeatPlayerId !== myPlayerId);
 }
-function clearBehalfInactivityTimer(){
-  if (behalfInactivityTimer) { clearTimeout(behalfInactivityTimer); behalfInactivityTimer = null; }
-}
-function armBehalfInactivityTimer(){
-  clearBehalfInactivityTimer();
-  if (!isOnBehalf()) return;
-  behalfInactivityTimer = setTimeout(() => {
-    if (!isOnBehalf()) return; // left on-behalf mode some other way in the meantime
-    const g = getGame(nav.gameId);
-    selectedSeatPlayerId = (myIdentity.myPlayers && myIdentity.myPlayers[g.communityId]) || null;
-    selectedBuyinAmount = MIN_BUYIN_AMOUNT;
-    actionPanelExpanded = false;
-    render();
-  }, 30000);
-}
-document.addEventListener("click", () => armBehalfInactivityTimer());
 // Any click outside the open seat-history popup (or its own toggle button) closes it.
 // Capture phase on purpose - it needs to see every click before some OTHER handler
 // further down (a seat tap, a modal, anything) has a chance to stopPropagation() it away,
@@ -1721,7 +1699,6 @@ function go(screen, extra){
   selectedBuyinAmount = MIN_BUYIN_AMOUNT;
   actionPanelExpanded = false;
   openHistorySeatPlayerId = null;
-  clearBehalfInactivityTimer();
   balanceFixSelected = {};
   if (screen === "table" && nav.gameId) autoSeatSelf(nav.gameId);
   lockPortraitForScreen(screen);
