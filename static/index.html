@@ -3665,7 +3665,7 @@ function renderModal(m){
         ${setupTabsHtml(m.communityId, "chips")}
         <div class="section-title" style="padding:0;margin:0 0 6px;">יחס ז'יטונים</div>
         <div class="field">
-          <label>1 שקל עבור <input type="number" inputmode="decimal" id="chip-ratio-input" value="${esc(c.chipRatio || '')}" placeholder="4" style="width:70px;display:inline-block;text-align:center;"> ז'יטונים</label>
+          <label>1 שקל עבור <input type="number" inputmode="decimal" id="chip-ratio-input" placeholder="${c.chipRatio ? esc(String(c.chipRatio)) : '4'}" style="width:70px;display:inline-block;text-align:center;"> ז'יטונים</label>
         </div>
         <p style="color:var(--muted);font-size:12px;margin-top:-8px;">משמש לספירת ז'יטונים כוללת בסיום ערב (כמות ז'יטונים ולא לפי צבע) - למשל, יחס של 4 אומר ש-100 ז'יטונים שווים ל-₪25.</p>
         ${editableList}
@@ -3980,7 +3980,7 @@ function renderModal(m){
       <div class="section-title" style="padding:0;margin:0 0 8px;">קבוצת פייבוקס</div>
       ${link ? `
         <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:10px;margin-bottom:18px;">
-          <input type="text" value="${esc(link.name)}" data-paybox-name-input="${link.id}" placeholder="שם" style="margin-bottom:6px;font-weight:700;">
+          <input type="text" data-paybox-name-input="${link.id}" placeholder="${esc(link.name) || 'שם'}" style="margin-bottom:6px;font-weight:700;">
           <input type="text" value="${esc(link.link)}" data-paybox-link-input="${link.id}" placeholder="קישור" dir="ltr">
         </div>
       ` : `
