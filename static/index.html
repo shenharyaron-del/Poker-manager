@@ -1289,10 +1289,24 @@ async function doRefreshNow(source){
       } else {
         logSync(`refresh[${callId}] GET done, buyins=${(fresh.games||[]).map(g=>g.buyins.length).join(',')}, applying (modal now=${!!modal})`);
         applyFreshState(fresh);
-        const scrollY = window.scrollY;
-        render();
-        window.scrollTo(0, scrollY);
-        logSync(`refresh[${callId}] applied+rendered`);
+        // The entry guard above only caught a modal that was ALREADY open when this
+        // refresh started - a modal opened while the GET was in flight (its own await
+        // above can take a real moment) slips past that check entirely. Re-checking here,
+        // right before the render() that would otherwise blow away its DOM, is what this
+        // was missing - reported live as typing a table/player name's first letter
+        // sometimes closing the keyboard with nothing typed (a fresh input node replaces
+        // the focused one mid-keystroke), working fine on the very next attempt once the
+        // refresh had already finished. The fetched state is still applied either way -
+        // only the render is skipped - so the next render (the modal closing, or the next
+        // refresh with no modal open) already reflects it.
+        if (modal) {
+          logSync(`refresh[${callId}] applied but SKIPPED render - modal opened mid-fetch`);
+        } else {
+          const scrollY = window.scrollY;
+          render();
+          window.scrollTo(0, scrollY);
+          logSync(`refresh[${callId}] applied+rendered`);
+        }
       }
     } while (refreshQueued);
   } catch(e) { logSync(`refresh[${callId}] ERROR ${e}`); /* offline or a hiccup - next refresh will retry */ }
