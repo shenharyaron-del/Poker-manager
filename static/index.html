@@ -3189,11 +3189,6 @@ function renderTable(gameId){
           <div style="color:var(--muted);font-size:12px;">סה"כ ציפים ₪${totalChipsAll}</div>
           <div style="color:${diffColor};font-weight:700;font-size:13px;margin-top:4px;">${diffLabel}${Math.abs(diff)>=0.5?` ₪${Math.abs(Math.round(diff))}`:""}</div>
         </div>
-        ${(seats.slice(0,9).filter(Boolean).length >= 9 && seats[9] == null) ? `
-          <div style="position:absolute;left:2%;top:${SEAT_POS[5][1]}%;transform:translateY(-50%);">
-            <button class="icon-btn gold" data-add-extra-player title="הוסף שחקן נוסף" style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.08);display:inline-flex;align-items:center;justify-content:center;">${icon('plus')}</button>
-          </div>
-        ` : ""}
       </div>
     </div>
     ${panelHtml}
@@ -4692,9 +4687,6 @@ function attachHandlers(){
     const active = g.players.filter(p => !(p.id in g.cashouts));
     openModal({type:"paybox", gameId: nav.gameId, playerId: (active[0]||g.players[0]||{}).id, amount:""});
   };
-
-  const addExtraBtn = app.querySelector("[data-add-extra-player]");
-  if (addExtraBtn) addExtraBtn.onclick = () => openModal({type:"addExisting", gameId: nav.gameId});
 
   const openOddsBtn = app.querySelector("[data-open-poker-odds]");
   if (openOddsBtn) openOddsBtn.onclick = () => openModal({type:"pokerOdds", gameType: "holdem", imageSrc: null, reading: false, error: null, results: null, hands: null, board: null});
