@@ -2356,6 +2356,37 @@ function computeFinalBalances(game){
   return finalBalances;
 }
 
+// Direct player-to-player settlements outside the app (the cash-out flow's own "arranged
+// with" picker) that involve this player, from either side: their OWN cashout might name
+// others (they're the one who said "I already settled with X" when leaving), and/or
+// someone ELSE'S cashout might name THEM (the other side of the same arrangement - which
+// can be true even before this player has cashed out themselves, e.g. the person they
+// arranged with already left). Same math/labeling the "history" modal already used inline
+// in two separate places; pulled out here so the admin screen and player screen (which
+// need this too) don't have to duplicate it a third and fourth time.
+function getArrangementNotes(g, playerId){
+  const notes = [];
+  const myOut = g.cashouts[playerId];
+  if (myOut && myOut.arrangedWith && myOut.arrangedWith.length) {
+    const myProfit = computeArrangementAdjustments(g).adjusted[playerId];
+    const share = Math.round((myProfit / myOut.arrangedWith.length) * 100) / 100;
+    myOut.arrangedWith.forEach(id => {
+      const name = (g.players.find(pl=>pl.id===id)||{}).name || "?";
+      notes.push({ received: share >= 0, name, amount: Math.abs(share) });
+    });
+  }
+  const adj = computeArrangementAdjustments(g).adjusted;
+  Object.entries(g.cashouts).forEach(([otherId, co]) => {
+    if (otherId === playerId) return;
+    if (!co.arrangedWith || !co.arrangedWith.includes(playerId)) return;
+    const otherName = (g.players.find(pl=>pl.id===otherId)||{}).name || "?";
+    const otherProfit = adj[otherId];
+    const share = Math.round((Math.abs(otherProfit) / co.arrangedWith.length) * 100) / 100;
+    notes.push({ received: otherProfit < 0, name: otherName, amount: share }); // if the other player owed money, this player received from them
+  });
+  return notes;
+}
+
 // Whatever a seat's caption is showing (buy-in total while active, profit once cashed
 // out) counts smoothly from its previous value to the new one over ~2s instead of just
 // jumping - on every render, regardless of what caused the change: a local buy-in or
@@ -2859,6 +2890,13 @@ function renderPlayerScreen(gameId){
       <div style="text-align:center;padding:6px 0 16px;flex-shrink:0;">
         <div style="font-size:26px;font-weight:700;color:var(--text);">${esc(p?p.name:"")}</div>
         <div data-player-total style="font-size:40px;font-weight:800;color:var(--gold);margin-top:4px;">₪${buyinTotal}</div>
+        ${(() => {
+          // Direct-settlement arrangement(s) involving this player (either side - see
+          // getArrangementNotes), same note shown on the admin screen's rows.
+          const notes = pid ? getArrangementNotes(g, pid) : [];
+          if (!notes.length) return "";
+          return `<div style="font-size:12px;color:var(--muted);margin-top:4px;">${notes.map(n => `${n.received?'קיבל':'העביר'} ₪${n.amount} ${n.received?'מ-':'ל-'}${esc(n.name)}`).join(' · ')}</div>`;
+        })()}
       </div>
       ${cashedOut ? "" : `<div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">ריביי</div>`}
       ${cashedOut ? "" : buyinButtonsHtml}
@@ -2899,22 +2937,43 @@ function renderAdminScreen(gameId){
   const diff = totalChipsAll - totalBuyinAll;
   const potUnbalanced = allCashedOut && Math.abs(diff) > 5;
   const nameOf = pid => (g.players.find(pl=>pl.id===pid)||{}).name || "?";
+  // Small "קיבל/העביר ₪X מ-/ל-Y" line for a player's own direct-settlement arrangement(s)
+  // (either side - see getArrangementNotes) - shown under their name wherever this screen
+  // already shows them.
+  const notesHtml = pid => {
+    const notes = getArrangementNotes(g, pid);
+    if (!notes.length) return "";
+    return `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${notes.map(n => `${n.received?'קיבל':'העביר'} ₪${n.amount} ${n.received?'מ-':'ל-'}${esc(n.name)}`).join(' · ')}</div>`;
+  };
 
-  const activeRows = activeIds.map(pid => `
+  const activeRows = activeIds.map(pid => {
+    // A still-active player can already be the OTHER side of someone else's arrangement
+    // (that someone already cashed out and named them) even before they themselves cash
+    // out - lighting up their own "סיים ערב" button is a heads-up not to lose track of it
+    // once they do.
+    const hasArrangement = getArrangementNotes(g, pid).length > 0;
+    return `
     <div class="roster-row">
-      <div class="row" style="gap:8px;"><span>${esc(nameOf(pid))}</span><span style="color:var(--gold);font-weight:700;">₪${buyinTotals[pid]||0}</span></div>
+      <div>
+        <div class="row" style="gap:8px;"><span>${esc(nameOf(pid))}</span><span style="color:var(--gold);font-weight:700;">₪${buyinTotals[pid]||0}</span></div>
+        ${notesHtml(pid)}
+      </div>
       <div class="row" style="gap:4px;">
         <button class="icon-btn ok" data-buyin="${pid}" title="הוסף ריביי">${icon('plus')}</button>
-        <button class="icon-btn" style="background:#57534e;color:#f5f5f4;" data-admin-end-night="${pid}" title="סיים ערב">${icon('out')}</button>
+        <button class="icon-btn" style="background:${hasArrangement?'#78350f':'#57534e'};color:${hasArrangement?'#fde68a':'#f5f5f4'};" data-admin-end-night="${pid}" title="${hasArrangement?'יש סידור תשלום ישיר עם השחקן הזה - ':''}סיים ערב">${icon('out')}</button>
         <button class="icon-btn danger" data-admin-remove-seat="${pid}" title="הסר מושב">${icon('trash')}</button>
       </div>
     </div>
-  `).join("") || `<div class="empty" style="padding:10px 0;font-size:13px;">אין שחקנים פעילים</div>`;
+  `;
+  }).join("") || `<div class="empty" style="padding:10px 0;font-size:13px;">אין שחקנים פעילים</div>`;
 
   const cashedOutRows = cashedOutIds.map(pid => {
     const profit = (liveChips[pid]||0) - (buyinTotals[pid]||0);
     return `<div class="roster-row">
-      <div class="row" style="gap:8px;"><span>${esc(nameOf(pid))}</span><span style="font-weight:700;color:${profitColor(profit)};">${profit>0?'+':''}₪${Math.round(profit)}</span></div>
+      <div>
+        <div class="row" style="gap:8px;"><span>${esc(nameOf(pid))}</span><span style="font-weight:700;color:${profitColor(profit)};">${profit>0?'+':''}₪${Math.round(profit)}</span></div>
+        ${notesHtml(pid)}
+      </div>
       <button class="btn btn-ghost btn-sm" data-return-to-game="${pid}">${icon('undo')} החזר לשולחן</button>
     </div>`;
   }).join("");
