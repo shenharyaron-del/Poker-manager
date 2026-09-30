@@ -158,12 +158,13 @@ body.table-screen .bottom-bar{position:static;flex-shrink:0;background:none;marg
    group feed) - unlike the circles view, this one scrolls as an ordinary page instead of
    a fixed-size felt with a separately-scrolling panel underneath it. */
 body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow-y:auto;padding:0 20px 20px;}
-/* Shared by the player screen's history and table-activity sections - a fixed-size,
-   scrollable "frame" so both read as their own defined panel instead of open-ended lists
-   pushing the page taller, with a WhatsApp-style muted background (a plain tonal shift,
-   not an actual pattern/texture - "not noisy") setting the chat area apart from the rest
-   of the screen. */
-.chat-frame{background:rgba(0,0,0,.18);border-radius:12px;padding:10px;max-height:240px;overflow-y:auto;}
+/* Shared by the player screen's history and table-activity sections - a genuinely FIXED
+   size (height, not max-height - stays put whether there's 1 message or 30), sized for
+   about 3 message bubbles, so both read as their own defined panel instead of open-ended
+   lists pushing the page taller. The doodle background is the user-supplied WhatsApp-style
+   reference image, tiled; the dark overlay underneath keeps the bubbles/text readable
+   against it instead of the image's own light color showing through at full strength. */
+.chat-frame{background:linear-gradient(rgba(0,0,0,.62),rgba(0,0,0,.62)),url('/static/chat-bg.png');background-repeat:repeat;background-size:auto,220px;border-radius:12px;padding:10px;height:158px;overflow-y:auto;touch-action:pan-y;}
 /* Same "bounded panel" idea as .chat-frame above, for the buy-in button row - a plain
    border box rather than a dark fill, so the gold buttons inside stay the brightest thing
    in it instead of competing with a tinted background. */
@@ -3244,6 +3245,7 @@ function renderPlayerScreen(gameId){
   // a re-render of the same data (see lastSeenFeedEventKey) - the vibrate trigger.
   const latestFeedEvent = feedEvents[feedEvents.length-1];
   const latestFeedEventKey = latestFeedEvent ? `${latestFeedEvent.ts}-${latestFeedEvent.kind}-${latestFeedEvent.kind==='buyin'?latestFeedEvent.buyin.id:latestFeedEvent.playerId}` : "";
+  const feedAdmin = isTableAdmin(g, c);
   const feedCounts = {}, feedTotals = {};
   const feedRows = feedEvents.map(ev => {
     if (ev.kind === "buyin") {
@@ -3252,10 +3254,15 @@ function renderPlayerScreen(gameId){
       const name = esc(player ? player.name : "שחקן");
       feedCounts[b.playerId] = (feedCounts[b.playerId]||0) + 1;
       feedTotals[b.playerId] = (feedTotals[b.playerId]||0) + b.amount;
-      const text = feedCounts[b.playerId] === 1
-        ? `${name} נכנס לשולחן עם ₪${b.amount}`
-        : `${name} עשה ריביי של ₪${b.amount} (סה"כ קנייה של ₪${feedTotals[b.playerId]})`;
-      return `<div class="chat-bubble"><span class="bubble-time">${fmtTime(b.ts)}</span>${text}</div>`;
+      const isRebuy = feedCounts[b.playerId] > 1;
+      const text = isRebuy
+        ? `${name} עשה ריביי של ₪${b.amount} (סה"כ קנייה של ₪${feedTotals[b.playerId]})`
+        : `${name} נכנס לשולחן עם ₪${b.amount}`;
+      // Only a rebuy (never the entry that got them seated) can be deleted, same rule as
+      // the personal history above - and only your own or, for admins, anyone's.
+      const canDeleteThis = isRebuy && (b.playerId === pid || feedAdmin) && !(b.playerId in g.cashouts);
+      const trashBtn = canDeleteThis ? `<button style="background:none;border:none;padding:2px;color:#dc2626;cursor:pointer;display:flex;float:left;margin-right:4px;" data-delete-feed-buyin="${b.id}" data-delete-feed-player="${b.playerId}" title="ביטול תשלום">${icon('trash')}</button>` : '';
+      return `<div class="chat-bubble">${trashBtn}<span class="bubble-time">${fmtTime(b.ts)}</span>${text}</div>`;
     }
     const player = g.players.find(pl => pl.id === ev.playerId);
     const name = esc(player ? player.name : "שחקן");
@@ -4788,7 +4795,10 @@ function attachHandlers(){
     let swipeStartX = null, swipeStartY = null, swipeActive = false, swipeAbandoned = false;
     const SWIPE_THRESHOLD = 60, SWIPE_DECIDE_PX = 12;
     swipeRoot.addEventListener("pointerdown", (e) => {
-      if (e.target.closest("[data-seat], button, input, textarea, select, a, [data-toggle-action-panel]")) return;
+      // .chat-frame (history/activity) owns its own vertical drag-to-scroll entirely -
+      // never even start tracking a swipe there, so it can never compete with (or get
+      // starved by) the frame's native scrolling.
+      if (e.target.closest("[data-seat], button, input, textarea, select, a, [data-toggle-action-panel], .chat-frame")) return;
       swipeStartX = e.clientX; swipeStartY = e.clientY; swipeActive = false; swipeAbandoned = false;
     });
     swipeRoot.addEventListener("pointermove", (e) => {
@@ -4798,13 +4808,13 @@ function attachHandlers(){
         if (Math.abs(dy) > SWIPE_DECIDE_PX && Math.abs(dy) > Math.abs(dx)) { swipeAbandoned = true; return; }
         if (Math.abs(dx) > SWIPE_DECIDE_PX) swipeActive = true;
       }
-      // Once this reads as a real horizontal drag, stop the browser from also treating it
-      // as (or switching to) a native scroll/pan gesture mid-drag - touch-action:pan-y on
-      // the root already keeps casual vertical scrolling native everywhere else, but a
-      // real finger's first few pixels are rarely purely horizontal, and without this the
-      // browser can still commit to its own pan-y gesture on that initial wobble and cut
-      // the pointer sequence off with a pointercancel before swipeActive even matters.
-      if (swipeActive && e.cancelable) e.preventDefault();
+      // Stop the browser from committing to its own native pan-y gesture while this still
+      // reads as more horizontal than vertical - not just once swipeActive is confirmed,
+      // but from the first sample, since a browser can lock into native scrolling within
+      // the first few pixels of ANY movement (before SWIPE_DECIDE_PX is even reached) and
+      // cut the pointer sequence off with a pointercancel, at which point calling
+      // preventDefault later is already too late to matter.
+      if ((swipeActive || Math.abs(dx) >= Math.abs(dy)) && e.cancelable) e.preventDefault();
     });
     swipeRoot.addEventListener("pointerup", (e) => {
       if (swipeStartX == null) return;
@@ -5262,6 +5272,15 @@ function attachHandlers(){
   app.querySelectorAll("[data-delete-seat-buyin]").forEach(el => el.onclick = (e) => {
     e.stopPropagation();
     openModal({type:"deleteBuyin", gameId: nav.gameId, playerId: openHistorySeatPlayerId, buyinId: el.dataset.deleteSeatBuyin, returnTo: null});
+  });
+  // Same modal as above, but for a delete tapped from the player screen's whole-table
+  // activity feed - that list mixes every player's buy-ins together, so (unlike the
+  // personal-history popup, which only ever shows the viewer's own) it can't rely on the
+  // single openHistorySeatPlayerId global and carries the right playerId on the button
+  // itself instead.
+  app.querySelectorAll("[data-delete-feed-buyin]").forEach(el => el.onclick = (e) => {
+    e.stopPropagation();
+    openModal({type:"deleteBuyin", gameId: nav.gameId, playerId: el.dataset.deleteFeedPlayer, buyinId: el.dataset.deleteFeedBuyin, returnTo: null});
   });
 
   // modal-level handlers
