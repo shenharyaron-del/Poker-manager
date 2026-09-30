@@ -1581,7 +1581,14 @@ function isCommunityAdmin(c){
   const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[c.id];
   if (!myPlayerId) return false;
   const p = (c.roster||[]).find(pl => pl.id === myPlayerId);
-  return !!(p && p.isAdmin);
+  if (!p) return false;
+  // Same creator check the roster screen's own "permanent, can't be toggled" badge uses
+  // (see the "roster" modal) - by clientId, not just by name. Catches the case where
+  // createdByName is stale (the creator renamed their display name sometime after
+  // creating the community) and the name check above no longer matches them, even though
+  // they're unmistakably still the same person who created it.
+  if (p.clientId && c.createdBy && p.clientId === c.createdBy) return true;
+  return !!p.isAdmin;
 }
 // Only the table's own creator, or a community admin (which now also covers the
 // community's creator - see isCommunityAdmin), may seat other people, end their night, or
