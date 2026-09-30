@@ -1604,6 +1604,12 @@ let openHistorySeatPlayerId = null;
 let tableSubView = "player";
 // Inline "custom amount" toggle for the player screen's one-tap buy-in row.
 let playerScreenCustomOpen = false;
+// `${gameId}:${playerId}` keys already auto-opened by the "directPay" modal (see
+// attachHandlers) - fires once when a player cashes out at a loss mid-game in a direct-
+// settlement community, so they're prompted immediately instead of waiting for the whole
+// table to finish. A Set (not persisted) so closing that modal doesn't re-trigger it on
+// the next render/refresh - it should only ever interrupt the player once per cash-out.
+let autoOpenedDirectPay = new Set();
 // Which seated players the admin screen's pot-balance-fix section has checked off to
 // share an equal-split correction - UI-only, not persisted, reset on nav (see go()).
 let adminBalanceFixSelected = {};
@@ -2498,6 +2504,122 @@ function animateCaptionNumber(el, from, to, isProfit, startTime){
   requestAnimationFrame(frame);
 }
 
+// ---------- Settlement arrows on the table screen (restored from the pre-carousel table
+// action panel - git history 82abca2/ed1b9db/9a7c96c/73e9657/748c99f/117ef81 - still
+// direct-settlement-mode-only, the same algorithm and rendering approach) ----------
+// set by renderTable(), consumed by drawSettlementArrows() after the DOM updates.
+let currentSettlementTransfers = null;
+// Minimum-transfer settlement: who still needs to pay whom, and how much, to zero
+// everyone out - folding in money already moved (paybox-pot payments reduce what the
+// payer still owes overall; direct player-to-player payments net out between that
+// specific pair) before running the standard greedy largest-debtor/largest-creditor
+// match. Direct payments already made are returned separately so the caller can draw
+// them as "already settled" rather than have the algorithm recompute them.
+function computeSettlementTransfers(game){
+  const finalBalances = computeFinalBalances(game);
+  const working = {};
+  Object.keys(finalBalances).forEach(id => { working[id] = finalBalances[id].profit; });
+
+  (game.payboxPayments||[]).forEach(pp => {
+    if (working[pp.playerId] !== undefined) working[pp.playerId] += pp.amount;
+  });
+  const directPayments = game.playerPayments || [];
+  directPayments.forEach(dp => {
+    if (working[dp.fromPlayerId] !== undefined) working[dp.fromPlayerId] += dp.amount;
+    if (working[dp.toPlayerId] !== undefined) working[dp.toPlayerId] -= dp.amount;
+  });
+
+  const debtors = [], creditors = [];
+  Object.entries(working).forEach(([id, bal]) => {
+    if (bal < -0.5) debtors.push({id, amt: -bal});
+    else if (bal > 0.5) creditors.push({id, amt: bal});
+  });
+  debtors.sort((a,b) => b.amt - a.amt);
+  creditors.sort((a,b) => b.amt - a.amt);
+
+  const remaining = [];
+  let i = 0, j = 0;
+  while (i < debtors.length && j < creditors.length) {
+    const pay = Math.round(Math.min(debtors[i].amt, creditors[j].amt) * 100) / 100;
+    if (pay > 0) remaining.push({ from: debtors[i].id, to: creditors[j].id, amount: pay });
+    debtors[i].amt -= pay;
+    creditors[j].amt -= pay;
+    if (debtors[i].amt < 0.5) i++;
+    if (creditors[j].amt < 0.5) j++;
+  }
+
+  return { remaining, alreadyPaid: directPayments };
+}
+
+// Draws the settlement arrows into #settlement-overlay using each seat-circle's actual
+// measured position, not a percentage guess - the seat-wrap block centers itself (circle
+// + name/caption stacked below) on its left%/top% point, so the circle's own visual
+// center sits above that point, not on it. Using real getBoundingClientRect() avoids
+// having to hand-derive that offset, and lets each line get trimmed back by the circle's
+// radius so it starts/ends at the nearest edge between the two circles instead of
+// disappearing under them. Called after every render() (table screen only, no-op if
+// settlement isn't showing) since it needs the seats already laid out in the DOM.
+function drawSettlementArrows(){
+  const overlay = document.getElementById("settlement-overlay");
+  if (!overlay) return;
+  const data = currentSettlementTransfers;
+  if (!data) { overlay.innerHTML = ""; return; }
+
+  // #settlement-overlay is inset:0 inside .poker-table-inner (its actual CSS positioning
+  // parent), NOT .poker-table-wrap - inner is a separately JS-sized (layoutTableSize) and
+  // centered/anchored box that rarely matches wrap's own edges exactly.
+  const inner = overlay.closest(".poker-table-inner");
+  if (!inner) return;
+  const innerRect = inner.getBoundingClientRect();
+
+  const centerOf = (playerId) => {
+    const idx = data.seats.indexOf(playerId);
+    if (idx === -1) return null;
+    const circle = inner.querySelector(`[data-seat="${idx}"] .seat-circle`);
+    if (!circle) return null;
+    const r = circle.getBoundingClientRect();
+    return { x: r.left + r.width/2 - innerRect.left, y: r.top + r.height/2 - innerRect.top, radius: r.width/2 };
+  };
+
+  const items = [];
+  data.transfers.forEach(t => {
+    if (data.filterId && t.fromId !== data.filterId && t.toId !== data.filterId) return;
+    const from = centerOf(t.fromId), to = centerOf(t.toId);
+    if (!from || !to) return;
+    const dx = to.x - from.x, dy = to.y - from.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const ux = dx / dist, uy = dy / dist;
+    items.push({
+      x1: from.x + ux*from.radius, y1: from.y + uy*from.radius,
+      x2: to.x - ux*to.radius, y2: to.y - uy*to.radius,
+      amount: t.amount, paid: t.paid,
+    });
+  });
+
+  if (!items.length) { overlay.innerHTML = ""; return; }
+
+  const lines = items.map(it => {
+    const color = it.paid ? "#e7e5e4" : "#fbbf24";
+    const marker = it.paid ? "arrowhead-paid" : "arrowhead-gold";
+    const dash = it.paid ? ` stroke-dasharray="5,4"` : "";
+    return `<line x1="${it.x1}" y1="${it.y1}" x2="${it.x2}" y2="${it.y2}" stroke="${color}" stroke-width="${it.paid?2:2.5}" opacity="${it.paid?0.85:0.9}"${dash} marker-end="url(#${marker})"/>`;
+  }).join("");
+  const svg = `<svg width="${innerRect.width}" height="${innerRect.height}" viewBox="0 0 ${innerRect.width} ${innerRect.height}" style="position:absolute;inset:0;z-index:2;pointer-events:none;">
+    <defs>
+      <marker id="arrowhead-gold" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#fbbf24"/></marker>
+      <marker id="arrowhead-paid" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#e7e5e4"/></marker>
+    </defs>
+    ${lines}
+  </svg>`;
+
+  const labels = items.map(it => {
+    const mx = (it.x1+it.x2)/2, my = (it.y1+it.y2)/2;
+    return `<div style="position:absolute;left:${mx}px;top:${my}px;transform:translate(-50%,-50%);z-index:5;background:${it.paid?'#3f3c39':'#78350f'};color:${it.paid?'#a8a29e':'#fde68a'};font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;white-space:nowrap;">₪${it.amount}${it.paid?' ✓':''}</div>`;
+  }).join("");
+
+  overlay.innerHTML = svg + labels;
+}
+
 // ---------- Icons (tiny inline SVGs) ----------
 const ICONS = {
   plus: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
@@ -2620,8 +2742,13 @@ function render(){
   // face - with both panes always mounted while seated, the circles view's own DOM (and
   // its sizing) exists even while the player screen is the one on screen.
   if (nav.screen === "table") {
-    requestAnimationFrame(layoutTableSize);
+    // drawSettlementArrows() reads .poker-table-inner's actual current size/position, so
+    // it must run AFTER layoutTableSize() resizes it this frame, not before (see the old
+    // "arrows aren't precise" fix in git history 117ef81) - same rAF callback, in order.
+    requestAnimationFrame(() => { layoutTableSize(); drawSettlementArrows(); });
     animateSeatCaptions(nav.gameId);
+  } else {
+    drawSettlementArrows(); // no-op if #settlement-overlay doesn't exist on this screen
   }
   if (seated) {
     // Both the personal history and the whole-table feed always open scrolled to the
@@ -2850,6 +2977,50 @@ function renderPlayerScreen(gameId){
   const mySettlementTxns = (cashedOut && allCashedOutForSettlement && potBalancedForSettlement)
     ? settleTransactions(computeFinalBalances(g), g.players).filter(t => t.from === pid || t.to === pid)
     : [];
+  // Cashed-out recap (buy-in / final chips / profit) plus a settlement-status line that
+  // depends on the community's settlement mode and how far the night has progressed -
+  // see the branches below for each combination.
+  let cashedOutInfoHtml = "";
+  if (cashedOut) {
+    const finalChipsForInfo = (g.cashouts[pid]||{}).amount || 0;
+    const profitForInfo = Math.round((finalChipsForInfo - buyinTotal) * 100) / 100;
+    const profitLine = profitForInfo >= 0
+      ? `<div style="font-weight:700;color:#6ee7b7;margin-top:2px;">רווח ${profitForInfo} שח</div>`
+      : `<div style="font-weight:700;color:#fda4af;margin-top:2px;">הפסד ${Math.abs(profitForInfo)} שח</div>`;
+    const breakdownHtml = `
+      <div style="font-size:14px;color:var(--muted);line-height:1.8;margin-top:6px;">
+        <div>קניה: ${Math.round(buyinTotal)} שח</div>
+        <div>ז'יטונים בסוף הערב: ${Math.round(finalChipsForInfo)} שח</div>
+        ${profitLine}
+      </div>
+    `;
+    const activePayboxLink = getActivePayboxLink(c);
+    let statusHtml = "";
+    if (c.settlementDefault === 'paybox') {
+      statusHtml = profitForInfo >= 0
+        ? `<div style="font-size:13px;color:var(--muted);margin-top:10px;">הרווח יחולק אחרי שכולם ישלמו לקבוצה</div>`
+        : (activePayboxLink
+            ? `<a href="${esc(activePayboxLink)}" target="_blank" rel="noopener" class="btn btn-primary btn-block" style="margin-top:10px;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} העברה לקבוצת פייבוקס</a>`
+            : `<div style="font-size:12px;color:var(--muted);margin-top:10px;">לא הוגדרה קבוצת פייבוקס</div>`);
+    } else if (allCashedOutForSettlement && potBalancedForSettlement) {
+      statusHtml = mySettlementTxns.map(t => t.from === pid ? `
+        <div style="margin-top:10px;">
+          <div style="font-weight:700;color:#fda4af;">${t.amount} שח מעביר ל-${esc(t.toName)}</div>
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <a href="https://www.bit.co.il" target="_blank" rel="noopener" class="btn btn-ghost flex1" style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} ביט</a>
+            ${activePayboxLink ? `<a href="${esc(activePayboxLink)}" target="_blank" rel="noopener" class="btn btn-ghost flex1" style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} פייבוקס</a>` : ""}
+          </div>
+        </div>
+      ` : `<div style="margin-top:10px;font-weight:700;color:#6ee7b7;">מקבל מ-${esc(t.fromName)} ${t.amount} שח</div>`).join("");
+    } else if (g.closed) {
+      statusHtml = `<div style="font-size:13px;color:var(--muted);margin-top:10px;">ממתין/ה שכולם יצאו מהשולחן</div>`;
+    } else if (profitForInfo >= -0.005) {
+      statusHtml = `<div style="font-size:13px;color:var(--muted);margin-top:10px;">הרווח יישלח אליך בסוף הערב</div>`;
+    }
+    // Lost, mid-game, not closed: no inline status text - the "who do I pay" modal
+    // auto-opens itself instead (see attachHandlers/autoOpenedDirectPay).
+    cashedOutInfoHtml = breakdownHtml + statusHtml;
+  }
   const canDeleteBuyins = true; // viewing/editing your own history here, always allowed
   // Carries its own playerId (data-delete-seat-buyin-player) rather than relying on
   // openHistorySeatPlayerId like the table view's popup does - this screen is always
@@ -2959,7 +3130,7 @@ function renderPlayerScreen(gameId){
     <div class="player-screen-scroll">
       <div style="text-align:center;padding:6px 0 16px;flex-shrink:0;">
         <div style="font-size:26px;font-weight:700;color:var(--text);">${esc(p?p.name:"")}</div>
-        <div data-player-total style="font-size:40px;font-weight:800;color:var(--gold);margin-top:4px;">₪${buyinTotal}</div>
+        ${cashedOut ? "" : `<div data-player-total style="font-size:40px;font-weight:800;color:var(--gold);margin-top:4px;">₪${buyinTotal}</div>`}
         ${(() => {
           // Direct-settlement arrangement(s) involving this player (either side - see
           // getArrangementNotes), same note shown on the admin screen's rows.
@@ -2967,7 +3138,7 @@ function renderPlayerScreen(gameId){
           if (!notes.length) return "";
           return `<div style="font-size:12px;color:var(--muted);margin-top:4px;">${notes.map(n => `${n.received?'קיבל':'העביר'} ₪${n.amount} ${n.received?'מ-':'ל-'}${esc(n.name)}`).join(' · ')}</div>`;
         })()}
-        ${mySettlementTxns.length ? `<div style="font-size:14px;color:var(--gold);font-weight:700;margin-top:6px;">${mySettlementTxns.map(t => t.from===pid ? `מעביר ₪${t.amount} ל-${esc(t.toName)}` : `מקבל ₪${t.amount} מ-${esc(t.fromName)}`).join(' · ')}</div>` : ""}
+        ${cashedOutInfoHtml}
       </div>
       ${cashedOut ? "" : `<div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">ריביי</div>`}
       ${cashedOut ? "" : buyinButtonsHtml}
@@ -3243,6 +3414,23 @@ function renderTable(gameId){
   const diffLabel = diff > 0.5 ? "קופה בחוסר" : (diff < -0.5 ? "קופה בעודף" : "קופה מאוזנת");
   const diffColor = diff > 0.5 ? "#fda4af" : (diff < -0.5 ? "#6ee7b7" : "var(--muted)");
 
+  // Once everyone's cashed out, the pot's balanced, and the community settles directly
+  // (not via a shared paybox pot) - draw who-pays-whom straight onto the table as arrows
+  // between seats (see drawSettlementArrows, called from render() after this markup is in
+  // the DOM). Filtered to the viewer's own transfers when they're seated at this table -
+  // full picture for everyone else (e.g. a non-playing admin watching).
+  currentSettlementTransfers = null;
+  const potUnbalanced = allCashedOut && Math.abs(diff) > 5;
+  if (allCashedOut && !potUnbalanced && c.settlementDefault !== "paybox") {
+    const { remaining, alreadyPaid } = computeSettlementTransfers(g);
+    const allTransfers = [
+      ...remaining.map(t => ({ fromId: t.from, toId: t.to, amount: t.amount, paid: false })),
+      ...alreadyPaid.map(t => ({ fromId: t.fromPlayerId, toId: t.toPlayerId, amount: t.amount, paid: true })),
+    ];
+    const filterId = seatedIds.includes(myPlayerId) ? myPlayerId : null;
+    currentSettlementTransfers = { seats, transfers: allTransfers, filterId };
+  }
+
   // Which half of the table the viewer's own seat slot falls in, so the crop direction
   // (see .poker-table-inner CSS above) always keeps THEIR seat in view: a seat in the top
   // half means the table should crop away from the bottom instead, everyone else crops
@@ -3263,6 +3451,7 @@ function renderTable(gameId){
       <div class="poker-table-inner ${cropClass}">
         <div class="poker-table-felt"></div>
         ${seatsHtml}
+        <div id="settlement-overlay" style="position:absolute;inset:0;pointer-events:none;"></div>
         <div style="position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);text-align:center;z-index:3;">
           <img src="/static/logo-p-crown.png" style="width:37px;height:auto;margin-bottom:8px;pointer-events:none;">
           <div style="color:var(--muted);font-size:12px;">סה"כ קנייה ₪${totalBuyinAll}</div>
@@ -3925,6 +4114,29 @@ function renderModal(m){
       </div>
       <button class="btn btn-primary btn-block" data-confirm-paybox>שמור העברה</button>
     `;
+  } else if (m.type === "directPay") {
+    // Opened automatically (see attachHandlers/autoOpenedDirectPay) the moment a player
+    // cashes out at a loss mid-game, in a direct-settlement community - the full group
+    // netting (settleTransactions) can't run yet since not everyone's done, so this lets
+    // them record who they actually handed cash to right now instead of waiting.
+    const g = getGame(m.gameId);
+    const fromP = g.players.find(pl => pl.id === m.fromPlayerId);
+    const otherPlayers = g.players.filter(p => p.id !== m.fromPlayerId);
+    title = `${esc(fromP ? fromP.name : "")} מעביר כסף`;
+    body = `
+      <p style="color:var(--muted);font-size:12px;margin-top:0;">בחרו למי העברתם את הכסף ביד, או פתחו ביט/פייבוקס.</p>
+      <div class="field"><label>למי?</label>
+        <select id="direct-pay-to" class="select-input">
+          ${otherPlayers.map(p=>`<option value="${p.id}" ${m.toPlayerId===p.id?"selected":""}>${esc(p.name)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field"><label>סכום בשקלים</label><input type="number" inputmode="decimal" id="direct-pay-amount" value="${m.amount||''}" placeholder="0" autofocus></div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        <a href="https://www.bit.co.il" target="_blank" rel="noopener" class="btn btn-ghost flex1" style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} ביט</a>
+        ${getActivePayboxLink(getCommunity(g.communityId)) ? `<a href="${esc(getActivePayboxLink(getCommunity(g.communityId)))}" target="_blank" rel="noopener" class="btn btn-ghost flex1" style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} פייבוקס</a>` : ""}
+      </div>
+      <button class="btn btn-primary btn-block" data-confirm-direct-pay>שמור</button>
+    `;
   } else if (m.type === "payboxSettings") {
     const c = getCommunity(m.communityId);
     title = "הגדרת פרופיל קבוצה";
@@ -4365,6 +4577,28 @@ function renderModal(m){
 // ---------- Event handling (delegated) ----------
 function attachHandlers(){
   const app = document.getElementById("app");
+
+  // Auto-open the "who do I pay" modal the moment this player is cashed out at a loss
+  // mid-game (direct settlement, not everyone else done yet, night not closed) - see
+  // autoOpenedDirectPay's own comment. Deferred to a fresh tick (not called synchronously
+  // from here) so it runs as its own top-level openModal()/render() cycle instead of
+  // re-entering the render/attachHandlers pass that's still in progress right now.
+  if (nav.screen === "table" && !modal) {
+    const g = getGame(nav.gameId);
+    const c = g && getCommunity(g.communityId);
+    const pid = g && myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+    if (g && c && pid && (pid in g.cashouts) && c.settlementDefault !== "paybox") {
+      const seatedIds = (g.seats||[]).filter(Boolean);
+      const allOut = seatedIds.length > 0 && seatedIds.every(sid => sid in g.cashouts);
+      const myBuyinTotal = g.buyins.filter(b=>b.playerId===pid).reduce((s,b)=>s+b.amount,0);
+      const myProfit = (g.cashouts[pid].amount||0) - myBuyinTotal;
+      const key = `${g.id}:${pid}`;
+      if (!allOut && !g.closed && myProfit < -0.005 && !autoOpenedDirectPay.has(key)) {
+        autoOpenedDirectPay.add(key);
+        setTimeout(() => openModal({type:"directPay", gameId: g.id, fromPlayerId: pid, amount: String(Math.round(Math.abs(myProfit)*100)/100)}), 0);
+      }
+    }
+  }
 
   // Swipe between the player screen and the classic circles view - both are mounted side
   // by side in [data-swipe-track] (see render()) and this literally drags that track
@@ -6062,6 +6296,28 @@ function attachHandlers(){
           const g = getGame(modal.gameId);
           if (!g.payboxPayments) g.payboxPayments = [];
           g.payboxPayments.push({id:uid(), playerId, amount: amt, ts: Date.now()});
+        });
+      }
+      closeModal();
+    };
+  }
+
+  if (modal && modal.type === "directPay") {
+    const confirmDirectPay = app.querySelector("[data-confirm-direct-pay]");
+    if (confirmDirectPay) confirmDirectPay.onclick = async () => {
+      const amt = parseFloat(document.getElementById("direct-pay-amount").value);
+      const toPlayerId = document.getElementById("direct-pay-to").value;
+      if (!amt || amt <= 0 || !toPlayerId) return;
+      confirmDirectPay.disabled = true;
+      showButtonLoading(confirmDirectPay);
+      if (USE_RELATIONAL_API) {
+        try { await v2AddPlayerPayment(modal.gameId, uid(), modal.fromPlayerId, toPlayerId, amt); }
+        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmDirectPay.disabled = false; return; }
+      } else {
+        await mutateAndSave(() => {
+          const g = getGame(modal.gameId);
+          if (!g.playerPayments) g.playerPayments = [];
+          g.playerPayments.push({id:uid(), fromPlayerId: modal.fromPlayerId, toPlayerId, amount: amt, ts: Date.now()});
         });
       }
       closeModal();
