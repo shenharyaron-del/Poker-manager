@@ -83,7 +83,6 @@ h1.sm{font-size:20px;}
 .icon-btn.danger{background:#450a0a;color:#fca5a5;}
 .icon-btn.gold{color:var(--gold);}
 .icon-btn.ok{background:#065f46;color:#6ee7b7;}
-.bottom-bar{position:fixed;bottom:0;left:0;right:0;max-width:520px;margin:0 auto;padding:16px 20px calc(20px + env(safe-area-inset-bottom));background:linear-gradient(to top,var(--bg2) 60%, transparent);}
 /* Table screen only: the table circle used to be sized purely from its own width (a
    padding-top percentage trick) with a guessed fixed margin reserved for the fixed
    bottom action panel - on a real phone (especially with browser chrome eating into the
@@ -114,7 +113,7 @@ body.table-screen #app{height:100vh;height:100dvh;height:var(--real-vh, 100dvh);
    touch-action:pan-y lets native vertical scroll work everywhere inside (the felt, the
    player screen's history/feed lists) while leaving horizontal swipes entirely to the JS
    swipe handlers in attachHandlers, unblocked by the browser's own gesture handling. */
-body.table-screen .table-swipe-root{display:flex;flex-direction:column;flex:1;min-height:0;touch-action:pan-y;}
+body.table-screen .table-swipe-root{display:flex;flex-direction:column;flex:1;min-height:0;touch-action:pan-y;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
 /* The actual swipeable carousel (see render()) - both faces (player screen + circles
    view) are mounted side by side at all times when seated, so dragging visibly slides
    the real content under the finger like a phone home screen, instead of an invisible
@@ -127,27 +126,26 @@ body.table-screen .swipe-track-viewport{flex:1;min-height:0;overflow:hidden;posi
 body.table-screen .swipe-track{display:flex;direction:ltr;height:100%;}
 body.table-screen .swipe-page{flex:0 0 100%;width:100%;min-width:0;direction:rtl;display:flex;flex-direction:column;min-height:0;}
 body.table-screen .top{flex-shrink:0;touch-action:none;}
-/* min-height keeps the table circle from ever fully disappearing - if the action panel
-   below (e.g. a settlement view listing several players' transfers) genuinely needs more
-   room than what's left on a short screen, the panel itself scrolls internally instead,
-   never the page. */
-body.table-screen .poker-table-wrap{flex:1;min-height:80px;width:100%;padding-top:0;max-width:100%;max-height:100%;margin:4px 0 8px;overflow:hidden;transition:height .25s ease;touch-action:none;}
+/* The table itself now fills all remaining vertical space below the header - there's no
+   bottom action panel competing for room any more (buy-in/leave/settlement all moved to
+   the player screen, see renderPlayerScreen). */
+body.table-screen .poker-table-wrap{flex:1;min-height:80px;width:100%;padding-top:0;max-width:100%;max-height:100%;margin:4px 0 8px;overflow:hidden;touch-action:none;}
 /* The identityName modal's own mini seat-picker table (see seatPickerHtml) reuses this
    same .poker-table-wrap class for its felt/watermark look, but it's a plain block inside
    a fixed-width wrapper, not the real table screen's flex-fit box above - so when that
-   modal is opened from the table screen itself ("הפרופיל שלי" in the action panel, body
-   already carries table-screen from the screen behind it), the rule above wrongly matched
-   it too and collapsed it to min-height:80px instead of its normal width-based aspect
-   ratio. Reported live as the profile screen's seat picker looking smaller/denser than
-   the same picker opened from the mandatory post-login "הגדרת שחקן" screen (nav.screen
-   isn't "table" yet at that point, so body never had table-screen to begin with there).
-   Needs the extra .modal in the selector to out-specificity the rule above. */
+   modal is opened while body still carries table-screen from the screen behind it, the
+   rule above wrongly matched it too and collapsed it to min-height:80px instead of its
+   normal width-based aspect ratio. Reported live as the profile screen's seat picker
+   looking smaller/denser than the same picker opened from the mandatory post-login
+   "הגדרת שחקן" screen (nav.screen isn't "table" yet at that point, so body never had
+   table-screen to begin with there). Needs the extra .modal in the selector to
+   out-specificity the rule above. */
 body.table-screen .modal .poker-table-wrap{flex:none;min-height:0;padding-top:145%;max-width:100%;max-height:none;overflow:visible;}
 /* The inner box keeps a fixed aspect ratio driven by WIDTH alone, so its height never
-   shrinks just because the outer viewport (.poker-table-wrap, above) got shorter when the
-   action panel expanded - it only ever gets clipped by that viewport's overflow:hidden.
-   Anchoring to top vs bottom (set per-render in renderTable from the viewer's own seat
-   position - see getMySeatPosition) decides which end stays fully visible. */
+   shrinks just because the outer viewport (.poker-table-wrap, above) got shorter - it only
+   ever gets clipped by that viewport's overflow:hidden. Anchoring to top vs bottom (set
+   per-render in renderTable from the viewer's own seat position - see getMySeatPosition)
+   decides which end stays fully visible. */
 body.table-screen .poker-table-inner{position:absolute;left:0;right:0;width:100%;aspect-ratio:1/1.45;}
 /* A flush 0 offset clips the closest seat's own content right at the edge - a top-row
    seat's avatar circle (crop-from-bottom, anchored at the top) and a bottom-row seat's
@@ -157,24 +155,21 @@ body.table-screen .poker-table-inner{position:absolute;left:0;right:0;width:100%
    enough slack for that overhang instead of cropping into it. */
 body.table-screen .poker-table-inner.crop-from-bottom{top:20px;bottom:auto;}
 body.table-screen .poker-table-inner.crop-from-top{bottom:16px;top:auto;}
-/* A plain background:none here left the button panel blending straight into the page with
-   no visible edge - the reference table image has a crisp line where its screen area ends
-   and its button panel starts. Border only, no shadow: an earlier version paired this with
-   a downward box-shadow for a physical-edge look, but that shadow's dark blur reached
-   straight into .panel-drag-glow's zone right above it (same spot, both radiating from this
-   same top edge) and visibly muddied the chevron sitting in the glow - the two effects were
-   never going to coexist there. */
-body.table-screen .bottom-bar{position:static;flex-shrink:0;background:none;margin:0;max-width:none;max-height:70vh;max-height:70dvh;overflow-y:auto;padding-top:0;border-top:1px solid rgba(255,255,255,.14);}
-/* The player screen's own content (name/total, history, buy-in row, leave button, the
-   group feed) - unlike the circles view, this one scrolls as an ordinary page instead of
-   a fixed-size felt with a separately-scrolling panel underneath it. */
-body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow-y:auto;padding:0 20px 20px;}
+/* The player screen's own content (name/total, buy-in row, history, table-activity feed,
+   leave button) - a column that fills the available height with no page scroll of its
+   own (nothing here should ever push the screen taller than the phone); every child
+   except the activity feed keeps its natural size (flex-shrink:0, set per-element below),
+   and the feed alone (flex:1) absorbs whatever room is left, shrinking or growing so the
+   leave button after it always stays on screen instead of getting pushed off. */
+body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;padding:0 20px 20px;}
 /* Shared by the player screen's history and table-activity sections - a genuinely FIXED
    size (height, not max-height - stays put whether there's 1 message or 30), sized for
    about 3 message bubbles, so both read as their own defined panel instead of open-ended
-   lists pushing the page taller. The doodle background is the user-supplied WhatsApp-style
-   reference image, tiled; the dark overlay underneath keeps the bubbles/text readable
-   against it instead of the image's own light color showing through at full strength. */
+   lists pushing the page taller. (The table-activity one overrides this height with an
+   inline flex:1 instead - see renderPlayerScreen.) The doodle background is the user-
+   supplied WhatsApp-style reference image, tiled; the dark overlay underneath keeps the
+   bubbles/text readable against it instead of the image's own light color showing
+   through at full strength. */
 .chat-frame{background:linear-gradient(rgba(0,0,0,.62),rgba(0,0,0,.62)),url('/static/chat-bg.png');background-repeat:repeat;background-size:auto,220px;border-radius:12px;padding:10px;height:158px;overflow-y:auto;touch-action:pan-y;}
 /* Same "bounded panel" idea as .chat-frame above, for the buy-in button row - a plain
    border box rather than a dark fill, so the gold buttons inside stay the brightest thing
@@ -201,34 +196,7 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .chip-btn:active{transform:scale(.93);}
 .btn:disabled{opacity:.45;cursor:not-allowed;}
 .chip-btn.buyin-selected{background:var(--gold);color:var(--gold-text);border-color:var(--gold);font-weight:700;}
-.chip-btn.buyin-selected.behalf{background:#78350f;color:#fde68a;border-color:#78350f;}
-/* The accordion's drag handle - a chevron on a soft upward glow, swiped (not tapped) to
-   expand/collapse the panel below it (see the pointerdown/move/up handlers in
-   attachHandlers). touch-action:none stops the browser's own page-scroll gesture from
-   competing with the swipe on a touchscreen. */
-.panel-drag-handle{position:relative;display:flex;justify-content:center;align-items:flex-start;padding-top:2px;height:24px;margin-bottom:4px;cursor:grab;touch-action:none;}
-/* .panel-drag-glow right below is purely visual (pointer-events:none) and reaches well above
-   this 24px-tall handle - without this, a drag/tap that starts anywhere in that glow (which is
-   exactly what it visually invites) misses the handle's real hit area entirely and falls
-   through to whatever's behind it (the table). This invisible pseudo-element enlarges the
-   handle's actual hit area upward to roughly match the glow, so starting a touch a bit above
-   the chevron still registers as pressing the handle - a pointer event landing on a
-   pseudo-element is reported with the host element itself as e.target, so the existing
-   pointerdown/move/up listeners on .panel-drag-handle fire exactly as if it were tapped
-   directly. */
-.panel-drag-handle::before{content:"";position:absolute;left:50%;bottom:100%;transform:translateX(-50%);width:200px;height:50px;}
-/* Bottom of this box sits right at the handle's own top edge (not overlapping it) so the
-   glow visibly starts there and reaches up into the table above, rather than fading out
-   just past the chevron. .bottom-bar has no overflow:hidden of its own, so this is free to
-   paint over .poker-table-wrap above it. */
-.panel-drag-glow{position:absolute;left:50%;bottom:100%;transform:translateX(-50%);width:320px;height:130px;background:radial-gradient(ellipse 42% 100% at 50% 100%,rgba(153,246,209,.85) 0%,rgba(153,246,209,.5) 22%,rgba(153,246,209,.24) 42%,rgba(153,246,209,.1) 62%,transparent 85%);pointer-events:none;}
-.panel-drag-handle svg{position:relative;filter:drop-shadow(0 0 4px rgba(153,246,209,.8));}
-/* Always present in the DOM (both collapsed and expanded) so the drag handler below can
-   track max-height continuously with the finger instead of jumping between two fixed
-   states - see the pointer handlers on [data-toggle-action-panel] in attachHandlers. */
-.panel-expand-extra{overflow:hidden;transition:max-height .25s ease;}
 .overlay{position:fixed;inset:0;background:#000;display:flex;align-items:flex-end;justify-content:center;z-index:50;}
-.overlay.overlay-blur{background:rgba(0,0,0,.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);}
 @media(min-width:600px){.overlay{align-items:center;}}
 /* Anchors the sheet to the top of the screen instead of the bottom - used for the
    chip-counting screen (seatChips), which got long enough (recap header + mode tabs +
@@ -308,26 +276,17 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .seat-circle.vacant{border:2px dashed rgba(255,255,255,.35);color:var(--muted);background:rgba(255,255,255,.05);font-size:20px;}
 .seat-circle.filled{background:var(--gold);color:var(--gold-text);border:2px solid #000;}
 .seat-circle.filled.cashed-out{background:#57534e;border-color:#57534e;color:#fda4af;}
-/* Ring color states, in order of precedence: cashed-out (fixed gray, see above - never
-   overridden below) > .ring-behalf (bordeaux, the one seat an admin is acting on behalf
-   of) > .ring-self (cyan, your own seat, only shown while nobody's on-behalf mode is
-   active) > plain black border, everyone else's default. */
+/* Ring color states: cashed-out (fixed gray, see above - never overridden below) >
+   .ring-self (cyan, your own seat) > plain black border, everyone else's default. */
 .seat-circle.filled.ring-self{border-color:#22d3ee;}
-.seat-circle.filled.ring-behalf{border-color:#78350f;}
 .buyin-fly{position:absolute;left:0;top:0;z-index:400;pointer-events:none;display:flex;align-items:center;justify-content:center;min-width:34px;height:30px;padding:0 9px;border-radius:15px;background:var(--gold);color:var(--gold-text);font-weight:800;font-size:12px;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.4);transform:translate(-50%,-50%);transition:left .65s cubic-bezier(.22,.7,.3,1),top .65s cubic-bezier(.22,.7,.3,1),opacity .3s ease .55s,transform .3s ease;}
 .buyin-fly.landed{transform:translate(-50%,-50%) scale(1.15);}
 .buyin-fly.fading{opacity:0;}
-.on-behalf-badge{background:#78350f;color:#fde68a;border-radius:9px;padding:8px 10px;font-size:15px;font-weight:700;text-align:center;margin-bottom:10px;}
 /* The dark nameplate: pulled up (negative margin) so it sits partly behind the lower part
    of the avatar circle above it (painted over it too, since seat-info comes after
    seat-circle in the DOM), with padding-top pushing the actual name text back below the
-   avatar's own visible edge. Stays plain black for an ordinary selection (creator or any
-   regular player, cashed-out or not) - only .name-behalf replaces the whole background
-   with the same bordeaux as .on-behalf-badge, for the one seat actually being acted on for
-   someone else (applies even if that seat already cashed out - only its ring stays the
-   fixed cashed-out gray in that case, see .ring-behalf above). */
+   avatar's own visible edge. */
 .seat-info{display:flex;flex-direction:column;align-items:center;gap:1px;cursor:pointer;background:rgba(8,8,8,.82);border-radius:10px;padding:13px 10px 5px;margin-top:-13px;}
-.seat-info.name-behalf{background:#78350f;}
 .seat-name{font-size:11px;font-weight:700;color:var(--text);text-align:center;white-space:nowrap;max-width:78px;overflow:hidden;text-overflow:ellipsis;}
 .seat-caption{font-size:13px;color:var(--gold);font-weight:700;text-align:center;line-height:1.35;white-space:nowrap;}
 .seat-history-toggle{position:absolute;top:3px;right:5px;background:none;border:none;color:var(--muted);cursor:pointer;padding:2px;display:inline-flex;z-index:2;}
@@ -1572,21 +1531,6 @@ let authSettings = { requireVerifyExistingEmail: true, requireVerifyBeforeAdminS
 // ---------- Navigation (not persisted - always starts at home) ----------
 let nav = { screen: "home", communityId: null, gameId: null };
 let modal = null; // {type, ...}
-// Which single player's arrows drawSettlementArrows() highlights on the all-cashed-out
-// settlement screen - UI-only, not persisted. null falls back to the viewer's own player
-// (see renderActionPanel) rather than meaning "show everyone"; tapping a seat's avatar/info
-// while settlement arrows are showing (currentSettlementTransfers is set) switches to that
-// player instead.
-let settlementFilterPlayerId = null;
-// Which players the table creator has checked off to share an end-of-night pot
-// imbalance correction (see renderActionPanel's "pot not balanced" branch) - UI-only,
-// not persisted, keyed by playerId, reset on nav.
-let balanceFixSelected = {};
-let currentSettlementTransfers = null; // set by renderTable(), consumed by drawSettlementArrows() after the DOM updates
-// Whose seat the bottom action panel currently shows (see renderTable/renderActionPanel) -
-// defaults to the viewer's own seat, but the table/community creator can tap any active
-// seat to act "on behalf of" that player instead. UI-only, not persisted, reset on nav.
-let selectedSeatPlayerId = null;
 // A small per-seat popup (chevron next to an active player's name, see renderTable's
 // seatsHtml) listing their buy-in history inline, right on the table - only one open at a
 // time, tapping another player's chevron closes whichever one was open. UI-only, not
@@ -1597,9 +1541,7 @@ let openHistorySeatPlayerId = null;
 // circles-around-the-felt view), swiped between (see the swipe handlers in
 // attachHandlers). Reset to "player" on nav so a fresh visit always starts there.
 let tableSubView = "player";
-// Inline "custom amount" toggle for the player screen's one-tap buy-in row - separate
-// from selectedBuyinAmount/customBuyinAmount (the table action panel's own two-step
-// flow) since this screen's buttons apply instantly instead of needing a confirm step.
+// Inline "custom amount" toggle for the player screen's one-tap buy-in row.
 let playerScreenCustomOpen = false;
 // Identifies the newest entry the player screen's activity feed has rendered so far - a
 // changed value after a render means something genuinely new landed (whether this device
@@ -1607,75 +1549,16 @@ let playerScreenCustomOpen = false;
 // means "haven't seen this game's feed yet" (right after navigating in), so the very
 // first render never vibrates for data that was already there. Reset in go().
 let lastSeenFeedEventKey = null;
-// A per-SESSION override of the community's persisted settlementDefault (see the
-// payboxSettings screen) - lets the table's creator pick a different method for just this
-// sitting without touching the permanent default future games will still use. Never saved
-// anywhere, resets on reload. null means "use the community's own default".
-let sessionSettlementOverride = null;
-// Two-step amount pick for the admin "בדיקת מאזן" correction flow (history modal,
-// m.editable) - separate from selectedBuyinAmount/customBuyinAmount (the main table
-// buy-in flow) since a correction has no reason to enforce that flow's "custom must
-// exceed the lowest tier" rule. Reset whenever that modal is opened (see data-check-
-// balance).
-let checkBalanceSelectedAmount = null;
-// Two-step buy-in: tapping 50/80/100/"אחר" only selects an amount (highlights it),
-// the actual buy-in only fires on the separate "הוסף ריביי" confirm button below it.
-// selectedBuyinAmount is either one of the three fixed numbers or the string "custom" -
-// defaults to the first (rightmost, in RTL) fixed amount so it's already highlighted
-// without a tap; a fresh "custom" input state is only ever reached by tapping "אחר".
-// customBuyinAmount is the last value typed into "אחר" - deliberately NOT reset when the
-// selection changes or after a buy-in confirms, only when the seat selection itself
-// changes (a different player's panel), so it stays available to reuse for the rest of
-// the session as the user asked.
 const FIXED_BUYIN_AMOUNTS = [50, 80, 100];
 // "אחר" exists for amounts ABOVE the standard tiers, not to re-type the lowest tier under
 // a different control - so unlike the fixed pills (already >= this by construction), a
 // custom amount must be strictly greater than it, not just positive.
 const MIN_BUYIN_AMOUNT = Math.min(...FIXED_BUYIN_AMOUNTS);
-function currentSelectedBuyinAmount(){
-  return selectedBuyinAmount === "custom" ? customBuyinAmount : selectedBuyinAmount;
-}
-function canConfirmSelectedBuyin(){
-  const amt = currentSelectedBuyinAmount();
-  if (amt == null || amt <= 0) return false;
-  if (selectedBuyinAmount === "custom" && amt <= MIN_BUYIN_AMOUNT) return false;
-  return true;
-}
-let selectedBuyinAmount = MIN_BUYIN_AMOUNT;
-let customBuyinAmount = null;
-// Collapsed by default - shows only the two buy-in rows; expanded reveals the rest of
-// the active-seat panel (end-night, remove-from-table). Reset whenever the selected seat
-// changes, same as the buy-in selection above - an expanded/collapsed choice made for one
-// player's panel shouldn't carry over to a different player's.
-let actionPanelExpanded = false;
-// Only the table's or community's creator may seat other people and act on their behalf
-// (buy-ins, ending their night, removing them) - anyone typing someone else's name is
-// just a courtesy elsewhere, but this gate is what keeps that from being used to mess
-// with someone else's seat.
+// Only the table's or community's creator may seat other people, end their night, or
+// remove them - anyone typing someone else's name is just a courtesy elsewhere, but this
+// gate is what keeps that from being used to mess with someone else's seat.
 function isTableAdmin(g, c){
   return !!(myIdentity.name && ((g && myIdentity.name === g.createdByName) || (c && myIdentity.name === c.createdByName)));
-}
-// A tap on a filled seat selects it into the bottom action panel - always allowed for
-// your own seat, and for the table/community creator on anyone's active seat (to act
-// "on behalf of" them). Anyone else tapping someone else's seat is a no-op.
-function trySelectSeatPlayer(pid){
-  const g = getGame(nav.gameId);
-  const c = getCommunity(g.communityId);
-  const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
-  if (pid === myPlayerId || isTableAdmin(g, c)) {
-    selectedSeatPlayerId = pid;
-    selectedBuyinAmount = MIN_BUYIN_AMOUNT;
-    actionPanelExpanded = false;
-    render();
-  }
-}
-// ---------- Auto-return from "on behalf of" after inactivity ----------
-function isOnBehalf(){
-  if (nav.screen !== "table" || !nav.gameId) return false;
-  const g = getGame(nav.gameId);
-  if (!g) return false;
-  const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
-  return !!(selectedSeatPlayerId && myPlayerId && selectedSeatPlayerId !== myPlayerId);
 }
 // Any click outside the open seat-history popup (or its own toggle button) closes it.
 // Capture phase on purpose - it needs to see every click before some OTHER handler
@@ -1688,9 +1571,9 @@ document.addEventListener("click", (e) => {
   render();
 }, true);
 
-// Purely cosmetic feedback for a buy-in from the action panel: a small badge flies from
-// the button that was tapped to the selected seat's circle, then turns into "+amount"
-// briefly before fading - never anything the actual save depends on.
+// Purely cosmetic feedback for a buy-in: a small badge flies from the button that was
+// tapped to its target element, then turns into "+amount" briefly before fading - never
+// anything the actual save depends on.
 function flyAmountBadge(fromEl, toEl, amount){
   try {
     if (!fromEl || !toEl) return;
@@ -1718,63 +1601,10 @@ function flyAmountBadge(fromEl, toEl, amount){
     setTimeout(() => { badge.remove(); }, 1300);
   } catch(e) { /* cosmetic only */ }
 }
-function flyBuyinBadge(fromEl, amount){
-  flyAmountBadge(fromEl, document.querySelector(".seat-circle.selected"), amount);
-}
-// Finds a seated player's own circle element on the table, for animations that don't
-// target the currently-selected seat (e.g. the pot-balance fix, which can hit several
-// players at once).
-function findSeatCircleEl(g, pid){
-  const seats = g.seats || [];
-  const idx = seats.indexOf(pid);
-  if (idx < 0) return null;
-  return document.querySelector(`[data-seat="${idx}"] .seat-circle`);
-}
-async function doPanelBuyin(amount, btnEl){
-  if (!amount || amount <= 0) return;
-  const pid = selectedSeatPlayerId;
-  if (!pid) return;
-  // Block another buy-in until this one's total has actually landed - otherwise a quick
-  // second tap could fire (and build its own mutation on top of a not-yet-updated total)
-  // before the first save even started reflecting on screen. render() at the end below
-  // rebuilds this row from scratch, which re-enables everything on its own.
-  document.querySelectorAll("[data-buyin-select],[data-panel-buyin-confirm],#panel-buyin-custom").forEach(el => el.disabled = true);
-  flyBuyinBadge(btnEl, amount);
-  // Starts the caption's count-up immediately (optimistically), using the seat's current
-  // known total - it doesn't wait for the network round trip below, so it feels instant.
-  // If the confirmed save ends up different (a conflict resolved against someone else's
-  // concurrent change), the render() after it lands corrects toward the true value the
-  // same way any other device's change would - see animateSeatCaptions.
-  optimisticallyAnimateBuyin(nav.gameId, pid, amount);
-  // mutateAndSave (the real network save) starts here, immediately - it is NOT waiting
-  // on flyBuyinBadge's own setTimeout-driven animation, which is purely decorative and
-  // runs independently in parallel.
-  let confirmed;
-  if (USE_RELATIONAL_API) {
-    try { await v2AddBuyin(nav.gameId, uid(), pid, amount); confirmed = true; }
-    catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmed = false; }
-  } else {
-    confirmed = await mutateAndSave(() => {
-      const g = getGame(nav.gameId);
-      g.buyins.push({id: uid(), playerId: pid, amount, ts: Date.now()});
-    });
-  }
-  // Only once the backend has actually accepted the save, not optimistically on click -
-  // a click that ends up failing/never reaching the server shouldn't sound like it worked.
-  // Still local-initiator only, same as before - other devices get the counting animation
-  // instead of a sound for a change that isn't theirs.
-  if (confirmed) playBuyinSound();
-  render();
-}
-
 function go(screen, extra){
   nav = Object.assign({screen}, extra||{});
   modal = null;
-  selectedSeatPlayerId = null; // re-defaults to the viewer's own seat on the next table render
-  selectedBuyinAmount = MIN_BUYIN_AMOUNT;
-  actionPanelExpanded = false;
   openHistorySeatPlayerId = null;
-  balanceFixSelected = {};
   tableSubView = "player";
   playerScreenCustomOpen = false;
   lastSeenFeedEventKey = null;
@@ -2443,66 +2273,12 @@ function computeFinalBalances(game){
   return finalBalances;
 }
 
-// Minimum-transfer settlement: who still needs to pay whom, and how much, to zero
-// everyone out - folding in money already moved (paybox-pot payments reduce what the
-// payer still owes overall; direct player-to-player payments net out between that
-// specific pair) before running the standard greedy largest-debtor/largest-creditor
-// match. Direct payments already made are returned separately so the caller can draw
-// them as "already settled" rather than have the algorithm recompute them.
-function computeSettlementTransfers(game){
-  const finalBalances = computeFinalBalances(game);
-  const working = {};
-  Object.keys(finalBalances).forEach(id => { working[id] = finalBalances[id].profit; });
-
-  (game.payboxPayments||[]).forEach(pp => {
-    if (working[pp.playerId] !== undefined) working[pp.playerId] += pp.amount;
-  });
-  const directPayments = game.playerPayments || [];
-  directPayments.forEach(dp => {
-    if (working[dp.fromPlayerId] !== undefined) working[dp.fromPlayerId] += dp.amount;
-    if (working[dp.toPlayerId] !== undefined) working[dp.toPlayerId] -= dp.amount;
-  });
-
-  const debtors = [], creditors = [];
-  Object.entries(working).forEach(([id, bal]) => {
-    if (bal < -0.5) debtors.push({id, amt: -bal});
-    else if (bal > 0.5) creditors.push({id, amt: bal});
-  });
-  debtors.sort((a,b) => b.amt - a.amt);
-  creditors.sort((a,b) => b.amt - a.amt);
-
-  // Greedy largest-debtor/largest-creditor match, keeping exact amounts (rounded only to
-  // the nearest agora) instead of flooring to a whole shekel - a real-number settlement
-  // always balances exactly, so there's no leftover to fold into anyone's transfer.
-  const remaining = [];
-  let i = 0, j = 0;
-  while (i < debtors.length && j < creditors.length) {
-    const pay = Math.round(Math.min(debtors[i].amt, creditors[j].amt) * 100) / 100;
-    if (pay > 0) remaining.push({ from: debtors[i].id, to: creditors[j].id, amount: pay });
-    debtors[i].amt -= pay;
-    creditors[j].amt -= pay;
-    if (debtors[i].amt < 0.5) i++;
-    if (creditors[j].amt < 0.5) j++;
-  }
-
-  return { remaining, alreadyPaid: directPayments, warning: null };
-}
-
-// Draws the settlement arrows into #settlement-overlay using each seat-circle's actual
-// measured position, not a percentage guess - the seat-wrap block centers itself (circle
-// + name/caption stacked below) on its left%/top% point, so the circle's own visual
-// center sits above that point, not on it. Using real getBoundingClientRect() avoids
-// having to hand-derive that offset, and lets each line get trimmed back by the circle's
-// radius so it starts/ends at the nearest edge between the two circles instead of
-// disappearing under them. Called after every render() (table screen only, no-op if
-// settlement isn't showing) since it needs the seats already laid out in the DOM.
 // Whatever a seat's caption is showing (buy-in total while active, profit once cashed
 // out) counts smoothly from its previous value to the new one over ~2s instead of just
-// jumping - on every render, regardless of what caused the change: a local buy-in, a
-// pot-balance correction, or another device's action picked up by the next refresh.
+// jumping - on every render, regardless of what caused the change: a local buy-in or
+// another device's action picked up by the next refresh.
 let lastSeatCaptionValues = {}; // gameId -> {playerId -> number}
-// render() fully replaces the DOM every time, including mid-animation (e.g. the real save
-// landing while an optimistic count from doPanelBuyin is still in flight) - without this,
+// render() fully replaces the DOM every time, including mid-animation - without this,
 // that new render's fresh element would just show the final value statically, cutting the
 // animation short. Tracking the animation's own start time here lets a later render()
 // resume it in place on the new element instead, so the full ~2s always plays out.
@@ -2523,11 +2299,9 @@ function animateSeatCaptions(gameId){
     const value = cashedOut ? Math.round(liveChips[pid]||0) - buyin : buyin;
     next[pid] = value;
     const prevValue = prev[pid];
-    // A genuine new buy-in someone ELSE just made - this device's own buy-ins already
-    // played the sound at the moment they were confirmed (see doPanelBuyin) and their
-    // optimistic update already moved this cache past the old value before this ever
-    // runs, so this only fires for a change that arrived via sync from another device -
-    // everyone watching the table hears it, not just whoever tapped the button.
+    // Any buy-in that raised this seat's caption since the last render plays the coin
+    // sound - the local initiator's own buy-in included, so everyone watching the table
+    // hears it, not just whoever tapped the button.
     if (!cashedOut && prevValue !== undefined && value > prevValue) playBuyinSound();
     const el = document.querySelector(`[data-caption-for="${pid}"]`);
     if (!el) return;
@@ -2541,24 +2315,6 @@ function animateSeatCaptions(gameId){
     }
   });
   lastSeatCaptionValues[gameId] = next;
-}
-// Kicks off a caption's count-up the instant a local buy-in is tapped, before the network
-// save even starts - see doPanelBuyin. Updates the same cache animateSeatCaptions reads,
-// so the real render() once the save lands resumes this animation instead of restarting
-// or cutting it short.
-function optimisticallyAnimateBuyin(gameId, pid, amount){
-  try {
-    const g = getGame(gameId);
-    if (!g || (pid in g.cashouts)) return;
-    const buyinTotals = {};
-    g.buyins.forEach(b => { buyinTotals[b.playerId] = (buyinTotals[b.playerId]||0) + b.amount; });
-    const from = buyinTotals[pid] || 0;
-    const to = from + amount;
-    const el = document.querySelector(`[data-caption-for="${pid}"]`);
-    if (el) animateCaptionNumber(el, from, to, false);
-    if (!lastSeatCaptionValues[gameId]) lastSeatCaptionValues[gameId] = {};
-    lastSeatCaptionValues[gameId][pid] = to;
-  } catch(e) { /* cosmetic only */ }
 }
 // Short, synthesized "coins" jingle on a local buy-in - no audio asset to host, and
 // reusing one AudioContext (created lazily, on the first buy-in - the click itself is the
@@ -2605,73 +2361,6 @@ function animateCaptionNumber(el, from, to, isProfit, startTime){
     else if (pid && activeCaptionAnimations[pid] && activeCaptionAnimations[pid].startTime === start) delete activeCaptionAnimations[pid];
   }
   requestAnimationFrame(frame);
-}
-
-function drawSettlementArrows(){
-  const overlay = document.getElementById("settlement-overlay");
-  if (!overlay) return;
-  const data = currentSettlementTransfers;
-  if (!data) { overlay.innerHTML = ""; return; }
-
-  // #settlement-overlay is inset:0 inside .poker-table-inner (its actual CSS positioning
-  // parent - see the markup), NOT .poker-table-wrap - inner is a separately JS-sized
-  // (layoutTableSize) and centered/anchored box that rarely matches wrap's own edges
-  // exactly. Using wrap's rect here to build coordinates the overlay then renders inside
-  // inner's box was the arrows-are-offset bug reported live: right shape, wrong origin
-  // whenever inner and wrap didn't coincide.
-  const inner = overlay.closest(".poker-table-inner");
-  if (!inner) return;
-  const innerRect = inner.getBoundingClientRect();
-
-  const centerOf = (playerId) => {
-    const idx = data.seats.indexOf(playerId);
-    if (idx === -1) return null;
-    const circle = inner.querySelector(`[data-seat="${idx}"] .seat-circle`);
-    if (!circle) return null;
-    const r = circle.getBoundingClientRect();
-    return { x: r.left + r.width/2 - innerRect.left, y: r.top + r.height/2 - innerRect.top, radius: r.width/2 };
-  };
-
-  const items = [];
-  data.transfers.forEach(t => {
-    if (data.filterId && t.fromId !== data.filterId && t.toId !== data.filterId) return;
-    const from = centerOf(t.fromId), to = centerOf(t.toId);
-    if (!from || !to) return;
-    const dx = to.x - from.x, dy = to.y - from.y;
-    const dist = Math.hypot(dx, dy) || 1;
-    const ux = dx / dist, uy = dy / dist;
-    items.push({
-      x1: from.x + ux*from.radius, y1: from.y + uy*from.radius,
-      x2: to.x - ux*to.radius, y2: to.y - uy*to.radius,
-      amount: t.amount, paid: t.paid,
-    });
-  });
-
-  if (!items.length) { overlay.innerHTML = ""; return; }
-
-  const lines = items.map(it => {
-    // "Already paid" lines used to be a dark gray (#57534e) at low opacity - nearly
-    // invisible against the dark green felt. A light, dashed line reads as "done/secondary"
-    // without disappearing into the background.
-    const color = it.paid ? "#e7e5e4" : "#fbbf24";
-    const marker = it.paid ? "arrowhead-paid" : "arrowhead-gold";
-    const dash = it.paid ? ` stroke-dasharray="5,4"` : "";
-    return `<line x1="${it.x1}" y1="${it.y1}" x2="${it.x2}" y2="${it.y2}" stroke="${color}" stroke-width="${it.paid?2:2.5}" opacity="${it.paid?0.85:0.9}"${dash} marker-end="url(#${marker})"/>`;
-  }).join("");
-  const svg = `<svg width="${innerRect.width}" height="${innerRect.height}" viewBox="0 0 ${innerRect.width} ${innerRect.height}" style="position:absolute;inset:0;z-index:2;pointer-events:none;">
-    <defs>
-      <marker id="arrowhead-gold" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#fbbf24"/></marker>
-      <marker id="arrowhead-paid" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#e7e5e4"/></marker>
-    </defs>
-    ${lines}
-  </svg>`;
-
-  const labels = items.map(it => {
-    const mx = (it.x1+it.x2)/2, my = (it.y1+it.y2)/2;
-    return `<div style="position:absolute;left:${mx}px;top:${my}px;transform:translate(-50%,-50%);z-index:5;background:${it.paid?'#3f3c39':'#78350f'};color:${it.paid?'#a8a29e':'#fde68a'};font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;white-space:nowrap;">₪${it.amount}${it.paid?' ✓':''}</div>`;
-  }).join("");
-
-  overlay.innerHTML = svg + labels;
 }
 
 // ---------- Icons (tiny inline SVGs) ----------
@@ -2777,38 +2466,20 @@ function render(){
   if (modal) html += renderModal(modal);
   app.innerHTML = html;
   attachHandlers();
-  // drawSettlementArrows() reads .poker-table-inner's actual current size/position to place
-  // its arrows - calling it here, before layoutTableSize() has even run (it's deferred to
-  // next frame below), meant it drew against whatever size inner was LEFT at by the
-  // previous render, not the size it's about to become for THIS one. layoutTableSize()
-  // resizing inner a frame later then left the just-drawn arrows misaligned with the now-
-  // resized table - reported live as "the arrows aren't precise". Moved into the same
-  // rAF callback, after layoutTableSize() actually finishes resizing, instead of before it.
   // Runs whenever .poker-table-wrap exists at all now, not just when it's the visible
   // face - with both panes always mounted while seated, the circles view's own DOM (and
   // its sizing) exists even while the player screen is the one on screen.
   if (nav.screen === "table") {
-    requestAnimationFrame(() => { layoutTableSize(); drawSettlementArrows(); });
+    requestAnimationFrame(layoutTableSize);
     animateSeatCaptions(nav.gameId);
-    // The immediate rAF above can land mid-transition (.poker-table-wrap now animates
-    // its height - see that rule's own comment - so a plain tap's expand/collapse eases
-    // instead of jumping, previously reported as "the table shrinks instead of
-    // cropping"). Measuring while it's still animating would lock in a transiently
-    // smaller height as the new "collapsed" baseline (see layoutTableSize's own
-    // !actionPanelExpanded branch) - catching the real, settled size once the
-    // transition actually finishes corrects that.
-    const wrapEl = app.querySelector(".poker-table-wrap");
-    if (wrapEl) wrapEl.addEventListener("transitionend", (e) => {
-      if (e.propertyName === "height") layoutTableSize();
-    });
-  } else {
-    drawSettlementArrows(); // no-op on other screens (#settlement-overlay doesn't exist there)
   }
   if (seated) {
-    // WhatsApp-style feed - always opens scrolled to the newest (bottom) message, same
-    // as a real chat would, not wherever the previous render happened to leave it. Runs
-    // even while the circles view is the one on screen, since the player screen's feed
-    // pane is always mounted in the background now.
+    // Both the personal history and the whole-table feed always open scrolled to the
+    // newest (bottom) message, same as a real chat would, not wherever the previous
+    // render happened to leave them. Runs even while the circles view is the one on
+    // screen, since the player screen's panes are always mounted in the background now.
+    const historyEl = app.querySelector("[data-player-history]");
+    if (historyEl) historyEl.scrollTop = historyEl.scrollHeight;
     const feedEl = app.querySelector("[data-player-feed]");
     if (feedEl) {
       feedEl.scrollTop = feedEl.scrollHeight;
@@ -2825,22 +2496,17 @@ function render(){
   }
 }
 
-// Pins the table (.poker-table-inner) to a fixed pixel size that fully fits with the
-// action panel COLLAPSED, regardless of whether it's actually expanded right now - see
-// the crop CSS on .poker-table-inner (body.table-screen rules) and data-panel-collapsed
-// above. Expanding the panel then only shrinks the *visible* viewport around this
-// same-sized table (cropping it), it never resizes the table itself.
+// Pins the table (.poker-table-inner) to a fixed pixel size matching whatever room
+// .poker-table-wrap's own flex layout actually gives it, so the aspect-ratio box can be
+// cropped (via the CSS crop-from-* anchor rules) to exactly that space instead of
+// overflowing it.
 //
 // Deliberately does NOT recompute "available height" by hand (summing header/padding/
 // margin guesses) - that estimate drifted from the real number on an actual phone (safe
 // areas, on-screen nav bars, font metrics all vary) and silently produced an oversized
-// table that just got cropped even while "collapsed". Instead it reads
-// .poker-table-wrap's OWN height from the browser's flex layout, which already accounts
-// for all of that correctly - but only while the panel is actually collapsed (the wrap
-// shrinks once the panel expands, which is exactly the number we must NOT use). That
-// reading is cached and reused while expanded, so the table keeps the exact size it had
-// when last collapsed instead of shrinking to fit less room.
-let lastCollapsedTableSize = null; // {w,h} in px
+// table that just got cropped unexpectedly. Instead it reads .poker-table-wrap's OWN
+// height from the browser's flex layout, which already accounts for all of that
+// correctly.
 // Kept in sync with the matching CSS offsets on .poker-table-inner.crop-from-* above.
 const TOP_CROP_BUFFER = 20, BOTTOM_CROP_BUFFER = 16;
 // Using the SAME number for the CSS anchor offset (top:20px/bottom:16px) and this sizing
@@ -2856,21 +2522,17 @@ function layoutTableSize(){
   const inner = document.querySelector(".poker-table-inner");
   if (!wrap || !inner) return;
   const RATIO = 1.45; // height/width, matches the CSS aspect-ratio used outside the table screen
-  if (!actionPanelExpanded) {
-    // The active crop-from-* class offsets the inner box away from whichever edge is
-    // flush (see the CSS) - that offset eats into the same wrap height being measured
-    // here, so it has to come off the collapsed budget too, or the box ends up exactly
-    // buffer-px taller than what actually fits and gets clipped anyway.
-    const buffer = (inner.classList.contains("crop-from-bottom") ? TOP_CROP_BUFFER : BOTTOM_CROP_BUFFER) + OVERHANG_CLEARANCE;
-    const availableW = wrap.getBoundingClientRect().width;
-    const availableH = wrap.getBoundingClientRect().height - buffer;
-    let w = availableW, h = w * RATIO;
-    if (h > availableH && availableH > 0) { h = availableH; w = h / RATIO; }
-    lastCollapsedTableSize = { w, h };
-  }
-  if (!lastCollapsedTableSize) return; // nothing measured yet - keep the CSS fallback size
-  inner.style.width = lastCollapsedTableSize.w + "px";
-  inner.style.height = lastCollapsedTableSize.h + "px";
+  // The active crop-from-* class offsets the inner box away from whichever edge is
+  // flush (see the CSS) - that offset eats into the same wrap height being measured
+  // here, so it has to come off the budget too, or the box ends up exactly buffer-px
+  // taller than what actually fits and gets clipped anyway.
+  const buffer = (inner.classList.contains("crop-from-bottom") ? TOP_CROP_BUFFER : BOTTOM_CROP_BUFFER) + OVERHANG_CLEARANCE;
+  const availableW = wrap.getBoundingClientRect().width;
+  const availableH = wrap.getBoundingClientRect().height - buffer;
+  let w = availableW, h = w * RATIO;
+  if (h > availableH && availableH > 0) { h = availableH; w = h / RATIO; }
+  inner.style.width = w + "px";
+  inner.style.height = h + "px";
   inner.style.left = "50%";
   inner.style.right = "auto";
   inner.style.transform = "translateX(-50%)";
@@ -3000,233 +2662,6 @@ function renderCommunity(communityId){
   `;
 }
 
-// The bottom action panel replaces both the old tap-to-open seat menu and the old
-// self-service-only bottom bar with one panel keyed off selectedSeatPlayerId: your own
-// seat by default, or - for the table/community creator only - whichever active seat
-// they tapped, to act "on behalf of" that player (see isTableAdmin and the seat click
-// handler in attachHandlers).
-function renderActionPanel(g, c, seatedIds){
-  const admin = isTableAdmin(g, c);
-  const allCashedOut = seatedIds.length > 0 && seatedIds.every(pid => pid in g.cashouts);
-  const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
-
-  // Whether the declared chip totals actually match what was bought in - checked here
-  // (not just for display in renderTable) because it gates which table-level controls
-  // show once the night is over: an unbalanced pot must be fixed before anyone starts
-  // settling payments off numbers that don't add up.
-  const buyinTotals = {};
-  g.buyins.forEach(b => { buyinTotals[b.playerId] = (buyinTotals[b.playerId]||0) + b.amount; });
-  const liveChips = g.liveChips || {};
-  const totalBuyinAll = seatedIds.reduce((s,pid)=>s+(buyinTotals[pid]||0),0);
-  const totalChipsAll = seatedIds.reduce((s,pid)=>s+(liveChips[pid]||0),0);
-  const diff = totalChipsAll - totalBuyinAll;
-  const potUnbalanced = allCashedOut && Math.abs(diff) > 5;
-
-  // The paybox/settlement group used to live above the table; it's table-wide, not tied
-  // to whichever seat is selected, so it always shows first once everyone's cashed out -
-  // but only once the pot is actually balanced (see potFixHtml below otherwise). Which
-  // form it takes follows the community's settlement default (or this session's override
-  // of it, see sessionSettlementOverride/the settlementMethod modal): 'paybox' shows just
-  // the one shared-group button (no "or" toggle to a second option any more), 'direct'
-  // lists each seated player with only THEIR OWN transfer(s), not a single global reveal.
-  let settlementWarning = "";
-  currentSettlementTransfers = null;
-  const effectiveSettlement = sessionSettlementOverride || c.settlementDefault || "direct";
-  let settlementHtml = "";
-  if (allCashedOut && !potUnbalanced) {
-    if (effectiveSettlement === "paybox") {
-      settlementHtml = `<button class="btn btn-block" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;" data-open-active-paybox><img src="/static/paybox-icon.png" style="height:18px;width:auto;display:block;"> פתח קבוצת פייבוקס משותפת לתשלום</button>`;
-    } else {
-      const { remaining, alreadyPaid, warning } = computeSettlementTransfers(g);
-      const allTransfers = [
-        ...remaining.map(t => ({ fromId: t.from, toId: t.to, amount: t.amount, paid: false })),
-        ...alreadyPaid.map(t => ({ fromId: t.fromPlayerId, toId: t.toPlayerId, amount: t.amount, paid: true })),
-      ];
-      // Defaults to the viewer's own player (not "show everyone") - tapping another
-      // seat's avatar/info switches settlementFilterPlayerId to them instead (see the
-      // data-seat pointerup/info click handlers); tapping the same one again clears it
-      // back to this default.
-      const effectiveFilterId = (settlementFilterPlayerId && seatedIds.includes(settlementFilterPlayerId)) ? settlementFilterPlayerId : myPlayerId;
-      currentSettlementTransfers = { seats: g.seats || new Array(9).fill(null), transfers: allTransfers, filterId: effectiveFilterId };
-      if (warning) settlementWarning = `<div style="background:#450a0a;color:#fca5a5;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;text-align:center;">${esc(warning)}</div>`;
-      // No per-player text list here - drawSettlementArrows() already shows who pays whom
-      // directly on the table (filtered to the viewer's own player by default, switchable
-      // by tapping another seat - see effectiveFilterId above). A parallel text list ate a
-      // lot of vertical space (one block per seated player) and shrank the table itself to
-      // make room, reported live as "the table got very small" - the arrows are the actual
-      // answer to "who pays who", not a duplicate of it.
-      settlementHtml = `
-        <div style="border:1px solid var(--card-b);border-radius:14px;padding:12px;margin:10px 0;">
-          <div style="color:var(--muted);font-size:11px;text-align:center;margin-bottom:8px;">קיצור דרך לפתיחת אפליקציית תשלומים</div>
-          <div class="row" style="gap:8px;">
-            <button class="btn btn-block" style="background:#065f46;color:var(--text);border:1px solid var(--card-b);display:flex;align-items:center;justify-content:center;gap:6px;" data-open-paybox-generic>${icon('share')} פייבוקס</button>
-            <button class="btn btn-block" style="background:#065f46;color:var(--text);border:1px solid var(--card-b);display:flex;align-items:center;justify-content:center;gap:6px;" data-open-bit-generic>${icon('share')} ביט</button>
-          </div>
-        </div>
-        ${settlementWarning}
-      `;
-    }
-  }
-
-  // Once everyone's cashed out but the declared chips don't match what was bought in by
-  // more than ₪5, settling up between players off those numbers would just be wrong -
-  // this replaces the paybox/settlement block (and every other panel control) with a fix
-  // instead. Only the table's own creator can perform the actual equal-split correction
-  // (narrower than isTableAdmin, which also allows the community's creator) - but
-  // "בדוק מאזן" on an individual player, to correct a specific buy-in/chip-count mistake
-  // directly, is open to everyone so any player can check/fix their own numbers.
-  const canBalancePot = !!(myIdentity.name && myIdentity.name === g.createdByName);
-  let potFixHtml = "";
-  if (potUnbalanced) {
-    const direction = diff > 0.5 ? "חוסר" : "עודף";
-    potFixHtml = `<div style="background:#450a0a;color:#fca5a5;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;text-align:center;font-weight:700;">הקופה לא מאוזנת - ${direction} של ₪${Math.abs(Math.round(diff))}</div>`;
-    const selectedIds = seatedIds.filter(id => balanceFixSelected[id]);
-    const perPlayer = selectedIds.length ? Math.round((-diff / selectedIds.length) * 100) / 100 : 0;
-    potFixHtml += `
-      <div style="margin-bottom:10px;">
-        ${seatedIds.map(pid => {
-          const pl = g.players.find(pp => pp.id === pid);
-          const checked = !!balanceFixSelected[pid];
-          const playerProfit = (liveChips[pid]||0) - (buyinTotals[pid]||0);
-          const playerProfitColor = playerProfit > 0.5 ? '#6ee7b7' : (playerProfit < -0.5 ? '#fda4af' : 'var(--muted)');
-          return `<div class="checkbox-row" style="cursor:pointer;">
-            ${canBalancePot ? `<input type="checkbox" data-balance-fix-toggle="${pid}" ${checked?'checked':''}>` : ""}
-            <span class="flex1">${esc(pl ? pl.name : "?")} <span style="color:${playerProfitColor};font-weight:700;">${playerProfit>0?'+':''}₪${Math.round(playerProfit)}</span></span>
-            <button class="btn btn-ghost btn-sm" data-check-balance="${pid}">בדיקת מאזן</button>
-          </div>`;
-        }).join("")}
-      </div>
-    `;
-    if (canBalancePot) {
-      potFixHtml += `
-        ${selectedIds.length ? `<div style="text-align:center;color:var(--muted);font-size:12px;margin-bottom:6px;">${perPlayer>=0?'כל שחקן מסומן יקבל':'מכל שחקן מסומן יילקח'} ₪${Math.abs(perPlayer)}</div>` : ""}
-        <button class="btn btn-primary btn-block" data-fix-pot-balance style="margin-bottom:10px;" ${selectedIds.length?"":"disabled"}>${icon('coins')} סדר קופה</button>
-      `;
-    }
-  }
-
-  // While unbalanced, this is the ONLY thing the panel shows - no per-player buy-in/
-  // summary/payment controls until the pot itself is fixed.
-  if (potUnbalanced) return `<div class="bottom-bar">${potFixHtml}</div>`;
-  // Once everyone's cashed out AND the pot is balanced, the panel is table-level only
-  // (paybox transfer + settlement-between-players) - no per-player selection/summary/
-  // payment controls, and "acting on behalf of" someone has no meaning at this point.
-  if (allCashedOut) return `<div class="bottom-bar">${settlementHtml}</div>`;
-
-  const pid = selectedSeatPlayerId;
-  if (!pid || !seatedIds.includes(pid)) return "";
-  const p = g.players.find(pl => pl.id === pid);
-  const isSelf = pid === myPlayerId;
-  const onBehalf = admin && !isSelf;
-  const cashedOut = pid in g.cashouts;
-  const buyinTotal = g.buyins.filter(b => b.playerId === pid).reduce((s,b) => s+b.amount, 0);
-  const behalfBadge = onBehalf ? `<div class="on-behalf-badge">פועל בשם ${esc(p?p.name:"")}</div>` : "";
-
-  // A newly-seated player hasn't actually "entered" the table until they've bought in at
-  // least once - force the dedicated initialBuyin modal (see renderModal) instead of the
-  // normal panel below, same amount state (selectedBuyinAmount/customBuyinAmount) but a
-  // mandatory minimum and no way to dismiss without picking something. Applies whether
-  // it's the player's own seat or an admin seating someone else (the pickSeat/addGuest
-  // handlers select the new seat right after assigning it specifically so this fires for
-  // them immediately too).
-  if (!cashedOut && buyinTotal === 0 && (!modal || modal.type === "initialBuyin")) {
-    modal = { type: "initialBuyin", gameId: g.id, playerId: pid };
-    return `<div class="bottom-bar"></div>`;
-  } else if (modal && modal.type === "initialBuyin" && modal.playerId === pid) {
-    modal = null; // the required buy-in went through (or the seat/cashout state moved on) - done
-  }
-
-  let panelBody;
-  if (cashedOut) {
-    const finalBalances = computeFinalBalances(g);
-    const alreadyPaidPaybox = (g.payboxPayments||[]).filter(pp=>pp.playerId===pid).reduce((s,pp)=>s+pp.amount,0);
-    const alreadyPaidDirect = (g.playerPayments||[]).filter(dp=>dp.fromPlayerId===pid).reduce((s,dp)=>s+dp.amount,0);
-    const fb = finalBalances[pid];
-    const owes = fb ? -(fb.profit + alreadyPaidPaybox + alreadyPaidDirect) : 0;
-    // Same collapsed/expand-extra split as the active-player panel above: a single
-    // payment button (never both) always visible, "מוצג רק אם צריך לשלם" - which one is
-    // driven by the community's configured default (payboxSettings screen) unless this
-    // session picked a different one just for tonight (sessionSettlementOverride, see
-    // the settlementMethod modal). On someone else's behalf (onBehalf), opening your own
-    // PayBox to pay doesn't make sense there - but neither does prompting the admin to
-    // record a manual "transfer to" on that player's behalf when the table's actual
-    // method IS the group PayBox, since the real payment happens outside the app on the
-    // absent player's own phone; show no payment button at all in that specific
-    // combination. Nothing owed (finished in profit/break-even) means an empty collapsed
-    // row too - starts closed either way, same as the active panel always has.
-    const needsPayment = owes > 0.005;
-    const effectiveSettlement = sessionSettlementOverride || c.settlementDefault || "direct";
-    const useProxyPaybox = needsPayment && !onBehalf && effectiveSettlement === "paybox";
-    const hidePaymentButton = needsPayment && onBehalf && effectiveSettlement === "paybox";
-    const paymentButtonHtml = (!needsPayment || hidePaymentButton) ? "" : useProxyPaybox
-      ? `<button class="btn btn-block" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-paybox-pay data-paybox-amount="${Math.round(owes*100)/100}"><img src="/static/paybox-icon.png" style="height:18px;width:auto;display:block;"> פתח קבוצת פייבוקס משותפת לתשלום (₪${Math.round(owes*100)/100})</button>`
-      : `<button class="btn btn-primary btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-pay-player data-pay-player-amount="${Math.round(owes*100)/100}">${icon('coins')} העבר ₪${Math.round(owes*100)/100} ל...</button>`;
-    panelBody = `
-      ${isSelf && !allCashedOut ? `<div style="background:rgba(255,255,255,.05);border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12px;text-align:center;color:var(--muted);">שמרו את הז'יטונים שלכם עד לספירה הסופית של כל השחקנים, לוידוא שהקופה מאוזנת</div>` : ""}
-      <div data-panel-collapsed>
-        <div data-toggle-action-panel class="panel-drag-handle">
-          <div class="panel-drag-glow"></div>
-          <svg width="22" height="10" viewBox="0 0 22 10" style="transform:rotate(${actionPanelExpanded?180:0}deg);transition:transform .2s ease;"><path d="M1 9L11 1L21 9" fill="none" stroke="#a7f3d0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </div>
-        ${behalfBadge}
-        ${paymentButtonHtml}
-      </div>
-      <div class="panel-expand-extra" data-panel-expand-extra style="max-height:${actionPanelExpanded?'200px':'0px'};">
-        <div style="width:50%;margin:${needsPayment?'18px':'6px'} auto 18px;height:1px;background:rgba(255,255,255,.55);box-shadow:0 1px 0 rgba(0,0,0,.4);"></div>
-        ${admin ? `<button class="btn btn-ghost btn-block" data-return-to-game="${pid}" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('undo')} החזר למשחק</button>` : ""}
-        <button class="btn btn-ghost btn-block" data-panel-summary style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('bar')} סיכום ערב</button>
-      </div>
-    `;
-  } else {
-    const canRemove = admin || (isSelf && buyinTotal === 0);
-    // The table's own creator, looking at their OWN seat (not on behalf of someone else) -
-    // that specific combination swaps "הסר מהשולחן" below for a shortcut to change the
-    // community's settlement default instead, since removing themselves from their own
-    // table isn't a meaningful action here but changing the payment method is exactly
-    // theirs to make.
-    const isCreatorOwnSeat = isSelf && myIdentity.name === g.createdByName;
-    // Two-step: tapping an amount only selects/highlights it (selectedBuyinAmount, see
-    // its own declaration for why), the buy-in itself only fires on the confirm button
-    // below. "אחר" swaps into a live number input in place, and whatever's typed both
-    // becomes the pill's own displayed value from then on (sticky for the rest of the
-    // session) and feeds the confirm button, same as the three fixed amounts.
-    const customSelected = selectedBuyinAmount === "custom";
-    const canConfirmBuyin = canConfirmSelectedBuyin();
-    // The drag handle + two buy-in rows are always visible (collapsed or expanded) -
-    // wrapped in their own element (data-panel-collapsed) so layoutTableSize() can measure
-    // exactly this much space regardless of expand state, keeping the table's own size
-    // stable across a toggle (see layoutTableSize).
-    panelBody = `
-      <div data-panel-collapsed>
-        <div data-toggle-action-panel class="panel-drag-handle">
-          <div class="panel-drag-glow"></div>
-          <svg width="22" height="10" viewBox="0 0 22 10" style="transform:rotate(${actionPanelExpanded?180:0}deg);transition:transform .2s ease;"><path d="M1 9L11 1L21 9" fill="none" stroke="#a7f3d0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </div>
-        ${behalfBadge}
-        <div style="display:flex;gap:6px;margin-bottom:8px;width:100%;">
-          ${FIXED_BUYIN_AMOUNTS.map(v=>`<button class="chip-btn${selectedBuyinAmount===v?' buyin-selected':''}${selectedBuyinAmount===v&&onBehalf?' behalf':''}" data-buyin-select="${v}" style="flex:1;padding:9px 2px;font-size:16px;">₪${v}</button>`).join("")}
-          ${customSelected
-            ? `<input type="number" inputmode="decimal" id="panel-buyin-custom" value="${customBuyinAmount!=null?customBuyinAmount:''}" placeholder="סכום" onfocus="this.select()" style="flex:1;min-width:0;padding:9px 2px;font-size:16px;text-align:center;border-radius:9px;border:1px solid var(--gold);background:var(--input);color:var(--text);" autofocus>`
-            : `<button class="chip-btn" data-buyin-select="custom" style="flex:1;padding:9px 2px;font-size:16px;">${customBuyinAmount!=null?`₪${customBuyinAmount}`:'אחר'}</button>`
-          }
-        </div>
-        <p id="buyin-custom-warning" style="color:#fda4af;font-size:12px;margin:-2px 0 8px;text-align:center;${customSelected && customBuyinAmount != null && customBuyinAmount <= MIN_BUYIN_AMOUNT ? '' : 'display:none;'}">סכום מותאם אישית חייב להיות גדול מ-₪${MIN_BUYIN_AMOUNT}</p>
-        <button class="btn btn-primary btn-block"${onBehalf?' style="background:#78350f;color:#fde68a;"':''} data-panel-buyin-confirm ${canConfirmBuyin?'':'disabled'}>${icon('plus')} הוסף ריביי</button>
-      </div>
-      <div class="panel-expand-extra" data-panel-expand-extra style="max-height:${actionPanelExpanded?'280px':'0px'};">
-        <div style="width:50%;margin:18px auto;height:1px;background:rgba(255,255,255,.55);box-shadow:0 1px 0 rgba(0,0,0,.4);"></div>
-        <button class="btn btn-ghost btn-block" style="margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;" data-open-my-profile>${icon('user')} הפרופיל שלי</button>
-        <button class="btn btn-block" style="background:#57534e;color:#f5f5f4;margin-bottom:${canRemove?'10px':'0'};display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-end-night>${icon('out')} סיים ערב</button>
-        ${canRemove ? (isCreatorOwnSeat
-          ? `<button class="btn btn-ghost btn-block" data-change-settlement-method style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('coins')} שנה שיטת תשלומים</button>`
-          : `<button class="btn btn-block" style="background:#be123c;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;" data-panel-remove>${icon('trash')} הסר מהשולחן</button>`
-        ) : ""}
-      </div>
-    `;
-  }
-  return `<div class="bottom-bar">${settlementHtml}${panelBody}</div>`;
-}
-
 // Percentage [x,y] position of each of the 9 main seat slots around the oval table -
 // asymmetric on purpose (2 across the top, 3 down each side, a single seat at the
 // bottom) rather than a mirrored layout, matching a real oval table's own seating.
@@ -3304,18 +2739,23 @@ function renderPlayerScreen(gameId){
     return `<div class="chat-bubble"><span class="bubble-time">${fmtTime(ev.ts)}</span>${text}</div>`;
   }).join("") || `<div class="chat-bubble" style="color:#888;">אין עדיין פעילות בשולחן</div>`;
   const buyinButtonsHtml = playerScreenCustomOpen ? `
-    <div class="buyin-frame" style="display:flex;gap:8px;margin-bottom:20px;">
+    <div class="buyin-frame" style="display:flex;gap:8px;margin-bottom:14px;flex-shrink:0;">
       <input type="number" inputmode="decimal" id="player-screen-custom-amount" placeholder="סכום" autofocus style="flex:1;padding:14px 8px;font-size:18px;text-align:center;border-radius:9px;border:1px solid var(--gold);background:var(--input);color:var(--text);">
       <button class="chip-btn" data-player-buyin-custom-confirm style="flex:0 0 auto;padding:14px 18px;font-size:16px;font-weight:700;">${icon('plus')}</button>
     </div>
   ` : `
-    <div class="buyin-frame" style="display:flex;gap:8px;margin-bottom:20px;">
+    <div class="buyin-frame" style="display:flex;gap:8px;margin-bottom:14px;flex-shrink:0;">
       ${FIXED_BUYIN_AMOUNTS.map(v=>`<button class="chip-btn" data-player-instant-buyin="${v}" style="flex:1;padding:14px 2px;font-size:18px;">₪${v}</button>`).join("")}
       <button class="chip-btn" data-player-buyin-other style="flex:1;padding:14px 2px;font-size:18px;">אחר</button>
     </div>
   `;
+  // Order (top to bottom): name/total, ריביי buttons, purchase history (fixed size, ~3
+  // rows), table activity feed (flex:1 - the one section whose size actually adapts, so
+  // the leave button after it always stays on screen instead of getting pushed off by a
+  // long feed), leave button. Nothing on this screen scrolls as a page (see
+  // .player-screen-scroll) - only the two .chat-frame panes scroll internally.
   return `
-    <div class="top row" style="padding-top:14px;padding-bottom:16px;">
+    <div class="top row" style="padding-top:14px;padding-bottom:16px;flex-shrink:0;">
       <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
       <div class="flex1">
         <h1 class="serif sm" style="color:var(--gold);">${esc(g.name || c.name)}</h1>
@@ -3323,17 +2763,17 @@ function renderPlayerScreen(gameId){
       </div>
     </div>
     <div class="player-screen-scroll">
-      <div style="text-align:center;padding:6px 0 22px;">
+      <div style="text-align:center;padding:6px 0 16px;flex-shrink:0;">
         <div style="font-size:26px;font-weight:700;color:var(--text);">${esc(p?p.name:"")}</div>
         <div data-player-total style="font-size:40px;font-weight:800;color:var(--gold);margin-top:4px;">₪${buyinTotal}</div>
       </div>
-      <div class="section-title" style="padding:0;margin:0 0 6px;">היסטוריית קניות</div>
-      <div class="chat-frame" style="margin-bottom:20px;">${historyRows}</div>
-      ${cashedOut ? "" : `<div class="section-title" style="padding:0;margin:0 0 6px;">ריביי</div>`}
+      ${cashedOut ? "" : `<div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">ריביי</div>`}
       ${cashedOut ? "" : buyinButtonsHtml}
-      ${cashedOut ? "" : `<button class="btn btn-block" style="background:#57534e;color:#f5f5f4;margin-bottom:26px;display:flex;align-items:center;justify-content:center;gap:6px;" data-player-leave-table>${icon('out')} יציאה מהשולחן</button>`}
-      <div class="section-title" style="padding:0;margin:0 0 6px;">פעילות אחרונה בשולחן</div>
-      <div class="chat-frame" data-player-feed data-latest-event="${latestFeedEventKey}">${feedRows}</div>
+      <div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">היסטוריית קניות</div>
+      <div class="chat-frame" data-player-history style="margin-bottom:14px;flex-shrink:0;">${historyRows}</div>
+      <div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">פעילות אחרונה בשולחן</div>
+      <div class="chat-frame" data-player-feed data-latest-event="${latestFeedEventKey}" style="flex:1;height:auto;min-height:54px;margin-bottom:${cashedOut?'0':'14px'};">${feedRows}</div>
+      ${cashedOut ? "" : `<button class="btn btn-block" style="background:#57534e;color:#f5f5f4;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:6px;" data-player-leave-table>${icon('out')} יציאה מהשולחן</button>`}
     </div>
   `;
 }
@@ -3351,14 +2791,10 @@ function renderTable(gameId){
   const allCashedOut = seatedIds.length > 0 && seatedIds.every(pid => pid in g.cashouts);
   const admin = isTableAdmin(g, c);
   const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
-  // Default the action panel to the viewer's own seat; keep whatever the admin tapped
-  // unless it's no longer valid (that player left the table).
-  if (selectedSeatPlayerId && !seatedIds.includes(selectedSeatPlayerId)) selectedSeatPlayerId = null;
-  if (!selectedSeatPlayerId && myPlayerId && seatedIds.includes(myPlayerId)) selectedSeatPlayerId = myPlayerId;
 
   // Rotate the visual layout only (the underlying seat indices are untouched, so
-  // drag-to-swap and the settlement arrows - both driven by data-seat/DOM position, not
-  // a hardcoded coordinate - keep working unchanged) so the viewer's own seat always
+  // drag-to-swap - driven by data-seat/DOM position, not a hardcoded coordinate - keeps
+  // working unchanged) so the viewer's own seat always
   // lands at their chosen slot (see getMySeatPosition/"המיקום שלי בשולחן" in the
   // identityName screen - defaults to index 5, bottom-center), everyone else arranged
   // around it. Seat 9, the special "extra player" overflow slot, never rotates.
@@ -3395,24 +2831,14 @@ function renderTable(gameId){
     const circleStyle = cashedOut ? "" : ` style="background-image:url('${photo || '/static/logo-watermark.png'}');background-size:cover;background-position:center;"`;
     const doorIconBig = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>';
     const circleInner = cashedOut ? doorIconBig : "";
-    const selected = pid === selectedSeatPlayerId;
-    // True the moment the currently-selected seat isn't the viewer's own - i.e. an admin
-    // is acting on someone else's behalf (matches isOnBehalf(), inlined here since this
-    // loop already has myPlayerId/selectedSeatPlayerId in scope for every seat, not just
-    // the selected one).
-    const onBehalfActive = !!myPlayerId && selectedSeatPlayerId && selectedSeatPlayerId !== myPlayerId;
-    const isBehalfTarget = selected && onBehalfActive;
-    // The nameplate turns bordeaux for the behalf target regardless of cashed-out status,
-    // but the ring stays the fixed cashed-out gray in that case - only an active seat's
-    // ring actually changes color (self-cyan normally, bordeaux for the behalf target).
-    const ringClass = cashedOut ? "" : (isBehalfTarget ? " ring-behalf" : (!onBehalfActive && pid === myPlayerId ? " ring-self" : ""));
-    const nameClass = isBehalfTarget ? " name-behalf" : "";
+    // The ring stays the fixed cashed-out gray for a player who's already left - only an
+    // active seat's ring changes color, cyan for the viewer's own seat.
+    const ringClass = cashedOut ? "" : (pid === myPlayerId ? " ring-self" : "");
     // The buy-in history chevron/popup (only for an active seat - once cashed out, this
-    // is covered by the summary screen instead). First buy-in is labeled "כניסה" (this is
-    // the same buy-in the initialBuyin modal forced - see renderActionPanel), every one
-    // after it "ריביי N". Only the viewed player themselves or the table's creator can
-    // delete a row from here, matching the same admin gate used everywhere else on this
-    // screen (isTableAdmin).
+    // is covered by the summary screen instead). First buy-in is labeled "כניסה", every
+    // one after it "ריביי N". Only the viewed player themselves or the table's creator
+    // can delete a row from here, matching the same admin gate used everywhere else on
+    // this screen (isTableAdmin).
     let historyToggleHtml = "", historyPopupHtml = "", infoRadius = "";
     let popupBelow = true;
     if (!cashedOut) {
@@ -3423,9 +2849,9 @@ function renderTable(gameId){
         <svg width="10" height="7" viewBox="0 0 12 8"><path d="M1 1L6 6L11 1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>`;
       if (historyOpen) {
-        // The first buy-in ("כניסה") is what got them into the table at all (see the
-        // initialBuyin modal in renderActionPanel) - it can't be deleted from here, only
-        // the rebuys after it. The trash icon's own slot is always reserved (even empty,
+        // The first buy-in ("כניסה") is what got them into the table at all - it can't be
+        // deleted from here, only the rebuys after it. The trash icon's own slot is
+        // always reserved (even empty,
         // on the כניסה row) so the label text itself always starts at the same x position
         // whether or not that row actually has a delete button.
         const rows = sortedBuyins.map((b,idx) => {
@@ -3459,8 +2885,8 @@ function renderTable(gameId){
     // seat, regardless of table order.
     const wrapZ = openHistorySeatPlayerId === pid ? 'z-index:70;' : '';
     return `<div class="seat-wrap" style="left:${x}%;top:${y}%;${wrapZ}" data-seat="${i}">
-      <div class="seat-circle filled ${cashedOut?'cashed-out':''}${selected?' selected':''}${ringClass}"${circleStyle}>${circleInner}</div>
-      <div class="seat-info${selected?' selected':''}${nameClass}" data-seat-info style="position:relative;${infoRadius}">
+      <div class="seat-circle filled ${cashedOut?'cashed-out':''}${ringClass}"${circleStyle}>${circleInner}</div>
+      <div class="seat-info" data-seat-info style="position:relative;${infoRadius}">
         ${historyToggleHtml}
         <div class="seat-name">${esc(name)}</div>
         <div class="seat-caption">${caption}</div>
@@ -3475,12 +2901,10 @@ function renderTable(gameId){
   const diffLabel = diff > 0.5 ? "קופה בחוסר" : (diff < -0.5 ? "קופה בעודף" : "קופה מאוזנת");
   const diffColor = diff > 0.5 ? "#fda4af" : (diff < -0.5 ? "#6ee7b7" : "var(--muted)");
 
-  const panelHtml = renderActionPanel(g, c, seatedIds);
-
   // Which half of the table the viewer's own seat slot falls in, so the crop direction
-  // (see .poker-table-inner CSS above) always keeps THEIR seat in view when the action
-  // panel expands and eats into the table's vertical space: a seat in the top half means
-  // the table should crop away from the bottom instead, everyone else crops from the top.
+  // (see .poker-table-inner CSS above) always keeps THEIR seat in view: a seat in the top
+  // half means the table should crop away from the bottom instead, everyone else crops
+  // from the top.
   const mySlotY = SEAT_POS[getMySeatPosition()][1];
   const cropClass = mySlotY < 50 ? "crop-from-bottom" : "crop-from-top";
 
@@ -3497,7 +2921,6 @@ function renderTable(gameId){
       <div class="poker-table-inner ${cropClass}">
         <div class="poker-table-felt"></div>
         ${seatsHtml}
-        <div id="settlement-overlay" style="position:absolute;inset:0;pointer-events:none;"></div>
         <div style="position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);text-align:center;z-index:3;">
           <img src="/static/logo-p-crown.png" style="width:37px;height:auto;margin-bottom:8px;pointer-events:none;">
           <div style="color:var(--muted);font-size:12px;">סה"כ קנייה ₪${totalBuyinAll}</div>
@@ -3506,7 +2929,6 @@ function renderTable(gameId){
         </div>
       </div>
     </div>
-    ${panelHtml}
   `;
 }
 
@@ -3532,33 +2954,6 @@ function renderModal(m){
       <input type="email" id="login-email-input" placeholder="האימייל שלך" dir="ltr" style="width:100%;text-align:center;margin-bottom:8px;" value="${esc(m.loginEmail||'')}" autofocus>
       ${m.loginError ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.loginError)}</p>` : ""}
       <button class="btn btn-primary btn-block" data-send-login-code>${authSettings.requireVerifyExistingEmail ? `${icon('share')} שלח קוד כניסה` : "כנס ל-Poker Manager"}</button>
-    `;
-  } else if (m.type === "initialBuyin") {
-    // Forced the moment a player's own seat has zero buy-in (see renderActionPanel) -
-    // reuses the exact same amount-selection state/markup as the regular panel's buy-in
-    // row (selectedBuyinAmount/customBuyinAmount, data-buyin-select, #panel-buyin-custom,
-    // data-panel-buyin-confirm - all wired once in attachHandlers and shared by both), just
-    // relabeled and gated so a player can't sit at the table without buying in first.
-    title = "כניסה לשולחן";
-    const customSelected = selectedBuyinAmount === "custom";
-    const canConfirm = canConfirmSelectedBuyin();
-    const ibG = getGame(m.gameId);
-    const ibMyPlayerId = ibG && myIdentity.myPlayers && myIdentity.myPlayers[ibG.communityId];
-    const ibIsSelf = m.playerId === ibMyPlayerId;
-    const ibPlayerName = ibG && (ibG.players.find(pl => pl.id === m.playerId) || {}).name;
-    body = `
-      <p style="color:var(--muted);font-size:13px;margin-bottom:14px;text-align:center;">${ibIsSelf
-        ? `בחרו סכום קנייה כדי להצטרף לשולחן - מינימום ₪${MIN_BUYIN_AMOUNT}.`
-        : `בחרו סכום קנייה כדי להכניס את ${esc(ibPlayerName||'השחקן')} לשולחן - מינימום ₪${MIN_BUYIN_AMOUNT}.`}</p>
-      <div style="display:flex;gap:6px;margin-bottom:12px;width:100%;">
-        ${FIXED_BUYIN_AMOUNTS.map(v=>`<button class="chip-btn${selectedBuyinAmount===v?' buyin-selected':''}${selectedBuyinAmount===v&&!ibIsSelf?' behalf':''}" data-buyin-select="${v}" style="flex:1;padding:9px 2px;font-size:16px;">₪${v}</button>`).join("")}
-        ${customSelected
-          ? `<input type="number" inputmode="decimal" id="panel-buyin-custom" value="${customBuyinAmount!=null?customBuyinAmount:''}" placeholder="סכום" onfocus="this.select()" style="flex:1;min-width:0;padding:9px 2px;font-size:16px;text-align:center;border-radius:9px;border:1px solid var(--gold);background:var(--input);color:var(--text);" autofocus>`
-          : `<button class="chip-btn" data-buyin-select="custom" style="flex:1;padding:9px 2px;font-size:16px;">${customBuyinAmount!=null?`₪${customBuyinAmount}`:'אחר'}</button>`
-        }
-      </div>
-      <p id="buyin-custom-warning" style="color:#fda4af;font-size:12px;margin-bottom:10px;text-align:center;${customSelected && customBuyinAmount != null && customBuyinAmount <= MIN_BUYIN_AMOUNT ? '' : 'display:none;'}">סכום מותאם אישית חייב להיות גדול מ-₪${MIN_BUYIN_AMOUNT}</p>
-      <button class="btn btn-primary btn-block"${!ibIsSelf?' style="background:#78350f;color:#fde68a;"':''} data-panel-buyin-confirm ${canConfirm?'':'disabled'}>${icon('plus')} כניסה לשולחן</button>
     `;
   } else if (m.type === "identityName") {
     // Same screen whether this is the mandatory post-login step or an editor-opened
@@ -4175,36 +3570,6 @@ function renderModal(m){
       </div>
       <button class="btn btn-primary btn-block" data-confirm-paybox>שמור העברה</button>
     `;
-  } else if (m.type === "payPlayer") {
-    const g = getGame(m.gameId);
-    const c = getCommunity(g.communityId);
-    const candidates = g.players.filter(p => p.id !== m.fromPlayerId).map(p => {
-      const rp = (c.roster||[]).find(r => r.id === p.id);
-      return { id: p.id, name: p.name, phone: rp && getPlayerPhone(rp) };
-    });
-    const selected = m.toPlayerId ? candidates.find(p=>p.id===m.toPlayerId) : null;
-    title = `שלם לשחקן (₪${m.amount})`;
-    body = `
-      ${candidates.length ? `
-        <div class="scroll-list" style="margin-bottom:14px;">
-          ${candidates.map(p => `<div class="checkbox-row" data-select-pay-target="${p.id}">
-            <input type="radio" name="pay-target" ${m.toPlayerId===p.id?"checked":""} style="margin-left:8px;">
-            <span class="flex1">${esc(p.name)}</span>
-            ${!p.phone ? `<span style="color:var(--muted);font-size:11px;opacity:.6;">אין טלפון שמור</span>` : ""}
-          </div>`).join("")}
-        </div>
-      ` : `<p style="color:var(--muted);font-size:12px;margin-bottom:14px;">אין שחקנים נוספים במשחק הזה.</p>`}
-      ${selected ? `
-        <div style="border:1px solid var(--card-b);border-radius:14px;padding:12px;margin-bottom:14px;">
-          <div style="color:var(--muted);font-size:11px;text-align:center;margin-bottom:8px;">קיצור דרך לפתיחת אפליקציית תשלומים</div>
-          <div class="row" style="gap:10px;">
-            <button class="btn btn-block" style="background:#065f46;color:var(--text);border:1px solid var(--card-b);display:flex;align-items:center;justify-content:center;gap:6px;" data-pay-via="bit">${icon('share')} ביט</button>
-            <button class="btn btn-block" style="background:#065f46;color:var(--text);border:1px solid var(--card-b);display:flex;align-items:center;justify-content:center;gap:6px;" data-pay-via="paybox">${icon('share')} פייבוקס</button>
-          </div>
-        </div>
-        <button class="btn btn-primary btn-block" data-confirm-pay-player>שולם</button>
-      ` : ""}
-    `;
   } else if (m.type === "payboxSettings") {
     const c = getCommunity(m.communityId);
     title = "הגדרת פרופיל קבוצה";
@@ -4244,26 +3609,6 @@ function renderModal(m){
         <span class="flex1">העברה ישירות בין שחקנים</span>
       </div>
       ${link ? `<button class="btn btn-primary btn-block" data-save-paybox-entries>שמור שינויים</button>` : ""}
-    `;
-  } else if (m.type === "settlementMethod") {
-    // A per-session pick (see sessionSettlementOverride), not the community's permanent
-    // default - never saved anywhere, so no PayBox group is required to pick "paybox"
-    // here (the pay button itself falls back to PayBox's generic site if there's no group
-    // link to send the payer to - see data-panel-paybox-pay).
-    title = "שיטת תשלומים לערב הזה";
-    const c = getCommunity(m.communityId);
-    const effective = sessionSettlementOverride || c.settlementDefault || "direct";
-    body = `
-      ${m.hasCashouts ? `<div style="background:#78350f;color:#fde68a;border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:13px;text-align:center;">כבר יש שחקן שיצא מהשולחן והעביר כסף לשחקן אחר או לקבוצת הפייבוקס. שינוי שיטת התשלום עכשיו עלול לבלבל לגבי איך להמשיך להסתדר.</div>` : ""}
-      <p style="color:var(--muted);font-size:12px;margin:0 0 12px;">התאמה לערב הזה בלבד - לא משנה את ברירת המחדל הקבועה של הקבוצה.</p>
-      <div class="checkbox-row" style="cursor:pointer;" data-select-session-settlement="paybox">
-        <input type="radio" name="session-settlement" ${effective==='paybox'?'checked':''}>
-        <span class="flex1">תשלום לפייבוקס הקבוצתי</span>
-      </div>
-      <div class="checkbox-row" style="cursor:pointer;" data-select-session-settlement="direct">
-        <input type="radio" name="session-settlement" ${effective==='direct'?'checked':''}>
-        <span class="flex1">העברה ישירות בין שחקנים</span>
-      </div>
     `;
   } else if (m.type === "pickSeat") {
     const g = getGame(m.gameId);
@@ -4362,10 +3707,10 @@ function renderModal(m){
       });
       arrangedNoteHtml = `<p style="color:var(--text);font-size:12px;margin:-14px 0 16px;text-align:center;">כולל ₪${Math.round(total)} שהועברו ע"י ${names.map(esc).join(', ')} שעזב/ו את השולחן</p>`;
     }
-    // Separate from arrangedNoteHtml above - this is a direct player-to-player payment (see
-    // "שלם לשחקן"/payPlayer), not a cash handoff folded into the group settlement math.
-    // Without this, a player who was paid this way off-app has no way to see it reflected
-    // on their own end-of-night screen at all.
+    // Separate from arrangedNoteHtml above - this is a direct player-to-player payment,
+    // not a cash handoff folded into the group settlement math. Without this, a player
+    // who was paid this way off-app has no way to see it reflected on their own
+    // end-of-night screen at all.
     const directPaymentsReceived = (g.playerPayments||[]).filter(pp => pp.toPlayerId === m.playerId);
     let directPaymentsNoteHtml = "";
     if (directPaymentsReceived.length) {
@@ -4544,7 +3889,7 @@ function renderModal(m){
   } else if (m.type === "history") {
     const g = getGame(m.gameId);
     const p = g.players.find(pl=>pl.id===m.playerId);
-    title = `${m.editable ? "בדיקת מאזן" : "היסטוריה"} — ${esc(p.name)}`;
+    title = `היסטוריה — ${esc(p.name)}`;
     const buyins = g.buyins.filter(b=>b.playerId===m.playerId);
     const totalBuyin = buyins.reduce((s,b)=>s+b.amount,0);
     let rows = `<div class="roster-row"><span>מספר תשלומים שהכניס</span><span style="font-weight:700;">${buyins.length}</span></div>`;
@@ -4552,23 +3897,6 @@ function renderModal(m){
     if (buyins.length) {
       rows += `<div class="section-title" style="padding:0;margin:10px 0 6px;">פירוט התשלומים</div>`;
       rows += buyins.map((b,i) => `<div class="roster-row"><span>תשלום ${i+1}${b.ts?` · ${fmtTime(b.ts)}`:""}</span><span style="display:flex;align-items:center;gap:10px;">₪${b.amount}<button class="icon-btn" style="color:#fda4af;" data-delete-buyin="${b.id}" title="ביטול תשלום">${icon('trash')}</button></span></div>`).join("");
-    }
-    if (m.editable) {
-      // Same select-then-confirm shape as the main table buy-in flow (tap only
-      // highlights, a separate button actually adds it) - just its own state
-      // (checkBalanceSelectedAmount), since a correction has no minimum to enforce on
-      // "אחר" the way the main flow does.
-      const cbCustomSelected = checkBalanceSelectedAmount === "custom";
-      const cbAmount = cbCustomSelected ? null : checkBalanceSelectedAmount;
-      rows += `<div class="section-title" style="padding:0;margin:14px 0 6px;">הוסף קנייה (לתיקון טעות)</div>`;
-      rows += `<div class="chip-row">
-        ${FIXED_BUYIN_AMOUNTS.map(v=>`<button class="chip-btn${checkBalanceSelectedAmount===v?' buyin-selected':''}" data-check-balance-select="${v}">₪${v}</button>`).join("")}
-        ${cbCustomSelected
-          ? `<input type="number" inputmode="decimal" id="check-balance-custom-amount" placeholder="סכום" onfocus="this.select()" style="flex:1;min-width:0;" autofocus>`
-          : `<button class="chip-btn" data-check-balance-select="custom">אחר</button>`
-        }
-      </div>`;
-      rows += `<button class="btn btn-primary btn-block" data-check-balance-confirm style="margin-bottom:14px;" ${(cbAmount>0||cbCustomSelected)?'':'disabled'}>${icon('plus')} הוסף</button>`;
     }
     const paybox = (g.payboxPayments||[]).filter(b=>b.playerId===m.playerId);
     if (paybox.length) {
@@ -4587,9 +3915,8 @@ function renderModal(m){
     if (myOut) {
       const myProfitTotal = myOut.amount - totalBuyin;
       rows += `<div class="section-title" style="padding:0;margin:14px 0 6px;">יציאה מהמשחק</div>`;
-      // The pencil edits the cashout amount itself - shown whenever there's one to edit,
-      // not just from the admin "check balance" flow (m.editable), so it's also reachable
-      // from the regular "סיכום ערב" summary button a player sees after cashing out.
+      // The pencil edits the cashout amount itself - reachable from the regular "סיכום
+      // ערב" summary button a player sees after cashing out.
       rows += `<div class="roster-row"><span>יצא עם${myOut.ts?` (בשעה ${fmtTime(myOut.ts)})`:""}</span><span style="display:flex;align-items:center;gap:8px;"><b>₪${myOut.amount}</b><button class="icon-btn" data-check-balance-edit-chips title="עדכן סכום ז'יטונים">${icon('pencil')}</button></span></div>`;
       rows += `<div class="roster-row"><span>סה"כ רווח / הפסד</span><span style="font-weight:700;color:${myProfitTotal>0.005?'#6ee7b7':(myProfitTotal<-0.005?'#fda4af':'inherit')};">${myProfitTotal>0?'+':''}₪${Math.round(myProfitTotal*100)/100}</span></div>`;
       if (myOut.arrangedWith && myOut.arrangedWith.length) {
@@ -4629,7 +3956,7 @@ function renderModal(m){
         if (Math.abs(remaining) < 0.005) {
           rows += `<div class="roster-row"><span>מאוזן — אין תשלום נוסף נדרש</span></div>`;
         } else {
-          const label = m.editable ? (remaining>0?"סה\"כ רווח":"סה\"כ הפסד") : (remaining>0?"מקבל מקבוצת פייבוקס":"מעביר לקבוצת פייבוקס");
+          const label = remaining>0 ? "מקבל מקבוצת פייבוקס" : "מעביר לקבוצת פייבוקס";
           rows += `<div class="roster-row"><span>${label}</span><span style="font-weight:700;color:${remaining>0?'#6ee7b7':'#fda4af'};">₪${Math.round(Math.abs(remaining)*100)/100}</span></div>`;
         }
       }
@@ -4637,15 +3964,11 @@ function renderModal(m){
     body = rows;
   }
 
-  const dismissable = m.type !== "loginRequired" && m.type !== "initialBuyin" && !(m.type === "identityName" && m.forced);
+  const dismissable = m.type !== "loginRequired" && !(m.type === "identityName" && m.forced);
   const topAnchored = m.type === "seatChips";
-  // The initial buy-in is forced the moment you're seated - showing the actual table
-  // blurred behind it (instead of a flat black backdrop, every other modal's default)
-  // makes clear you're about to join THIS table, not some disconnected form.
-  const blurred = m.type === "initialBuyin";
   const isSetupFlow = m.type === "chipSetup" || m.type === "payboxSettings";
   return `
-    <div class="overlay${topAnchored ? ' overlay-top' : ''}${blurred ? ' overlay-blur' : ''}${isSetupFlow ? ' overlay-fullscreen' : ''}">
+    <div class="overlay${topAnchored ? ' overlay-top' : ''}${isSetupFlow ? ' overlay-fullscreen' : ''}">
       <div class="modal" onclick="event.stopPropagation()">
         <div class="modal-head"><h3 class="serif">${title}</h3>${dismissable ? `<button class="close-x" data-close-modal>${icon('x')}</button>` : ""}</div>
         ${body}
@@ -4714,7 +4037,7 @@ function attachHandlers(){
         // preventDefault call in that case) - that's enough on its own to let a frame's
         // native vertical scroll and a horizontal swipe starting on the same element
         // coexist, without needing to block one of them outright.
-        if (e.target.closest("[data-seat], button, input, textarea, select, a, [data-toggle-action-panel]")) return;
+        if (e.target.closest("[data-seat], button, input, textarea, select, a")) return;
         swipeStartX = e.clientX; swipeStartY = e.clientY; swipeActive = false; swipeAbandoned = false; swipeLastDx = 0;
       }, {passive:false});
       swipeRoot.addEventListener("pointermove", (e) => {
@@ -4921,243 +4244,6 @@ function attachHandlers(){
     openModal({type:"seatChips", gameId: nav.gameId, playerId: pid});
   };
 
-  // Expand/collapse is a swipe on the handle (the extra-buttons block, and through it the
-  // table's own crop - see layoutTableSize - grows and shrinks live with the finger, not
-  // in one jump), OR a plain tap on it (a drag under TAP_THRESHOLD_PX is treated as a tap
-  // and just flips the current state instead of using the drag-distance snap below).
-  // [data-panel-expand-extra] is always in the DOM (see renderActionPanel) specifically so
-  // its height can be tracked continuously here.
-  const toggleActionPanelEl = app.querySelector("[data-toggle-action-panel]");
-  const expandExtraEl = app.querySelector("[data-panel-expand-extra]");
-  const dragChevronEl = toggleActionPanelEl && toggleActionPanelEl.querySelector("svg");
-  // Any button inside the expanded panel (הפרופיל שלי, סיים ערב, הסר מהשולחן/שנה שיטת
-  // תשלומים, סיכום ערב, החזר למשחק...) collapses it back once tapped - delegated on the
-  // container rather than each button individually, and in the bubble phase so it runs
-  // AFTER that button's own handler (which almost always opens a modal and its own
-  // render() straight away) - setting the flag here just has to land before the NEXT
-  // render, which happens whenever that modal closes.
-  if (expandExtraEl) expandExtraEl.addEventListener("click", () => { actionPanelExpanded = false; });
-  if (toggleActionPanelEl && expandExtraEl) {
-    const tableWrapEl = app.querySelector(".poker-table-wrap");
-    let dragStartY = null, dragStartH = 0, naturalH = 0, dragActive = false;
-    const beginDrag = (e) => {
-      dragStartY = e.clientY;
-      dragStartH = expandExtraEl.getBoundingClientRect().height;
-      // Disabled during a live drag so the table crops 1:1 with the finger instead of
-      // lagging behind the CSS transition below (that transition exists only to smooth
-      // out a plain TAP's instant expand/collapse jump, which otherwise reads as the
-      // table itself shrinking rather than a fixed-size table being cropped).
-      if (tableWrapEl) tableWrapEl.style.transition = "none";
-      naturalH = expandExtraEl.scrollHeight;
-      expandExtraEl.style.transition = "none";
-      dragActive = false;
-    };
-    const updateDrag = (e, threshold) => {
-      if (dragStartY == null || naturalH <= 0) return;
-      const dy = dragStartY - e.clientY; // positive = dragged up = expanding
-      if (!dragActive) {
-        if (Math.abs(dy) < threshold) return; // still could be a plain tap - don't touch anything yet
-        dragActive = true;
-      }
-      const h = Math.max(0, Math.min(naturalH, dragStartH + dy));
-      expandExtraEl.style.maxHeight = h + "px";
-      if (dragChevronEl) dragChevronEl.style.transform = `rotate(${(h / naturalH) * 180}deg)`;
-      // No layoutTableSize() call here on purpose - .poker-table-inner already has its
-      // fixed pixel size from the last render, and .poker-table-wrap shrinking as
-      // expandExtraEl grows crops it live via plain flex/overflow reflow. Re-measuring
-      // here would treat the transiently-shrunk wrap as if it were the new "collapsed"
-      // baseline and permanently shrink the cached table size (see layoutTableSize).
-    };
-    const TAP_THRESHOLD_PX = 6;
-    const endDrag = (e, allowTapToggle) => {
-      if (dragStartY == null) return;
-      const dy = dragStartY - e.clientY;
-      dragStartY = null;
-      dragActive = false;
-      const wasExpanded = actionPanelExpanded;
-      if (Math.abs(dy) < TAP_THRESHOLD_PX) {
-        // A plain tap on the handle itself still toggles it (a deliberate button-like
-        // affordance); the same bare tap landing anywhere else on the table screen (empty
-        // felt, header, between seats) does nothing instead of surprising the user.
-        if (!allowTapToggle) return;
-        actionPanelExpanded = !actionPanelExpanded;
-      } else {
-        const h = Math.max(0, Math.min(naturalH, dragStartH + dy));
-        actionPanelExpanded = naturalH > 0 && h > naturalH / 2;
-      }
-      render();
-      // Opening (not closing) can put a brand-new button exactly where this tap physically
-      // landed - once the panel opens, its first button sits right under the handle - and
-      // the browser's own follow-up "click" event (fired right after pointerup, against
-      // whatever's now in the DOM) can then land on and fire THAT button, as if it had been
-      // tapped too. Rather than guess whether a ghost click will actually follow (a flag
-      // that eats the "next click" either catches it or, if no ghost click happens on this
-      // device, wrongly eats the user's next REAL tap instead), just disable every newly-
-      // revealed button until the panel's had time to fully settle open - a ghost click
-      // lands on a disabled button and does nothing either way.
-      if (!wasExpanded && actionPanelExpanded) {
-        const newButtons = Array.from(document.querySelectorAll("[data-panel-expand-extra] button"));
-        newButtons.forEach(b => b.disabled = true);
-        setTimeout(() => newButtons.forEach(b => b.disabled = false), 350);
-      }
-    };
-
-    toggleActionPanelEl.addEventListener("pointerdown", (e) => {
-      // Without this, a touch tap here fires a compatibility "click" event right after
-      // pointerup - and since render() below already swapped in the expanded panel's new
-      // buttons by then, that stray click can land on and fire one of them (a real bug:
-      // expanding the panel could silently also trigger whatever button ended up under
-      // the same coordinates). preventDefault() on pointerdown is what suppresses it.
-      e.preventDefault();
-      beginDrag(e);
-      dragActive = true; // the handle itself always tracks from the first pixel, tap-vs-drag is decided on release
-      toggleActionPanelEl.setPointerCapture(e.pointerId);
-    });
-    toggleActionPanelEl.addEventListener("pointermove", (e) => updateDrag(e, 0));
-    toggleActionPanelEl.addEventListener("pointerup", (e) => { e.preventDefault(); endDrag(e, true); });
-
-    // Same expand/collapse gesture from anywhere else on the table screen (the felt,
-    // empty space between seats, the header above it) - reported as too easy to miss the
-    // tiny handle. Seats keep their own drag-to-reposition untouched (excluded below by
-    // data-seat), and real buttons/inputs/links keep their normal taps untouched too -
-    // only an actual vertical drag past the threshold does anything here, a plain tap is
-    // a no-op (see allowTapToggle=false in endDrag above).
-    const screenDragTargets = [app.querySelector(".top"), app.querySelector(".poker-table-wrap")].filter(Boolean);
-    screenDragTargets.forEach(el => {
-      let tracking = false;
-      el.addEventListener("pointerdown", (e) => {
-        if (e.target.closest("[data-seat], button, input, textarea, select, a, [data-toggle-action-panel]")) return;
-        // Same reasoning as the handle's own pointerdown above - without this, a real
-        // drag that ends up expanding the panel leaves a compatibility "click" queued
-        // right after pointerup, which then lands on whatever the render() below just
-        // revealed under the finger (often inside data-panel-expand-extra itself) and
-        // immediately collapses it back via that container's own click-to-collapse
-        // listener - reported live as the panel opening and "shrinking by itself" a
-        // moment later.
-        e.preventDefault();
-        tracking = true;
-        beginDrag(e);
-      });
-      el.addEventListener("pointermove", (e) => { if (tracking) updateDrag(e, 10); });
-      el.addEventListener("pointerup", (e) => { if (!tracking) return; tracking = false; e.preventDefault(); endDrag(e, false); });
-      el.addEventListener("pointercancel", () => { if (!tracking) return; tracking = false; dragStartY = null; dragActive = false; });
-    });
-  }
-  app.querySelectorAll("[data-buyin-select]").forEach(el => el.onclick = () => {
-    const v = el.dataset.buyinSelect;
-    selectedBuyinAmount = v === "custom" ? "custom" : parseFloat(v);
-    render();
-  });
-  // Shared between the normal panel's "הוסף ריביי" and the initialBuyin modal's "כניסה
-  // לשולחן" - renderActionPanel only ever renders one of the two at a time for a given
-  // seat (see its initialBuyin branch), so these selectors always resolve to whichever
-  // one is actually on screen.
-  const panelBuyinConfirmBtn = app.querySelector("[data-panel-buyin-confirm]");
-  const panelBuyinCustomInput = document.getElementById("panel-buyin-custom");
-  if (panelBuyinCustomInput && panelBuyinConfirmBtn) panelBuyinCustomInput.oninput = () => {
-    const amt = parseFloat(panelBuyinCustomInput.value);
-    customBuyinAmount = (!isNaN(amt) && amt > 0) ? amt : null;
-    panelBuyinConfirmBtn.disabled = !canConfirmSelectedBuyin();
-    const warningEl = document.getElementById("buyin-custom-warning");
-    if (warningEl) warningEl.style.display = (customBuyinAmount != null && customBuyinAmount <= MIN_BUYIN_AMOUNT) ? "" : "none";
-  };
-  if (panelBuyinConfirmBtn) panelBuyinConfirmBtn.onclick = () => {
-    if (!canConfirmSelectedBuyin()) return;
-    doPanelBuyin(currentSelectedBuyinAmount(), panelBuyinConfirmBtn);
-  };
-  const panelSummaryBtn = app.querySelector("[data-panel-summary]");
-  if (panelSummaryBtn) panelSummaryBtn.onclick = () => openModal({type:"history", gameId: nav.gameId, playerId: selectedSeatPlayerId});
-  const panelMyProfileBtn = app.querySelector("[data-open-my-profile]");
-  if (panelMyProfileBtn) panelMyProfileBtn.onclick = () => openModal({type:"identityName", forced:false, profileTitle:true});
-  const panelEndNightBtn = app.querySelector("[data-panel-end-night]");
-  if (panelEndNightBtn) panelEndNightBtn.onclick = () => openModal({type:"seatChips", gameId: nav.gameId, playerId: selectedSeatPlayerId});
-  const panelRemoveBtn = app.querySelector("[data-panel-remove]");
-  if (panelRemoveBtn) panelRemoveBtn.onclick = () => openModal({type:"removeSeat", gameId: nav.gameId, playerId: selectedSeatPlayerId});
-  const panelPayboxPayBtn = app.querySelector("[data-panel-paybox-pay]");
-  if (panelPayboxPayBtn) panelPayboxPayBtn.onclick = () => {
-    const g = getGame(nav.gameId);
-    const c = getCommunity(g.communityId);
-    const link = getActivePayboxLink(c);
-    const amount = panelPayboxPayBtn.dataset.payboxAmount;
-    // No group link configured - paybox can still be picked as the settlement method (see
-    // the settlementMethod modal), it just has nowhere specific to send the payer, so open
-    // PayBox's own generic site instead of a group link.
-    // location.href, not window.open - a link opened in a NEW tab/window context doesn't
-    // reliably get the mobile OS's automatic app-link handoff (PayBox's own page then shows
-    // a manual "continue to PayBox?" interstitial instead of opening straight into the app,
-    // reported live) - navigating the current page there does.
-    if (!link) { window.location.href = "https://links.payboxapp.com/"; return; }
-    const url = link + (link.includes("?") ? "&" : "?") + "amount=" + amount;
-    window.location.href = url;
-  };
-  const panelPayPlayerBtn = app.querySelector("[data-panel-pay-player]");
-  if (panelPayPlayerBtn) panelPayPlayerBtn.onclick = () => {
-    openModal({type:"payPlayer", gameId: nav.gameId, fromPlayerId: selectedSeatPlayerId, amount: parseFloat(panelPayPlayerBtn.dataset.payPlayerAmount), toPlayerId: null});
-  };
-  app.querySelectorAll("[data-check-balance]").forEach(el => el.onclick = () => {
-    checkBalanceSelectedAmount = null;
-    openModal({type:"history", gameId: nav.gameId, playerId: el.dataset.checkBalance, editable: true});
-  });
-  app.querySelectorAll("[data-balance-fix-toggle]").forEach(el => el.onchange = () => {
-    balanceFixSelected[el.dataset.balanceFixToggle] = el.checked;
-    render();
-  });
-  const fixPotBtn = app.querySelector("[data-fix-pot-balance]");
-  if (fixPotBtn) fixPotBtn.onclick = async () => {
-    const g = getGame(nav.gameId);
-    const seats = g.seats || new Array(9).fill(null);
-    const seatedIds = seats.filter(Boolean);
-    const selectedIds = seatedIds.filter(id => balanceFixSelected[id]);
-    if (!selectedIds.length) return;
-    const buyinTotals = {};
-    g.buyins.forEach(b => { buyinTotals[b.playerId] = (buyinTotals[b.playerId]||0) + b.amount; });
-    const totalBuyinAll = seatedIds.reduce((s,pid)=>s+(buyinTotals[pid]||0),0);
-    const totalChipsAll = seatedIds.reduce((s,pid)=>s+((g.liveChips||{})[pid]||0),0);
-    const diff = totalChipsAll - totalBuyinAll;
-    const perPlayer = Math.round((-diff / selectedIds.length) * 100) / 100;
-    fixPotBtn.disabled = true;
-    showButtonLoading(fixPotBtn);
-    // Purely cosmetic - fires one flying badge per selected player, independent of the
-    // real save below (which recomputes everything fresh, see the comment inside it).
-    selectedIds.forEach(pid => flyAmountBadge(fixPotBtn, findSeatCircleEl(g, pid), perPlayer));
-    // Recompute against the freshest known state rather than reusing perPlayer from the
-    // outer closure - if a concurrent save changed the totals since we opened this panel,
-    // the correction must be based on the real current imbalance, not a stale one.
-    const g2 = getGame(nav.gameId);
-    const seats2 = g2.seats || new Array(9).fill(null);
-    const seatedIds2 = seats2.filter(Boolean);
-    const selectedIds2 = selectedIds.filter(pid => seatedIds2.includes(pid));
-    if (!selectedIds2.length) { fixPotBtn.disabled = false; return; }
-    const buyinTotals2 = {};
-    g2.buyins.forEach(b => { buyinTotals2[b.playerId] = (buyinTotals2[b.playerId]||0) + b.amount; });
-    const totalBuyinAll2 = seatedIds2.reduce((s,pid)=>s+(buyinTotals2[pid]||0),0);
-    const totalChipsAll2 = seatedIds2.reduce((s,pid)=>s+((g2.liveChips||{})[pid]||0),0);
-    const diff2 = totalChipsAll2 - totalBuyinAll2;
-    const perPlayer2 = Math.round((-diff2 / selectedIds2.length) * 100) / 100;
-    if (USE_RELATIONAL_API) {
-      try {
-        for (const pid of selectedIds2) {
-          const newChips = Math.round(((g2.liveChips[pid]||0) + perPlayer2) * 100) / 100;
-          if (g2.cashouts[pid]) {
-            const newAmount = Math.round(((g2.cashouts[pid].amount||0) + perPlayer2) * 100) / 100;
-            await v2SetCashout(nav.gameId, pid, newAmount, g2.cashouts[pid].arrangedWith, newChips);
-          } else {
-            await v2UpdateLiveChips(nav.gameId, pid, newChips);
-          }
-        }
-      } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); fixPotBtn.disabled = false; return; }
-    } else {
-      await mutateAndSave(() => {
-        if (!g2.liveChips) g2.liveChips = {};
-        selectedIds2.forEach(pid => {
-          g2.liveChips[pid] = Math.round(((g2.liveChips[pid]||0) + perPlayer2) * 100) / 100;
-          if (g2.cashouts[pid]) g2.cashouts[pid].amount = Math.round(((g2.cashouts[pid].amount||0) + perPlayer2) * 100) / 100;
-        });
-      });
-    }
-    balanceFixSelected = {};
-    render();
-  };
   app.querySelectorAll("[data-buyin]").forEach(el => el.onclick = () => openModal({type:"buyin", gameId: nav.gameId, playerId: el.dataset.buyin, amount:""}));
   app.querySelectorAll("[data-leave]").forEach(el => el.onclick = () => openModal({type:"leave", gameId: nav.gameId, playerId: el.dataset.leave, amount:""}));
   app.querySelectorAll("[data-history]").forEach(el => el.onclick = () => openModal({type:"history", gameId: nav.gameId, playerId: el.dataset.history}));
@@ -5216,53 +4302,8 @@ function attachHandlers(){
   const openOddsBtn = app.querySelector("[data-open-poker-odds]");
   if (openOddsBtn) openOddsBtn.onclick = () => openModal({type:"pokerOdds", gameType: "holdem", imageSrc: null, reading: false, error: null, results: null, hands: null, board: null});
 
-  const changeSettlementBtn = app.querySelector("[data-change-settlement-method]");
-  if (changeSettlementBtn) changeSettlementBtn.onclick = () => {
-    const g = getGame(nav.gameId);
-    // The warning (someone already cashed out under the current method) lives inline in
-    // the modal itself now, not a separate confirm gate in front of it.
-    openModal({type:"settlementMethod", communityId: g.communityId, hasCashouts: Object.keys(g.cashouts || {}).length > 0});
-  };
-
-  const openActivePayboxBtn = app.querySelector("[data-open-active-paybox]");
-  if (openActivePayboxBtn) openActivePayboxBtn.onclick = () => {
-    const g = getGame(nav.gameId);
-    const c = getCommunity(g.communityId);
-    const link = getActivePayboxLink(c);
-    window.location.href = link || "https://links.payboxapp.com/";
-  };
-  const openPayboxGenericBtn = app.querySelector("[data-open-paybox-generic]");
-  if (openPayboxGenericBtn) openPayboxGenericBtn.onclick = () => { window.location.href = "https://links.payboxapp.com/"; };
-  const openBitGenericBtn = app.querySelector("[data-open-bit-generic]");
-  // location.href, not window.open - see the data-pay-via handler's own comment on why
-  // window.open silently does nothing for a custom (non-http) scheme like bit://.
-  if (openBitGenericBtn) openBitGenericBtn.onclick = () => { window.location.href = "bit://"; };
-
   app.querySelectorAll("[data-seat]").forEach(el => {
     const dragHandle = el.querySelector(".seat-circle") || el;
-    if (currentSettlementTransfers) {
-      // Once everyone's cashed out and settlement arrows are showing, repositioning seats
-      // is meaningless (the night's over) - skip the drag machinery below entirely instead
-      // of relying on its movement threshold to fall through to a tap. A real touch tap
-      // routinely includes a few px of incidental movement, enough to cross that 14px
-      // threshold and swallow the tap as a (no-op, same-seat) drag instead of a filter
-      // click - reported live as "tapping a player doesn't work well". A plain click
-      // listener has no such threshold.
-      const filterClick = (e) => {
-        if (e) e.stopPropagation();
-        const g = getGame(nav.gameId);
-        const idx = parseInt(el.dataset.seat);
-        const seats = g.seats || new Array(9).fill(null);
-        const pid = seats[idx];
-        if (!pid) return;
-        settlementFilterPlayerId = settlementFilterPlayerId === pid ? null : pid;
-        render();
-      };
-      dragHandle.addEventListener("click", filterClick);
-      const infoEl = el.querySelector("[data-seat-info]");
-      if (infoEl) infoEl.addEventListener("click", filterClick);
-      return;
-    }
     let drag = null;
     dragHandle.addEventListener("pointerdown", (e) => {
       const g = getGame(nav.gameId);
@@ -5291,16 +4332,7 @@ function attachHandlers(){
       el.style.zIndex = "";
       el.style.opacity = "";
       drag = null;
-      if (!wasMoved) {
-        const g = getGame(nav.gameId);
-        const seats = g.seats || new Array(9).fill(null);
-        const pid = seats[fromIdx];
-        if (!pid) return;
-        // A plain tap selects this seat into the bottom panel, same as tapping the info
-        // text below.
-        trySelectSeatPlayer(pid);
-        return;
-      }
+      if (!wasMoved) return; // a plain tap on an already-seated player is a no-op
       el.style.pointerEvents = "none";
       const under = document.elementFromPoint(e.clientX, e.clientY);
       el.style.pointerEvents = "";
@@ -5339,16 +4371,6 @@ function attachHandlers(){
       // everyone else just sees a plain circle, still a valid drag target for moving an
       // already-seated player's own position.
       if (!seats[idx] && isTableAdmin(g, c)) openModal({type:"pickSeat", gameId: nav.gameId, seatIndex: idx});
-    };
-    const infoEl = el.querySelector("[data-seat-info]");
-    if (infoEl) infoEl.onclick = (e) => {
-      e.stopPropagation();
-      const g = getGame(nav.gameId);
-      const idx = parseInt(el.dataset.seat);
-      const seats = g.seats || new Array(9).fill(null);
-      const pid = seats[idx];
-      if (!pid) return;
-      trySelectSeatPlayer(pid);
     };
   });
 
@@ -5908,9 +4930,9 @@ function attachHandlers(){
 
   if (modal && modal.type === "chipSetup") {
     // Detects each distinct chip type in the freshly-loaded photo and turns every one
-    // into a marker point, the same shape trySelectSeatPlayer/manual tapping already
-    // produces - the user can still drag/resize/remove each one, or tap to add more,
-    // exactly as if they'd placed it by hand.
+    // into a marker point, the same shape a manual tap already produces - the user can
+    // still drag/resize/remove each one, or tap to add more, exactly as if they'd placed
+    // it by hand.
     const detectChipsInPhoto = async (dataUrl, width, height, imgEl) => {
       try {
         const prompt = `התמונה מציגה כמה זוטוני פוקר שונים, כל אחד מונח בנפרד על משטח, צולמו ממבט על. זהו את כל הז'יטונים השונים הנראים בתמונה (כל צבע/סוג פעם אחת בלבד), ועבור כל אחד תנו תיבה תוחמת (bounding box) בפיקסלים מוחלטים יחסית לתמונה (רוחב ${width}, גובה ${height}) שתוחמת בדיוק את הזוטון עצמו ולא את הרקע. בפורמט [x1,y1,x2,y2] - פינה שמאלית-עליונה ופינה ימנית-תחתונה. החזירו תשובה בפורמט JSON בלבד, בלי טקסט נוסף ובלי markdown, במבנה הזה בדיוק: [{"box":[x1,y1,x2,y2]}]`;
@@ -6403,36 +5425,6 @@ function attachHandlers(){
     app.querySelectorAll("[data-delete-player-payment]").forEach(el => el.onclick = () => {
       openModal({type:"deletePlayerPayment", gameId: modal.gameId, playerId: modal.playerId, paymentId: el.dataset.deletePlayerPayment, returnTo: modal});
     });
-    app.querySelectorAll("[data-check-balance-select]").forEach(el => el.onclick = () => {
-      const v = el.dataset.checkBalanceSelect;
-      checkBalanceSelectedAmount = v === "custom" ? "custom" : parseFloat(v);
-      render();
-    });
-    const checkBalanceConfirmBtn = app.querySelector("[data-check-balance-confirm]");
-    const checkBalanceCustomInput = document.getElementById("check-balance-custom-amount");
-    if (checkBalanceCustomInput && checkBalanceConfirmBtn) checkBalanceCustomInput.oninput = () => {
-      const amt = parseFloat(checkBalanceCustomInput.value);
-      checkBalanceConfirmBtn.disabled = !(!isNaN(amt) && amt > 0);
-    };
-    if (checkBalanceConfirmBtn) checkBalanceConfirmBtn.onclick = async () => {
-      const amount = checkBalanceSelectedAmount === "custom"
-        ? parseFloat((document.getElementById("check-balance-custom-amount")||{}).value)
-        : checkBalanceSelectedAmount;
-      if (!amount || amount <= 0) return;
-      const gameId = modal.gameId, playerId = modal.playerId;
-      checkBalanceConfirmBtn.disabled = true;
-      if (USE_RELATIONAL_API) {
-        try { await v2AddBuyin(gameId, uid(), playerId, amount); }
-        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
-      } else {
-        await mutateAndSave(() => {
-          const g = getGame(gameId);
-          g.buyins.push({id: uid(), playerId, amount, ts: Date.now()});
-        }, true);
-      }
-      checkBalanceSelectedAmount = null;
-      render(); // re-renders the same history modal with the fresh buy-in list/totals
-    };
     const editChipsBtn = app.querySelector("[data-check-balance-edit-chips]");
     if (editChipsBtn) editChipsBtn.onclick = () => {
       openModal({type:"editCashout", gameId: modal.gameId, playerId: modal.playerId});
@@ -6561,64 +5553,6 @@ function attachHandlers(){
     };
   }
 
-  if (modal && modal.type === "payPlayer") {
-    app.querySelectorAll("[data-select-pay-target]").forEach(el => el.onclick = () => {
-      updateModal({toPlayerId: el.dataset.selectPayTarget});
-    });
-    app.querySelectorAll("[data-pay-via]").forEach(el => el.onclick = () => {
-      const g = getGame(modal.gameId);
-      const c = getCommunity(g.communityId);
-      const target = (c.roster||[]).find(p => p.id === modal.toPlayerId);
-      const targetPhone = target && getPlayerPhone(target);
-      const phone = targetPhone ? targetPhone.replace(/[^0-9+]/g, "") : null;
-      // Best-effort deep links, same caveat as the PayBox group link: neither app's
-      // exact URL scheme for pre-filling a phone+amount is officially confirmed, so
-      // this may just open the app without them - harmless if the params are ignored.
-      // Without a saved phone there's nothing to pre-fill, so just open the app itself.
-      // links.payboxapp.com is PayBox's own confirmed-working domain (same one used for
-      // the group link elsewhere in the app) - phone/amount as query params is still a
-      // guess, but at least the domain itself is real instead of a made-up one.
-      const isBit = el.dataset.payVia === "bit";
-      const url = isBit
-        ? (phone ? `bit://transfer?phone=${encodeURIComponent(phone)}&amount=${modal.amount}` : "bit://")
-        : (phone ? `https://links.payboxapp.com/?phone=${encodeURIComponent(phone)}&amount=${modal.amount}` : "https://links.payboxapp.com/");
-      // location.href for both, not window.open. bit:// is a custom (non-http) scheme -
-      // window.open tries to open a new browsing context at that address, which most
-      // mobile browsers simply can't do for a non-http(s) scheme and silently do nothing
-      // instead of the OS's "open in app?" handoff (reported live: the Bit button did
-      // nothing). PayBox's own https:// link has a different but related issue opened in a
-      // new tab - it doesn't reliably get the OS's automatic app-link handoff either, so
-      // PayBox's own page shows a manual "continue to PayBox?" interstitial instead of
-      // opening straight into the app (also reported live). Navigating the current page
-      // to either is what actually triggers the real handoff for both.
-      window.location.href = url;
-    });
-    const confirmPayPlayer = app.querySelector("[data-confirm-pay-player]");
-    if (confirmPayPlayer) confirmPayPlayer.onclick = async () => {
-      if (!modal.toPlayerId) return;
-      confirmPayPlayer.disabled = true;
-      showButtonLoading(confirmPayPlayer);
-      if (USE_RELATIONAL_API) {
-        try { await v2AddPlayerPayment(modal.gameId, uid(), modal.fromPlayerId, modal.toPlayerId, modal.amount); }
-        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmPayPlayer.disabled = false; return; }
-      } else {
-        await mutateAndSave(() => {
-          const g = getGame(modal.gameId);
-          if (!g.playerPayments) g.playerPayments = [];
-          g.playerPayments.push({id:uid(), fromPlayerId: modal.fromPlayerId, toPlayerId: modal.toPlayerId, amount: modal.amount, ts: Date.now()});
-        });
-      }
-      closeModal();
-    };
-  }
-
-  if (modal && modal.type === "settlementMethod") {
-    app.querySelectorAll("[data-select-session-settlement]").forEach(el => el.onclick = () => {
-      sessionSettlementOverride = el.dataset.selectSessionSettlement;
-      closeModal();
-    });
-  }
-
   if (modal && modal.type === "payboxSettings") {
     app.querySelectorAll("[data-select-settlement-default]").forEach(el => el.onclick = async () => {
       const value = el.dataset.selectSettlementDefault;
@@ -6689,10 +5623,6 @@ function attachHandlers(){
           try {
             const ok = await v2ClaimSeat(modal.gameId, modal.seatIndex, p.id, p.name);
             if (!ok) showAlert("המושב הזה כבר תפוס - בחרו מושב אחר.");
-            // Select the seat that was just filled so the panel - and, since they haven't
-            // bought in yet, the mandatory initialBuyin modal (see renderActionPanel) -
-            // shows for THIS player right away instead of whoever was selected before.
-            else selectedSeatPlayerId = p.id;
           } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
         }
         closeModal();
@@ -6715,7 +5645,6 @@ function attachHandlers(){
         // player," so the next game they opened auto-seated whoever they'd most recently
         // assigned to a seat instead of themselves. That mapping should only come from
         // genuinely self-identifying (via an invite link, or creating the community).
-        selectedSeatPlayerId = p.id;
       });
       closeModal();
     });
@@ -6734,7 +5663,6 @@ function attachHandlers(){
         try {
           const ok = await v2ClaimSeat(modal.gameId, modal.seatIndex, guestId, name);
           if (!ok) showAlert("המושב הזה כבר תפוס - בחרו מושב אחר.");
-          else selectedSeatPlayerId = guestId; // see the same comment on the pick-player handler above
         } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
         closeModal();
         return;
@@ -6747,7 +5675,6 @@ function attachHandlers(){
         if (!g.seats) g.seats = new Array(9).fill(null);
         g.seats[modal.seatIndex] = guest.id;
         g.players.push(guest);
-        selectedSeatPlayerId = guest.id;
         if (!g.liveChips) g.liveChips = {};
         g.liveChips[guest.id] = 0;
       });
@@ -6766,7 +5693,6 @@ function attachHandlers(){
         const playerId = await v2PreRegisterPlayer(getGame(modal.gameId).communityId, name, email);
         const ok = await v2ClaimSeat(modal.gameId, modal.seatIndex, playerId, name);
         if (!ok) showAlert("המושב הזה כבר תפוס - בחרו מושב אחר.");
-        else selectedSeatPlayerId = playerId;
         closeModal();
       } catch(e) {
         if (e.status === 409) { updateModal({permanentError: "האימייל הזה כבר רשום במערכת."}); addPermanentBtn.disabled = false; }
