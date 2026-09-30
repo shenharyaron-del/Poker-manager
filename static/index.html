@@ -4686,8 +4686,11 @@ function attachHandlers(){
       const settle = (dx, fromCancel) => {
         const w = pageWidth();
         const threshold = fromCancel ? 30 : w * 0.22;
-        if (dx < -threshold && tableSubView === "player") tableSubView = "table";
-        else if (dx > threshold && tableSubView === "table") tableSubView = "player";
+        // Circular with only two pages: either direction past the threshold switches to
+        // "the other one" regardless of which page this drag started on or which way it
+        // went - swiping right from the player screen (nothing to its right) still gets
+        // you to the table view, same as swiping left from it does.
+        if (Math.abs(dx) > threshold) tableSubView = (tableSubView === "player") ? "table" : "player";
         // else: not past threshold - tableSubView stays what it already was, so
         // baseOffset() below naturally snaps back to where this drag started instead of
         // completing it.
@@ -4702,10 +4705,16 @@ function attachHandlers(){
       // driven pointer listeners to passive (for scroll perf), which makes
       // preventDefault() inside them a silent no-op with no error or warning.
       swipeRoot.addEventListener("pointerdown", (e) => {
-        // .chat-frame (history/activity) owns its own vertical drag-to-scroll entirely -
-        // never even start tracking a swipe there, so it can never compete with (or get
-        // starved by) the frame's native scrolling.
-        if (e.target.closest("[data-seat], button, input, textarea, select, a, [data-toggle-action-panel], .chat-frame")) return;
+        // Deliberately NOT excluding .chat-frame (history/activity) here - confirmed live
+        // that swipe only worked from the dots area at the very bottom, not "the middle
+        // of the screen", because that exclusion blocked it from ever starting anywhere
+        // over either frame (which covers a lot of the player screen's vertical space).
+        // The dx/dy comparison below already tells a horizontal swipe apart from a
+        // vertical scroll attempt (swipeAbandoned when vertical wins, with no
+        // preventDefault call in that case) - that's enough on its own to let a frame's
+        // native vertical scroll and a horizontal swipe starting on the same element
+        // coexist, without needing to block one of them outright.
+        if (e.target.closest("[data-seat], button, input, textarea, select, a, [data-toggle-action-panel]")) return;
         swipeStartX = e.clientX; swipeStartY = e.clientY; swipeActive = false; swipeAbandoned = false; swipeLastDx = 0;
       }, {passive:false});
       swipeRoot.addEventListener("pointermove", (e) => {
@@ -4725,7 +4734,14 @@ function attachHandlers(){
         if ((swipeActive || Math.abs(dx) >= Math.abs(dy)) && e.cancelable) e.preventDefault();
         if (swipeActive) {
           const w = pageWidth();
-          const raw = Math.max(-w, Math.min(0, baseOffset() + dx));
+          let raw = baseOffset() + dx;
+          // Rubber-band past either edge instead of a hard stop - there's no real third
+          // page to slide in when dragging "the wrong way" (right from the player screen,
+          // left from the table view), but settle() below still treats a past-threshold
+          // release in that direction as a circular switch to the other page, so the drag
+          // should still show SOME give instead of feeling like it hit a wall.
+          if (raw > 0) raw = raw * 0.35;
+          else if (raw < -w) raw = -w + (raw + w) * 0.35;
           setTrack(raw, false);
         }
       }, {passive:false});
