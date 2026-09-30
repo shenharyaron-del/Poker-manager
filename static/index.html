@@ -3091,7 +3091,10 @@ function renderAdminScreen(gameId){
       </div>
     </div>
     <div style="flex:1;min-height:0;overflow-y:auto;padding:0 20px 20px;touch-action:pan-y;">
-      ${g.closed ? "" : `<button class="btn btn-ghost btn-block" style="margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:6px;" data-end-night>${icon('bar')} הכרז על סיום ערב</button>`}
+      <div class="checkbox-row" style="cursor:pointer;margin-bottom:16px;" data-end-night>
+        <input type="checkbox" ${g.closed?'checked':''} ${g.closed?'disabled':''} onclick="return false;">
+        <span class="flex1">סיום ערב</span>
+      </div>
       <div class="section-title" style="padding:0;margin:0 0 8px;">שחקנים פעילים</div>
       ${activeRows}
       ${cashedOutIds.length ? `<div class="section-title" style="padding:0;margin:16px 0 8px;">יצאו מהשולחן</div>${cashedOutRows}` : ""}
