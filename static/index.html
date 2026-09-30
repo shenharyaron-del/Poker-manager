@@ -4025,8 +4025,7 @@ function renderModal(m){
     // the others). Only offer a mode the community actually has data for; "direct"
     // (typing the ₪ total by hand) is always available as a fallback.
     const availableModes = [
-      ratio ? {key:"quantity", label:"ספירת ז'יטונים"} : null,
-      {key:"direct", label:"סכום ז'יטונים בש\"ח"},
+      {key:"chips", label:"סכום ז'יטונים"},
       {key:"profit", label:"רווח/הפסד"},
       chipValues.length ? {key:"byColor", label:"לפי צבע"} : null,
     ].filter(Boolean);
@@ -4095,11 +4094,22 @@ function renderModal(m){
           `).join("")}
         </div>
       `;
-    } else if (mode === "quantity") {
-      modeBody = `
-        <p style="color:var(--muted);font-size:12px;margin:0 0 6px;">הקלידו לפי הספירה הכוללת שלכם את סך הז'יטונים.<br>נמיר לשקלים לפי 1 ש"ח עבור ${ratio} ז'יטונים.</p>
-        <div class="field"><label>סך כל הז'יטונים (כמות)</label><input type="number" inputmode="numeric" id="total-chip-qty" data-chip-ratio="${ratio}" placeholder="0" style="width:100%;"></div>
-      `;
+    } else if (mode === "chips") {
+      // Ratio-aware: typing chip count or shekels fills in the other field automatically
+      // (see the matching oninput wiring in attachHandlers), replacing the old separate
+      // "ספירת ז'יטונים"/"סכום ז'יטונים בש"ח" mode tabs with one combined field pair.
+      // RTL layout, right to left: ₪ field, "=", ratio, ":", chip-count field - per the
+      // explicit correction on the field order (the ₪ side must read first/rightmost).
+      modeBody = ratio ? `
+        <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">הקלידו כמה ז'יטונים יש לכם ביד, או ישר את הסכום בשקלים - השדה השני יתמלא אוטומטית (יחס הקבוצה: ${ratio} ז'יטונים = ₪1).</p>
+        <div style="display:flex;align-items:center;gap:8px;justify-content:center;margin-bottom:6px;">
+          <div class="field" style="margin:0;"><label>סכום בש"ח</label><input type="number" inputmode="numeric" id="seat-chips-direct" value="${chips}" onfocus="this.select()" style="width:100px;text-align:center;"></div>
+          <span style="font-weight:700;color:var(--muted);">=</span>
+          <span style="font-weight:700;color:var(--muted);">${ratio}</span>
+          <span style="font-weight:700;color:var(--muted);">:</span>
+          <div class="field" style="margin:0;"><label>כמות ז'יטונים</label><input type="number" inputmode="numeric" id="total-chip-qty" placeholder="0" style="width:100px;text-align:center;"></div>
+        </div>
+      ` : `<div class="field"><label>סכום ז'יטונים בש"ח</label><input type="number" inputmode="numeric" id="seat-chips-direct" value="${chips}" onfocus="this.select()"></div>`;
     } else if (mode === "profit") {
       // Sign picked via a toggle instead of typing a minus sign - a plain numeric keypad
       // (inputmode="numeric") doesn't reliably offer a "-" key on mobile, and the picked
@@ -6303,7 +6313,7 @@ function attachHandlers(){
     const ratio = c.chipRatio;
     const chipValues = c.chipValues || [];
     const currentChips = (g.liveChips||{})[modal.playerId] || 0;
-    const availableModes = [ratio&&"quantity", "direct", "profit", chipValues.length&&"byColor"].filter(Boolean);
+    const availableModes = ["chips", "profit", chipValues.length&&"byColor"].filter(Boolean);
     const mode = (modal.chipsMode && availableModes.includes(modal.chipsMode)) ? modal.chipsMode : availableModes[0];
     const profitSign = modal.profitSign === "loss" ? "loss" : "profit";
     // Switching modes swaps out the input(s) entirely - anything typed in the mode being
@@ -6311,8 +6321,9 @@ function attachHandlers(){
     // chance to notice (e.g. a half-typed per-color count).
     const hasEnteredData = () => {
       if (mode === "byColor") return Array.from(app.querySelectorAll("[data-color-count]")).some(el => el.value.trim() !== "");
-      if (mode === "quantity") return (document.getElementById("total-chip-qty")||{}).value?.trim() !== "";
       if (mode === "profit") return (document.getElementById("seat-chips-profit")||{}).value?.trim() !== "";
+      const qtyEl = document.getElementById("total-chip-qty");
+      if (qtyEl && qtyEl.value.trim() !== "") return true;
       const el = document.getElementById("seat-chips-direct");
       return el && el.value.trim() !== "" && parseFloat(el.value) !== currentChips;
     };
@@ -6320,7 +6331,7 @@ function attachHandlers(){
     // is actually up. updateModal() renders synchronously, so the new mode's input
     // already exists in the DOM by the time this runs.
     const focusModeInput = (forMode) => {
-      const idByMode = {quantity:"total-chip-qty", direct:"seat-chips-direct", profit:"seat-chips-profit"};
+      const idByMode = {chips:"seat-chips-direct", profit:"seat-chips-profit"};
       const el = idByMode[forMode] ? document.getElementById(idByMode[forMode]) : app.querySelector("[data-color-count]");
       if (el) el.focus();
     };
@@ -6339,11 +6350,6 @@ function attachHandlers(){
     // used both to keep the fixed recap header live and to compute what actually gets
     // saved on confirm, so the two can never disagree with each other.
     const computeCounted = () => {
-      if (mode === "quantity") {
-        const qtyInput = document.getElementById("total-chip-qty");
-        const qty = qtyInput ? parseFloat(qtyInput.value) : NaN;
-        return (!isNaN(qty) && ratio > 0) ? qty / ratio : 0;
-      }
       if (mode === "profit") {
         const el = document.getElementById("seat-chips-profit");
         const v = el ? parseFloat(el.value) : NaN;
@@ -6375,6 +6381,25 @@ function attachHandlers(){
       if (profitEl) { profitEl.textContent = `${profit>0?'+':''}₪${profit}`; profitEl.style.color = profitColor(profit); }
     };
     app.querySelectorAll("input[type=number]").forEach(el => el.oninput = refreshHeader);
+    // "chips" mode's two fields (shekels / chip count) mirror each other live via the
+    // community's ratio - overrides the generic refreshHeader-only binding just set above
+    // for these two specific inputs, layering the cross-fill on top of it.
+    if (mode === "chips" && ratio > 0) {
+      const directInput = document.getElementById("seat-chips-direct");
+      const qtyInput = document.getElementById("total-chip-qty");
+      if (directInput && qtyInput) {
+        directInput.oninput = () => {
+          const v = parseFloat(directInput.value);
+          qtyInput.value = isNaN(v) ? "" : Math.round(v * ratio);
+          refreshHeader();
+        };
+        qtyInput.oninput = () => {
+          const v = parseFloat(qtyInput.value);
+          directInput.value = isNaN(v) ? "" : Math.round((v / ratio) * 100) / 100;
+          refreshHeader();
+        };
+      }
+    }
     refreshHeader();
     const quickEndBtn = app.querySelector("[data-quick-end]");
     if (quickEndBtn) quickEndBtn.onclick = async () => {
