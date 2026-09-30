@@ -163,10 +163,11 @@ body.table-screen .poker-table-inner.crop-from-top{bottom:16px;top:auto;}
    leave button after it always stays on screen instead of getting pushed off. */
 body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;padding:0 20px 20px;}
 /* Shared by the player screen's history and table-activity sections - a genuinely FIXED
-   size (height, not max-height - stays put whether there's 1 message or 30), sized for
-   about 3 message bubbles, so both read as their own defined panel instead of open-ended
-   lists pushing the page taller. (The table-activity one overrides this height with an
-   inline flex:1 instead - see renderPlayerScreen.) The doodle background is the user-
+   size (height, not max-height - stays put whether there's 1 message or 30) by default,
+   so both read as their own defined panel instead of open-ended lists pushing the page
+   taller. Both sections override this base height inline (see renderPlayerScreen): the
+   history frame to a shorter ~2-bubble height, the table-activity one to flex:1 so it
+   absorbs whatever room is left. The doodle background is the user-
    supplied WhatsApp-style reference image, tiled; the dark overlay underneath keeps the
    bubbles/text readable against it instead of the image's own light color showing
    through at full strength. */
@@ -1189,9 +1190,11 @@ function showButtonLoading(btn){
 // saves (see connectLiveSync below), so other open tabs refetch within about a second.
 // Periodic polling stays underneath as a fallback for when SSE is unsupported/blocked or
 // the connection drops - same safety net as before, just now a backup instead of the
-// primary mechanism. Skip a refresh whenever a modal is open so we never yank away
-// something someone's mid-typing; render() re-draws whatever nav/modal already are, so this
-// never navigates anyone away from the screen (e.g. table) they're currently looking at.
+// primary mechanism. Skip a refresh whenever a modal is open, or the player screen's own
+// inline "אחר" amount input is (playerScreenCustomOpen - not a modal, but just as much a
+// freshly-focused input mid-typing), so we never yank away something someone's mid-typing;
+// render() re-draws whatever nav/modal already are, so this never navigates anyone away
+// from the screen (e.g. table) they're currently looking at.
 // Waits for `promise` to settle, but never longer than `ms` - used where giving up on a
 // stuck promise and moving on beats blocking forever (a promise itself can't be
 // cancelled/timed out in JS, so this just stops the CALLER from waiting on it any longer,
@@ -1210,7 +1213,7 @@ let refreshQueued = false;
 async function doRefreshNow(source){
   const callId = DEBUG_SYNC ? Math.random().toString(36).slice(2,6) : "";
   logSync(`refresh[${callId}] triggered by ${source}, modal=${!!modal}`);
-  if (modal) { logSync(`refresh[${callId}] SKIPPED - modal open`); return; }
+  if (modal || playerScreenCustomOpen) { logSync(`refresh[${callId}] SKIPPED - modal or custom-amount input open`); return; }
   if (refreshInProgress) {
     // Another refresh is already running its own GET - don't start a second one
     // concurrently (two in-flight GETs can resolve out of order, and the one that
@@ -1287,18 +1290,19 @@ async function doRefreshNow(source){
       } else {
         logSync(`refresh[${callId}] GET done, buyins=${(fresh.games||[]).map(g=>g.buyins.length).join(',')}, applying (modal now=${!!modal})`);
         applyFreshState(fresh);
-        // The entry guard above only caught a modal that was ALREADY open when this
-        // refresh started - a modal opened while the GET was in flight (its own await
-        // above can take a real moment) slips past that check entirely. Re-checking here,
-        // right before the render() that would otherwise blow away its DOM, is what this
-        // was missing - reported live as typing a table/player name's first letter
+        // The entry guard above only caught a modal/custom-input that was ALREADY open
+        // when this refresh started - one opened while the GET was in flight (its own
+        // await above can take a real moment) slips past that check entirely. Re-checking
+        // here, right before the render() that would otherwise blow away its DOM, is what
+        // this was missing - reported live as typing a table/player name's first letter
         // sometimes closing the keyboard with nothing typed (a fresh input node replaces
-        // the focused one mid-keystroke), working fine on the very next attempt once the
-        // refresh had already finished. The fetched state is still applied either way -
-        // only the render is skipped - so the next render (the modal closing, or the next
-        // refresh with no modal open) already reflects it.
-        if (modal) {
-          logSync(`refresh[${callId}] applied but SKIPPED render - modal opened mid-fetch`);
+        // the focused one mid-keystroke), same symptom later reported for the player
+        // screen's "אחר" amount field once that existed too - working fine on the very
+        // next attempt once the refresh had already finished. The fetched state is still
+        // applied either way - only the render is skipped - so the next render (the modal
+        // closing, or the next refresh with neither open) already reflects it.
+        if (modal || playerScreenCustomOpen) {
+          logSync(`refresh[${callId}] applied but SKIPPED render - modal or custom-amount input opened mid-fetch`);
         } else {
           const scrollY = window.scrollY;
           render();
@@ -2687,14 +2691,14 @@ function renderPlayerScreen(gameId){
   const myBuyins = g.buyins.filter(b => b.playerId === pid).slice().sort((a,b) => (a.ts||0)-(b.ts||0));
   const buyinTotal = myBuyins.reduce((s,b) => s+b.amount, 0);
   const cashedOut = pid in g.cashouts;
-  // Reused by the existing data-delete-seat-buyin handler (see renderTable's own history
-  // popup), which reads this global for whose row to delete rather than the row itself -
-  // this screen only ever shows one player's history (the viewer's own), so pinning it
-  // here once is equivalent to toggling it open in the popup.
-  openHistorySeatPlayerId = pid;
   const canDeleteBuyins = true; // viewing/editing your own history here, always allowed
+  // Carries its own playerId (data-delete-seat-buyin-player) rather than relying on
+  // openHistorySeatPlayerId like the table view's popup does - this screen is always
+  // mounted alongside the table view now (see the swipe carousel in render()), so setting
+  // that shared global here on every render would constantly clobber the table view's own
+  // open/closed popup state out from under it.
   const historyRows = myBuyins.map((b,idx) => {
-    const trashBtn = (canDeleteBuyins && idx>0 && !cashedOut) ? `<button style="background:none;border:none;padding:2px;color:#dc2626;cursor:pointer;display:flex;float:left;margin-right:4px;" data-delete-seat-buyin="${b.id}" title="ביטול תשלום">${icon('trash')}</button>` : '';
+    const trashBtn = (canDeleteBuyins && idx>0 && !cashedOut) ? `<button style="background:none;border:none;padding:2px;color:#dc2626;cursor:pointer;display:flex;float:left;margin-right:4px;" data-delete-seat-buyin="${b.id}" data-delete-seat-buyin-player="${pid}" title="ביטול תשלום">${icon('trash')}</button>` : '';
     return `<div class="chat-bubble">${trashBtn}<span class="bubble-time">${fmtTime(b.ts)}</span>${idx===0?'כניסה':`ריביי ${idx}`} · ₪${b.amount}</div>`;
   }).join("") || `<div class="chat-bubble" style="color:#888;">אין קניות עדיין</div>`;
   // Whole-table activity, oldest first (WhatsApp order) - buy-ins and cash-outs merged
@@ -2711,7 +2715,6 @@ function renderPlayerScreen(gameId){
   // a re-render of the same data (see lastSeenFeedEventKey) - the vibrate trigger.
   const latestFeedEvent = feedEvents[feedEvents.length-1];
   const latestFeedEventKey = latestFeedEvent ? `${latestFeedEvent.ts}-${latestFeedEvent.kind}-${latestFeedEvent.kind==='buyin'?latestFeedEvent.buyin.id:latestFeedEvent.playerId}` : "";
-  const feedAdmin = isTableAdmin(g, c);
   const feedCounts = {}, feedTotals = {};
   const feedRows = feedEvents.map(ev => {
     if (ev.kind === "buyin") {
@@ -2724,11 +2727,7 @@ function renderPlayerScreen(gameId){
       const text = isRebuy
         ? `${name} עשה ריביי של ₪${b.amount} (סה"כ קנייה של ₪${feedTotals[b.playerId]})`
         : `${name} נכנס לשולחן עם ₪${b.amount}`;
-      // Only a rebuy (never the entry that got them seated) can be deleted, same rule as
-      // the personal history above - and only your own or, for admins, anyone's.
-      const canDeleteThis = isRebuy && (b.playerId === pid || feedAdmin) && !(b.playerId in g.cashouts);
-      const trashBtn = canDeleteThis ? `<button style="background:none;border:none;padding:2px;color:#dc2626;cursor:pointer;display:flex;float:left;margin-right:4px;" data-delete-feed-buyin="${b.id}" data-delete-feed-player="${b.playerId}" title="ביטול תשלום">${icon('trash')}</button>` : '';
-      return `<div class="chat-bubble">${trashBtn}<span class="bubble-time">${fmtTime(b.ts)}</span>${text}</div>`;
+      return `<div class="chat-bubble"><span class="bubble-time">${fmtTime(b.ts)}</span>${text}</div>`;
     }
     const player = g.players.find(pl => pl.id === ev.playerId);
     const name = esc(player ? player.name : "שחקן");
@@ -2770,7 +2769,7 @@ function renderPlayerScreen(gameId){
       ${cashedOut ? "" : `<div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">ריביי</div>`}
       ${cashedOut ? "" : buyinButtonsHtml}
       <div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">היסטוריית קניות</div>
-      <div class="chat-frame" data-player-history style="margin-bottom:14px;flex-shrink:0;">${historyRows}</div>
+      <div class="chat-frame" data-player-history style="height:110px;margin-bottom:14px;flex-shrink:0;">${historyRows}</div>
       <div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">פעילות אחרונה בשולחן</div>
       <div class="chat-frame" data-player-feed data-latest-event="${latestFeedEventKey}" style="flex:1;height:auto;min-height:54px;margin-bottom:${cashedOut?'0':'14px'};">${feedRows}</div>
       ${cashedOut ? "" : `<button class="btn btn-block" style="background:#57534e;color:#f5f5f4;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:6px;" data-player-leave-table>${icon('out')} יציאה מהשולחן</button>`}
@@ -4001,10 +4000,42 @@ function attachHandlers(){
       let swipeStartX = null, swipeStartY = null, swipeActive = false, swipeAbandoned = false, swipeLastDx = 0;
       const SWIPE_DECIDE_PX = 12;
       const pageWidth = () => swipeRoot.getBoundingClientRect().width;
-      const baseOffset = () => (tableSubView === "player" ? 0 : -pageWidth());
+      // Which of the two real DOM pages (render() always authors [player, table], in that
+      // order) is currently in which track slot (0 = left/first, 1 = right/second) - starts
+      // matching the authored order, but a single gesture can swap it (see ensureAdjacency
+      // below) to make BOTH swipe directions always reveal the real other page from the
+      // correct side, circular, with only two actual pages. Reset fresh every render(), so
+      // a swap made mid-gesture never lingers into the next one.
+      let trackOrder = ["player", "table"];
+      const slotOf = (which) => trackOrder.indexOf(which);
+      const offsetForSlot = (slot) => -slot * pageWidth();
+      const baseOffset = () => offsetForSlot(slotOf(tableSubView));
       const setTrack = (px, animated) => {
         swipeTrack.style.transition = animated ? "transform .25s ease" : "none";
         swipeTrack.style.transform = `translateX(${px}px)`;
+      };
+      // With only two real pages, "swipe left" and "swipe right" both need to look the
+      // same either way: the OTHER page slides in from the side the finger is dragging
+      // away from, never a rubber-band-then-jump. That only works automatically when the
+      // other page is already the DOM-adjacent neighbor on that side (true for one
+      // direction from each page, e.g. left-from-player or right-from-table, which is why
+      // that direction always worked) - the other, "wrap-around" direction has no real
+      // neighbor there in the authored [player, table] order. Fixing that: right when a
+      // drag commits to a direction (or reverses mid-drag, past the start point), if the
+      // other page isn't adjacent on that side, physically swap the two DOM nodes' order
+      // and instantly (no transition) re-set the transform so the current page stays
+      // pinned exactly where it visually already was - invisible to the eye, since it
+      // happens before the drag has moved it anywhere - after which the other page IS the
+      // adjacent neighbor on that side, and the existing reveal math just works.
+      const ensureAdjacency = (dxSign) => {
+        const curSlot = slotOf(tableSubView);
+        const desiredOtherSlot = curSlot + (dxSign < 0 ? 1 : -1);
+        const otherSlot = 1 - curSlot;
+        if (otherSlot === desiredOtherSlot) return;
+        trackOrder.reverse();
+        const kids = swipeTrack.children;
+        if (kids.length === 2) swipeTrack.insertBefore(kids[1], kids[0]);
+        setTrack(baseOffset(), false);
       };
       const settle = (dx, fromCancel) => {
         const w = pageWidth();
@@ -4021,7 +4052,11 @@ function attachHandlers(){
         // The full render() (which drops the now-redundant transform/transition and
         // re-measures the table) only needs to happen once the slide animation has
         // actually finished, not before - doing it immediately would yank the DOM out
-        // from under the still-running CSS transition.
+        // from under the still-running CSS transition. render() re-authors the canonical
+        // [player, table] DOM order regardless of any mid-gesture swap above, with a
+        // transform matching the new tableSubView the same way settle() just animated
+        // to - same visual position via a different (canonical) underlying arrangement,
+        // so the swap between them is imperceptible.
         setTimeout(render, 260);
       };
       // {passive:false} is load-bearing, not decoration - modern browsers default touch-
@@ -4039,6 +4074,7 @@ function attachHandlers(){
         // coexist, without needing to block one of them outright.
         if (e.target.closest("[data-seat], button, input, textarea, select, a")) return;
         swipeStartX = e.clientX; swipeStartY = e.clientY; swipeActive = false; swipeAbandoned = false; swipeLastDx = 0;
+        trackOrder = ["player", "table"];
       }, {passive:false});
       swipeRoot.addEventListener("pointermove", (e) => {
         if (swipeStartX == null || swipeAbandoned) return;
@@ -4056,13 +4092,15 @@ function attachHandlers(){
         // which point calling preventDefault later is already too late to matter.
         if ((swipeActive || Math.abs(dx) >= Math.abs(dy)) && e.cancelable) e.preventDefault();
         if (swipeActive) {
+          // Checked on every sample, not just once - if the finger reverses past the
+          // start point mid-drag, the side that needs the real neighbor adjacent flips
+          // too (see ensureAdjacency's own comment). Cheap when nothing needs to change:
+          // just a two-element array comparison.
+          ensureAdjacency(dx < 0 ? -1 : 1);
           const w = pageWidth();
           let raw = baseOffset() + dx;
-          // Rubber-band past either edge instead of a hard stop - there's no real third
-          // page to slide in when dragging "the wrong way" (right from the player screen,
-          // left from the table view), but settle() below still treats a past-threshold
-          // release in that direction as a circular switch to the other page, so the drag
-          // should still show SOME give instead of feeling like it hit a wall.
+          // Rubber-band past either edge instead of a hard stop - for dragging further
+          // than one full page width, which still has nothing real to reveal beyond it.
           if (raw > 0) raw = raw * 0.35;
           else if (raw < -w) raw = -w + (raw + w) * 0.35;
           setTrack(raw, false);
@@ -4387,18 +4425,12 @@ function attachHandlers(){
   if (seatHistoryPopupEl) seatHistoryPopupEl.onclick = (e) => e.stopPropagation();
   app.querySelectorAll("[data-delete-seat-buyin]").forEach(el => el.onclick = (e) => {
     e.stopPropagation();
-    openModal({type:"deleteBuyin", gameId: nav.gameId, playerId: openHistorySeatPlayerId, buyinId: el.dataset.deleteSeatBuyin, returnTo: null});
+    // The player screen's own history rows carry their playerId directly (see
+    // renderPlayerScreen); the table view's popup rows don't (only one can ever be open
+    // at a time there) and fall back to whichever seat's popup is currently open.
+    const playerId = el.dataset.deleteSeatBuyinPlayer || openHistorySeatPlayerId;
+    openModal({type:"deleteBuyin", gameId: nav.gameId, playerId, buyinId: el.dataset.deleteSeatBuyin, returnTo: null});
   });
-  // Same modal as above, but for a delete tapped from the player screen's whole-table
-  // activity feed - that list mixes every player's buy-ins together, so (unlike the
-  // personal-history popup, which only ever shows the viewer's own) it can't rely on the
-  // single openHistorySeatPlayerId global and carries the right playerId on the button
-  // itself instead.
-  app.querySelectorAll("[data-delete-feed-buyin]").forEach(el => el.onclick = (e) => {
-    e.stopPropagation();
-    openModal({type:"deleteBuyin", gameId: nav.gameId, playerId: el.dataset.deleteFeedPlayer, buyinId: el.dataset.deleteFeedBuyin, returnTo: null});
-  });
-
   // modal-level handlers
   // Clicking the dark overlay behind a modal does nothing on purpose - it was too
   // easy to accidentally dismiss a modal (and lose in-progress input) with a stray
