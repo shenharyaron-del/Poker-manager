@@ -2746,7 +2746,8 @@ function render(){
     // directly) - see .table-swipe-root's own CSS.
     html = `<div class="table-swipe-root">${inner}${dotsHtml}</div>`;
   }
-  const screenTag = `<div class="screen-tag">${esc(SCREEN_NAMES[nav.screen] || nav.screen)}</div>`;
+  const screenLabel = showingPlayerScreen ? "מסך שחקן" : (SCREEN_NAMES[nav.screen] || nav.screen);
+  const screenTag = `<div class="screen-tag">${esc(screenLabel)}</div>`;
   html = screenTag + html;
   if (modal) html += renderModal(modal);
   app.innerHTML = html;
@@ -4792,18 +4793,25 @@ function attachHandlers(){
   // Seats/buttons/inputs are excluded so their own drag/tap handling stays untouched.
   const swipeRoot = app.querySelector(".table-swipe-root");
   if (swipeRoot) {
-    let swipeStartX = null, swipeStartY = null, swipeActive = false, swipeAbandoned = false;
+    let swipeStartX = null, swipeStartY = null, swipeActive = false, swipeAbandoned = false, swipeLastDx = 0, swipeLastDy = 0;
     const SWIPE_THRESHOLD = 60, SWIPE_DECIDE_PX = 12;
+    // {passive:false} is load-bearing, not decoration - modern browsers default touch-
+    // driven pointer listeners to passive (for scroll perf), which makes preventDefault()
+    // inside them a silent no-op with no error or warning. That's almost certainly why
+    // the swipe kept not working on a real device despite testing fine here (synthetic
+    // PointerEvents don't exercise the browser's own native-gesture arbitration at all, so
+    // a no-op preventDefault couldn't show up as a failure in that testing).
     swipeRoot.addEventListener("pointerdown", (e) => {
       // .chat-frame (history/activity) owns its own vertical drag-to-scroll entirely -
       // never even start tracking a swipe there, so it can never compete with (or get
       // starved by) the frame's native scrolling.
       if (e.target.closest("[data-seat], button, input, textarea, select, a, [data-toggle-action-panel], .chat-frame")) return;
-      swipeStartX = e.clientX; swipeStartY = e.clientY; swipeActive = false; swipeAbandoned = false;
-    });
+      swipeStartX = e.clientX; swipeStartY = e.clientY; swipeActive = false; swipeAbandoned = false; swipeLastDx = 0; swipeLastDy = 0;
+    }, {passive:false});
     swipeRoot.addEventListener("pointermove", (e) => {
       if (swipeStartX == null || swipeAbandoned) return;
       const dx = e.clientX - swipeStartX, dy = e.clientY - swipeStartY;
+      swipeLastDx = dx; swipeLastDy = dy;
       if (!swipeActive) {
         if (Math.abs(dy) > SWIPE_DECIDE_PX && Math.abs(dy) > Math.abs(dx)) { swipeAbandoned = true; return; }
         if (Math.abs(dx) > SWIPE_DECIDE_PX) swipeActive = true;
@@ -4815,7 +4823,7 @@ function attachHandlers(){
       // cut the pointer sequence off with a pointercancel, at which point calling
       // preventDefault later is already too late to matter.
       if ((swipeActive || Math.abs(dx) >= Math.abs(dy)) && e.cancelable) e.preventDefault();
-    });
+    }, {passive:false});
     swipeRoot.addEventListener("pointerup", (e) => {
       if (swipeStartX == null) return;
       const dx = e.clientX - swipeStartX;
@@ -4824,7 +4832,17 @@ function attachHandlers(){
       if (dx < -SWIPE_THRESHOLD && tableSubView === "player") { tableSubView = "table"; render(); }
       else if (dx > SWIPE_THRESHOLD && tableSubView === "table" && isSeatedInGame(getGame(nav.gameId))) { tableSubView = "player"; render(); }
     });
-    swipeRoot.addEventListener("pointercancel", () => { swipeStartX = null; swipeActive = false; swipeAbandoned = false; });
+    // Defense in depth: if a browser still cancels the gesture anyway (mid-drag,
+    // before pointerup), fall back to whatever the last real movement sample said
+    // instead of just silently dropping the swipe - a lower bar than SWIPE_THRESHOLD
+    // since a cancel means the finger is still moving, not that it settled at this point.
+    swipeRoot.addEventListener("pointercancel", () => {
+      if (swipeActive && !swipeAbandoned) {
+        if (swipeLastDx < -30 && tableSubView === "player") { tableSubView = "table"; render(); }
+        else if (swipeLastDx > 30 && tableSubView === "table" && isSeatedInGame(getGame(nav.gameId))) { tableSubView = "player"; render(); }
+      }
+      swipeStartX = null; swipeActive = false; swipeAbandoned = false;
+    });
   }
 
   // Expand/collapse is a swipe on the handle (the extra-buttons block, and through it the
