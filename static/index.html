@@ -1589,6 +1589,12 @@ let tableSubView = "player";
 // from selectedBuyinAmount/customBuyinAmount (the table action panel's own two-step
 // flow) since this screen's buttons apply instantly instead of needing a confirm step.
 let playerScreenCustomOpen = false;
+// Identifies the newest entry the player screen's activity feed has rendered so far - a
+// changed value after a render means something genuinely new landed (whether this device
+// caused it or someone else did), which is what triggers the vibrate in render(). null
+// means "haven't seen this game's feed yet" (right after navigating in), so the very
+// first render never vibrates for data that was already there. Reset in go().
+let lastSeenFeedEventKey = null;
 // A per-SESSION override of the community's persisted settlementDefault (see the
 // payboxSettings screen) - lets the table's creator pick a different method for just this
 // sitting without touching the permanent default future games will still use. Never saved
@@ -1759,6 +1765,7 @@ function go(screen, extra){
   balanceFixSelected = {};
   tableSubView = "player";
   playerScreenCustomOpen = false;
+  lastSeenFeedEventKey = null;
   if (screen === "table" && nav.gameId) autoSeatSelf(nav.gameId);
   lockPortraitForScreen(screen);
   render();
@@ -2771,7 +2778,18 @@ function render(){
     // WhatsApp-style feed - always opens scrolled to the newest (bottom) message, same
     // as a real chat would, not wherever the previous render happened to leave it.
     const feedEl = app.querySelector("[data-player-feed]");
-    if (feedEl) feedEl.scrollTop = feedEl.scrollHeight;
+    if (feedEl) {
+      feedEl.scrollTop = feedEl.scrollHeight;
+      // Buzz on every genuinely new feed entry (anyone's buy-in or cash-out, not just
+      // this device's own) - lastSeenFeedEventKey starting null means the very first
+      // render of a freshly-opened game never buzzes for data that was already there,
+      // only for what actually changes after that.
+      const latestKey = feedEl.dataset.latestEvent;
+      if (latestKey && lastSeenFeedEventKey !== null && latestKey !== lastSeenFeedEventKey && navigator.vibrate) {
+        navigator.vibrate(80);
+      }
+      lastSeenFeedEventKey = latestKey;
+    }
   }
 }
 
@@ -3222,6 +3240,10 @@ function renderPlayerScreen(gameId){
     feedEvents.push({ts: g.cashouts[playerId].ts, kind:"cashout", playerId, amount: g.cashouts[playerId].amount});
   });
   feedEvents.sort((a,b) => (a.ts||0)-(b.ts||0));
+  // Identifies the newest event so render() can tell a genuinely new one apart from just
+  // a re-render of the same data (see lastSeenFeedEventKey) - the vibrate trigger.
+  const latestFeedEvent = feedEvents[feedEvents.length-1];
+  const latestFeedEventKey = latestFeedEvent ? `${latestFeedEvent.ts}-${latestFeedEvent.kind}-${latestFeedEvent.kind==='buyin'?latestFeedEvent.buyin.id:latestFeedEvent.playerId}` : "";
   const feedCounts = {}, feedTotals = {};
   const feedRows = feedEvents.map(ev => {
     if (ev.kind === "buyin") {
@@ -3273,7 +3295,7 @@ function renderPlayerScreen(gameId){
       ${cashedOut ? "" : buyinButtonsHtml}
       ${cashedOut ? "" : `<button class="btn btn-block" style="background:#57534e;color:#f5f5f4;margin-bottom:26px;display:flex;align-items:center;justify-content:center;gap:6px;" data-player-leave-table>${icon('out')} יציאה מהשולחן</button>`}
       <div class="section-title" style="padding:0;margin:0 0 6px;">פעילות אחרונה בשולחן</div>
-      <div class="chat-frame" data-player-feed>${feedRows}</div>
+      <div class="chat-frame" data-player-feed data-latest-event="${latestFeedEventKey}">${feedRows}</div>
     </div>
   `;
 }
