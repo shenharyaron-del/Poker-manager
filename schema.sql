@@ -131,10 +131,29 @@ CREATE TABLE player_payments (
   ts TIMESTAMPTZ
 );
 
+-- The table screen's activity feed, for action types that leave no other trace to derive
+-- a feed entry from afterward (a deleted buy-in, a player returned to the table, a seat
+-- removed outright, the whole night declared over) - unlike a buy-in or cash-out, which
+-- are already durably recorded as their own rows above and don't need a separate log.
+-- actor_name is who actually performed the action (may differ from player_id - an admin
+-- acting on someone else's behalf, see the admin screen), for the feed's "בשם X"
+-- attribution. Added post-Phase-7 via server.py's own idempotent startup init, not by
+-- re-running this file against the live DB.
+CREATE TABLE game_events (
+  id TEXT PRIMARY KEY,
+  game_id TEXT REFERENCES games(id) ON DELETE CASCADE,
+  ts TIMESTAMPTZ NOT NULL DEFAULT now(),
+  type TEXT NOT NULL,
+  player_id TEXT,
+  actor_name TEXT,
+  amount NUMERIC
+);
+
 CREATE INDEX ON roster_players(community_id);
 CREATE INDEX ON buyins(game_id);
 CREATE INDEX ON cashouts(game_id);
 CREATE INDEX ON games(community_id);
+CREATE INDEX ON game_events(game_id);
 
 -- Derived, not stored - avoids drift if a buy-in/cashout is later edited
 -- (the app already has an edit-pencil for a cashed-out player's amount).

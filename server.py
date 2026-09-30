@@ -123,6 +123,24 @@ _INIT_STATEMENTS = (
     # Postgres, unlike CREATE TABLE above - no DuplicateTable/UniqueViolation handling
     # needed for it.
     "ALTER TABLE roster_players ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT false",
+    # A small event log for the table screen's activity feed - only for actions that would
+    # otherwise leave no trace at all once done (a deleted buy-in, a player returned to the
+    # table, a seat removed outright, the whole night declared over): unlike a buy-in or a
+    # cash-out, which are already permanently recorded as their own rows and can just be
+    # read back out, these are here-and-gone mutations/deletions with nothing left to derive
+    # a feed entry from afterward. actor_name is who actually performed the action (may
+    # differ from player_id - an admin acting on someone else's behalf, see the admin
+    # screen), for the feed's own "בשם X" attribution.
+    "CREATE TABLE IF NOT EXISTS game_events ("
+    "  id TEXT PRIMARY KEY,"
+    "  game_id TEXT REFERENCES games(id) ON DELETE CASCADE,"
+    "  ts TIMESTAMPTZ NOT NULL DEFAULT now(),"
+    "  type TEXT NOT NULL,"
+    "  player_id TEXT,"
+    "  actor_name TEXT,"
+    "  amount NUMERIC"
+    ")",
+    "CREATE INDEX IF NOT EXISTS game_events_game_id_idx ON game_events(game_id)",
 )
 
 
@@ -517,6 +535,19 @@ def v2_get_game(game_id):
                 }
                 for r in cur.fetchall()
             ]
+
+            cur.execute(
+                "SELECT id, ts, type, player_id, actor_name, amount FROM game_events "
+                "WHERE game_id = %s ORDER BY ts",
+                (gid,),
+            )
+            events = [
+                {
+                    "id": r[0], "ts": int(r[1].timestamp() * 1000) if r[1] else None, "type": r[2],
+                    "playerId": r[3], "actorName": r[4], "amount": _num(r[5]) if r[5] is not None else None,
+                }
+                for r in cur.fetchall()
+            ]
         conn.commit()
 
     return jsonify({
@@ -527,7 +558,29 @@ def v2_get_game(game_id):
         "seats": seats, "liveChips": live_chips,
         "players": players, "buyins": buyins, "cashouts": cashouts,
         "payboxPayments": paybox_payments, "playerPayments": player_payments,
+        "events": events,
     })
+
+
+@app.route("/api/v2/games/<game_id>/events", methods=["POST"])
+def v2_add_game_event(game_id):
+    # Only for the action types that leave no other trace - see game_events' own comment
+    # in _INIT_STATEMENTS. player_id is nullable (a whole-night event like
+    # "night_declared_over" isn't about any one seat); amount is nullable too (only
+    # buyin_deleted actually carries one).
+    body = request.get_json(silent=True) or {}
+    event_id, event_type = body.get("id"), body.get("type")
+    if not event_id or not event_type:
+        return jsonify({"error": "id and type required"}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO game_events (id, game_id, type, player_id, actor_name, amount) "
+                "VALUES (%s,%s,%s,%s,%s,%s)",
+                (event_id, game_id, event_type, body.get("playerId"), body.get("actorName"), body.get("amount")),
+            )
+        conn.commit()
+    return jsonify({"ok": True}), 201
 
 
 @app.route("/api/v2/games/<game_id>/outcomes", methods=["GET"])

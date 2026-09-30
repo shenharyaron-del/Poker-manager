@@ -1142,6 +1142,27 @@ async function v2SetCashout(gameId, playerId, amount, arrangedWith, chips){
   if (chips !== undefined) g.liveChips[playerId] = chips;
 }
 
+// Logs one of the table screen's activity-feed events that would otherwise leave no trace
+// at all (see game_events' own comment in server.py) - never awaited by its own callers on
+// the critical path (best-effort: a feed entry going missing because this particular
+// request failed is far less bad than blocking or failing the real action over it), so
+// every call site fires it and moves on rather than awaiting it inline.
+async function v2AddGameEvent(gameId, type, playerId, actorName, amount){
+  try {
+    const id = uid();
+    await v2Fetch("POST", `/games/${gameId}/events`, {id, type, playerId, actorName, amount});
+    const g = getGame(gameId);
+    if (g) { if (!g.events) g.events = []; g.events.push({id, type, playerId, actorName, amount, ts: Date.now()}); }
+  } catch(e) { logSync("game event log failed: " + e); }
+}
+// Same event, for the non-relational (legacy blob) save path - appended directly onto the
+// game object inside whatever mutateAndSave() callback is already running, no separate
+// network call needed since the whole state blob gets saved together.
+function logGameEvent(g, type, playerId, actorName, amount){
+  if (!g.events) g.events = [];
+  g.events.push({id: uid(), type, playerId, actorName, amount, ts: Date.now()});
+}
+
 async function v2DeleteCashout(gameId, playerId){
   await v2Fetch("DELETE", `/games/${gameId}/cashouts/${playerId}`);
   delete getGame(gameId).cashouts[playerId];
@@ -2826,22 +2847,36 @@ function renderPlayerScreen(gameId){
     const trashBtn = (canDeleteBuyins && idx>0 && !cashedOut) ? `<button style="background:none;border:none;padding:2px;color:#dc2626;cursor:pointer;display:flex;float:left;margin-right:4px;" data-delete-seat-buyin="${b.id}" data-delete-seat-buyin-player="${pid}" title="ביטול תשלום">${icon('trash')}</button>` : '';
     return `<div class="chat-bubble">${trashBtn}<span class="bubble-time">${fmtTime(b.ts)}</span>${idx===0?'כניסה':`ריביי ${idx}`} · ₪${b.amount}</div>`;
   }).join("") || `<div class="chat-bubble" style="color:#888;">אין קניות עדיין</div>`;
-  // Whole-table activity, oldest first (WhatsApp order) - buy-ins and cash-outs merged
-  // into one timeline by ts. Each buy-in's wording depends on whether it was that
-  // player's very first (their entry) or a later rebuy, same distinction the history
-  // popup above already draws via idx===0; each cash-out shows their final chip count
-  // and profit/loss against everything they bought in for up to that point.
+  // Whole-table activity, oldest first (WhatsApp order) - buy-ins and cash-outs (derived
+  // straight from g.buyins/g.cashouts, which already durably record them) merged with the
+  // small game_events log (see logGameEvent/v2AddGameEvent) for the handful of action types
+  // that leave no other trace to derive a feed entry from afterward: a deleted buy-in, a
+  // player returned to the table, a seat removed outright, the whole night declared over.
+  // Each buy-in's wording depends on whether it was that player's very first (their entry)
+  // or a later rebuy, same distinction the history popup above already draws via idx===0;
+  // each cash-out shows their final chip count and profit/loss against everything they
+  // bought in for up to that point. Color coding (gray/white/red) and "ע"י X" attribution
+  // when an admin acted on someone else's behalf - see FEED_COLORS/actorSuffix below.
   const feedEvents = g.buyins.map(b => ({ts:b.ts, kind:"buyin", buyin:b}));
   Object.keys(g.cashouts||{}).forEach(playerId => {
     feedEvents.push({ts: g.cashouts[playerId].ts, kind:"cashout", playerId, amount: g.cashouts[playerId].amount});
   });
+  (g.events||[]).forEach(ev => feedEvents.push({ts: ev.ts, kind: ev.type, playerId: ev.playerId, amount: ev.amount, actorName: ev.actorName}));
   feedEvents.sort((a,b) => (a.ts||0)-(b.ts||0));
   // Identifies the newest event so render() can tell a genuinely new one apart from just
   // a re-render of the same data (see lastSeenFeedEventKey) - the vibrate trigger.
   const latestFeedEvent = feedEvents[feedEvents.length-1];
   const latestFeedEventKey = latestFeedEvent ? `${latestFeedEvent.ts}-${latestFeedEvent.kind}-${latestFeedEvent.kind==='buyin'?latestFeedEvent.buyin.id:latestFeedEvent.playerId}` : "";
+  const FEED_COLORS = { gray: "#888", white: "var(--text)", red: "#fda4af" };
+  // Only for the 4 log-based event types, which carry an actorName from the moment they're
+  // logged (see logGameEvent/v2AddGameEvent) - the older, purely-derived buyin/cashout
+  // events don't record who acted, so self vs. on-behalf-of-someone-else isn't knowable for
+  // those yet. Omitted entirely (not "ע"י [own name]") when the actor IS the player it's
+  // about, same as a player doing it for themselves normally reads.
+  const actorSuffix = (playerName, actorName) => (actorName && actorName !== playerName) ? ` ע"י ${esc(actorName)}` : "";
   const feedCounts = {}, feedTotals = {};
   const feedRows = feedEvents.map(ev => {
+    let text, color;
     if (ev.kind === "buyin") {
       const b = ev.buyin;
       const player = g.players.find(pl => pl.id === b.playerId);
@@ -2849,18 +2884,40 @@ function renderPlayerScreen(gameId){
       feedCounts[b.playerId] = (feedCounts[b.playerId]||0) + 1;
       feedTotals[b.playerId] = (feedTotals[b.playerId]||0) + b.amount;
       const isRebuy = feedCounts[b.playerId] > 1;
-      const text = isRebuy
+      text = isRebuy
         ? `${name} עשה ריביי של ₪${b.amount} (סה"כ קנייה של ₪${feedTotals[b.playerId]})`
         : `${name} נכנס לשולחן עם ₪${b.amount}`;
-      return `<div class="chat-bubble"><span class="bubble-time">${fmtTime(b.ts)}</span>${text}</div>`;
+      color = isRebuy ? FEED_COLORS.white : FEED_COLORS.gray;
+    } else if (ev.kind === "cashout") {
+      const player = g.players.find(pl => pl.id === ev.playerId);
+      const name = esc(player ? player.name : "שחקן");
+      const totalBuyin = feedTotals[ev.playerId] || 0;
+      const profit = ev.amount - totalBuyin;
+      const profitText = profit >= 0 ? `₪${Math.round(profit)} רווח` : `₪${Math.abs(Math.round(profit))} הפסד`;
+      text = `${name} יצא מהשולחן עם ₪${ev.amount} ז'יטונים בספירה (${profitText})`;
+      color = FEED_COLORS.gray;
+    } else if (ev.kind === "buyin_deleted") {
+      const player = g.players.find(pl => pl.id === ev.playerId);
+      const pname = player ? player.name : "שחקן";
+      text = `${esc(pname)} ביטל קנייה בסך ₪${ev.amount}${actorSuffix(pname, ev.actorName)}`;
+      color = FEED_COLORS.red;
+    } else if (ev.kind === "returned_to_table") {
+      const player = g.players.find(pl => pl.id === ev.playerId);
+      const pname = player ? player.name : "שחקן";
+      text = `${esc(pname)} חזר לשולחן${actorSuffix(pname, ev.actorName)}`;
+      color = FEED_COLORS.gray;
+    } else if (ev.kind === "seat_removed") {
+      const player = g.players.find(pl => pl.id === ev.playerId);
+      const pname = player ? player.name : "שחקן";
+      text = `${esc(pname)} הוצא מהשולחן${actorSuffix(pname, ev.actorName)}`;
+      color = FEED_COLORS.red;
+    } else if (ev.kind === "night_declared_over") {
+      text = `הוכרז על סיום ערב`;
+      color = FEED_COLORS.gray;
+    } else {
+      return "";
     }
-    const player = g.players.find(pl => pl.id === ev.playerId);
-    const name = esc(player ? player.name : "שחקן");
-    const totalBuyin = feedTotals[ev.playerId] || 0;
-    const profit = ev.amount - totalBuyin;
-    const profitText = profit >= 0 ? `₪${Math.round(profit)} רווח` : `₪${Math.abs(Math.round(profit))} הפסד`;
-    const text = `${name} יצא מהשולחן עם ₪${ev.amount} ז'יטונים בספירה (${profitText})`;
-    return `<div class="chat-bubble"><span class="bubble-time">${fmtTime(ev.ts)}</span>${text}</div>`;
+    return `<div class="chat-bubble" style="color:${color};"><span class="bubble-time">${fmtTime(ev.ts)}</span>${text}</div>`;
   }).join("") || `<div class="chat-bubble" style="color:#888;">אין עדיין פעילות בשולחן</div>`;
   const buyinButtonsHtml = playerScreenCustomOpen ? `
     <div class="buyin-frame" style="display:flex;gap:8px;margin-bottom:14px;flex-shrink:0;">
@@ -2902,7 +2959,7 @@ function renderPlayerScreen(gameId){
       ${cashedOut ? "" : buyinButtonsHtml}
       <div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">היסטוריית קניות</div>
       <div class="chat-frame" data-player-history style="height:110px;margin-bottom:14px;flex-shrink:0;">${historyRows}</div>
-      <div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">פעילות אחרונה בשולחן</div>
+      <div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">פעילות בשולחן</div>
       <div class="chat-frame" data-player-feed data-latest-event="${latestFeedEventKey}" style="flex:1;height:auto;min-height:54px;margin-bottom:${cashedOut?'0':'14px'};">${feedRows}</div>
       ${cashedOut ? "" : `<button class="btn btn-block" style="background:#57534e;color:#f5f5f4;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:6px;" data-player-leave-table>${icon('out')} יציאה מהשולחן</button>`}
     </div>
@@ -4599,6 +4656,7 @@ function attachHandlers(){
         await v2DeleteCashout(nav.gameId, playerId);
         await v2UpdateLiveChips(nav.gameId, playerId, 0);
         if (g.closed) await v2UpdateGame(nav.gameId, {closed: false}); // a night with an active player again can't stay "closed"
+        v2AddGameEvent(nav.gameId, "returned_to_table", playerId, myIdentity.name, undefined);
       } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); el.disabled = false; return; }
     } else {
       await mutateAndSave(() => {
@@ -4606,6 +4664,7 @@ function attachHandlers(){
         if (!g.liveChips) g.liveChips = {};
         g.liveChips[playerId] = 0;
         if (g.closed) g.closed = false;
+        logGameEvent(g, "returned_to_table", playerId, myIdentity.name, undefined);
       });
     }
     closeModal();
@@ -5841,13 +5900,18 @@ function attachHandlers(){
       confirmDelBuyin.disabled = true;
       showButtonLoading(confirmDelBuyin);
       const buyinId = modal.buyinId, returnTo = modal.returnTo;
+      const deletedAmount = (getGame(modal.gameId).buyins.find(b => b.id === buyinId) || {}).amount;
       if (USE_RELATIONAL_API) {
-        try { await v2DeleteBuyin(modal.gameId, buyinId); }
+        try {
+          await v2DeleteBuyin(modal.gameId, buyinId);
+          v2AddGameEvent(modal.gameId, "buyin_deleted", modal.playerId, myIdentity.name, deletedAmount);
+        }
         catch(e) { showAlert("מחיקה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
       } else {
         await mutateAndSave(() => {
           const g = getGame(modal.gameId);
           g.buyins = g.buyins.filter(b => b.id !== buyinId);
+          logGameEvent(g, "buyin_deleted", modal.playerId, myIdentity.name, deletedAmount);
         });
       }
       openModal(returnTo);
@@ -6114,7 +6178,10 @@ function attachHandlers(){
         const g = getGame(modal.gameId);
         const idx = g.seats.indexOf(modal.playerId);
         if (idx !== -1) {
-          try { await v2ClearSeat(modal.gameId, idx); }
+          try {
+            await v2ClearSeat(modal.gameId, idx);
+            v2AddGameEvent(modal.gameId, "seat_removed", modal.playerId, myIdentity.name, undefined);
+          }
           catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmClear.disabled = false; return; }
         }
         closeModal();
@@ -6129,6 +6196,7 @@ function attachHandlers(){
         // As if this player never sat down tonight - so if they come back, they start clean.
         g.buyins = g.buyins.filter(b => b.playerId !== modal.playerId);
         if (g.liveChips) delete g.liveChips[modal.playerId];
+        logGameEvent(g, "seat_removed", modal.playerId, myIdentity.name, undefined);
         maybeAutoCloseNight(g);
       });
       closeModal();
@@ -6144,6 +6212,7 @@ function attachHandlers(){
           await v2UpdateLiveChips(modal.gameId, modal.playerId, 0);
           const g = getGame(modal.gameId);
           if (g.closed) await v2UpdateGame(modal.gameId, {closed: false});
+          v2AddGameEvent(modal.gameId, "returned_to_table", modal.playerId, myIdentity.name, undefined);
         } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
         closeModal();
         return;
@@ -6157,6 +6226,7 @@ function attachHandlers(){
       if (!g.liveChips) g.liveChips = {};
       g.liveChips[modal.playerId] = 0;
       if (g.closed) g.closed = false;
+      logGameEvent(g, "returned_to_table", modal.playerId, myIdentity.name, undefined);
       saveState();
       closeModal();
     };
@@ -6438,6 +6508,7 @@ function attachHandlers(){
           }
           await v2UpdateGame(gameId, {closed: true});
           await v2UpdateCommunity(g.communityId, {lastParticipants: fresh.players.map(p=>p.id)});
+          v2AddGameEvent(gameId, "night_declared_over", null, myIdentity.name, undefined);
         } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmBulkBtn.disabled = false; return; }
         openModal({type:"summary", gameId});
         return;
@@ -6458,6 +6529,7 @@ function attachHandlers(){
         g.closed = true;
         const c = getCommunity(g.communityId);
         c.lastParticipants = g.players.map(p=>p.id);
+        logGameEvent(g, "night_declared_over", null, myIdentity.name, undefined);
       });
       openModal({type:"summary", gameId});
     };
@@ -6471,6 +6543,7 @@ function attachHandlers(){
         try {
           await v2UpdateGame(gameId, {closed: true});
           await v2UpdateCommunity(g.communityId, {lastParticipants: g.players.map(p=>p.id)});
+          v2AddGameEvent(gameId, "night_declared_over", null, myIdentity.name, undefined);
         } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmBtn.disabled = false; return; }
         openModal({type:"summary", gameId});
         return;
@@ -6480,6 +6553,7 @@ function attachHandlers(){
         g.closed = true;
         const c = getCommunity(g.communityId);
         c.lastParticipants = g.players.map(p=>p.id);
+        logGameEvent(g, "night_declared_over", null, myIdentity.name, undefined);
         return true;
       });
       openModal({type:"summary", gameId});
