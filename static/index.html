@@ -2884,9 +2884,13 @@ function renderAdminScreen(gameId){
     </div>`;
   }).join("");
 
-  const emptySeatRows = seats.map((pid,i) => pid===null ? i : -1).filter(i=>i>=0).map(i => `
+  // Only the 9 real seats - index 9 is a vestigial "extra player" overflow slot from
+  // elsewhere in the app (renderTable's own seatsHtml skips its empty state the same way,
+  // see "if (i === 9) return \"\"") that isn't actually meant to be used - 9 players is the
+  // real cap.
+  const emptySeatRows = seats.map((pid,i) => (pid===null && i<9) ? i : -1).filter(i=>i>=0).map(i => `
     <div class="roster-row">
-      <span style="color:var(--muted);">מושב פנוי${i<9?` ${i+1}`:' נוסף'}</span>
+      <span style="color:var(--muted);">מושב פנוי ${i+1}</span>
       <button class="btn btn-ghost btn-sm" data-admin-add-seat="${i}">${icon('plus')} הוסף שחקן</button>
     </div>
   `).join("");
