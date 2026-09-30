@@ -1389,15 +1389,28 @@ async function syncBeforeMutate(){
 // a per-device id. It lets us show/allow "delete" only to the creator, but someone could
 // still type someone else's name - it's a courtesy, not security.
 async function loadIdentity(){
-  try {
-    const res = await fetch("/api/identity?clientId=" + encodeURIComponent(getClientId()));
-    if (res.ok) {
-      const data = await res.json();
-      if (data) return data;
-    }
-  } catch(e) { /* not set yet */ }
+  // Same reasoning as checkLoginSession's own retry loop right below - a 503/timeout while
+  // this free-tier host is still waking up from idle is not the same thing as "no record
+  // for this device yet", and treating it that way used to silently forget an existing
+  // user's saved name (forcing the "הגדרת שחקן" prompt again) any time the very first
+  // load after an idle stretch happened to land on a cold server.
+  const RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 8000];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await fetch("/api/identity?clientId=" + encodeURIComponent(getClientId()));
+      if (res.ok) {
+        const data = await res.json();
+        // A genuinely empty response (no record for this device at all) is authoritative
+        // too, same as a real one - only a non-ok status or a thrown error below is
+        // ambiguous enough to be worth retrying instead of trusting right away.
+        return data || { id: getClientId(), name: null };
+      }
+    } catch(e) { /* network error - fall through to retry below */ }
+    if (attempt >= RETRY_DELAYS_MS.length) break;
+    await new Promise(r => setTimeout(r, RETRY_DELAYS_MS[attempt]));
+  }
   // id must always be this device's stable clientId, never a fresh random one - a random
-  // fallback here (whether from a failed/slow fetch or genuinely no record yet) used to
+  // fallback here (whether from an exhausted retry loop or genuinely no record yet) used to
   // silently split one real person into two: it got linked into rosters/globalPlayers
   // under a throwaway id, so the same phone showed up twice under the same typed-in name.
   return { id: getClientId(), name: null };
@@ -1434,13 +1447,28 @@ async function saveIdentity(){
 // device's globalPlayers photo/phone from the account, the same fields either path already
 // sets, so everything downstream (rosters, isTableAdmin, stats) keeps working unchanged
 // whether someone ever logs in at all.
+// Retries on anything that ISN'T an authoritative answer from the server (a network
+// error, a timeout, a 503 while a sleeping backend is still waking up) instead of treating
+// those the same as a confirmed "not logged in" - this free-tier host sleeps after ~15min
+// idle and can take 20-50+s to wake back up, observed live; without this, the very first
+// open after any idle stretch (not just after days away) could misread "couldn't reach the
+// server yet" as "this device was never verified" and wrongly show the login screen again
+// to someone who genuinely already had a trusted device. Only a real HTTP response (loading
+// with loggedIn true or false) is treated as final; anything else is retried with backoff
+// before finally giving up.
 async function checkLoginSession(){
-  try {
-    const res = await fetch("/api/auth/session?clientId=" + encodeURIComponent(getClientId()));
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.loggedIn ? data : null;
-  } catch(e) { return null; }
+  const RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 8000]; // ~23s of retrying, on top of each attempt's own fetch time
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await fetch("/api/auth/session?clientId=" + encodeURIComponent(getClientId()));
+      if (res.ok) {
+        const data = await res.json();
+        return data.loggedIn ? data : null; // authoritative either way - no more retries
+      }
+    } catch(e) { /* network error - fall through to retry below */ }
+    if (attempt >= RETRY_DELAYS_MS.length) return null; // genuinely unreachable - fail open to "ask again"
+    await new Promise(r => setTimeout(r, RETRY_DELAYS_MS[attempt]));
+  }
 }
 // Applies an account (from checkLoginSession or a fresh verify-code) onto this device's
 // identity/globalPlayer record - the one place both call sites share, so they can't drift.
