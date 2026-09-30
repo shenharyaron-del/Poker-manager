@@ -4658,6 +4658,94 @@ function renderModal(m){
 function attachHandlers(){
   const app = document.getElementById("app");
 
+  // Swipe between the player screen and the classic circles view - both are mounted side
+  // by side in [data-swipe-track] (see render()) and this literally drags that track
+  // under the finger in real time, phone-home-screen style, snapping to whichever side is
+  // closer (or past the distance threshold) on release instead of only deciding on
+  // release with no visible feedback while dragging - that version worked mechanically
+  // but was repeatedly reported as "doesn't work" since nothing visibly happened until
+  // the gesture ended. Seats/buttons/inputs/.chat-frame are excluded so their own
+  // drag/tap/scroll handling stays untouched. Deliberately the FIRST thing attachHandlers
+  // does, not somewhere in the middle of this (very long, single-function) file - an
+  // uncaught exception anywhere earlier in this function would otherwise stop every
+  // handler after it from ever being attached, including this one, with no visible sign
+  // beyond "the swipe just doesn't do anything" (reported live, repeatedly, even after
+  // the touch-handling itself was independently verified correct).
+  try {
+    const swipeRoot = app.querySelector(".table-swipe-root");
+    const swipeTrack = app.querySelector("[data-swipe-track]");
+    if (swipeRoot && swipeTrack) {
+      let swipeStartX = null, swipeStartY = null, swipeActive = false, swipeAbandoned = false, swipeLastDx = 0;
+      const SWIPE_DECIDE_PX = 12;
+      const pageWidth = () => swipeRoot.getBoundingClientRect().width;
+      const baseOffset = () => (tableSubView === "player" ? 0 : -pageWidth());
+      const setTrack = (px, animated) => {
+        swipeTrack.style.transition = animated ? "transform .25s ease" : "none";
+        swipeTrack.style.transform = `translateX(${px}px)`;
+      };
+      const settle = (dx, fromCancel) => {
+        const w = pageWidth();
+        const threshold = fromCancel ? 30 : w * 0.22;
+        if (dx < -threshold && tableSubView === "player") tableSubView = "table";
+        else if (dx > threshold && tableSubView === "table") tableSubView = "player";
+        // else: not past threshold - tableSubView stays what it already was, so
+        // baseOffset() below naturally snaps back to where this drag started instead of
+        // completing it.
+        setTrack(baseOffset(), true);
+        // The full render() (which drops the now-redundant transform/transition and
+        // re-measures the table) only needs to happen once the slide animation has
+        // actually finished, not before - doing it immediately would yank the DOM out
+        // from under the still-running CSS transition.
+        setTimeout(render, 260);
+      };
+      // {passive:false} is load-bearing, not decoration - modern browsers default touch-
+      // driven pointer listeners to passive (for scroll perf), which makes
+      // preventDefault() inside them a silent no-op with no error or warning.
+      swipeRoot.addEventListener("pointerdown", (e) => {
+        // .chat-frame (history/activity) owns its own vertical drag-to-scroll entirely -
+        // never even start tracking a swipe there, so it can never compete with (or get
+        // starved by) the frame's native scrolling.
+        if (e.target.closest("[data-seat], button, input, textarea, select, a, [data-toggle-action-panel], .chat-frame")) return;
+        swipeStartX = e.clientX; swipeStartY = e.clientY; swipeActive = false; swipeAbandoned = false; swipeLastDx = 0;
+      }, {passive:false});
+      swipeRoot.addEventListener("pointermove", (e) => {
+        if (swipeStartX == null || swipeAbandoned) return;
+        const dx = e.clientX - swipeStartX, dy = e.clientY - swipeStartY;
+        swipeLastDx = dx;
+        if (!swipeActive) {
+          if (Math.abs(dy) > SWIPE_DECIDE_PX && Math.abs(dy) > Math.abs(dx)) { swipeAbandoned = true; return; }
+          if (Math.abs(dx) > SWIPE_DECIDE_PX) swipeActive = true;
+        }
+        // Stop the browser from committing to its own native pan-y gesture while this
+        // still reads as more horizontal than vertical - not just once swipeActive is
+        // confirmed, but from the first sample, since a browser can lock into native
+        // scrolling within the first few pixels of ANY movement (before SWIPE_DECIDE_PX
+        // is even reached) and cut the pointer sequence off with a pointercancel, at
+        // which point calling preventDefault later is already too late to matter.
+        if ((swipeActive || Math.abs(dx) >= Math.abs(dy)) && e.cancelable) e.preventDefault();
+        if (swipeActive) {
+          const w = pageWidth();
+          const raw = Math.max(-w, Math.min(0, baseOffset() + dx));
+          setTrack(raw, false);
+        }
+      }, {passive:false});
+      swipeRoot.addEventListener("pointerup", (e) => {
+        if (swipeStartX == null) return;
+        const dx = e.clientX - swipeStartX;
+        swipeStartX = null;
+        if (!swipeActive || swipeAbandoned) return;
+        settle(dx, false);
+      });
+      // Defense in depth: if a browser still cancels the gesture anyway (mid-drag,
+      // before pointerup), settle from the last real movement sample instead of leaving
+      // the track stranded wherever the cancel happened to catch it.
+      swipeRoot.addEventListener("pointercancel", () => {
+        if (swipeActive && !swipeAbandoned) settle(swipeLastDx, true);
+        swipeStartX = null; swipeActive = false; swipeAbandoned = false;
+      });
+    }
+  } catch(e) { logSync("swipe handler setup failed: " + e); }
+
   app.querySelectorAll("[data-edit-identity-name]").forEach(el => el.onclick = () => openModal({type:"identityName", forced:false}));
   app.querySelectorAll("[data-open-admin-settings]").forEach(el => el.onclick = async () => {
     if (!authSettings.requireVerifyBeforeAdminSettings) { openModal({type:"adminSettings"}); return; }
@@ -4816,89 +4904,6 @@ function attachHandlers(){
     const pid = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
     openModal({type:"seatChips", gameId: nav.gameId, playerId: pid});
   };
-
-  // Swipe between the player screen and the classic circles view - both are mounted side
-  // by side in [data-swipe-track] (see render()) and this literally drags that track
-  // under the finger in real time, phone-home-screen style, snapping to whichever side is
-  // closer (or past the distance threshold) on release instead of only deciding on
-  // release with no visible feedback while dragging - that version worked mechanically
-  // but was repeatedly reported as "doesn't work" since nothing visibly happened until
-  // the gesture ended. Seats/buttons/inputs/.chat-frame are excluded so their own
-  // drag/tap/scroll handling stays untouched.
-  const swipeRoot = app.querySelector(".table-swipe-root");
-  const swipeTrack = app.querySelector("[data-swipe-track]");
-  if (swipeRoot && swipeTrack) {
-    let swipeStartX = null, swipeStartY = null, swipeActive = false, swipeAbandoned = false, swipeLastDx = 0;
-    const SWIPE_DECIDE_PX = 12;
-    const pageWidth = () => swipeRoot.getBoundingClientRect().width;
-    const baseOffset = () => (tableSubView === "player" ? 0 : -pageWidth());
-    const setTrack = (px, animated) => {
-      swipeTrack.style.transition = animated ? "transform .25s ease" : "none";
-      swipeTrack.style.transform = `translateX(${px}px)`;
-    };
-    const settle = (dx, fromCancel) => {
-      const w = pageWidth();
-      const threshold = fromCancel ? 30 : w * 0.22;
-      if (dx < -threshold && tableSubView === "player") tableSubView = "table";
-      else if (dx > threshold && tableSubView === "table") tableSubView = "player";
-      // else: not past threshold - tableSubView stays what it already was, so baseOffset()
-      // below naturally snaps back to where this drag started instead of completing it.
-      setTrack(baseOffset(), true);
-      // The full render() (which drops the now-redundant transform/transition and
-      // re-measures the table) only needs to happen once the slide animation has
-      // actually finished, not before - doing it immediately would yank the DOM out
-      // from under the still-running CSS transition.
-      setTimeout(render, 260);
-    };
-    // {passive:false} is load-bearing, not decoration - modern browsers default touch-
-    // driven pointer listeners to passive (for scroll perf), which makes preventDefault()
-    // inside them a silent no-op with no error or warning. That's almost certainly why
-    // the swipe kept not working on a real device despite testing fine here (synthetic
-    // PointerEvents don't exercise the browser's own native-gesture arbitration at all, so
-    // a no-op preventDefault couldn't show up as a failure in that testing).
-    swipeRoot.addEventListener("pointerdown", (e) => {
-      // .chat-frame (history/activity) owns its own vertical drag-to-scroll entirely -
-      // never even start tracking a swipe there, so it can never compete with (or get
-      // starved by) the frame's native scrolling.
-      if (e.target.closest("[data-seat], button, input, textarea, select, a, [data-toggle-action-panel], .chat-frame")) return;
-      swipeStartX = e.clientX; swipeStartY = e.clientY; swipeActive = false; swipeAbandoned = false; swipeLastDx = 0;
-    }, {passive:false});
-    swipeRoot.addEventListener("pointermove", (e) => {
-      if (swipeStartX == null || swipeAbandoned) return;
-      const dx = e.clientX - swipeStartX, dy = e.clientY - swipeStartY;
-      swipeLastDx = dx;
-      if (!swipeActive) {
-        if (Math.abs(dy) > SWIPE_DECIDE_PX && Math.abs(dy) > Math.abs(dx)) { swipeAbandoned = true; return; }
-        if (Math.abs(dx) > SWIPE_DECIDE_PX) swipeActive = true;
-      }
-      // Stop the browser from committing to its own native pan-y gesture while this still
-      // reads as more horizontal than vertical - not just once swipeActive is confirmed,
-      // but from the first sample, since a browser can lock into native scrolling within
-      // the first few pixels of ANY movement (before SWIPE_DECIDE_PX is even reached) and
-      // cut the pointer sequence off with a pointercancel, at which point calling
-      // preventDefault later is already too late to matter.
-      if ((swipeActive || Math.abs(dx) >= Math.abs(dy)) && e.cancelable) e.preventDefault();
-      if (swipeActive) {
-        const w = pageWidth();
-        const raw = Math.max(-w, Math.min(0, baseOffset() + dx));
-        setTrack(raw, false);
-      }
-    }, {passive:false});
-    swipeRoot.addEventListener("pointerup", (e) => {
-      if (swipeStartX == null) return;
-      const dx = e.clientX - swipeStartX;
-      swipeStartX = null;
-      if (!swipeActive || swipeAbandoned) return;
-      settle(dx, false);
-    });
-    // Defense in depth: if a browser still cancels the gesture anyway (mid-drag, before
-    // pointerup), settle from the last real movement sample instead of leaving the track
-    // stranded wherever the cancel happened to catch it.
-    swipeRoot.addEventListener("pointercancel", () => {
-      if (swipeActive && !swipeAbandoned) settle(swipeLastDx, true);
-      swipeStartX = null; swipeActive = false; swipeAbandoned = false;
-    });
-  }
 
   // Expand/collapse is a swipe on the handle (the extra-buttons block, and through it the
   // table's own crop - see layoutTableSize - grows and shrinks live with the finger, not
