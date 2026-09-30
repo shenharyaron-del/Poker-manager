@@ -109,6 +109,12 @@ h1.sm{font-size:20px;}
    100vh/100dvh anyway. */
 body.table-screen{height:100vh;height:100dvh;height:var(--real-vh, 100dvh);min-height:0;overflow:hidden;}
 body.table-screen #app{height:100vh;height:100dvh;height:var(--real-vh, 100dvh);min-height:0;display:flex;flex-direction:column;padding-bottom:0;}
+/* Wraps whichever face of the table screen is showing (see render()) - re-establishes
+   the column layout #app used to give its children directly, now one level removed.
+   touch-action:pan-y lets native vertical scroll work everywhere inside (the felt, the
+   player screen's history/feed lists) while leaving horizontal swipes entirely to the JS
+   swipe handlers in attachHandlers, unblocked by the browser's own gesture handling. */
+body.table-screen .table-swipe-root{display:flex;flex-direction:column;flex:1;min-height:0;touch-action:pan-y;}
 body.table-screen .top{flex-shrink:0;touch-action:none;}
 /* min-height keeps the table circle from ever fully disappearing - if the action panel
    below (e.g. a settlement view listing several players' transfers) genuinely needs more
@@ -148,6 +154,12 @@ body.table-screen .poker-table-inner.crop-from-top{bottom:16px;top:auto;}
    same top edge) and visibly muddied the chevron sitting in the glow - the two effects were
    never going to coexist there. */
 body.table-screen .bottom-bar{position:static;flex-shrink:0;background:none;margin:0;max-width:none;max-height:70vh;max-height:70dvh;overflow-y:auto;padding-top:0;border-top:1px solid rgba(255,255,255,.14);}
+/* The player screen's own content (name/total, history, buy-in row, leave button, the
+   group feed) - unlike the circles view, this one scrolls as an ordinary page instead of
+   a fixed-size felt with a separately-scrolling panel underneath it. */
+body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow-y:auto;padding:0 20px 20px;}
+.player-feed-row{background:rgba(255,255,255,.06);border-radius:10px;padding:8px 10px;margin-bottom:8px;}
+.player-feed-row .time{font-size:10px;color:var(--muted);text-align:left;margin-top:3px;}
 .empty{text-align:center;padding:50px 20px;color:#059669;font-size:14px;}
 .section-title{color:var(--gold);font-size:11px;font-weight:700;letter-spacing:.05em;margin:0 0 8px;padding:0 20px;}
 .field{display:block;margin-bottom:14px;}
@@ -1553,6 +1565,15 @@ let selectedSeatPlayerId = null;
 // time, tapping another player's chevron closes whichever one was open. UI-only, not
 // persisted, reset on nav.
 let openHistorySeatPlayerId = null;
+// Which face of the table screen is showing - "player" (the new default: your own name/
+// total/history/buy-in/leave + the table's live activity feed) or "table" (the classic
+// circles-around-the-felt view), swiped between (see the swipe handlers in
+// attachHandlers). Reset to "player" on nav so a fresh visit always starts there.
+let tableSubView = "player";
+// Inline "custom amount" toggle for the player screen's one-tap buy-in row - separate
+// from selectedBuyinAmount/customBuyinAmount (the table action panel's own two-step
+// flow) since this screen's buttons apply instantly instead of needing a confirm step.
+let playerScreenCustomOpen = false;
 // A per-SESSION override of the community's persisted settlementDefault (see the
 // payboxSettings screen) - lets the table's creator pick a different method for just this
 // sitting without touching the permanent default future games will still use. Never saved
@@ -1721,6 +1742,8 @@ function go(screen, extra){
   actionPanelExpanded = false;
   openHistorySeatPlayerId = null;
   balanceFixSelected = {};
+  tableSubView = "player";
+  playerScreenCustomOpen = false;
   if (screen === "table" && nav.gameId) autoSeatSelf(nav.gameId);
   lockPortraitForScreen(screen);
   render();
@@ -2663,13 +2686,33 @@ const SCREEN_NAMES = {
   table: "מסך השולחן"
 };
 
+// True when this device actually has a seat in the given game - the player screen (the
+// table nav's default face) only makes sense for someone actually playing; anyone else
+// (an admin just checking in, a spectator) always gets the classic circles view instead,
+// regardless of tableSubView.
+function isSeatedInGame(g){
+  if (!g) return false;
+  const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+  return !!(myPlayerId && (g.seats||[]).includes(myPlayerId));
+}
 function render(){
   const app = document.getElementById("app");
   document.body.classList.toggle("table-screen", nav.screen === "table");
   let html = "";
+  let showingPlayerScreen = false;
   if (nav.screen === "home") html = renderHome();
   else if (nav.screen === "community") html = renderCommunity(nav.communityId);
-  else if (nav.screen === "table") html = renderTable(nav.gameId);
+  else if (nav.screen === "table") {
+    const g = getGame(nav.gameId);
+    showingPlayerScreen = tableSubView === "player" && isSeatedInGame(g);
+    const inner = showingPlayerScreen ? renderPlayerScreen(nav.gameId) : renderTable(nav.gameId);
+    // One wrapper around whichever face is showing - lets the swipe handlers in
+    // attachHandlers live on a single element instead of duplicating them per-view, and
+    // re-establishes the column-flex layout body.table-screen expects from #app's direct
+    // children (now just this one wrapper instead of .top/.poker-table-wrap/.bottom-bar
+    // directly) - see .table-swipe-root's own CSS.
+    html = `<div class="table-swipe-root">${inner}</div>`;
+  }
   const screenTag = `<div class="screen-tag">${esc(SCREEN_NAMES[nav.screen] || nav.screen)}</div>`;
   html = screenTag + html;
   if (modal) html += renderModal(modal);
@@ -2682,7 +2725,7 @@ function render(){
   // resizing inner a frame later then left the just-drawn arrows misaligned with the now-
   // resized table - reported live as "the arrows aren't precise". Moved into the same
   // rAF callback, after layoutTableSize() actually finishes resizing, instead of before it.
-  if (nav.screen === "table") {
+  if (nav.screen === "table" && !showingPlayerScreen) {
     requestAnimationFrame(() => { layoutTableSize(); drawSettlementArrows(); });
     animateSeatCaptions(nav.gameId);
     // The immediate rAF above can land mid-transition (.poker-table-wrap now animates
@@ -2696,8 +2739,14 @@ function render(){
     if (wrapEl) wrapEl.addEventListener("transitionend", (e) => {
       if (e.propertyName === "height") layoutTableSize();
     });
-  } else {
+  } else if (nav.screen !== "table") {
     drawSettlementArrows(); // no-op on other screens (#settlement-overlay doesn't exist there)
+  }
+  if (showingPlayerScreen) {
+    // WhatsApp-style feed - always opens scrolled to the newest (bottom) message, same
+    // as a real chat would, not wherever the previous render happened to leave it.
+    const feedEl = app.querySelector("[data-player-feed]");
+    if (feedEl) feedEl.scrollTop = feedEl.scrollHeight;
   }
 }
 
@@ -3110,9 +3159,92 @@ function renderActionPanel(g, c, seatedIds){
 // getMySeatPosition - and index 9 is the special "extra player" overflow slot,
 // positioned separately. Shared between the real table render and the small preview in
 // the identityName "המיקום שלי בשולחן" picker, so both draw from the exact same layout.
+// The table screen's default face for a seated player: their own name/total up top, their
+// buy-in history, a one-tap buy-in row, a leave-the-table shortcut, and a WhatsApp-style
+// feed of the whole table's recent buy-ins. Swipe left (see attachHandlers) to reach the
+// classic circles view (renderTable) instead - isSeatedInGame in render() is what decides
+// whether this screen is even reachable for the current viewer.
+// Index 5 (the single bottom seat) is the default "my seat" slot - see
+// getMySeatPosition - and index 9 is the special "extra player" overflow slot,
+// positioned separately. Shared between the real table render and the small preview in
+// the identityName "המיקום שלי בשולחן" picker, so both draw from the exact same layout.
 const SEAT_POS = [
   [32,7],[68,7],[89,26],[89,52],[78,76],[38,92],[18,76],[7,52],[7,26],[3,90]
 ];
+function renderPlayerScreen(gameId){
+  const g = getGame(gameId);
+  if (!g) return `<div class="empty">משחק לא נמצא</div>`;
+  const c = getCommunity(g.communityId) || {name:"קבוצה", roster:[]};
+  const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+  const pid = myPlayerId;
+  const p = g.players.find(pl => pl.id === pid);
+  const myBuyins = g.buyins.filter(b => b.playerId === pid).slice().sort((a,b) => (a.ts||0)-(b.ts||0));
+  const buyinTotal = myBuyins.reduce((s,b) => s+b.amount, 0);
+  const cashedOut = pid in g.cashouts;
+  // Reused by the existing data-delete-seat-buyin handler (see renderTable's own history
+  // popup), which reads this global for whose row to delete rather than the row itself -
+  // this screen only ever shows one player's history (the viewer's own), so pinning it
+  // here once is equivalent to toggling it open in the popup.
+  openHistorySeatPlayerId = pid;
+  const canDeleteBuyins = true; // viewing/editing your own history here, always allowed
+  const historyRows = myBuyins.map((b,idx) => {
+    const trashBtn = (canDeleteBuyins && idx>0 && !cashedOut) ? `<button style="background:none;border:none;padding:2px;color:#dc2626;cursor:pointer;display:flex;" data-delete-seat-buyin="${b.id}" title="ביטול תשלום">${icon('trash')}</button>` : '';
+    return `
+      <div class="seat-history-row">
+        <span style="display:flex;align-items:center;gap:4px;">
+          <span style="width:20px;flex-shrink:0;display:inline-flex;justify-content:center;">${trashBtn}</span>
+          <span>${idx===0?'כניסה':`ריביי ${idx}`}${b.ts?` · ${fmtTime(b.ts)}`:''}</span>
+        </span>
+        <span>₪${b.amount}</span>
+      </div>`;
+  }).join("") || `<div class="seat-history-row" style="border:none;color:#888;">אין קניות עדיין</div>`;
+  // Whole-table activity, oldest first (WhatsApp order) - each row's wording depends on
+  // whether it was that player's very first buy-in (their entry) or a later rebuy, same
+  // distinction the history popup above already draws via idx===0.
+  const feedCounts = {}, feedTotals = {};
+  const feedRows = g.buyins.slice().sort((a,b) => (a.ts||0)-(b.ts||0)).map(b => {
+    const player = g.players.find(pl => pl.id === b.playerId);
+    const name = esc(player ? player.name : "שחקן");
+    feedCounts[b.playerId] = (feedCounts[b.playerId]||0) + 1;
+    feedTotals[b.playerId] = (feedTotals[b.playerId]||0) + b.amount;
+    const text = feedCounts[b.playerId] === 1
+      ? `${name} נכנס לשולחן עם ₪${b.amount}`
+      : `${name} עשה ריביי של ₪${b.amount} (סה"כ קנייה של ₪${feedTotals[b.playerId]})`;
+    return `<div class="player-feed-row"><div>${text}</div><div class="time">${fmtTime(b.ts)}</div></div>`;
+  }).join("") || `<div class="empty" style="padding:20px 0;">אין עדיין פעילות בשולחן</div>`;
+  const buyinButtonsHtml = playerScreenCustomOpen ? `
+    <div style="display:flex;gap:8px;margin-bottom:20px;">
+      <input type="number" inputmode="decimal" id="player-screen-custom-amount" placeholder="סכום" autofocus style="flex:1;padding:14px 8px;font-size:18px;text-align:center;border-radius:9px;border:1px solid var(--gold);background:var(--input);color:var(--text);">
+      <button class="chip-btn" data-player-buyin-custom-confirm style="flex:0 0 auto;padding:14px 18px;font-size:16px;font-weight:700;">${icon('plus')}</button>
+    </div>
+  ` : `
+    <div style="display:flex;gap:8px;margin-bottom:20px;">
+      ${FIXED_BUYIN_AMOUNTS.map(v=>`<button class="chip-btn" data-player-instant-buyin="${v}" style="flex:1;padding:14px 2px;font-size:18px;">₪${v}</button>`).join("")}
+      <button class="chip-btn" data-player-buyin-other style="flex:1;padding:14px 2px;font-size:18px;">אחר</button>
+    </div>
+  `;
+  return `
+    <div class="top row" style="padding-top:14px;padding-bottom:16px;">
+      <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
+      <div class="flex1">
+        <h1 class="serif sm" style="color:var(--gold);">${esc(g.name || c.name)}</h1>
+        <div class="meta" style="color:#6ee7b7;font-size:12px;display:flex;align-items:center;gap:5px;">${icon('cal')}${esc(g.date)}</div>
+      </div>
+    </div>
+    <div class="player-screen-scroll">
+      <div style="text-align:center;padding:6px 0 22px;">
+        <div style="font-size:26px;font-weight:700;color:var(--text);">${esc(p?p.name:"")}</div>
+        <div style="font-size:40px;font-weight:800;color:var(--gold);margin-top:4px;">₪${buyinTotal}</div>
+      </div>
+      <div class="section-title" style="padding:0;margin:0 0 6px;">היסטוריית קניות</div>
+      <div class="scroll-list" style="margin-bottom:20px;">${historyRows}</div>
+      ${cashedOut ? "" : buyinButtonsHtml}
+      ${cashedOut ? "" : `<button class="btn btn-block" style="background:#57534e;color:#f5f5f4;margin-bottom:26px;display:flex;align-items:center;justify-content:center;gap:6px;" data-player-leave-table>${icon('out')} יציאה מהשולחן</button>`}
+      <div class="section-title" style="padding:0;margin:0 0 6px;">פעילות אחרונה בשולחן</div>
+      <div data-player-feed style="max-height:280px;overflow-y:auto;">${feedRows}</div>
+    </div>
+  `;
+}
 function renderTable(gameId){
   const g = getGame(gameId);
   if (!g) return `<div class="empty">משחק לא נמצא</div>`;
@@ -4553,6 +4685,71 @@ function attachHandlers(){
     if (!c || c.roster.length === 0) return;
     openModal({type:"newGame", communityId: nav.communityId, date: new Date().toISOString().slice(0,10)});
   };
+
+  // Player screen (renderPlayerScreen) - one-tap buy-in row, no separate confirm step
+  // like the table action panel's own two-step flow (pick an amount, then tap "הוסף
+  // ריביי") since every amount here is a real button that applies itself immediately.
+  const doPlayerBuyin = async (amt) => {
+    if (!amt || amt <= 0) return;
+    const gameId = nav.gameId;
+    const pid = myIdentity.myPlayers && myIdentity.myPlayers[getGame(gameId).communityId];
+    if (USE_RELATIONAL_API) {
+      try { await v2AddBuyin(gameId, uid(), pid, amt); }
+      catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+    } else {
+      await mutateAndSave(() => {
+        const g = getGame(gameId);
+        g.buyins.push({id:uid(), playerId: pid, amount: amt, ts: Date.now()});
+      });
+    }
+    playerScreenCustomOpen = false;
+    render();
+  };
+  app.querySelectorAll("[data-player-instant-buyin]").forEach(el => el.onclick = () => doPlayerBuyin(parseFloat(el.dataset.playerInstantBuyin)));
+  const playerBuyinOtherBtn = app.querySelector("[data-player-buyin-other]");
+  if (playerBuyinOtherBtn) playerBuyinOtherBtn.onclick = () => { playerScreenCustomOpen = true; render(); };
+  const playerBuyinCustomConfirm = app.querySelector("[data-player-buyin-custom-confirm]");
+  if (playerBuyinCustomConfirm) playerBuyinCustomConfirm.onclick = () => {
+    const amt = parseFloat(document.getElementById("player-screen-custom-amount").value);
+    doPlayerBuyin(amt);
+  };
+  const playerLeaveBtn = app.querySelector("[data-player-leave-table]");
+  if (playerLeaveBtn) playerLeaveBtn.onclick = () => {
+    const g = getGame(nav.gameId);
+    const pid = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+    openModal({type:"seatChips", gameId: nav.gameId, playerId: pid});
+  };
+
+  // Swipe between the player screen and the classic circles view (see render()'s
+  // .table-swipe-root wrapper) - a real drag past the threshold only, so an ordinary tap
+  // or vertical scroll (the felt, the history/feed lists) never gets mistaken for one.
+  // Seats/buttons/inputs are excluded so their own drag/tap handling stays untouched.
+  const swipeRoot = app.querySelector(".table-swipe-root");
+  if (swipeRoot) {
+    let swipeStartX = null, swipeStartY = null, swipeActive = false, swipeAbandoned = false;
+    const SWIPE_THRESHOLD = 60, SWIPE_DECIDE_PX = 12;
+    swipeRoot.addEventListener("pointerdown", (e) => {
+      if (e.target.closest("[data-seat], button, input, textarea, select, a, [data-toggle-action-panel]")) return;
+      swipeStartX = e.clientX; swipeStartY = e.clientY; swipeActive = false; swipeAbandoned = false;
+    });
+    swipeRoot.addEventListener("pointermove", (e) => {
+      if (swipeStartX == null || swipeAbandoned) return;
+      const dx = e.clientX - swipeStartX, dy = e.clientY - swipeStartY;
+      if (!swipeActive) {
+        if (Math.abs(dy) > SWIPE_DECIDE_PX && Math.abs(dy) > Math.abs(dx)) { swipeAbandoned = true; return; }
+        if (Math.abs(dx) > SWIPE_DECIDE_PX) swipeActive = true;
+      }
+    });
+    swipeRoot.addEventListener("pointerup", (e) => {
+      if (swipeStartX == null) return;
+      const dx = e.clientX - swipeStartX;
+      swipeStartX = null;
+      if (!swipeActive || swipeAbandoned) return;
+      if (dx < -SWIPE_THRESHOLD && tableSubView === "player") { tableSubView = "table"; render(); }
+      else if (dx > SWIPE_THRESHOLD && tableSubView === "table" && isSeatedInGame(getGame(nav.gameId))) { tableSubView = "player"; render(); }
+    });
+    swipeRoot.addEventListener("pointercancel", () => { swipeStartX = null; swipeActive = false; swipeAbandoned = false; });
+  }
 
   // Expand/collapse is a swipe on the handle (the extra-buttons block, and through it the
   // table's own crop - see layoutTableSize - grows and shrinks live with the finger, not
