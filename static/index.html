@@ -2939,7 +2939,7 @@ function renderAdminScreen(gameId){
         <div class="meta" style="color:#6ee7b7;font-size:12px;display:flex;align-items:center;gap:5px;">${icon('cal')}${esc(g.date)}</div>
       </div>
     </div>
-    <div style="flex:1;min-height:0;overflow-y:auto;padding:0 20px 20px;">
+    <div style="flex:1;min-height:0;overflow-y:auto;padding:0 20px 20px;touch-action:pan-y;">
       <div class="section-title" style="padding:0;margin:0 0 8px;">שחקנים פעילים</div>
       ${activeRows}
       ${cashedOutIds.length ? `<div class="section-title" style="padding:0;margin:16px 0 8px;">יצאו מהשולחן</div>${cashedOutRows}` : ""}
@@ -4395,7 +4395,11 @@ function attachHandlers(){
     window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank", "noopener");
   });
   const backHome = app.querySelector("[data-back-home]"); if (backHome) backHome.onclick = () => go("home");
-  const backCommunity = app.querySelector("[data-back-community]"); if (backCommunity) backCommunity.onclick = () => go("community", {communityId: backCommunity.dataset.backCommunity});
+  // querySelectorAll, not querySelector - the table screen's carousel mounts every page
+  // at once (player/table, plus admin for a table admin - see render()), each with its
+  // own back arrow in its own header; binding only the first match left every arrow
+  // except whichever one happened to be first in DOM order doing nothing when tapped.
+  app.querySelectorAll("[data-back-community]").forEach(el => el.onclick = () => go("community", {communityId: el.dataset.backCommunity}));
 
   const showRoster = app.querySelector("[data-show-roster]");
   if (showRoster) showRoster.onclick = () => openModal({type:"roster", communityId: nav.communityId, editingId:null});
