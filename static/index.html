@@ -2837,6 +2837,19 @@ function renderPlayerScreen(gameId){
   const myBuyins = g.buyins.filter(b => b.playerId === pid).slice().sort((a,b) => (a.ts||0)-(b.ts||0));
   const buyinTotal = myBuyins.reduce((s,b) => s+b.amount, 0);
   const cashedOut = pid in g.cashouts;
+  // Once every seated player has cashed out (the night auto-closes via maybeAutoCloseNight
+  // at that point - see its own comment) and the pot is balanced, show THIS player directly
+  // who they owe/are owed by - computed purely from final chip counts (settleTransactions/
+  // computeFinalBalances, same min-transfer pairing the admin screen's "מי מעביר למי" already
+  // uses), not from any manual "who did you pay" selection.
+  const seatedIdsForSettlement = (g.seats||[]).filter(Boolean);
+  const allCashedOutForSettlement = seatedIdsForSettlement.length > 0 && seatedIdsForSettlement.every(sid => sid in g.cashouts);
+  const totalBuyinsForSettlement = g.buyins.reduce((s,b)=>s+b.amount,0);
+  const totalCashedOutForSettlement = Object.values(g.cashouts).reduce((s,co)=>s+co.amount,0);
+  const potBalancedForSettlement = Math.abs(totalBuyinsForSettlement - totalCashedOutForSettlement) <= 5;
+  const mySettlementTxns = (cashedOut && allCashedOutForSettlement && potBalancedForSettlement)
+    ? settleTransactions(computeFinalBalances(g), g.players).filter(t => t.from === pid || t.to === pid)
+    : [];
   const canDeleteBuyins = true; // viewing/editing your own history here, always allowed
   // Carries its own playerId (data-delete-seat-buyin-player) rather than relying on
   // openHistorySeatPlayerId like the table view's popup does - this screen is always
@@ -2954,6 +2967,7 @@ function renderPlayerScreen(gameId){
           if (!notes.length) return "";
           return `<div style="font-size:12px;color:var(--muted);margin-top:4px;">${notes.map(n => `${n.received?'קיבל':'העביר'} ₪${n.amount} ${n.received?'מ-':'ל-'}${esc(n.name)}`).join(' · ')}</div>`;
         })()}
+        ${mySettlementTxns.length ? `<div style="font-size:14px;color:var(--gold);font-weight:700;margin-top:6px;">${mySettlementTxns.map(t => t.from===pid ? `מעביר ₪${t.amount} ל-${esc(t.toName)}` : `מקבל ₪${t.amount} מ-${esc(t.fromName)}`).join(' · ')}</div>` : ""}
       </div>
       ${cashedOut ? "" : `<div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">ריביי</div>`}
       ${cashedOut ? "" : buyinButtonsHtml}
@@ -3091,10 +3105,11 @@ function renderAdminScreen(gameId){
       </div>
     </div>
     <div style="flex:1;min-height:0;overflow-y:auto;padding:0 20px 20px;touch-action:pan-y;">
-      <div class="checkbox-row" style="cursor:pointer;margin-bottom:16px;" data-end-night>
-        <input type="checkbox" ${g.closed?'checked':''} onclick="return false;">
+      ${c.settlementDefault === 'paybox' ? "" : `
+      <div class="checkbox-row" style="margin-bottom:16px;">
+        <input type="checkbox" ${g.closed?'checked':''} disabled>
         <span class="flex1">סיום ערב</span>
-      </div>
+      </div>`}
       <div class="section-title" style="padding:0;margin:0 0 8px;">שחקנים פעילים</div>
       ${activeRows}
       ${cashedOutIds.length ? `<div class="section-title" style="padding:0;margin:16px 0 8px;">יצאו מהשולחן</div>${cashedOutRows}` : ""}
@@ -4735,8 +4750,6 @@ function attachHandlers(){
     render();
   };
 
-  const endNightBtn = app.querySelector("[data-end-night]");
-  if (endNightBtn) endNightBtn.onclick = () => openModal({type:"endNight", gameId: nav.gameId, amounts:{}});
   const viewSummaryBtn = app.querySelector("[data-view-summary]");
   if (viewSummaryBtn) viewSummaryBtn.onclick = () => openModal({type:"summary", gameId: nav.gameId});
   const addExistingBtn = app.querySelector("[data-add-existing]");
