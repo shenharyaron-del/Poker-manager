@@ -873,6 +873,14 @@ async function v2LinkRosterPlayer(communityId, playerId, clientId){
   if (p) p.clientId = clientId;
 }
 
+// Toggles a roster player's community-level admin flag (the admin screen) - see
+// isCommunityAdmin. Same PATCH endpoint as v2LinkRosterPlayer, just the other field.
+async function v2SetRosterAdmin(communityId, playerId, isAdmin){
+  await v2Fetch("PATCH", `/communities/${communityId}/roster/${playerId}`, {isAdmin});
+  const p = getCommunity(communityId).roster.find(pl => pl.id === playerId);
+  if (p) p.isAdmin = isAdmin;
+}
+
 // Adds a NEW permanent roster player already linked to an account for the given email,
 // instead of the one-off "guest" path (see pickSeat) that never touches the roster at all.
 // Refuses (throws with .status 409) if that email is already registered - this is for
@@ -1547,6 +1555,9 @@ let openHistorySeatPlayerId = null;
 let tableSubView = "player";
 // Inline "custom amount" toggle for the player screen's one-tap buy-in row.
 let playerScreenCustomOpen = false;
+// Which seated players the admin screen's pot-balance-fix section has checked off to
+// share an equal-split correction - UI-only, not persisted, reset on nav (see go()).
+let adminBalanceFixSelected = {};
 // Identifies the newest entry the player screen's activity feed has rendered so far - a
 // changed value after a render means something genuinely new landed (whether this device
 // caused it or someone else did), which is what triggers the vibrate in render(). null
@@ -1558,11 +1569,43 @@ const FIXED_BUYIN_AMOUNTS = [50, 80, 100];
 // a different control - so unlike the fixed pills (already >= this by construction), a
 // custom amount must be strictly greater than it, not just positive.
 const MIN_BUYIN_AMOUNT = Math.min(...FIXED_BUYIN_AMOUNTS);
-// Only the table's or community's creator may seat other people, end their night, or
+// Community-level admin (the admin screen's own gate, and full table-admin rights in
+// every game under this community - see isTableAdmin below) - the community's creator
+// always has this, even before any roster row is ever marked, same as isTableAdmin's own
+// long-standing "creator" check; a roster row's own isAdmin flag (toggled from the
+// community's players screen, see data-toggle-roster-admin) grants it to whoever that row
+// is linked to (via myIdentity.myPlayers), on top of that.
+function isCommunityAdmin(c){
+  if (!c) return false;
+  if (myIdentity.name && myIdentity.name === c.createdByName) return true;
+  const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[c.id];
+  if (!myPlayerId) return false;
+  const p = (c.roster||[]).find(pl => pl.id === myPlayerId);
+  return !!(p && p.isAdmin);
+}
+// Only the table's own creator, or a community admin (which now also covers the
+// community's creator - see isCommunityAdmin), may seat other people, end their night, or
 // remove them - anyone typing someone else's name is just a courtesy elsewhere, but this
 // gate is what keeps that from being used to mess with someone else's seat.
 function isTableAdmin(g, c){
-  return !!(myIdentity.name && ((g && myIdentity.name === g.createdByName) || (c && myIdentity.name === c.createdByName)));
+  return !!(myIdentity.name && g && myIdentity.name === g.createdByName) || isCommunityAdmin(c);
+}
+// The table screen's swipe carousel, in fixed circular order - "player" (the default
+// face) always exists; "admin" (the new admin screen) only exists for a table admin (see
+// isTableAdmin), added as the page BEFORE player so the circular sequence reads
+// admin→player→table→admin, matching the order the feature was specified in. A non-admin
+// (or a spectator/admin not seated in this particular game - see isSeatedInGame) never
+// gets it, same two pages as before.
+function swipePageOrder(g, c){
+  return isTableAdmin(g, c) ? ["admin", "player", "table"] : ["player", "table"];
+}
+// One step around that circular order in either direction (delta -1/+1) - used by both
+// the swipe gesture (attachHandlers) and the page it lands on (render) to agree on what
+// "the next/previous page" means without duplicating the wraparound math in both places.
+function cyclicPage(order, key, delta){
+  const i = order.indexOf(key);
+  const n = order.length;
+  return order[(i + delta + n) % n];
 }
 // Any click outside the open seat-history popup (or its own toggle button) closes it.
 // Capture phase on purpose - it needs to see every click before some OTHER handler
@@ -1611,6 +1654,7 @@ function go(screen, extra){
   openHistorySeatPlayerId = null;
   tableSubView = "player";
   playerScreenCustomOpen = false;
+  adminBalanceFixSelected = {};
   lastSeenFeedEventKey = null;
   if (screen === "table" && nav.gameId) autoSeatSelf(nav.gameId);
   lockPortraitForScreen(screen);
@@ -2398,6 +2442,7 @@ const ICONS = {
   coins: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v5c0 1.66 3.13 3 7 3s7-1.34 7-3V6"/><path d="M5 11v5c0 1.66 3.13 3 7 3s7-1.34 7-3v-5"/></svg>',
   download: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>',
   upload: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>',
+  shield: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>',
 };
 function icon(name){ return ICONS[name] || ""; }
 
@@ -2426,34 +2471,47 @@ function render(){
   const app = document.getElementById("app");
   document.body.classList.toggle("table-screen", nav.screen === "table");
   let html = "";
-  let showingPlayerScreen = false;
   let seated = false;
   if (nav.screen === "home") html = renderHome();
   else if (nav.screen === "community") html = renderCommunity(nav.communityId);
   else if (nav.screen === "table") {
     const g = getGame(nav.gameId);
+    const c = g && getCommunity(g.communityId);
     seated = isSeatedInGame(g);
-    showingPlayerScreen = tableSubView === "player" && seated;
     if (seated) {
-      // Both faces mounted side by side at all times (not just the active one) - lets the
+      const pageOrder = swipePageOrder(g, c);
+      // Losing admin rights (or just never having had them) between renders shouldn't
+      // strand tableSubView on a page that no longer exists in the carousel - falls back
+      // to the default face instead of rendering nothing/crashing on a page lookup miss.
+      if (!pageOrder.includes(tableSubView)) tableSubView = "player";
+      const N = pageOrder.length;
+      const RENDERERS = { player: () => renderPlayerScreen(nav.gameId), table: () => renderTable(nav.gameId), admin: () => renderAdminScreen(nav.gameId) };
+      // Every page in the carousel is mounted at once (not just the active one) - lets the
       // swipe drag actually slide real content under the finger like a phone home screen,
       // instead of an invisible gesture that only silently swaps views on release (that
       // version was reported repeatedly as "swiping doesn't work" even once the touch
       // handling itself was fixed - it technically worked, it just never looked or felt
-      // like it was doing anything while dragging).
-      const playerHtml = renderPlayerScreen(nav.gameId);
-      const tableHtml = renderTable(nav.gameId);
+      // like it was doing anything while dragging). Exactly 2 pages (no admin screen) keep
+      // the DOM in the fixed authored order [player, table] always, with attachHandlers'
+      // own swipe logic reordering those two real nodes on the fly as a gesture commits to
+      // a direction (see ensureAdjacency there) - the only way to make BOTH swipe
+      // directions reveal the same lone "other" page smoothly with just 2 real pages and
+      // no duplicates. With 3 pages there's no such wraparound gap to begin with: centering
+      // the current page between its two DISTINCT real neighbors (prev, cur, next) already
+      // covers both drag directions correctly every render, no reordering ever needed.
+      const domOrder = N === 3 ? [cyclicPage(pageOrder, tableSubView, -1), tableSubView, cyclicPage(pageOrder, tableSubView, 1)] : pageOrder;
+      const restOffset = N === 3 ? "-100%" : (domOrder[0] === tableSubView ? "0" : "-100%");
+      const pagesHtml = domOrder.map(key => `<div class="swipe-page">${RENDERERS[key]()}</div>`).join("");
+      const DOT_LABELS = { admin: "אדמינים", player: "שחקן", table: "שולחן" };
       const dotsHtml = `
         <div style="display:flex;justify-content:center;gap:6px;padding:8px 0;flex-shrink:0;">
-          <span style="width:7px;height:7px;border-radius:50%;background:${tableSubView==='player'?'var(--gold)':'rgba(255,255,255,.25)'};"></span>
-          <span style="width:7px;height:7px;border-radius:50%;background:${tableSubView==='table'?'var(--gold)':'rgba(255,255,255,.25)'};"></span>
+          ${pageOrder.map(key => `<span style="width:7px;height:7px;border-radius:50%;background:${tableSubView===key?'var(--gold)':'rgba(255,255,255,.25)'};" title="${DOT_LABELS[key]}"></span>`).join("")}
         </div>
       `;
       html = `<div class="table-swipe-root">
         <div class="swipe-track-viewport">
-          <div class="swipe-track" data-swipe-track style="transform:translateX(${tableSubView==='player'?'0':'-100%'});">
-            <div class="swipe-page">${playerHtml}</div>
-            <div class="swipe-page">${tableHtml}</div>
+          <div class="swipe-track" data-swipe-track style="transform:translateX(${restOffset});">
+            ${pagesHtml}
           </div>
         </div>
         ${dotsHtml}
@@ -2464,7 +2522,8 @@ function render(){
       html = `<div class="table-swipe-root">${renderTable(nav.gameId)}</div>`;
     }
   }
-  const screenLabel = showingPlayerScreen ? "מסך שחקן" : (SCREEN_NAMES[nav.screen] || nav.screen);
+  const SUB_VIEW_LABELS = { player: "מסך שחקן", table: "מסך השולחן", admin: "מסך אדמינים" };
+  const screenLabel = (seated && SUB_VIEW_LABELS[tableSubView]) || (SCREEN_NAMES[nav.screen] || nav.screen);
   const screenTag = `<div class="screen-tag">${esc(screenLabel)}</div>`;
   html = screenTag + html;
   if (modal) html += renderModal(modal);
@@ -2773,6 +2832,116 @@ function renderPlayerScreen(gameId){
       <div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">פעילות אחרונה בשולחן</div>
       <div class="chat-frame" data-player-feed data-latest-event="${latestFeedEventKey}" style="flex:1;height:auto;min-height:54px;margin-bottom:${cashedOut?'0':'14px'};">${feedRows}</div>
       ${cashedOut ? "" : `<button class="btn btn-block" style="background:#57534e;color:#f5f5f4;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:6px;" data-player-leave-table>${icon('out')} יציאה מהשולחן</button>`}
+    </div>
+  `;
+}
+
+// The admin screen (third carousel page, only for a table admin - see swipePageOrder/
+// isTableAdmin) - the on-behalf-of-someone-else management actions that used to live in
+// the table screen's bottom action panel before that was removed in favor of the player
+// screen: buy in for another player, end their night, remove their seat entirely (a
+// different action from ending their night - see PENDING_CHANGES history), bring a
+// cashed-out player back, seat a new player into an empty slot, fix an unbalanced pot, and
+// a read-only view of who still needs to pay whom. Reuses several existing modals as-is
+// (buyin, seatChips, removeSeat, pickSeat, the data-return-to-game handler) rather than
+// building parallel ones - they were already generic on m.playerId, just never had a
+// trigger left pointing at someone OTHER than the viewer's own seat after that panel was
+// removed.
+function renderAdminScreen(gameId){
+  const g = getGame(gameId);
+  if (!g) return `<div class="empty">משחק לא נמצא</div>`;
+  const c = getCommunity(g.communityId) || {name:"קבוצה", roster:[]};
+  const seats = g.seats || new Array(9).fill(null);
+  const buyinTotals = {};
+  g.buyins.forEach(b => { buyinTotals[b.playerId] = (buyinTotals[b.playerId]||0) + b.amount; });
+  const liveChips = g.liveChips || {};
+  const seatedIds = seats.filter(Boolean);
+  const activeIds = seatedIds.filter(pid => !(pid in g.cashouts));
+  const cashedOutIds = seatedIds.filter(pid => pid in g.cashouts);
+  const allCashedOut = seatedIds.length > 0 && cashedOutIds.length === seatedIds.length;
+  const totalBuyinAll = seatedIds.reduce((s,pid)=>s+(buyinTotals[pid]||0),0);
+  const totalChipsAll = seatedIds.reduce((s,pid)=>s+(liveChips[pid]||0),0);
+  const diff = totalChipsAll - totalBuyinAll;
+  const potUnbalanced = allCashedOut && Math.abs(diff) > 5;
+  const nameOf = pid => (g.players.find(pl=>pl.id===pid)||{}).name || "?";
+
+  const activeRows = activeIds.map(pid => `
+    <div class="roster-row">
+      <div class="row" style="gap:8px;"><span>${esc(nameOf(pid))}</span><span style="color:var(--gold);font-weight:700;">₪${buyinTotals[pid]||0}</span></div>
+      <div class="row" style="gap:4px;">
+        <button class="icon-btn ok" data-buyin="${pid}" title="הוסף ריביי">${icon('plus')}</button>
+        <button class="icon-btn" style="background:#57534e;color:#f5f5f4;" data-admin-end-night="${pid}" title="סיים ערב">${icon('out')}</button>
+        <button class="icon-btn danger" data-admin-remove-seat="${pid}" title="הסר מושב">${icon('trash')}</button>
+      </div>
+    </div>
+  `).join("") || `<div class="empty" style="padding:10px 0;font-size:13px;">אין שחקנים פעילים</div>`;
+
+  const cashedOutRows = cashedOutIds.map(pid => {
+    const profit = (liveChips[pid]||0) - (buyinTotals[pid]||0);
+    return `<div class="roster-row">
+      <div class="row" style="gap:8px;"><span>${esc(nameOf(pid))}</span><span style="font-weight:700;color:${profitColor(profit)};">${profit>0?'+':''}₪${Math.round(profit)}</span></div>
+      <button class="btn btn-ghost btn-sm" data-return-to-game="${pid}">${icon('undo')} החזר לשולחן</button>
+    </div>`;
+  }).join("");
+
+  const emptySeatRows = seats.map((pid,i) => pid===null ? i : -1).filter(i=>i>=0).map(i => `
+    <div class="roster-row">
+      <span style="color:var(--muted);">מושב פנוי${i<9?` ${i+1}`:' נוסף'}</span>
+      <button class="btn btn-ghost btn-sm" data-admin-add-seat="${i}">${icon('plus')} הוסף שחקן</button>
+    </div>
+  `).join("");
+
+  // Once everyone's cashed out but the declared chips don't match what was bought in by
+  // more than ₪5, settling up between players off those numbers would just be wrong - an
+  // equal-split correction across whichever players are checked, same as the old panel's
+  // own pot-balance fix.
+  let potFixHtml = "";
+  if (potUnbalanced) {
+    const direction = diff > 0.5 ? "חוסר" : "עודף";
+    const selectedIds = seatedIds.filter(id => adminBalanceFixSelected[id]);
+    const perPlayer = selectedIds.length ? Math.round((-diff / selectedIds.length) * 100) / 100 : 0;
+    potFixHtml = `
+      <div class="section-title" style="padding:0;margin:16px 0 8px;">סדר קופה</div>
+      <div style="background:#450a0a;color:#fca5a5;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;text-align:center;font-weight:700;">הקופה לא מאוזנת - ${direction} של ₪${Math.abs(Math.round(diff))}</div>
+      ${seatedIds.map(pid => {
+        const playerProfit = (liveChips[pid]||0) - (buyinTotals[pid]||0);
+        return `<div class="checkbox-row" style="cursor:pointer;">
+          <input type="checkbox" data-admin-balance-fix-toggle="${pid}" ${adminBalanceFixSelected[pid]?'checked':''}>
+          <span class="flex1">${esc(nameOf(pid))} <span style="color:${profitColor(playerProfit)};font-weight:700;">${playerProfit>0?'+':''}₪${Math.round(playerProfit)}</span></span>
+        </div>`;
+      }).join("")}
+      ${selectedIds.length ? `<div style="text-align:center;color:var(--muted);font-size:12px;margin:6px 0;">${perPlayer>=0?'כל שחקן מסומן יקבל':'מכל שחקן מסומן יילקח'} ₪${Math.abs(perPlayer)}</div>` : ""}
+      <button class="btn btn-primary btn-block" data-admin-fix-pot-balance ${selectedIds.length?"":"disabled"}>${icon('coins')} סדר קופה</button>
+    `;
+  }
+
+  // Read-only ("מידע בלבד", not a payment-recording UI) - who still needs to pay whom,
+  // once the pot itself is balanced. Reuses the existing (previously orphaned)
+  // settleTransactions/computeFinalBalances min-transfer calculation.
+  let settlementHtml = "";
+  if (allCashedOut && !potUnbalanced) {
+    const txns = settleTransactions(computeFinalBalances(g), g.players);
+    settlementHtml = `
+      <div class="section-title" style="padding:0;margin:16px 0 8px;">מי מעביר למי</div>
+      ${txns.length ? txns.map(t => `<div class="roster-row"><span>${esc(t.fromName)} ← ${esc(t.toName)}</span><span style="font-weight:700;color:var(--gold);">₪${t.amount}</span></div>`).join("") : `<div class="empty" style="padding:10px 0;font-size:13px;">אין תשלומים נדרשים</div>`}
+    `;
+  }
+
+  return `
+    <div class="top row" style="padding-top:14px;padding-bottom:16px;flex-shrink:0;">
+      <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
+      <div class="flex1">
+        <h1 class="serif sm" style="color:var(--gold);">${esc(g.name || c.name)}</h1>
+        <div class="meta" style="color:#6ee7b7;font-size:12px;display:flex;align-items:center;gap:5px;">${icon('cal')}${esc(g.date)}</div>
+      </div>
+    </div>
+    <div style="flex:1;min-height:0;overflow-y:auto;padding:0 20px 20px;">
+      <div class="section-title" style="padding:0;margin:0 0 8px;">שחקנים פעילים</div>
+      ${activeRows}
+      ${cashedOutIds.length ? `<div class="section-title" style="padding:0;margin:16px 0 8px;">יצאו מהשולחן</div>${cashedOutRows}` : ""}
+      ${emptySeatRows ? `<div class="section-title" style="padding:0;margin:16px 0 8px;">מושבים פנויים</div>${emptySeatRows}` : ""}
+      ${potFixHtml}
+      ${settlementHtml}
     </div>
   `;
 }
@@ -3369,10 +3538,23 @@ function renderModal(m){
   } else if (m.type === "roster") {
     const c = getCommunity(m.communityId);
     title = `שחקנים ב${esc(c.name)}`;
+    // Community admin toggle (the admin screen's own gate - see isCommunityAdmin): the
+    // creator's own row (identified by clientId, not name - see the roster INSERT in
+    // v2_create_community) is permanently an admin and never shows a clickable toggle,
+    // everyone else's row does, but only for a viewer who is themselves a community admin -
+    // read-only (a plain badge, same icon) for anyone else looking at this same list.
+    const viewerIsAdmin = isCommunityAdmin(c);
     const rows = c.roster.map(p => {
+      const isCreatorRow = !!(p.clientId && c.createdBy && p.clientId === c.createdBy);
+      const isAdminRow = isCreatorRow || !!p.isAdmin;
+      const roleIcon = isAdminRow ? icon('shield') : icon('user');
+      const roleBtn = (viewerIsAdmin && !isCreatorRow)
+        ? `<button class="icon-btn${isAdminRow?' gold':''}" data-toggle-roster-admin="${p.id}" data-roster-admin-next="${isAdminRow?'0':'1'}" title="${isAdminRow?'הסר הרשאת אדמין':'הפוך לאדמין'}">${roleIcon}</button>`
+        : `<span class="icon-btn${isAdminRow?' gold':''}" style="cursor:default;" title="${isAdminRow?'אדמין':'שחקן'}">${roleIcon}</span>`;
       return `<div class="roster-row">
         <div class="row" style="gap:8px;"><span>${esc(p.name)}</span>${netBadge(playerNetProfit(m.communityId, p.id))}</div>
         <div class="row" style="gap:4px;">
+          ${roleBtn}
           <button class="icon-btn danger" data-remove-player="${p.id}">${icon('trash')}</button>
         </div>
       </div>`;
@@ -3997,16 +4179,21 @@ function attachHandlers(){
     const swipeRoot = app.querySelector(".table-swipe-root");
     const swipeTrack = app.querySelector("[data-swipe-track]");
     if (swipeRoot && swipeTrack) {
+      const swipeGame = getGame(nav.gameId);
+      const swipeCommunity = swipeGame && getCommunity(swipeGame.communityId);
+      const pageOrder = swipePageOrder(swipeGame, swipeCommunity);
+      const N = pageOrder.length;
       let swipeStartX = null, swipeStartY = null, swipeActive = false, swipeAbandoned = false, swipeLastDx = 0;
       const SWIPE_DECIDE_PX = 12;
       const pageWidth = () => swipeRoot.getBoundingClientRect().width;
-      // Which of the two real DOM pages (render() always authors [player, table], in that
-      // order) is currently in which track slot (0 = left/first, 1 = right/second) - starts
-      // matching the authored order, but a single gesture can swap it (see ensureAdjacency
+      // Which real DOM page (see render() - [player, table] when N===2, or a
+      // [prev, current, next] window centered on tableSubView when N===3) is currently in
+      // which track slot (0 = left/first ... N-1 = right/last) - starts matching whatever
+      // render() just authored, but an N===2 gesture can swap it (see ensureAdjacency
       // below) to make BOTH swipe directions always reveal the real other page from the
       // correct side, circular, with only two actual pages. Reset fresh every render(), so
       // a swap made mid-gesture never lingers into the next one.
-      let trackOrder = ["player", "table"];
+      let trackOrder = N === 3 ? [cyclicPage(pageOrder, tableSubView, -1), tableSubView, cyclicPage(pageOrder, tableSubView, 1)] : pageOrder.slice();
       const slotOf = (which) => trackOrder.indexOf(which);
       const offsetForSlot = (slot) => -slot * pageWidth();
       const baseOffset = () => offsetForSlot(slotOf(tableSubView));
@@ -4022,16 +4209,22 @@ function attachHandlers(){
       // that direction always worked) - the other, "wrap-around" direction has no real
       // neighbor there in the authored [player, table] order. Fixing that: right when a
       // drag commits to a direction (or reverses mid-drag, past the start point), if the
-      // other page isn't adjacent on that side, physically swap the two DOM nodes' order
-      // and instantly (no transition) re-set the transform so the current page stays
+      // needed neighbor isn't adjacent on that side, physically swap the two DOM nodes'
+      // order and instantly (no transition) re-set the transform so the current page stays
       // pinned exactly where it visually already was - invisible to the eye, since it
-      // happens before the drag has moved it anywhere - after which the other page IS the
-      // adjacent neighbor on that side, and the existing reveal math just works.
+      // happens before the drag has moved it anywhere - after which the needed neighbor IS
+      // the adjacent one on that side, and the existing reveal math just works. With three
+      // real pages this is provably always already satisfied (render()'s centered window
+      // gives the current page a distinct real neighbor on both sides, every time), so the
+      // reorder body below never actually runs for N===3 - it's dead code there, not a
+      // bug, kept as a single code path instead of forking the whole drag handler on N.
       const ensureAdjacency = (dxSign) => {
-        const curSlot = slotOf(tableSubView);
-        const desiredOtherSlot = curSlot + (dxSign < 0 ? 1 : -1);
-        const otherSlot = 1 - curSlot;
-        if (otherSlot === desiredOtherSlot) return;
+        const cur = tableSubView;
+        const neededNeighbor = cyclicPage(pageOrder, cur, dxSign < 0 ? 1 : -1);
+        const curSlot = slotOf(cur);
+        const desiredNeighborSlot = curSlot + (dxSign < 0 ? 1 : -1);
+        if (slotOf(neededNeighbor) === desiredNeighborSlot) return;
+        if (N !== 2) return; // see comment above - shouldn't be reachable, but never mutate the DOM for N!==2
         trackOrder.reverse();
         const kids = swipeTrack.children;
         if (kids.length === 2) swipeTrack.insertBefore(kids[1], kids[0]);
@@ -4040,11 +4233,12 @@ function attachHandlers(){
       const settle = (dx, fromCancel) => {
         const w = pageWidth();
         const threshold = fromCancel ? 30 : w * 0.22;
-        // Circular with only two pages: either direction past the threshold switches to
-        // "the other one" regardless of which page this drag started on or which way it
-        // went - swiping right from the player screen (nothing to its right) still gets
-        // you to the table view, same as swiping left from it does.
-        if (Math.abs(dx) > threshold) tableSubView = (tableSubView === "player") ? "table" : "player";
+        // Circular: either direction past the threshold moves one step around pageOrder -
+        // dxSign<0 (dragged left) to the next page, dxSign>0 (dragged right) to the
+        // previous one - regardless of which page this drag started on, so swiping right
+        // from the first page in the order (nothing "before" it on screen) still wraps to
+        // the last one, same as swiping left from the last page wraps to the first.
+        if (Math.abs(dx) > threshold) tableSubView = cyclicPage(pageOrder, tableSubView, dx < 0 ? 1 : -1);
         // else: not past threshold - tableSubView stays what it already was, so
         // baseOffset() below naturally snaps back to where this drag started instead of
         // completing it.
@@ -4053,10 +4247,9 @@ function attachHandlers(){
         // re-measures the table) only needs to happen once the slide animation has
         // actually finished, not before - doing it immediately would yank the DOM out
         // from under the still-running CSS transition. render() re-authors the canonical
-        // [player, table] DOM order regardless of any mid-gesture swap above, with a
-        // transform matching the new tableSubView the same way settle() just animated
-        // to - same visual position via a different (canonical) underlying arrangement,
-        // so the swap between them is imperceptible.
+        // DOM order for the new tableSubView regardless of any mid-gesture swap above,
+        // with a transform matching the same visual position settle() just animated to
+        // (see render()'s own restOffset) - so the swap between them is imperceptible.
         setTimeout(render, 260);
       };
       // {passive:false} is load-bearing, not decoration - modern browsers default touch-
@@ -4074,7 +4267,7 @@ function attachHandlers(){
         // coexist, without needing to block one of them outright.
         if (e.target.closest("[data-seat], button, input, textarea, select, a")) return;
         swipeStartX = e.clientX; swipeStartY = e.clientY; swipeActive = false; swipeAbandoned = false; swipeLastDx = 0;
-        trackOrder = ["player", "table"];
+        trackOrder = N === 3 ? [cyclicPage(pageOrder, tableSubView, -1), tableSubView, cyclicPage(pageOrder, tableSubView, 1)] : pageOrder.slice();
       }, {passive:false});
       swipeRoot.addEventListener("pointermove", (e) => {
         if (swipeStartX == null || swipeAbandoned) return;
@@ -4098,11 +4291,12 @@ function attachHandlers(){
           // just a two-element array comparison.
           ensureAdjacency(dx < 0 ? -1 : 1);
           const w = pageWidth();
+          const minOffset = -(N - 1) * w; // the leftmost real slot - 0 is the rightmost
           let raw = baseOffset() + dx;
           // Rubber-band past either edge instead of a hard stop - for dragging further
-          // than one full page width, which still has nothing real to reveal beyond it.
+          // than the whole mounted track (all N real pages) already covers.
           if (raw > 0) raw = raw * 0.35;
-          else if (raw < -w) raw = -w + (raw + w) * 0.35;
+          else if (raw < minOffset) raw = minOffset + (raw - minOffset) * 0.35;
           setTrack(raw, false);
         }
       }, {passive:false});
@@ -4315,6 +4509,66 @@ function attachHandlers(){
     closeModal();
   });
   app.querySelectorAll("[data-remove-from-game]").forEach(el => el.onclick = () => openModal({type:"removeFromGame", gameId: nav.gameId, playerId: el.dataset.removeFromGame}));
+
+  // Admin screen (renderAdminScreen) - buy-in reuses [data-buyin] and return-to-game
+  // reuses [data-return-to-game] above as-is (both already generic on playerId); these
+  // are the ones with no existing generic trigger left after the old table-screen panel
+  // (which read a single selectedSeatPlayerId instead of carrying playerId per button)
+  // was removed.
+  app.querySelectorAll("[data-admin-end-night]").forEach(el => el.onclick = () => openModal({type:"seatChips", gameId: nav.gameId, playerId: el.dataset.adminEndNight}));
+  app.querySelectorAll("[data-admin-remove-seat]").forEach(el => el.onclick = () => openModal({type:"removeSeat", gameId: nav.gameId, playerId: el.dataset.adminRemoveSeat}));
+  app.querySelectorAll("[data-admin-add-seat]").forEach(el => el.onclick = () => openModal({type:"pickSeat", gameId: nav.gameId, seatIndex: parseInt(el.dataset.adminAddSeat)}));
+  app.querySelectorAll("[data-admin-balance-fix-toggle]").forEach(el => el.onchange = () => {
+    adminBalanceFixSelected[el.dataset.adminBalanceFixToggle] = el.checked;
+    render();
+  });
+  const adminFixPotBtn = app.querySelector("[data-admin-fix-pot-balance]");
+  if (adminFixPotBtn) adminFixPotBtn.onclick = async () => {
+    const g = getGame(nav.gameId);
+    const seats = g.seats || new Array(9).fill(null);
+    const seatedIds = seats.filter(Boolean);
+    const selectedIds = seatedIds.filter(id => adminBalanceFixSelected[id]);
+    if (!selectedIds.length) return;
+    adminFixPotBtn.disabled = true;
+    showButtonLoading(adminFixPotBtn);
+    // Recompute against the freshest known state rather than a value cached before this
+    // click - if a concurrent save changed the totals since this screen opened, the
+    // correction must be based on the real current imbalance, not a stale one.
+    const g2 = getGame(nav.gameId);
+    const seats2 = g2.seats || new Array(9).fill(null);
+    const seatedIds2 = seats2.filter(Boolean);
+    const selectedIds2 = selectedIds.filter(pid => seatedIds2.includes(pid));
+    if (!selectedIds2.length) { adminFixPotBtn.disabled = false; return; }
+    const buyinTotals2 = {};
+    g2.buyins.forEach(b => { buyinTotals2[b.playerId] = (buyinTotals2[b.playerId]||0) + b.amount; });
+    const totalBuyinAll2 = seatedIds2.reduce((s,pid)=>s+(buyinTotals2[pid]||0),0);
+    const totalChipsAll2 = seatedIds2.reduce((s,pid)=>s+((g2.liveChips||{})[pid]||0),0);
+    const diff2 = totalChipsAll2 - totalBuyinAll2;
+    const perPlayer2 = Math.round((-diff2 / selectedIds2.length) * 100) / 100;
+    if (USE_RELATIONAL_API) {
+      try {
+        for (const pid of selectedIds2) {
+          const newChips = Math.round(((g2.liveChips[pid]||0) + perPlayer2) * 100) / 100;
+          if (g2.cashouts[pid]) {
+            const newAmount = Math.round(((g2.cashouts[pid].amount||0) + perPlayer2) * 100) / 100;
+            await v2SetCashout(nav.gameId, pid, newAmount, g2.cashouts[pid].arrangedWith, newChips);
+          } else {
+            await v2UpdateLiveChips(nav.gameId, pid, newChips);
+          }
+        }
+      } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); adminFixPotBtn.disabled = false; return; }
+    } else {
+      await mutateAndSave(() => {
+        if (!g2.liveChips) g2.liveChips = {};
+        selectedIds2.forEach(pid => {
+          g2.liveChips[pid] = Math.round(((g2.liveChips[pid]||0) + perPlayer2) * 100) / 100;
+          if (g2.cashouts[pid]) g2.cashouts[pid].amount = Math.round(((g2.cashouts[pid].amount||0) + perPlayer2) * 100) / 100;
+        });
+      });
+    }
+    adminBalanceFixSelected = {};
+    render();
+  };
 
   const endNightBtn = app.querySelector("[data-end-night]");
   if (endNightBtn) endNightBtn.onclick = () => openModal({type:"endNight", gameId: nav.gameId, amounts:{}});
@@ -4780,6 +5034,22 @@ function attachHandlers(){
             const stillLinkedElsewhere = state.communities.some(cm => cm.roster.some(p => p.clientId === removed.clientId));
             if (!stillLinkedElsewhere && state.globalPlayers) delete state.globalPlayers[removed.clientId];
           }
+        });
+      }
+      updateModal({});
+    });
+    app.querySelectorAll("[data-toggle-roster-admin]").forEach(el => el.onclick = async () => {
+      const playerId = el.dataset.toggleRosterAdmin;
+      const communityId = modal.communityId;
+      const next = el.dataset.rosterAdminNext === "1";
+      el.disabled = true;
+      if (USE_RELATIONAL_API) {
+        try { await v2SetRosterAdmin(communityId, playerId, next); }
+        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); el.disabled = false; return; }
+      } else {
+        await mutateAndSave(() => {
+          const p = getCommunity(communityId).roster.find(pl => pl.id === playerId);
+          if (p) p.isAdmin = next;
         });
       }
       updateModal({});

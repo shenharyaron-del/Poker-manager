@@ -116,6 +116,13 @@ _INIT_STATEMENTS = (
     "  key TEXT PRIMARY KEY,"
     "  value TEXT NOT NULL"
     ")",
+    # Community-level admin flag, added post-Phase-7 (the admin screen) - a roster player
+    # with this set gets table-admin rights (see isTableAdmin/isCommunityAdmin client-side)
+    # in every game under that community, on top of the community/game creator who always
+    # has them regardless of this flag. ADD COLUMN IF NOT EXISTS is itself idempotent in
+    # Postgres, unlike CREATE TABLE above - no DuplicateTable/UniqueViolation handling
+    # needed for it.
+    "ALTER TABLE roster_players ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT false",
 )
 
 
@@ -428,13 +435,15 @@ def v2_list_communities():
                     by_id[community_id]["payboxLinks"].append({"id": link_id, "name": name, "link": link})
 
                 cur.execute(
-                    "SELECT community_id, id, name, client_id FROM roster_players WHERE community_id = ANY(%s)",
+                    "SELECT community_id, id, name, client_id, is_admin FROM roster_players WHERE community_id = ANY(%s)",
                     (ids,),
                 )
-                for community_id, pid, pname, client_id in cur.fetchall():
+                for community_id, pid, pname, client_id, is_admin in cur.fetchall():
                     entry = {"id": pid, "name": pname}
                     if client_id:
                         entry["clientId"] = client_id
+                    if is_admin:
+                        entry["isAdmin"] = True
                     by_id[community_id]["roster"].append(entry)
         conn.commit()
     return jsonify(communities)
@@ -720,14 +729,25 @@ def v2_update_roster_player(community_id, player_id):
     # the fact - the backfill path in autoSeatSelf/autoJoinViaInvite for a player who
     # self-identified before global-player linking existed. Structural (single row,
     # single field), so no conflict token needed, same reasoning as the rest of Phase 3.
+    # isAdmin (the admin-screen feature) reuses this same endpoint rather than a new one -
+    # same "single row, single field" shape, just a different field. Accepts either or
+    # both fields present; the client always sends exactly one of them per call today.
     body = request.get_json(silent=True) or {}
-    if "clientId" not in body:
-        return jsonify({"error": "clientId required"}), 400
+    sets, params = [], []
+    if "clientId" in body:
+        sets.append("client_id = %s")
+        params.append(body["clientId"])
+    if "isAdmin" in body:
+        sets.append("is_admin = %s")
+        params.append(bool(body["isAdmin"]))
+    if not sets:
+        return jsonify({"error": "clientId or isAdmin required"}), 400
+    params.extend([player_id, community_id])
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "UPDATE roster_players SET client_id = %s WHERE id = %s AND community_id = %s",
-                (body["clientId"], player_id, community_id),
+                f"UPDATE roster_players SET {', '.join(sets)} WHERE id = %s AND community_id = %s",
+                params,
             )
             updated = cur.rowcount
         conn.commit()

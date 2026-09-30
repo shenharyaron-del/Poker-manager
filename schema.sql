@@ -47,7 +47,13 @@ CREATE TABLE roster_players (
   id TEXT PRIMARY KEY,
   community_id TEXT REFERENCES communities(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
-  client_id TEXT NULL
+  client_id TEXT NULL,
+  -- Community-level admin flag (the admin screen) - grants table-admin rights in every
+  -- game under this community, on top of whoever created the community/game (who always
+  -- have them regardless of this flag). Added post-Phase-7 via an idempotent
+  -- ALTER TABLE ... ADD COLUMN IF NOT EXISTS in server.py's own startup init, not by
+  -- re-running this file against the live DB.
+  is_admin BOOLEAN NOT NULL DEFAULT false
 );
 
 -- Cross-community canonical player data (photo/phone/preferred seat),
