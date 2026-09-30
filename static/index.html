@@ -158,8 +158,22 @@ body.table-screen .bottom-bar{position:static;flex-shrink:0;background:none;marg
    group feed) - unlike the circles view, this one scrolls as an ordinary page instead of
    a fixed-size felt with a separately-scrolling panel underneath it. */
 body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow-y:auto;padding:0 20px 20px;}
-.player-feed-row{background:rgba(255,255,255,.06);border-radius:10px;padding:8px 10px;margin-bottom:8px;}
-.player-feed-row .time{font-size:10px;color:var(--muted);text-align:left;margin-top:3px;}
+/* Shared by the player screen's history and table-activity sections - a fixed-size,
+   scrollable "frame" so both read as their own defined panel instead of open-ended lists
+   pushing the page taller, with a WhatsApp-style muted background (a plain tonal shift,
+   not an actual pattern/texture - "not noisy") setting the chat area apart from the rest
+   of the screen. */
+.chat-frame{background:rgba(0,0,0,.18);border-radius:12px;padding:10px;max-height:240px;overflow-y:auto;}
+/* Same "bounded panel" idea as .chat-frame above, for the buy-in button row - a plain
+   border box rather than a dark fill, so the gold buttons inside stay the brightest thing
+   in it instead of competing with a tinted background. */
+.buyin-frame{border:1px solid var(--card-b);border-radius:12px;padding:10px;}
+/* Time sits tucked in the bubble's own bottom-left corner instead of a separate full-width
+   row underneath - floating it lets the message text wrap around it exactly like a real
+   chat bubble, landing beside the last line when there's room and below it otherwise. */
+.chat-bubble{background:rgba(255,255,255,.07);border-radius:10px;padding:6px 10px;margin-bottom:6px;font-size:13px;color:var(--text);overflow:hidden;}
+.chat-bubble:last-child{margin-bottom:0;}
+.chat-bubble .bubble-time{float:left;font-size:10px;color:var(--muted);margin:3px 0 0 6px;}
 .empty{text-align:center;padding:50px 20px;color:#059669;font-size:14px;}
 .section-title{color:var(--gold);font-size:11px;font-weight:700;letter-spacing:.05em;margin:0 0 8px;padding:0 20px;}
 .field{display:block;margin-bottom:14px;}
@@ -170,8 +184,9 @@ input[type=text],input[type=number],input[type=date],input[type=email],.select-i
 }
 input:focus,.select-input:focus{border-color:var(--gold);}
 .chip-row{display:flex;gap:8px;margin-bottom:12px;}
-.chip-btn{flex:1;padding:9px;border-radius:9px;background:var(--input);border:1px solid var(--input-b);color:var(--text);font-family:inherit;cursor:pointer;}
+.chip-btn{flex:1;padding:9px;border-radius:9px;background:var(--input);border:1px solid var(--input-b);color:var(--text);font-family:inherit;cursor:pointer;transition:transform .08s ease;}
 .chip-btn:disabled{opacity:.4;cursor:not-allowed;}
+.chip-btn:active{transform:scale(.93);}
 .btn:disabled{opacity:.45;cursor:not-allowed;}
 .chip-btn.buyin-selected{background:var(--gold);color:var(--gold-text);border-color:var(--gold);font-weight:700;}
 .chip-btn.buyin-selected.behalf{background:#78350f;color:#fde68a;border-color:#78350f;}
@@ -2704,14 +2719,24 @@ function render(){
   else if (nav.screen === "community") html = renderCommunity(nav.communityId);
   else if (nav.screen === "table") {
     const g = getGame(nav.gameId);
-    showingPlayerScreen = tableSubView === "player" && isSeatedInGame(g);
+    const seated = isSeatedInGame(g);
+    showingPlayerScreen = tableSubView === "player" && seated;
     const inner = showingPlayerScreen ? renderPlayerScreen(nav.gameId) : renderTable(nav.gameId);
+    // Standard two-dot page indicator - only meaningful when there's actually a second
+    // page to swipe to (a seated player); a spectator/admin with only the circles view
+    // never sees it.
+    const dotsHtml = seated ? `
+      <div style="display:flex;justify-content:center;gap:6px;padding:8px 0;flex-shrink:0;">
+        <span style="width:7px;height:7px;border-radius:50%;background:${tableSubView==='player'?'var(--gold)':'rgba(255,255,255,.25)'};"></span>
+        <span style="width:7px;height:7px;border-radius:50%;background:${tableSubView==='table'?'var(--gold)':'rgba(255,255,255,.25)'};"></span>
+      </div>
+    ` : "";
     // One wrapper around whichever face is showing - lets the swipe handlers in
     // attachHandlers live on a single element instead of duplicating them per-view, and
     // re-establishes the column-flex layout body.table-screen expects from #app's direct
     // children (now just this one wrapper instead of .top/.poker-table-wrap/.bottom-bar
     // directly) - see .table-swipe-root's own CSS.
-    html = `<div class="table-swipe-root">${inner}</div>`;
+    html = `<div class="table-swipe-root">${inner}${dotsHtml}</div>`;
   }
   const screenTag = `<div class="screen-tag">${esc(SCREEN_NAMES[nav.screen] || nav.screen)}</div>`;
   html = screenTag + html;
@@ -3159,18 +3184,14 @@ function renderActionPanel(g, c, seatedIds){
 // getMySeatPosition - and index 9 is the special "extra player" overflow slot,
 // positioned separately. Shared between the real table render and the small preview in
 // the identityName "המיקום שלי בשולחן" picker, so both draw from the exact same layout.
+const SEAT_POS = [
+  [32,7],[68,7],[89,26],[89,52],[78,76],[38,92],[18,76],[7,52],[7,26],[3,90]
+];
 // The table screen's default face for a seated player: their own name/total up top, their
 // buy-in history, a one-tap buy-in row, a leave-the-table shortcut, and a WhatsApp-style
 // feed of the whole table's recent buy-ins. Swipe left (see attachHandlers) to reach the
 // classic circles view (renderTable) instead - isSeatedInGame in render() is what decides
 // whether this screen is even reachable for the current viewer.
-// Index 5 (the single bottom seat) is the default "my seat" slot - see
-// getMySeatPosition - and index 9 is the special "extra player" overflow slot,
-// positioned separately. Shared between the real table render and the small preview in
-// the identityName "המיקום שלי בשולחן" picker, so both draw from the exact same layout.
-const SEAT_POS = [
-  [32,7],[68,7],[89,26],[89,52],[78,76],[38,92],[18,76],[7,52],[7,26],[3,90]
-];
 function renderPlayerScreen(gameId){
   const g = getGame(gameId);
   if (!g) return `<div class="empty">משחק לא נמצא</div>`;
@@ -3188,37 +3209,47 @@ function renderPlayerScreen(gameId){
   openHistorySeatPlayerId = pid;
   const canDeleteBuyins = true; // viewing/editing your own history here, always allowed
   const historyRows = myBuyins.map((b,idx) => {
-    const trashBtn = (canDeleteBuyins && idx>0 && !cashedOut) ? `<button style="background:none;border:none;padding:2px;color:#dc2626;cursor:pointer;display:flex;" data-delete-seat-buyin="${b.id}" title="ביטול תשלום">${icon('trash')}</button>` : '';
-    return `
-      <div class="seat-history-row">
-        <span style="display:flex;align-items:center;gap:4px;">
-          <span style="width:20px;flex-shrink:0;display:inline-flex;justify-content:center;">${trashBtn}</span>
-          <span>${idx===0?'כניסה':`ריביי ${idx}`}${b.ts?` · ${fmtTime(b.ts)}`:''}</span>
-        </span>
-        <span>₪${b.amount}</span>
-      </div>`;
-  }).join("") || `<div class="seat-history-row" style="border:none;color:#888;">אין קניות עדיין</div>`;
-  // Whole-table activity, oldest first (WhatsApp order) - each row's wording depends on
-  // whether it was that player's very first buy-in (their entry) or a later rebuy, same
-  // distinction the history popup above already draws via idx===0.
+    const trashBtn = (canDeleteBuyins && idx>0 && !cashedOut) ? `<button style="background:none;border:none;padding:2px;color:#dc2626;cursor:pointer;display:flex;float:left;margin-right:4px;" data-delete-seat-buyin="${b.id}" title="ביטול תשלום">${icon('trash')}</button>` : '';
+    return `<div class="chat-bubble">${trashBtn}<span class="bubble-time">${fmtTime(b.ts)}</span>${idx===0?'כניסה':`ריביי ${idx}`} · ₪${b.amount}</div>`;
+  }).join("") || `<div class="chat-bubble" style="color:#888;">אין קניות עדיין</div>`;
+  // Whole-table activity, oldest first (WhatsApp order) - buy-ins and cash-outs merged
+  // into one timeline by ts. Each buy-in's wording depends on whether it was that
+  // player's very first (their entry) or a later rebuy, same distinction the history
+  // popup above already draws via idx===0; each cash-out shows their final chip count
+  // and profit/loss against everything they bought in for up to that point.
+  const feedEvents = g.buyins.map(b => ({ts:b.ts, kind:"buyin", buyin:b}));
+  Object.keys(g.cashouts||{}).forEach(playerId => {
+    feedEvents.push({ts: g.cashouts[playerId].ts, kind:"cashout", playerId, amount: g.cashouts[playerId].amount});
+  });
+  feedEvents.sort((a,b) => (a.ts||0)-(b.ts||0));
   const feedCounts = {}, feedTotals = {};
-  const feedRows = g.buyins.slice().sort((a,b) => (a.ts||0)-(b.ts||0)).map(b => {
-    const player = g.players.find(pl => pl.id === b.playerId);
+  const feedRows = feedEvents.map(ev => {
+    if (ev.kind === "buyin") {
+      const b = ev.buyin;
+      const player = g.players.find(pl => pl.id === b.playerId);
+      const name = esc(player ? player.name : "שחקן");
+      feedCounts[b.playerId] = (feedCounts[b.playerId]||0) + 1;
+      feedTotals[b.playerId] = (feedTotals[b.playerId]||0) + b.amount;
+      const text = feedCounts[b.playerId] === 1
+        ? `${name} נכנס לשולחן עם ₪${b.amount}`
+        : `${name} עשה ריביי של ₪${b.amount} (סה"כ קנייה של ₪${feedTotals[b.playerId]})`;
+      return `<div class="chat-bubble"><span class="bubble-time">${fmtTime(b.ts)}</span>${text}</div>`;
+    }
+    const player = g.players.find(pl => pl.id === ev.playerId);
     const name = esc(player ? player.name : "שחקן");
-    feedCounts[b.playerId] = (feedCounts[b.playerId]||0) + 1;
-    feedTotals[b.playerId] = (feedTotals[b.playerId]||0) + b.amount;
-    const text = feedCounts[b.playerId] === 1
-      ? `${name} נכנס לשולחן עם ₪${b.amount}`
-      : `${name} עשה ריביי של ₪${b.amount} (סה"כ קנייה של ₪${feedTotals[b.playerId]})`;
-    return `<div class="player-feed-row"><div>${text}</div><div class="time">${fmtTime(b.ts)}</div></div>`;
-  }).join("") || `<div class="empty" style="padding:20px 0;">אין עדיין פעילות בשולחן</div>`;
+    const totalBuyin = feedTotals[ev.playerId] || 0;
+    const profit = ev.amount - totalBuyin;
+    const profitText = profit >= 0 ? `₪${Math.round(profit)} רווח` : `₪${Math.abs(Math.round(profit))} הפסד`;
+    const text = `${name} יצא מהשולחן עם ₪${ev.amount} ז'יטונים בספירה (${profitText})`;
+    return `<div class="chat-bubble"><span class="bubble-time">${fmtTime(ev.ts)}</span>${text}</div>`;
+  }).join("") || `<div class="chat-bubble" style="color:#888;">אין עדיין פעילות בשולחן</div>`;
   const buyinButtonsHtml = playerScreenCustomOpen ? `
-    <div style="display:flex;gap:8px;margin-bottom:20px;">
+    <div class="buyin-frame" style="display:flex;gap:8px;margin-bottom:20px;">
       <input type="number" inputmode="decimal" id="player-screen-custom-amount" placeholder="סכום" autofocus style="flex:1;padding:14px 8px;font-size:18px;text-align:center;border-radius:9px;border:1px solid var(--gold);background:var(--input);color:var(--text);">
       <button class="chip-btn" data-player-buyin-custom-confirm style="flex:0 0 auto;padding:14px 18px;font-size:16px;font-weight:700;">${icon('plus')}</button>
     </div>
   ` : `
-    <div style="display:flex;gap:8px;margin-bottom:20px;">
+    <div class="buyin-frame" style="display:flex;gap:8px;margin-bottom:20px;">
       ${FIXED_BUYIN_AMOUNTS.map(v=>`<button class="chip-btn" data-player-instant-buyin="${v}" style="flex:1;padding:14px 2px;font-size:18px;">₪${v}</button>`).join("")}
       <button class="chip-btn" data-player-buyin-other style="flex:1;padding:14px 2px;font-size:18px;">אחר</button>
     </div>
@@ -3234,14 +3265,15 @@ function renderPlayerScreen(gameId){
     <div class="player-screen-scroll">
       <div style="text-align:center;padding:6px 0 22px;">
         <div style="font-size:26px;font-weight:700;color:var(--text);">${esc(p?p.name:"")}</div>
-        <div style="font-size:40px;font-weight:800;color:var(--gold);margin-top:4px;">₪${buyinTotal}</div>
+        <div data-player-total style="font-size:40px;font-weight:800;color:var(--gold);margin-top:4px;">₪${buyinTotal}</div>
       </div>
       <div class="section-title" style="padding:0;margin:0 0 6px;">היסטוריית קניות</div>
-      <div class="scroll-list" style="margin-bottom:20px;">${historyRows}</div>
+      <div class="chat-frame" style="margin-bottom:20px;">${historyRows}</div>
+      ${cashedOut ? "" : `<div class="section-title" style="padding:0;margin:0 0 6px;">ריביי</div>`}
       ${cashedOut ? "" : buyinButtonsHtml}
       ${cashedOut ? "" : `<button class="btn btn-block" style="background:#57534e;color:#f5f5f4;margin-bottom:26px;display:flex;align-items:center;justify-content:center;gap:6px;" data-player-leave-table>${icon('out')} יציאה מהשולחן</button>`}
       <div class="section-title" style="padding:0;margin:0 0 6px;">פעילות אחרונה בשולחן</div>
-      <div data-player-feed style="max-height:280px;overflow-y:auto;">${feedRows}</div>
+      <div class="chat-frame" data-player-feed>${feedRows}</div>
     </div>
   `;
 }
@@ -4689,8 +4721,13 @@ function attachHandlers(){
   // Player screen (renderPlayerScreen) - one-tap buy-in row, no separate confirm step
   // like the table action panel's own two-step flow (pick an amount, then tap "הוסף
   // ריביי") since every amount here is a real button that applies itself immediately.
-  const doPlayerBuyin = async (amt) => {
+  const doPlayerBuyin = async (amt, fromEl) => {
     if (!amt || amt <= 0) return;
+    // Purely cosmetic - fires the same flying "+₪X" badge the table action panel uses,
+    // from the tapped button to the big total up top, so the total visibly "receives" the
+    // buy-in instead of just silently changing number on the next render.
+    const totalEl = app.querySelector("[data-player-total]");
+    if (fromEl && totalEl) flyAmountBadge(fromEl, totalEl, amt);
     const gameId = nav.gameId;
     const pid = myIdentity.myPlayers && myIdentity.myPlayers[getGame(gameId).communityId];
     if (USE_RELATIONAL_API) {
@@ -4705,13 +4742,13 @@ function attachHandlers(){
     playerScreenCustomOpen = false;
     render();
   };
-  app.querySelectorAll("[data-player-instant-buyin]").forEach(el => el.onclick = () => doPlayerBuyin(parseFloat(el.dataset.playerInstantBuyin)));
+  app.querySelectorAll("[data-player-instant-buyin]").forEach(el => el.onclick = () => doPlayerBuyin(parseFloat(el.dataset.playerInstantBuyin), el));
   const playerBuyinOtherBtn = app.querySelector("[data-player-buyin-other]");
   if (playerBuyinOtherBtn) playerBuyinOtherBtn.onclick = () => { playerScreenCustomOpen = true; render(); };
   const playerBuyinCustomConfirm = app.querySelector("[data-player-buyin-custom-confirm]");
   if (playerBuyinCustomConfirm) playerBuyinCustomConfirm.onclick = () => {
     const amt = parseFloat(document.getElementById("player-screen-custom-amount").value);
-    doPlayerBuyin(amt);
+    doPlayerBuyin(amt, playerBuyinCustomConfirm);
   };
   const playerLeaveBtn = app.querySelector("[data-player-leave-table]");
   if (playerLeaveBtn) playerLeaveBtn.onclick = () => {
@@ -4739,6 +4776,13 @@ function attachHandlers(){
         if (Math.abs(dy) > SWIPE_DECIDE_PX && Math.abs(dy) > Math.abs(dx)) { swipeAbandoned = true; return; }
         if (Math.abs(dx) > SWIPE_DECIDE_PX) swipeActive = true;
       }
+      // Once this reads as a real horizontal drag, stop the browser from also treating it
+      // as (or switching to) a native scroll/pan gesture mid-drag - touch-action:pan-y on
+      // the root already keeps casual vertical scrolling native everywhere else, but a
+      // real finger's first few pixels are rarely purely horizontal, and without this the
+      // browser can still commit to its own pan-y gesture on that initial wobble and cut
+      // the pointer sequence off with a pointercancel before swipeActive even matters.
+      if (swipeActive && e.cancelable) e.preventDefault();
     });
     swipeRoot.addEventListener("pointerup", (e) => {
       if (swipeStartX == null) return;
