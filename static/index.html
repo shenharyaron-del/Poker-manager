@@ -115,6 +115,17 @@ body.table-screen #app{height:100vh;height:100dvh;height:var(--real-vh, 100dvh);
    player screen's history/feed lists) while leaving horizontal swipes entirely to the JS
    swipe handlers in attachHandlers, unblocked by the browser's own gesture handling. */
 body.table-screen .table-swipe-root{display:flex;flex-direction:column;flex:1;min-height:0;touch-action:pan-y;}
+/* The actual swipeable carousel (see render()) - both faces (player screen + circles
+   view) are mounted side by side at all times when seated, so dragging visibly slides
+   the real content under the finger like a phone home screen, instead of an invisible
+   gesture that silently swaps views only once released. The viewport clips to one page's
+   width; the track is what .swipe-track's own transform moves in attachHandlers.
+   direction:ltr on the track (with direction:rtl put back on each .swipe-page) is what
+   makes "first DOM child = leftmost, translateX(0)" hold regardless of the page's own
+   RTL setting - plain physical left/right math instead of RTL-flexbox's reversed order. */
+body.table-screen .swipe-track-viewport{flex:1;min-height:0;overflow:hidden;position:relative;}
+body.table-screen .swipe-track{display:flex;direction:ltr;height:100%;}
+body.table-screen .swipe-page{flex:0 0 100%;width:100%;min-width:0;direction:rtl;display:flex;flex-direction:column;min-height:0;}
 body.table-screen .top{flex-shrink:0;touch-action:none;}
 /* min-height keeps the table circle from ever fully disappearing - if the action panel
    below (e.g. a settlement view listing several players' transfers) genuinely needs more
@@ -2723,28 +2734,42 @@ function render(){
   document.body.classList.toggle("table-screen", nav.screen === "table");
   let html = "";
   let showingPlayerScreen = false;
+  let seated = false;
   if (nav.screen === "home") html = renderHome();
   else if (nav.screen === "community") html = renderCommunity(nav.communityId);
   else if (nav.screen === "table") {
     const g = getGame(nav.gameId);
-    const seated = isSeatedInGame(g);
+    seated = isSeatedInGame(g);
     showingPlayerScreen = tableSubView === "player" && seated;
-    const inner = showingPlayerScreen ? renderPlayerScreen(nav.gameId) : renderTable(nav.gameId);
-    // Standard two-dot page indicator - only meaningful when there's actually a second
-    // page to swipe to (a seated player); a spectator/admin with only the circles view
-    // never sees it.
-    const dotsHtml = seated ? `
-      <div style="display:flex;justify-content:center;gap:6px;padding:8px 0;flex-shrink:0;">
-        <span style="width:7px;height:7px;border-radius:50%;background:${tableSubView==='player'?'var(--gold)':'rgba(255,255,255,.25)'};"></span>
-        <span style="width:7px;height:7px;border-radius:50%;background:${tableSubView==='table'?'var(--gold)':'rgba(255,255,255,.25)'};"></span>
-      </div>
-    ` : "";
-    // One wrapper around whichever face is showing - lets the swipe handlers in
-    // attachHandlers live on a single element instead of duplicating them per-view, and
-    // re-establishes the column-flex layout body.table-screen expects from #app's direct
-    // children (now just this one wrapper instead of .top/.poker-table-wrap/.bottom-bar
-    // directly) - see .table-swipe-root's own CSS.
-    html = `<div class="table-swipe-root">${inner}${dotsHtml}</div>`;
+    if (seated) {
+      // Both faces mounted side by side at all times (not just the active one) - lets the
+      // swipe drag actually slide real content under the finger like a phone home screen,
+      // instead of an invisible gesture that only silently swaps views on release (that
+      // version was reported repeatedly as "swiping doesn't work" even once the touch
+      // handling itself was fixed - it technically worked, it just never looked or felt
+      // like it was doing anything while dragging).
+      const playerHtml = renderPlayerScreen(nav.gameId);
+      const tableHtml = renderTable(nav.gameId);
+      const dotsHtml = `
+        <div style="display:flex;justify-content:center;gap:6px;padding:8px 0;flex-shrink:0;">
+          <span style="width:7px;height:7px;border-radius:50%;background:${tableSubView==='player'?'var(--gold)':'rgba(255,255,255,.25)'};"></span>
+          <span style="width:7px;height:7px;border-radius:50%;background:${tableSubView==='table'?'var(--gold)':'rgba(255,255,255,.25)'};"></span>
+        </div>
+      `;
+      html = `<div class="table-swipe-root">
+        <div class="swipe-track-viewport">
+          <div class="swipe-track" data-swipe-track style="transform:translateX(${tableSubView==='player'?'0':'-100%'});">
+            <div class="swipe-page">${playerHtml}</div>
+            <div class="swipe-page">${tableHtml}</div>
+          </div>
+        </div>
+        ${dotsHtml}
+      </div>`;
+    } else {
+      // Not seated (spectator/admin) - only the circles view exists, nothing to swipe to,
+      // so skip the carousel machinery entirely and keep the plain single-face structure.
+      html = `<div class="table-swipe-root">${renderTable(nav.gameId)}</div>`;
+    }
   }
   const screenLabel = showingPlayerScreen ? "מסך שחקן" : (SCREEN_NAMES[nav.screen] || nav.screen);
   const screenTag = `<div class="screen-tag">${esc(screenLabel)}</div>`;
@@ -2759,7 +2784,10 @@ function render(){
   // resizing inner a frame later then left the just-drawn arrows misaligned with the now-
   // resized table - reported live as "the arrows aren't precise". Moved into the same
   // rAF callback, after layoutTableSize() actually finishes resizing, instead of before it.
-  if (nav.screen === "table" && !showingPlayerScreen) {
+  // Runs whenever .poker-table-wrap exists at all now, not just when it's the visible
+  // face - with both panes always mounted while seated, the circles view's own DOM (and
+  // its sizing) exists even while the player screen is the one on screen.
+  if (nav.screen === "table") {
     requestAnimationFrame(() => { layoutTableSize(); drawSettlementArrows(); });
     animateSeatCaptions(nav.gameId);
     // The immediate rAF above can land mid-transition (.poker-table-wrap now animates
@@ -2773,12 +2801,14 @@ function render(){
     if (wrapEl) wrapEl.addEventListener("transitionend", (e) => {
       if (e.propertyName === "height") layoutTableSize();
     });
-  } else if (nav.screen !== "table") {
+  } else {
     drawSettlementArrows(); // no-op on other screens (#settlement-overlay doesn't exist there)
   }
-  if (showingPlayerScreen) {
+  if (seated) {
     // WhatsApp-style feed - always opens scrolled to the newest (bottom) message, same
-    // as a real chat would, not wherever the previous render happened to leave it.
+    // as a real chat would, not wherever the previous render happened to leave it. Runs
+    // even while the circles view is the one on screen, since the player screen's feed
+    // pane is always mounted in the background now.
     const feedEl = app.querySelector("[data-player-feed]");
     if (feedEl) {
       feedEl.scrollTop = feedEl.scrollHeight;
@@ -4787,14 +4817,39 @@ function attachHandlers(){
     openModal({type:"seatChips", gameId: nav.gameId, playerId: pid});
   };
 
-  // Swipe between the player screen and the classic circles view (see render()'s
-  // .table-swipe-root wrapper) - a real drag past the threshold only, so an ordinary tap
-  // or vertical scroll (the felt, the history/feed lists) never gets mistaken for one.
-  // Seats/buttons/inputs are excluded so their own drag/tap handling stays untouched.
+  // Swipe between the player screen and the classic circles view - both are mounted side
+  // by side in [data-swipe-track] (see render()) and this literally drags that track
+  // under the finger in real time, phone-home-screen style, snapping to whichever side is
+  // closer (or past the distance threshold) on release instead of only deciding on
+  // release with no visible feedback while dragging - that version worked mechanically
+  // but was repeatedly reported as "doesn't work" since nothing visibly happened until
+  // the gesture ended. Seats/buttons/inputs/.chat-frame are excluded so their own
+  // drag/tap/scroll handling stays untouched.
   const swipeRoot = app.querySelector(".table-swipe-root");
-  if (swipeRoot) {
-    let swipeStartX = null, swipeStartY = null, swipeActive = false, swipeAbandoned = false, swipeLastDx = 0, swipeLastDy = 0;
-    const SWIPE_THRESHOLD = 60, SWIPE_DECIDE_PX = 12;
+  const swipeTrack = app.querySelector("[data-swipe-track]");
+  if (swipeRoot && swipeTrack) {
+    let swipeStartX = null, swipeStartY = null, swipeActive = false, swipeAbandoned = false, swipeLastDx = 0;
+    const SWIPE_DECIDE_PX = 12;
+    const pageWidth = () => swipeRoot.getBoundingClientRect().width;
+    const baseOffset = () => (tableSubView === "player" ? 0 : -pageWidth());
+    const setTrack = (px, animated) => {
+      swipeTrack.style.transition = animated ? "transform .25s ease" : "none";
+      swipeTrack.style.transform = `translateX(${px}px)`;
+    };
+    const settle = (dx, fromCancel) => {
+      const w = pageWidth();
+      const threshold = fromCancel ? 30 : w * 0.22;
+      if (dx < -threshold && tableSubView === "player") tableSubView = "table";
+      else if (dx > threshold && tableSubView === "table") tableSubView = "player";
+      // else: not past threshold - tableSubView stays what it already was, so baseOffset()
+      // below naturally snaps back to where this drag started instead of completing it.
+      setTrack(baseOffset(), true);
+      // The full render() (which drops the now-redundant transform/transition and
+      // re-measures the table) only needs to happen once the slide animation has
+      // actually finished, not before - doing it immediately would yank the DOM out
+      // from under the still-running CSS transition.
+      setTimeout(render, 260);
+    };
     // {passive:false} is load-bearing, not decoration - modern browsers default touch-
     // driven pointer listeners to passive (for scroll perf), which makes preventDefault()
     // inside them a silent no-op with no error or warning. That's almost certainly why
@@ -4806,12 +4861,12 @@ function attachHandlers(){
       // never even start tracking a swipe there, so it can never compete with (or get
       // starved by) the frame's native scrolling.
       if (e.target.closest("[data-seat], button, input, textarea, select, a, [data-toggle-action-panel], .chat-frame")) return;
-      swipeStartX = e.clientX; swipeStartY = e.clientY; swipeActive = false; swipeAbandoned = false; swipeLastDx = 0; swipeLastDy = 0;
+      swipeStartX = e.clientX; swipeStartY = e.clientY; swipeActive = false; swipeAbandoned = false; swipeLastDx = 0;
     }, {passive:false});
     swipeRoot.addEventListener("pointermove", (e) => {
       if (swipeStartX == null || swipeAbandoned) return;
       const dx = e.clientX - swipeStartX, dy = e.clientY - swipeStartY;
-      swipeLastDx = dx; swipeLastDy = dy;
+      swipeLastDx = dx;
       if (!swipeActive) {
         if (Math.abs(dy) > SWIPE_DECIDE_PX && Math.abs(dy) > Math.abs(dx)) { swipeAbandoned = true; return; }
         if (Math.abs(dx) > SWIPE_DECIDE_PX) swipeActive = true;
@@ -4823,24 +4878,24 @@ function attachHandlers(){
       // cut the pointer sequence off with a pointercancel, at which point calling
       // preventDefault later is already too late to matter.
       if ((swipeActive || Math.abs(dx) >= Math.abs(dy)) && e.cancelable) e.preventDefault();
+      if (swipeActive) {
+        const w = pageWidth();
+        const raw = Math.max(-w, Math.min(0, baseOffset() + dx));
+        setTrack(raw, false);
+      }
     }, {passive:false});
     swipeRoot.addEventListener("pointerup", (e) => {
       if (swipeStartX == null) return;
       const dx = e.clientX - swipeStartX;
       swipeStartX = null;
       if (!swipeActive || swipeAbandoned) return;
-      if (dx < -SWIPE_THRESHOLD && tableSubView === "player") { tableSubView = "table"; render(); }
-      else if (dx > SWIPE_THRESHOLD && tableSubView === "table" && isSeatedInGame(getGame(nav.gameId))) { tableSubView = "player"; render(); }
+      settle(dx, false);
     });
-    // Defense in depth: if a browser still cancels the gesture anyway (mid-drag,
-    // before pointerup), fall back to whatever the last real movement sample said
-    // instead of just silently dropping the swipe - a lower bar than SWIPE_THRESHOLD
-    // since a cancel means the finger is still moving, not that it settled at this point.
+    // Defense in depth: if a browser still cancels the gesture anyway (mid-drag, before
+    // pointerup), settle from the last real movement sample instead of leaving the track
+    // stranded wherever the cancel happened to catch it.
     swipeRoot.addEventListener("pointercancel", () => {
-      if (swipeActive && !swipeAbandoned) {
-        if (swipeLastDx < -30 && tableSubView === "player") { tableSubView = "table"; render(); }
-        else if (swipeLastDx > 30 && tableSubView === "table" && isSeatedInGame(getGame(nav.gameId))) { tableSubView = "player"; render(); }
-      }
+      if (swipeActive && !swipeAbandoned) settle(swipeLastDx, true);
       swipeStartX = null; swipeActive = false; swipeAbandoned = false;
     });
   }
