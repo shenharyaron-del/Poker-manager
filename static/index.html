@@ -2747,6 +2747,14 @@ function render(){
   const screenTag = `<div class="screen-tag">${esc(screenLabel)}</div>`;
   html = screenTag + html;
   if (modal) html += renderModal(modal);
+  // Captured BEFORE replacing the DOM below - app.innerHTML wipes and recreates these
+  // elements from scratch every render, so a brand new element always starts at
+  // scrollTop 0 regardless of where the old one was left. Not explicitly restoring that
+  // (previous fix only skipped the force-to-bottom, assuming the browser would otherwise
+  // leave the scroll position alone) meant every no-op render silently reset both frames
+  // to the top - reported live as "now it jumps to the top every few seconds instead".
+  const prevHistoryScrollTop = (() => { const el = app.querySelector("[data-player-history]"); return el ? el.scrollTop : null; })();
+  const prevFeedScrollTop = (() => { const el = app.querySelector("[data-player-feed]"); return el ? el.scrollTop : null; })();
   app.innerHTML = html;
   attachHandlers();
   // Runs whenever .poker-table-wrap exists at all now, not just when it's the visible
@@ -2773,6 +2781,7 @@ function render(){
     if (historyEl) {
       const latestHistoryKeySeen = historyEl.dataset.latestBuyin;
       if (latestHistoryKeySeen !== lastSeenHistoryKey) historyEl.scrollTop = historyEl.scrollHeight;
+      else if (prevHistoryScrollTop !== null) historyEl.scrollTop = prevHistoryScrollTop;
       lastSeenHistoryKey = latestHistoryKeySeen;
     }
     const feedEl = app.querySelector("[data-player-feed]");
@@ -2784,6 +2793,7 @@ function render(){
       const latestKey = feedEl.dataset.latestEvent;
       const isNewEvent = latestKey !== lastSeenFeedEventKey;
       if (isNewEvent) feedEl.scrollTop = feedEl.scrollHeight;
+      else if (prevFeedScrollTop !== null) feedEl.scrollTop = prevFeedScrollTop;
       if (latestKey && lastSeenFeedEventKey !== null && isNewEvent && navigator.vibrate) {
         navigator.vibrate(80);
       }
@@ -3246,12 +3256,15 @@ function renderAdminScreen(gameId){
   // elsewhere in the app (renderTable's own seatsHtml skips its empty state the same way,
   // see "if (i === 9) return \"\"") that isn't actually meant to be used - 9 players is the
   // real cap.
-  const emptySeatRows = seats.map((pid,i) => (pid===null && i<9) ? i : -1).filter(i=>i>=0).map(i => `
+  const emptySeatIndices = seats.map((pid,i) => (pid===null && i<9) ? i : -1).filter(i=>i>=0);
+  // One summary row instead of one per empty seat - any of them works identically for
+  // seating a new player, so listing each by number added nothing but length.
+  const emptySeatRows = emptySeatIndices.length ? `
     <div class="roster-row">
-      <span style="color:var(--muted);">מושב פנוי ${i+1}</span>
-      <button class="btn btn-ghost btn-sm" data-admin-add-seat="${i}">${icon('plus')} הוסף שחקן</button>
+      <span style="color:var(--muted);">${emptySeatIndices.length} מקומות פנויים</span>
+      <button class="btn btn-ghost btn-sm" data-admin-add-seat="${emptySeatIndices[0]}">${icon('plus')} הוסף שחקן</button>
     </div>
-  `).join("");
+  ` : "";
 
   // Once everyone's cashed out but the declared chips don't match what was bought in by
   // more than ₪5, settling up between players off those numbers would just be wrong - an
