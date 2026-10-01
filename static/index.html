@@ -1619,6 +1619,15 @@ let adminBalanceFixSelected = {};
 // means "haven't seen this game's feed yet" (right after navigating in), so the very
 // first render never vibrates for data that was already there. Reset in go().
 let lastSeenFeedEventKey = null;
+// Same idea as lastSeenFeedEventKey, for the purchase-history frame right above it - see
+// render()'s scroll-gating. Reset in go().
+let lastSeenHistoryKey = null;
+// Which seated player's transfers the settlement arrows (drawSettlementArrows) are
+// filtered to - null means "default" (the viewer's own seat if they're playing, otherwise
+// everyone's). Set by tapping a seat while the arrows are showing (see attachHandlers'
+// [data-seat] handling) - tapping the same seat again clears back to the default. UI-only,
+// not persisted, reset on nav (see go()).
+let settlementFilterPlayerId = null;
 const FIXED_BUYIN_AMOUNTS = [50, 80, 100];
 // "אחר" exists for amounts ABOVE the standard tiers, not to re-type the lowest tier under
 // a different control - so unlike the fixed pills (already >= this by construction), a
@@ -1718,6 +1727,8 @@ function go(screen, extra){
   playerScreenCustomOpen = false;
   adminBalanceFixSelected = {};
   lastSeenFeedEventKey = null;
+  lastSeenHistoryKey = null;
+  settlementFilterPlayerId = null;
   if (screen === "table" && nav.gameId) autoSeatSelf(nav.gameId);
   lockPortraitForScreen(screen);
   render();
@@ -2751,21 +2762,29 @@ function render(){
     drawSettlementArrows(); // no-op if #settlement-overlay doesn't exist on this screen
   }
   if (seated) {
-    // Both the personal history and the whole-table feed always open scrolled to the
-    // newest (bottom) message, same as a real chat would, not wherever the previous
-    // render happened to leave them. Runs even while the circles view is the one on
-    // screen, since the player screen's panes are always mounted in the background now.
+    // Both the personal history and the whole-table feed open scrolled to the newest
+    // (bottom) message, same as a real chat would - but ONLY force that scroll when a
+    // genuinely new row actually arrived (or on the very first render after navigating
+    // in), not on every render. render() re-runs every ~6s (periodic refresh) and on every
+    // SSE push regardless of whether anything changed, so scrolling unconditionally here
+    // snapped the user back to the bottom mid-read every few seconds - reported live as
+    // "scrolling up gets interrupted, it keeps jumping to the end".
     const historyEl = app.querySelector("[data-player-history]");
-    if (historyEl) historyEl.scrollTop = historyEl.scrollHeight;
+    if (historyEl) {
+      const latestHistoryKeySeen = historyEl.dataset.latestBuyin;
+      if (latestHistoryKeySeen !== lastSeenHistoryKey) historyEl.scrollTop = historyEl.scrollHeight;
+      lastSeenHistoryKey = latestHistoryKeySeen;
+    }
     const feedEl = app.querySelector("[data-player-feed]");
     if (feedEl) {
-      feedEl.scrollTop = feedEl.scrollHeight;
       // Buzz on every genuinely new feed entry (anyone's buy-in or cash-out, not just
       // this device's own) - lastSeenFeedEventKey starting null means the very first
       // render of a freshly-opened game never buzzes for data that was already there,
       // only for what actually changes after that.
       const latestKey = feedEl.dataset.latestEvent;
-      if (latestKey && lastSeenFeedEventKey !== null && latestKey !== lastSeenFeedEventKey && navigator.vibrate) {
+      const isNewEvent = latestKey !== lastSeenFeedEventKey;
+      if (isNewEvent) feedEl.scrollTop = feedEl.scrollHeight;
+      if (latestKey && lastSeenFeedEventKey !== null && isNewEvent && navigator.vibrate) {
         navigator.vibrate(80);
       }
       lastSeenFeedEventKey = latestKey;
@@ -2963,6 +2982,9 @@ function renderPlayerScreen(gameId){
   const p = g.players.find(pl => pl.id === pid);
   const myBuyins = g.buyins.filter(b => b.playerId === pid).slice().sort((a,b) => (a.ts||0)-(b.ts||0));
   const buyinTotal = myBuyins.reduce((s,b) => s+b.amount, 0);
+  // Identifies the history frame's newest row, same purpose as latestFeedEventKey below -
+  // render() only force-scrolls this frame to the bottom when this actually changes.
+  const latestHistoryKey = myBuyins.length ? myBuyins[myBuyins.length-1].id : "";
   const cashedOut = pid in g.cashouts;
   // Once every seated player has cashed out (the night auto-closes via maybeAutoCloseNight
   // at that point - see its own comment) and the pot is balanced, show THIS player directly
@@ -3007,7 +3029,7 @@ function renderPlayerScreen(gameId){
         <div style="margin-top:10px;">
           <div style="font-weight:700;color:#fda4af;">${t.amount} שח מעביר ל-${esc(t.toName)}</div>
           <div style="display:flex;gap:8px;margin-top:8px;">
-            <a href="https://www.bit.co.il" target="_blank" rel="noopener" class="btn btn-ghost flex1" style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} ביט</a>
+            <button class="btn btn-ghost flex1" data-open-bit-generic style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} ביט</button>
             ${activePayboxLink ? `<a href="${esc(activePayboxLink)}" target="_blank" rel="noopener" class="btn btn-ghost flex1" style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} פייבוקס</a>` : ""}
           </div>
         </div>
@@ -3143,7 +3165,7 @@ function renderPlayerScreen(gameId){
       ${cashedOut ? "" : `<div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">ריביי</div>`}
       ${cashedOut ? "" : buyinButtonsHtml}
       <div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">היסטוריית קניות</div>
-      <div class="chat-frame" data-player-history style="height:110px;margin-bottom:14px;flex-shrink:0;">${historyRows}</div>
+      <div class="chat-frame" data-player-history data-latest-buyin="${latestHistoryKey}" style="height:110px;margin-bottom:14px;flex-shrink:0;">${historyRows}</div>
       <div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">פעילות בשולחן</div>
       <div class="chat-frame" data-player-feed data-latest-event="${latestFeedEventKey}" style="flex:1;height:auto;min-height:54px;margin-bottom:${cashedOut?'0':'14px'};">${feedRows}</div>
       ${cashedOut ? "" : `<button class="btn btn-block" style="background:#57534e;color:#f5f5f4;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:6px;" data-player-leave-table>${icon('out')} יציאה מהשולחן</button>`}
@@ -3427,7 +3449,11 @@ function renderTable(gameId){
       ...remaining.map(t => ({ fromId: t.from, toId: t.to, amount: t.amount, paid: false })),
       ...alreadyPaid.map(t => ({ fromId: t.fromPlayerId, toId: t.toPlayerId, amount: t.amount, paid: true })),
     ];
-    const filterId = seatedIds.includes(myPlayerId) ? myPlayerId : null;
+    // Defaults to the viewer's own seat (not "show everyone"); tapping another seat while
+    // arrows are showing overrides this to that player instead (see attachHandlers'
+    // [data-seat] handling) - tapping the same one again clears back to this default.
+    const defaultFilterId = seatedIds.includes(myPlayerId) ? myPlayerId : null;
+    const filterId = (settlementFilterPlayerId && seatedIds.includes(settlementFilterPlayerId)) ? settlementFilterPlayerId : defaultFilterId;
     currentSettlementTransfers = { seats, transfers: allTransfers, filterId };
   }
 
@@ -4132,7 +4158,7 @@ function renderModal(m){
       </div>
       <div class="field"><label>סכום בשקלים</label><input type="number" inputmode="decimal" id="direct-pay-amount" value="${m.amount||''}" placeholder="0" autofocus></div>
       <div style="display:flex;gap:8px;margin-bottom:14px;">
-        <a href="https://www.bit.co.il" target="_blank" rel="noopener" class="btn btn-ghost flex1" style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} ביט</a>
+        <button class="btn btn-ghost flex1" data-open-bit-generic style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} ביט</button>
         ${getActivePayboxLink(getCommunity(g.communityId)) ? `<a href="${esc(getActivePayboxLink(getCommunity(g.communityId)))}" target="_blank" rel="noopener" class="btn btn-ghost flex1" style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} פייבוקס</a>` : ""}
       </div>
       <button class="btn btn-primary btn-block" data-confirm-direct-pay>שמור</button>
@@ -5036,8 +5062,35 @@ function attachHandlers(){
   const openOddsBtn = app.querySelector("[data-open-poker-odds]");
   if (openOddsBtn) openOddsBtn.onclick = () => openModal({type:"pokerOdds", gameType: "holdem", imageSrc: null, reading: false, error: null, results: null, hands: null, board: null});
 
+  // Plain app-open, no phone/amount prefill (see git history 117ef81's own data-open-bit-
+  // generic) - location.href, not window.open, since window.open silently does nothing
+  // for a custom (non-http) scheme like bit://.
+  app.querySelectorAll("[data-open-bit-generic]").forEach(el => el.onclick = () => { window.location.href = "bit://"; });
+
   app.querySelectorAll("[data-seat]").forEach(el => {
     const dragHandle = el.querySelector(".seat-circle") || el;
+    // Once everyone's cashed out and settlement arrows are showing, dragging seats around
+    // is meaningless (the night's over) - skip the drag machinery entirely and let a tap
+    // toggle which player's transfers the arrows are filtered to instead (restored from
+    // git history 117ef81, same reasoning as its own comment here: a plain click listener
+    // has no movement threshold, so incidental jitter during a real tap can't get
+    // misread as a drag and swallow the tap).
+    if (currentSettlementTransfers) {
+      const filterClick = (e) => {
+        if (e) e.stopPropagation();
+        const g = getGame(nav.gameId);
+        const idx = parseInt(el.dataset.seat);
+        const seats = g.seats || new Array(9).fill(null);
+        const pid = seats[idx];
+        if (!pid) return;
+        settlementFilterPlayerId = settlementFilterPlayerId === pid ? null : pid;
+        render();
+      };
+      dragHandle.addEventListener("click", filterClick);
+      const infoEl = el.querySelector("[data-seat-info]");
+      if (infoEl) infoEl.addEventListener("click", filterClick);
+      return;
+    }
     let drag = null;
     dragHandle.addEventListener("pointerdown", (e) => {
       const g = getGame(nav.gameId);
