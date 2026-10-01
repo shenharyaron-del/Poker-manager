@@ -2722,7 +2722,7 @@ function render(){
       const domOrder = N === 3 ? [cyclicPage(pageOrder, tableSubView, -1), tableSubView, cyclicPage(pageOrder, tableSubView, 1)] : pageOrder;
       const restOffset = N === 3 ? "-100%" : (domOrder[0] === tableSubView ? "0" : "-100%");
       const pagesHtml = domOrder.map(key => `<div class="swipe-page">${RENDERERS[key]()}</div>`).join("");
-      const DOT_LABELS = { admin: "ניהול שחקנים", player: "שחקן", table: "שולחן" };
+      const DOT_LABELS = { admin: "ניהול שחקנים", player: "השחקן שלי", table: "שולחן" };
       const dotsRow = `
         <div style="display:flex;justify-content:center;gap:6px;">
           ${pageOrder.map(key => `<span style="width:7px;height:7px;border-radius:50%;background:${tableSubView===key?'var(--gold)':'rgba(255,255,255,.25)'};" title="${DOT_LABELS[key]}"></span>`).join("")}
@@ -3044,15 +3044,15 @@ function renderPlayerScreen(gameId){
       statusHtml = profitForInfo >= 0
         ? `<div style="font-size:13px;color:var(--muted);margin-top:10px;">הרווח יחולק אחרי שכולם ישלמו לקבוצה</div>`
         : (activePayboxLink
-            ? `<a href="${esc(activePayboxLink)}" target="_blank" rel="noopener" class="btn btn-primary btn-block" style="margin-top:10px;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} העברה לקבוצת פייבוקס</a>`
+            ? `<a href="${esc(activePayboxLink)}" target="_blank" rel="noopener" class="btn btn-block" style="margin-top:10px;background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"></a>`
             : `<div style="font-size:12px;color:var(--muted);margin-top:10px;">לא הוגדרה קבוצת פייבוקס</div>`);
     } else if (allCashedOutForSettlement && potBalancedForSettlement) {
       statusHtml = mySettlementTxns.map(t => t.from === pid ? `
         <div style="margin-top:10px;">
           <div style="font-weight:700;color:#fda4af;">${t.amount} שח מעביר ל-${esc(t.toName)}</div>
           <div style="display:flex;gap:8px;margin-top:8px;">
-            <button class="btn btn-ghost flex1" data-open-bit-generic style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} ביט</button>
-            ${activePayboxLink ? `<a href="${esc(activePayboxLink)}" target="_blank" rel="noopener" class="btn btn-ghost flex1" style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} פייבוקס</a>` : ""}
+            <button class="btn flex1" data-open-bit-generic style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} ביט</button>
+            ${activePayboxLink ? `<a href="${esc(activePayboxLink)}" target="_blank" rel="noopener" class="btn flex1" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"></a>` : ""}
           </div>
         </div>
       ` : `<div style="margin-top:10px;font-weight:700;color:#6ee7b7;">מקבל מ-${esc(t.fromName)} ${t.amount} שח</div>`).join("");
@@ -3298,7 +3298,7 @@ function renderAdminScreen(gameId){
         </div>`;
       }).join("")}
       ${selectedIds.length ? `<div style="text-align:center;color:var(--muted);font-size:12px;margin:6px 0;">${perPlayer>=0?'כל שחקן מסומן יקבל':'מכל שחקן מסומן יילקח'} ₪${Math.abs(perPlayer)}</div>` : ""}
-      <button class="btn btn-primary btn-block" data-admin-fix-pot-balance ${selectedIds.length?"":"disabled"}>${icon('coins')} סדר קופה</button>
+      <button class="btn btn-primary btn-block" data-admin-fix-pot-balance style="background:#0891b2;color:#fff;" ${selectedIds.length?"":"disabled"}>${icon('coins')} סדר קופה</button>
     `;
   }
 
@@ -4183,8 +4183,8 @@ function renderModal(m){
       </div>
       <div class="field"><label>סכום בשקלים</label><input type="number" inputmode="decimal" id="direct-pay-amount" value="${m.amount||''}" placeholder="0" autofocus></div>
       <div style="display:flex;gap:8px;margin-bottom:14px;">
-        <button class="btn btn-ghost flex1" data-open-bit-generic style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} ביט</button>
-        ${getActivePayboxLink(getCommunity(g.communityId)) ? `<a href="${esc(getActivePayboxLink(getCommunity(g.communityId)))}" target="_blank" rel="noopener" class="btn btn-ghost flex1" style="display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} פייבוקס</a>` : ""}
+        <button class="btn flex1" data-open-bit-generic style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} ביט</button>
+        ${getActivePayboxLink(getCommunity(g.communityId)) ? `<a href="${esc(getActivePayboxLink(getCommunity(g.communityId)))}" target="_blank" rel="noopener" class="btn flex1" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"></a>` : ""}
       </div>
       <button class="btn btn-primary btn-block" data-confirm-direct-pay>שמור</button>
     `;
