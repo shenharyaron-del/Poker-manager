@@ -2722,12 +2722,24 @@ function render(){
       const domOrder = N === 3 ? [cyclicPage(pageOrder, tableSubView, -1), tableSubView, cyclicPage(pageOrder, tableSubView, 1)] : pageOrder;
       const restOffset = N === 3 ? "-100%" : (domOrder[0] === tableSubView ? "0" : "-100%");
       const pagesHtml = domOrder.map(key => `<div class="swipe-page">${RENDERERS[key]()}</div>`).join("");
-      const DOT_LABELS = { admin: "אדמינים", player: "שחקן", table: "שולחן" };
-      const dotsHtml = `
-        <div style="display:flex;justify-content:center;gap:6px;padding:8px 0;flex-shrink:0;">
+      const DOT_LABELS = { admin: "ניהול שחקנים", player: "שחקן", table: "שולחן" };
+      const dotsRow = `
+        <div style="display:flex;justify-content:center;gap:6px;">
           ${pageOrder.map(key => `<span style="width:7px;height:7px;border-radius:50%;background:${tableSubView===key?'var(--gold)':'rgba(255,255,255,.25)'};" title="${DOT_LABELS[key]}"></span>`).join("")}
         </div>
       `;
+      // With all 3 faces in the carousel, a plain row of dots doesn't say WHICH screen is
+      // in which direction - these two corner labels name the adjacent screen a swipe (or
+      // a tap right here) leads to, with a chevron pointing toward it. Only shown with 3
+      // pages: with just 2 (player/table) there's only one "other" screen either way, not
+      // worth labeling twice.
+      const dotsHtml = N === 3 ? `
+        <div style="position:relative;padding:8px 0;flex-shrink:0;">
+          <button data-swipe-to="${cyclicPage(pageOrder, tableSubView, -1)}" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:rgba(255,255,255,.55);font-size:11px;display:flex;align-items:center;gap:3px;cursor:pointer;padding:4px;">${esc(DOT_LABELS[cyclicPage(pageOrder, tableSubView, -1)])}${icon('left')}</button>
+          ${dotsRow}
+          <button data-swipe-to="${cyclicPage(pageOrder, tableSubView, 1)}" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:rgba(255,255,255,.55);font-size:11px;display:flex;align-items:center;gap:3px;cursor:pointer;padding:4px;">${icon('right')}${esc(DOT_LABELS[cyclicPage(pageOrder, tableSubView, 1)])}</button>
+        </div>
+      ` : `<div style="padding:8px 0;flex-shrink:0;">${dotsRow}</div>`;
       html = `<div class="table-swipe-root">
         <div class="swipe-track-viewport">
           <div class="swipe-track" data-swipe-track style="transform:translateX(${restOffset});">
@@ -2742,7 +2754,7 @@ function render(){
       html = `<div class="table-swipe-root">${renderTable(nav.gameId)}</div>`;
     }
   }
-  const SUB_VIEW_LABELS = { player: "מסך שחקן", table: "מסך השולחן", admin: "מסך אדמינים" };
+  const SUB_VIEW_LABELS = { player: "מסך שחקן", table: "מסך השולחן", admin: "מסך ניהול שחקנים" };
   const screenLabel = (seated && SUB_VIEW_LABELS[tableSubView]) || (SCREEN_NAMES[nav.screen] || nav.screen);
   const screenTag = `<div class="screen-tag">${esc(screenLabel)}</div>`;
   html = screenTag + html;
@@ -4638,6 +4650,14 @@ function attachHandlers(){
       }
     }
   }
+
+  // The two corner labels next to the carousel dots (3-page case only, see render()) -
+  // naming the adjacent screen and letting a tap jump straight there, same destination a
+  // swipe in that direction would reach.
+  app.querySelectorAll("[data-swipe-to]").forEach(el => el.onclick = () => {
+    tableSubView = el.dataset.swipeTo;
+    render();
+  });
 
   // Swipe between the player screen and the classic circles view - both are mounted side
   // by side in [data-swipe-track] (see render()) and this literally drags that track
