@@ -3763,8 +3763,13 @@ function renderTable(gameId){
         <h1 class="serif sm" style="color:var(--gold);">${esc(g.name || c.name)}</h1>
         <div class="meta" style="color:#6ee7b7;font-size:12px;display:flex;align-items:center;gap:5px;">${icon('cal')}${esc(g.date)}${g.createdByName ? ` · נוצר ע"י ${esc(g.createdByName)}` : ""}</div>
       </div>
-      ${!allCashedOut ? `<button class="icon-btn gold" data-open-poker-odds title="מה הסיכויים שלי" style="flex-shrink:0;width:36px;height:36px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;">${icon('percent')}</button>` : ""}
     </div>
+    ${!allCashedOut ? `
+    <div style="display:flex;justify-content:flex-end;padding:0 20px 10px;">
+      <button class="icon-btn" data-open-poker-odds title="מה הסיכויים שלי" style="flex-shrink:0;width:44px;height:44px;border-radius:50%;padding:0;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;">
+        <img src="/static/odds-coin.png" style="width:100%;height:100%;object-fit:cover;display:block;">
+      </button>
+    </div>` : ""}
     <div class="poker-table-wrap">
       <div class="poker-table-inner ${cropClass}">
         <div class="poker-table-felt"></div>
