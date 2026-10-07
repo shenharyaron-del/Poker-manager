@@ -3765,9 +3765,10 @@ function renderTable(gameId){
       </div>
     </div>
     ${!allCashedOut ? `
-    <div style="display:flex;justify-content:flex-end;padding:0 20px 10px;">
-      <button class="icon-btn" data-open-poker-odds title="מה הסיכויים שלי" style="flex-shrink:0;width:44px;height:44px;border-radius:50%;padding:0;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;">
-        <img src="/static/odds-coin.png" style="width:100%;height:100%;object-fit:cover;display:block;">
+    <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:0 20px 10px;">
+      <span style="color:var(--muted);font-size:12px;">מחשבון סיכויי פוקר</span>
+      <button class="icon-btn" data-open-poker-odds title="מה הסיכויים שלי" style="flex-shrink:0;width:48px;height:auto;background:none;border:none;padding:0;display:inline-flex;align-items:center;justify-content:center;">
+        <img src="/static/odds-coin.png" style="width:48px;height:auto;display:block;">
       </button>
     </div>` : ""}
     <div class="poker-table-wrap">
