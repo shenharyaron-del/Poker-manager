@@ -123,6 +123,16 @@ _INIT_STATEMENTS = (
     # Postgres, unlike CREATE TABLE above - no DuplicateTable/UniqueViolation handling
     # needed for it.
     "ALTER TABLE roster_players ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT false",
+    # The 3 quick-buyin amounts shown on every buy-in button in this community (plus
+    # "אחר" for anything else) - NULL means "use the app default" (client-side
+    # DEFAULT_BUYIN_AMOUNTS), so existing communities don't need a migration/backfill.
+    "ALTER TABLE communities ADD COLUMN IF NOT EXISTS buyin_amounts JSONB",
+    # Who actually tapped the button for this buy-in, when it differs from the player it's
+    # for (an admin buying in on someone else's behalf from the admin screen) - NULL for
+    # the common case (a player buying in for themselves), matching game_events' own
+    # actor_name/"ע\"י X" convention so the activity feed can attribute admin-performed
+    # buy-ins the same way it already does for the 4 event-log-only action types.
+    "ALTER TABLE buyins ADD COLUMN IF NOT EXISTS actor_name TEXT",
     # A small event log for the table screen's activity feed - only for actions that would
     # otherwise leave no trace at all once done (a deleted buy-in, a player returned to the
     # table, a seat removed outright, the whole night declared over): unlike a buy-in or a
@@ -401,13 +411,14 @@ def _num(x):
 
 def _row_to_community(row):
     (cid, name, created_by, created_by_name, chip_ratio, active_paybox_link_id,
-     settlement_default, updated_at, last_participants) = row
+     settlement_default, updated_at, last_participants, buyin_amounts) = row
     return {
         "id": cid, "name": name, "createdBy": created_by, "createdByName": created_by_name,
         "chipRatio": _num(chip_ratio), "activePayboxLinkId": active_paybox_link_id,
         "settlementDefault": settlement_default,
         "updatedAt": updated_at.isoformat() if updated_at else None,
         "lastParticipants": last_participants,
+        "buyinAmounts": buyin_amounts,
     }
 
 
@@ -424,7 +435,7 @@ def v2_list_communities():
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT id, name, created_by, created_by_name, chip_ratio, active_paybox_link_id, "
-                "settlement_default, updated_at, last_participants "
+                "settlement_default, updated_at, last_participants, buyin_amounts "
                 "FROM communities ORDER BY name"
             )
             communities = [_row_to_community(r) for r in cur.fetchall()]
@@ -500,9 +511,9 @@ def v2_get_game(game_id):
             cur.execute("SELECT player_id, name FROM game_players WHERE game_id = %s", (gid,))
             players = [{"id": r[0], "name": r[1]} for r in cur.fetchall()]
 
-            cur.execute("SELECT id, player_id, amount, ts FROM buyins WHERE game_id = %s ORDER BY ts", (gid,))
+            cur.execute("SELECT id, player_id, amount, ts, actor_name FROM buyins WHERE game_id = %s ORDER BY ts", (gid,))
             buyins = [
-                {"id": r[0], "playerId": r[1], "amount": _num(r[2]), "ts": int(r[3].timestamp() * 1000) if r[3] else None}
+                {"id": r[0], "playerId": r[1], "amount": _num(r[2]), "ts": int(r[3].timestamp() * 1000) if r[3] else None, "actorName": r[4]}
                 for r in cur.fetchall()
             ]
 
@@ -666,6 +677,8 @@ def v2_update_community(community_id):
         fields.append("settlement_default = %s"); params.append(body["settlementDefault"])
     if "lastParticipants" in body:
         fields.append("last_participants = %s"); params.append(Json(body["lastParticipants"]))
+    if "buyinAmounts" in body:
+        fields.append("buyin_amounts = %s"); params.append(Json(body["buyinAmounts"]) if body["buyinAmounts"] is not None else None)
     if not fields:
         return jsonify({"error": "no fields to update"}), 400
     fields.append("updated_at = now()")
@@ -708,17 +721,17 @@ def v2_duplicate_community(community_id):
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT created_by, created_by_name, chip_ratio FROM communities WHERE id = %s",
+                "SELECT created_by, created_by_name, chip_ratio, buyin_amounts FROM communities WHERE id = %s",
                 (community_id,),
             )
             src = cur.fetchone()
             if not src:
                 return jsonify({"error": "source community not found"}), 404
-            created_by, created_by_name, chip_ratio = src
+            created_by, created_by_name, chip_ratio, buyin_amounts = src
             cur.execute(
-                "INSERT INTO communities (id, name, created_by, created_by_name, chip_ratio) "
-                "VALUES (%s,%s,%s,%s,%s)",
-                (new_id, new_name, created_by, created_by_name, chip_ratio),
+                "INSERT INTO communities (id, name, created_by, created_by_name, chip_ratio, buyin_amounts) "
+                "VALUES (%s,%s,%s,%s,%s,%s)",
+                (new_id, new_name, created_by, created_by_name, chip_ratio, Json(buyin_amounts) if buyin_amounts is not None else None),
             )
 
             cur.execute(
@@ -1185,13 +1198,14 @@ def v2_remove_game_player(game_id, player_id):
 def v2_add_buyin(game_id):
     body = request.get_json(silent=True) or {}
     buyin_id, player_id, amount = body.get("id"), body.get("playerId"), body.get("amount")
+    actor_name = body.get("actorName")
     if not buyin_id or not player_id or amount is None:
         return jsonify({"error": "id, playerId and amount required"}), 400
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO buyins (id, game_id, player_id, amount, ts) VALUES (%s,%s,%s,%s,now())",
-                (buyin_id, game_id, player_id, amount),
+                "INSERT INTO buyins (id, game_id, player_id, amount, ts, actor_name) VALUES (%s,%s,%s,%s,now(),%s)",
+                (buyin_id, game_id, player_id, amount, actor_name),
             )
         conn.commit()
     return jsonify({"id": buyin_id}), 201

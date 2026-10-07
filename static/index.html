@@ -225,6 +225,11 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .custom-confirm{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:201;padding:16px;}
 .custom-confirm-box{background:#0c3d2e;border:1px solid var(--gold);border-radius:14px;padding:18px 16px;width:100%;max-width:400px;color:var(--text);font-size:14px;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.5);animation:custom-alert-in .2s ease-out;}
 .custom-confirm-actions{display:flex;gap:10px;margin-top:16px;}
+.buyin-confirm-overlay{position:fixed;inset:0;z-index:300;display:flex;align-items:center;justify-content:center;pointer-events:none;padding:16px;}
+.buyin-confirm-card{pointer-events:auto;background:#15803d;color:#fff;border-radius:18px;padding:28px 32px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.6);animation:buyin-confirm-pop .4s cubic-bezier(.34,1.56,.64,1);max-width:300px;}
+.buyin-confirm-card.fade-out{animation:buyin-confirm-fade .3s ease forwards;}
+@keyframes buyin-confirm-pop{0%{transform:scale(.5);opacity:0;}60%{transform:scale(1.1);opacity:1;}100%{transform:scale(1);opacity:1;}}
+@keyframes buyin-confirm-fade{to{opacity:0;transform:scale(.95);}}
 .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
 .modal-head h3{margin:0;font-size:18px;}
 .close-x{background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;}
@@ -658,9 +663,38 @@ async function loadStateV2(){
 // avatar (and any admin-added custom avatars) visibly vanished. Overlaying just
 // communities/games instead - the same "start from the blob, layer v2 on top" shape
 // init() already uses for its own initial load - keeps the rest of state untouched.
+// Whether applyFreshState has ever actually overlaid a real fetch yet - false only for the
+// very first call (seeding state from whatever's already on the server when the app
+// opens), which must never queue a confirm card for every buy-in that already existed.
+let hasAppliedFreshStateOnce = false;
+// Cross-device buy-in confirm card (item 4): comparing each game's buyins BEFORE this
+// overlay against the freshly-fetched ones catches any id that didn't exist a moment ago,
+// regardless of which device actually added it or which screen is currently showing - the
+// same diff this function already does to apply the fetch, reused rather than a parallel
+// polling loop. The device that itself performed the add already shows this card directly
+// from performBuyin once its own request resolves - skipped here via pendingBuyinRequest
+// so it doesn't also get caught by this diff a moment later and double up.
+function detectAndAnnounceNewBuyins(oldGames, newGames){
+  (newGames||[]).forEach(ng => {
+    const og = (oldGames||[]).find(g => g.id === ng.id);
+    const oldIds = new Set((og ? og.buyins : []).map(b => b.id));
+    const playerBuyins = {};
+    (ng.buyins||[]).forEach(b => { (playerBuyins[b.playerId] = playerBuyins[b.playerId] || []).push(b); });
+    (ng.buyins||[]).forEach(b => {
+      if (oldIds.has(b.id)) return;
+      if (pendingBuyinRequest && pendingBuyinRequest.gameId === ng.id && pendingBuyinRequest.id === b.id) return;
+      const player = (ng.players||[]).find(p => p.id === b.playerId);
+      const sorted = (playerBuyins[b.playerId]||[]).slice().sort((a,c)=>(a.ts||0)-(c.ts||0));
+      const isEntry = sorted.length > 0 && sorted[0].id === b.id;
+      showBuyinConfirmCard(player ? player.name : "שחקן", b.amount, isEntry);
+    });
+  });
+}
 function applyFreshState(fresh){
   if (fresh === null) return;
   if (USE_RELATIONAL_API) {
+    if (hasAppliedFreshStateOnce) detectAndAnnounceNewBuyins(state.games, fresh.games);
+    hasAppliedFreshStateOnce = true;
     state.communities = fresh.communities;
     state.games = fresh.games;
   } else {
@@ -1044,6 +1078,19 @@ async function v2ClaimSeat(gameId, seatIndex, playerId, name){
   g.updatedAt = result.updatedAt;
   if (!g.players.some(p => p.id === playerId)) g.players.push({id: playerId, name});
   if (g.liveChips[playerId] === undefined) g.liveChips[playerId] = 0;
+  // First time ever seated in this game (not a returning cashed-out player - that path
+  // clears their cashout entry directly, never calls claimSeat again) - auto-buy-in with
+  // the community's first configured amount instead of leaving them seated with nothing
+  // bought in and no screen asking them to pick one. Fire-and-forget: seat-claiming itself
+  // must not block on a second full round trip, and performBuyin owns its own render()/
+  // error handling/pending-banner lifecycle independently. myIdentity.name (whoever is
+  // actually operating this device - themselves, or an admin seating someone else from
+  // the admin screen), not the seated player's own `name`, so the feed attributes it
+  // correctly either way (see performBuyin's actorName===playerName self-buy check).
+  if (!g.buyins.some(b => b.playerId === playerId) && !pendingBuyinRequest) {
+    const c = getCommunity(g.communityId);
+    performBuyin(gameId, playerId, getBuyinAmounts(c)[0], {isEntry: true, actorName: myIdentity.name});
+  }
   return true;
 }
 
@@ -1117,9 +1164,9 @@ async function v2RemoveGamePlayer(gameId, playerId){
   await v2MaybeAutoCloseNight(gameId);
 }
 
-async function v2AddBuyin(gameId, id, playerId, amount){
-  await v2Fetch("POST", `/games/${gameId}/buyins`, {id, playerId, amount});
-  getGame(gameId).buyins.push({id, playerId, amount, ts: Date.now()});
+async function v2AddBuyin(gameId, id, playerId, amount, actorName){
+  await v2Fetch("POST", `/games/${gameId}/buyins`, {id, playerId, amount, actorName});
+  getGame(gameId).buyins.push({id, playerId, amount, ts: Date.now(), actorName});
 }
 
 async function v2AddBuyinsBulk(gameId, buyins){
@@ -1628,11 +1675,13 @@ let lastSeenHistoryKey = null;
 // [data-seat] handling) - tapping the same seat again clears back to the default. UI-only,
 // not persisted, reset on nav (see go()).
 let settlementFilterPlayerId = null;
-const FIXED_BUYIN_AMOUNTS = [50, 80, 100];
-// "אחר" exists for amounts ABOVE the standard tiers, not to re-type the lowest tier under
-// a different control - so unlike the fixed pills (already >= this by construction), a
-// custom amount must be strictly greater than it, not just positive.
-const MIN_BUYIN_AMOUNT = Math.min(...FIXED_BUYIN_AMOUNTS);
+// Fallback when a community hasn't configured its own 3 amounts (see getBuyinAmounts) -
+// existing communities with buyinAmounts still NULL in the DB get this, no migration
+// needed.
+const DEFAULT_BUYIN_AMOUNTS = [50, 80, 100];
+function getBuyinAmounts(c){
+  return (c && Array.isArray(c.buyinAmounts) && c.buyinAmounts.length === 3) ? c.buyinAmounts : DEFAULT_BUYIN_AMOUNTS;
+}
 // Community-level admin (the admin screen's own gate, and full table-admin rights in
 // every game under this community - see isTableAdmin below) - the community's creator
 // always has this, even before any roster row is ever marked, same as isTableAdmin's own
@@ -1719,6 +1768,124 @@ function flyAmountBadge(fromEl, toEl, amount){
     setTimeout(() => { badge.remove(); }, 1300);
   } catch(e) { /* cosmetic only */ }
 }
+
+// ---------- Unified buy-in pipeline: pending-request banner, cross-device confirm card,
+// cancel-with-rollback (see performBuyin) ----------
+// The one buy-in currently in flight FROM THIS DEVICE (a player can't have two at once -
+// every rebuy button is disabled while this is set, see renderPlayerScreen). Tracks enough
+// to both drive the pending banner/button-disabling and let a tap on "ביטול" delete the
+// row again if the save already reached the DB by the time it's tapped.
+let pendingBuyinRequest = null;
+function showPendingBuyinBanner(text){
+  clearPendingBuyinBanner();
+  const el = document.createElement("div");
+  el.id = "pending-buyin-banner";
+  el.className = "custom-alert";
+  el.innerHTML = `<div class="custom-alert-box">
+    <span>${esc(text)}</span>
+    <button class="btn btn-ghost btn-sm" data-pending-buyin-cancel style="flex-shrink:0;">ביטול</button>
+  </div>`;
+  document.body.appendChild(el);
+  el.querySelector("[data-pending-buyin-cancel]").onclick = () => {
+    // Doesn't actually abort the in-flight request (fetch can't un-send it) - just marks
+    // it so performBuyin deletes the row again once/if it lands, per its own comment.
+    // Re-enabling the buttons and dropping the banner happen immediately either way -
+    // "אחרי ביטול: הכפתורים חוזרים לפעול, ואין הודעת אישור באף מכשיר" doesn't wait for
+    // the network round trip to actually finish.
+    if (pendingBuyinRequest) pendingBuyinRequest.cancelled = true;
+    clearPendingBuyinBanner();
+    render();
+  };
+}
+function clearPendingBuyinBanner(){
+  const el = document.getElementById("pending-buyin-banner");
+  if (el) el.remove();
+}
+
+// Queued so several near-simultaneous buy-ins (a bulk charge, or just bad timing between
+// two players) show one at a time instead of stacking on top of each other.
+let buyinConfirmQueue = [];
+let buyinConfirmShowing = false;
+function showBuyinConfirmCard(playerName, amount, isEntry){
+  buyinConfirmQueue.push({playerName, amount, isEntry});
+  if (!buyinConfirmShowing) runBuyinConfirmQueue();
+}
+function runBuyinConfirmQueue(){
+  const item = buyinConfirmQueue.shift();
+  if (!item) { buyinConfirmShowing = false; return; }
+  buyinConfirmShowing = true;
+  const verb = item.isEntry ? "כניסה לשולחן" : "ריביי";
+  const fem = item.isEntry ? "ה" : ""; // "התקבלה/נשמרה" (כניסה, נקבה) vs "התקבל/נשמר" (ריביי, זכר)
+  const overlay = document.createElement("div");
+  overlay.className = "buyin-confirm-overlay";
+  overlay.innerHTML = `<div class="buyin-confirm-card">
+    <div style="font-size:48px;line-height:1;margin-bottom:10px;">✓</div>
+    <div style="font-size:17px;font-weight:700;">${esc(verb)} ₪${item.amount} התקבל${fem} ונשמר${fem} ל-${esc(item.playerName)}</div>
+  </div>`;
+  document.body.appendChild(overlay);
+  let dismissed = false;
+  const dismiss = () => {
+    if (dismissed) return;
+    dismissed = true;
+    overlay.querySelector(".buyin-confirm-card").classList.add("fade-out");
+    setTimeout(() => { overlay.remove(); runBuyinConfirmQueue(); }, 300);
+  };
+  overlay.onclick = dismiss; // tap closes early, per spec
+  setTimeout(dismiss, 1500);
+}
+
+// The single entry point for every "add a buy-in" action in the app (a player's own tap,
+// an admin buying in for someone else, item 6's auto-entry) - owns the whole pending-
+// banner → DB save → confirm-card (or cancel-rollback) lifecycle so all three stay in sync
+// regardless of which screen/flow triggered it. actorName is who's actually performing it
+// (defaults to the viewer), only persisted/shown when it differs from the player it's for
+// (see the server's buyins.actor_name and the feed's actorSuffix).
+async function performBuyin(gameId, playerId, amount, opts){
+  opts = opts || {};
+  const isEntry = !!opts.isEntry;
+  const actorName = opts.actorName || myIdentity.name;
+  const fromEl = opts.fromEl || null;
+  const g = getGame(gameId);
+  const playerName = (g.players.find(p=>p.id===playerId)||{}).name || "שחקן";
+  const id = uid();
+  const verb = isEntry ? "כניסה לשולחן" : "ריביי";
+
+  pendingBuyinRequest = {gameId, id, playerId, cancelled: false};
+  showPendingBuyinBanner(`נרשמה בקשה ל${verb} ₪${amount} ל-${playerName}...`);
+  render();
+  if (fromEl) { const totalEl = document.querySelector("[data-player-total]"); if (totalEl) flyAmountBadge(fromEl, totalEl, amount); }
+
+  let ok = false;
+  const sentActorName = actorName === playerName ? undefined : actorName;
+  try {
+    if (USE_RELATIONAL_API) {
+      await v2AddBuyin(gameId, id, playerId, amount, sentActorName);
+    } else {
+      await mutateAndSave(() => {
+        const freshG = getGame(gameId);
+        freshG.buyins.push({id, playerId, amount, ts: Date.now(), actorName: sentActorName});
+      });
+    }
+    ok = true;
+  } catch(e) {
+    showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב.");
+  }
+
+  clearPendingBuyinBanner();
+  const wasCancelled = !!(pendingBuyinRequest && pendingBuyinRequest.cancelled);
+  pendingBuyinRequest = null;
+
+  if (ok && wasCancelled) {
+    try {
+      if (USE_RELATIONAL_API) await v2DeleteBuyin(gameId, id);
+      else await mutateAndSave(() => { const freshG = getGame(gameId); freshG.buyins = freshG.buyins.filter(b=>b.id!==id); });
+    } catch(e) { /* best-effort - a failed rollback just leaves one real row behind */ }
+  } else if (ok) {
+    showBuyinConfirmCard(playerName, amount, isEntry);
+  }
+  render();
+}
+
 function go(screen, extra){
   nav = Object.assign({screen}, extra||{});
   modal = null;
@@ -2365,6 +2532,89 @@ function settleTransactions(balances, players){
     if (d.amt <= 0.005) di++;
   }
   return txns;
+}
+
+// Every cashed-out game this player has in this community, oldest first, each with their
+// own profit for that game - the shared data source for every exit-highlight stat below.
+// Sourced from state.games directly (not just the current game) since several of these
+// stats are explicitly about history ("ב-5 המשחקים האחרונים"), not just tonight.
+function getPlayerGameProfits(communityId, playerId){
+  return (state.games||[])
+    .filter(gm => gm.communityId === communityId && gm.cashouts && (playerId in gm.cashouts))
+    .map(gm => {
+      const buyinTotal = (gm.buyins||[]).filter(b=>b.playerId===playerId).reduce((s,b)=>s+b.amount,0);
+      return {
+        gameId: gm.id, date: gm.date || "",
+        ts: (gm.cashouts[playerId]||{}).ts || 0,
+        profit: (gm.cashouts[playerId]||{}).amount - buyinTotal,
+        buyinCount: (gm.buyins||[]).filter(b=>b.playerId===playerId).length,
+      };
+    })
+    .sort((a,b) => (a.date||"").localeCompare(b.date||"") || (a.ts - b.ts));
+}
+// Up to 3 flattering facts to show a player right when they cash out (item 7) - every
+// candidate below is self-gating (only added when it's actually true/positive for THIS
+// player right now), then the first 3 by priority win. Priority is a judgment call, not
+// specified: a personal milestone (new record, a streak) ranks above a plain relative
+// comparison (rank/average), which ranks above a same-night-only fact (tonight's best,
+// fewest buy-ins) - the first two still hold once the night is forgotten, the others don't.
+function computeExitHighlights(c, g, playerId){
+  const history = getPlayerGameProfits(c.id, playerId); // includes the game just cashed out of
+  if (!history.length) return [];
+  const candidates = [];
+  const last = n => history.slice(-n);
+  const sum = arr => arr.reduce((s,x)=>s+x.profit, 0);
+  const currentProfit = history[history.length-1].profit;
+
+  if (history.length > 1) {
+    const bestEver = Math.max(...history.map(h=>h.profit));
+    if (currentProfit > 0.005 && currentProfit >= bestEver - 0.005) {
+      candidates.push({pri:1, text:`שיא רווח אישי חדש: ₪${Math.round(currentProfit)}!`});
+    }
+  }
+
+  let streak = 0;
+  for (let i=history.length-1; i>=0; i--) { if (history[i].profit > 0.005) streak++; else break; }
+  if (streak >= 2) candidates.push({pri:2, text:`רצף של ${streak} משחקים ברווח!`});
+
+  if (history.length >= 2) {
+    const N = Math.min(5, history.length);
+    const communityPlayerIds = new Set();
+    (state.games||[]).filter(gm=>gm.communityId===c.id).forEach(gm => Object.keys(gm.cashouts||{}).forEach(pid2=>communityPlayerIds.add(pid2)));
+    const sums = Array.from(communityPlayerIds).map(pid2 => ({pid2, s: sum(getPlayerGameProfits(c.id, pid2).slice(-N))}));
+    sums.sort((a,b)=>b.s-a.s);
+    const rank = sums.findIndex(x=>x.pid2===playerId) + 1;
+    if (sums.length >= 3 && rank >= 1 && rank <= 3) {
+      const place = rank===1 ? "ראשון" : rank===2 ? "שני" : "שלישי";
+      candidates.push({pri:3, text:`ב-${N} המשחקים האחרונים אתה במקום ה${place} בקבוצה`});
+    }
+    const myRecentSum = Math.round(sum(last(N)) * 100) / 100;
+    if (myRecentSum > 0.005) candidates.push({pri:4, text:`ב-${N} המשחקים האחרונים הרווחת ₪${Math.round(myRecentSum)}`});
+  }
+
+  if (history.length >= 6) {
+    const N = 5;
+    const recentAvg = sum(last(N)) / N;
+    const overallAvg = sum(history) / history.length;
+    if (recentAvg > overallAvg + 0.5) {
+      candidates.push({pri:5, text:`הממוצע שלך לאחרונה (₪${Math.round(recentAvg)}) טוב מהממוצע הכללי שלך (₪${Math.round(overallAvg)})`});
+    }
+  }
+
+  const tonight = Object.keys(g.cashouts||{}).map(pid2 => {
+    const buyinTotal = (g.buyins||[]).filter(b=>b.playerId===pid2).reduce((s,b)=>s+b.amount,0);
+    return {pid2, profit: g.cashouts[pid2].amount - buyinTotal, buyinCount: (g.buyins||[]).filter(b=>b.playerId===pid2).length};
+  });
+  if (tonight.length >= 2) {
+    const maxTonight = Math.max(...tonight.map(x=>x.profit));
+    if (currentProfit > 0.005 && currentProfit >= maxTonight - 0.005) candidates.push({pri:6, text:"הרווח הגבוה ביותר הערב!"});
+    const minCount = Math.min(...tonight.map(x=>x.buyinCount));
+    const myCount = (g.buyins||[]).filter(b=>b.playerId===playerId).length;
+    if (myCount > 0 && myCount <= minCount && myCount <= 1) candidates.push({pri:7, text:`הכי מעט ריביים הערב (${myCount})`});
+  }
+
+  candidates.sort((a,b)=>a.pri-b.pri);
+  return candidates.slice(0,3).map(x=>x.text);
 }
 
 // A player who left mid-game and arranged payment directly with active counterpart(s)
@@ -3028,23 +3278,32 @@ function renderPlayerScreen(gameId){
   if (cashedOut) {
     const finalChipsForInfo = (g.cashouts[pid]||{}).amount || 0;
     const profitForInfo = Math.round((finalChipsForInfo - buyinTotal) * 100) / 100;
+    // Enlarged (was a plain 14px line alongside the buy-in/final-chips figures) now that
+    // the history/feed sections below it are hidden once cashed out (item 8) - this is the
+    // one number that freed-up space exists to foreground.
     const profitLine = profitForInfo >= 0
-      ? `<div style="font-weight:700;color:#6ee7b7;margin-top:2px;">רווח ${profitForInfo} שח</div>`
-      : `<div style="font-weight:700;color:#fda4af;margin-top:2px;">הפסד ${Math.abs(profitForInfo)} שח</div>`;
+      ? `<div style="font-weight:800;font-size:34px;color:#6ee7b7;margin-top:6px;">רווח ${profitForInfo} שח</div>`
+      : `<div style="font-weight:800;font-size:34px;color:#fda4af;margin-top:6px;">הפסד ${Math.abs(profitForInfo)} שח</div>`;
     const breakdownHtml = `
-      <div style="font-size:14px;color:var(--muted);line-height:1.8;margin-top:6px;">
+      <div style="font-size:14px;color:var(--muted);line-height:1.6;margin-top:6px;">
         <div>קניה: ${Math.round(buyinTotal)} שח</div>
         <div>ז'יטונים בסוף הערב: ${Math.round(finalChipsForInfo)} שח</div>
-        ${profitLine}
       </div>
+      ${profitLine}
     `;
+    const exitHighlights = computeExitHighlights(c, g, pid);
+    const exitHighlightsHtml = exitHighlights.length ? `
+      <div style="margin-top:18px;display:flex;flex-direction:column;gap:8px;flex-shrink:0;">
+        ${exitHighlights.map(t => `<div style="background:rgba(255,255,255,.06);border:1px solid var(--card-b);border-radius:12px;padding:12px 14px;text-align:center;font-size:14px;font-weight:600;color:var(--text);">${esc(t)}</div>`).join("")}
+      </div>
+    ` : "";
     const activePayboxLink = getActivePayboxLink(c);
     let statusHtml = "";
     if (c.settlementDefault === 'paybox') {
       statusHtml = profitForInfo >= 0
         ? `<div style="font-size:13px;color:var(--muted);margin-top:10px;">הרווח יחולק אחרי שכולם ישלמו לקבוצה</div>`
         : (activePayboxLink
-            ? `<a href="${esc(activePayboxLink)}" target="_blank" rel="noopener" class="btn btn-block" style="margin-top:10px;background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"></a>`
+            ? `<a href="${esc(activePayboxLink)}" target="_blank" rel="noopener" class="btn btn-block" style="margin-top:10px;background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> העברה לקבוצת פייבוקס</a>`
             : `<div style="font-size:12px;color:var(--muted);margin-top:10px;">לא הוגדרה קבוצת פייבוקס</div>`);
     } else if (allCashedOutForSettlement && potBalancedForSettlement) {
       statusHtml = mySettlementTxns.map(t => t.from === pid ? `
@@ -3052,7 +3311,7 @@ function renderPlayerScreen(gameId){
           <div style="font-weight:700;color:#fda4af;">${t.amount} שח מעביר ל-${esc(t.toName)}</div>
           <div style="display:flex;gap:8px;margin-top:8px;">
             <button class="btn flex1" data-open-bit-generic style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} ביט</button>
-            ${activePayboxLink ? `<a href="${esc(activePayboxLink)}" target="_blank" rel="noopener" class="btn flex1" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"></a>` : ""}
+            ${activePayboxLink ? `<a href="${esc(activePayboxLink)}" target="_blank" rel="noopener" class="btn flex1" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</a>` : ""}
           </div>
         </div>
       ` : `<div style="margin-top:10px;font-weight:700;color:#6ee7b7;">מקבל מ-${esc(t.fromName)} ${t.amount} שח</div>`).join("");
@@ -3063,7 +3322,7 @@ function renderPlayerScreen(gameId){
     }
     // Lost, mid-game, not closed: no inline status text - the "who do I pay" modal
     // auto-opens itself instead (see attachHandlers/autoOpenedDirectPay).
-    cashedOutInfoHtml = breakdownHtml + statusHtml;
+    cashedOutInfoHtml = breakdownHtml + statusHtml + exitHighlightsHtml;
   }
   const canDeleteBuyins = true; // viewing/editing your own history here, always allowed
   // Carries its own playerId (data-delete-seat-buyin-player) rather than relying on
@@ -3096,11 +3355,11 @@ function renderPlayerScreen(gameId){
   const latestFeedEvent = feedEvents[feedEvents.length-1];
   const latestFeedEventKey = latestFeedEvent ? `${latestFeedEvent.ts}-${latestFeedEvent.kind}-${latestFeedEvent.kind==='buyin'?latestFeedEvent.buyin.id:latestFeedEvent.playerId}` : "";
   const FEED_COLORS = { gray: "#888", white: "var(--text)", red: "#fda4af" };
-  // Only for the 4 log-based event types, which carry an actorName from the moment they're
-  // logged (see logGameEvent/v2AddGameEvent) - the older, purely-derived buyin/cashout
-  // events don't record who acted, so self vs. on-behalf-of-someone-else isn't knowable for
-  // those yet. Omitted entirely (not "ע"י [own name]") when the actor IS the player it's
-  // about, same as a player doing it for themselves normally reads.
+  // Carries an actorName whenever the actor differs from the player it's about - the 4
+  // log-based event types always have (see logGameEvent/v2AddGameEvent); a buyin only does
+  // for ones saved since actor_name was added to the buyins table (see performBuyin) -
+  // older rows just read as undefined, same as a player doing it for themselves normally
+  // reads. Omitted entirely (not "ע"י [own name]") when the actor IS the player it's about.
   const actorSuffix = (playerName, actorName) => (actorName && actorName !== playerName) ? ` ע"י ${esc(actorName)}` : "";
   const feedCounts = {}, feedTotals = {};
   const feedRows = feedEvents.map(ev => {
@@ -3113,8 +3372,8 @@ function renderPlayerScreen(gameId){
       feedTotals[b.playerId] = (feedTotals[b.playerId]||0) + b.amount;
       const isRebuy = feedCounts[b.playerId] > 1;
       text = isRebuy
-        ? `${name} עשה ריביי של ₪${b.amount} (סה"כ קנייה של ₪${feedTotals[b.playerId]})`
-        : `${name} נכנס לשולחן עם ₪${b.amount}`;
+        ? `${name} עשה ריביי של ₪${b.amount} (סה"כ קנייה של ₪${feedTotals[b.playerId]})${actorSuffix(player?player.name:name, b.actorName)}`
+        : `${name} נכנס לשולחן עם ₪${b.amount}${actorSuffix(player?player.name:name, b.actorName)}`;
       color = isRebuy ? FEED_COLORS.white : FEED_COLORS.gray;
     } else if (ev.kind === "cashout") {
       const player = g.players.find(pl => pl.id === ev.playerId);
@@ -3147,15 +3406,20 @@ function renderPlayerScreen(gameId){
     }
     return `<div class="chat-bubble" style="color:${color};"><span class="bubble-time">${fmtTime(ev.ts)}</span>${text}</div>`;
   }).join("") || `<div class="chat-bubble" style="color:#888;">אין עדיין פעילות בשולחן</div>`;
+  // Every rebuy control (including "אחר") stays disabled from the moment a buy-in request
+  // is sent until it settles (success, cancel, or error) - see performBuyin/
+  // pendingBuyinRequest - so a second tap can't fire a genuine duplicate buy-in while the
+  // first one is still in flight.
+  const buyinPending = !!(pendingBuyinRequest && pendingBuyinRequest.gameId === g.id && !pendingBuyinRequest.cancelled);
   const buyinButtonsHtml = playerScreenCustomOpen ? `
     <div class="buyin-frame" style="display:flex;gap:8px;margin-bottom:14px;flex-shrink:0;">
-      <input type="number" inputmode="decimal" id="player-screen-custom-amount" placeholder="סכום" autofocus style="flex:1;padding:14px 8px;font-size:18px;text-align:center;border-radius:9px;border:1px solid var(--gold);background:var(--input);color:var(--text);">
-      <button class="chip-btn" data-player-buyin-custom-confirm style="flex:0 0 auto;padding:14px 18px;font-size:16px;font-weight:700;">${icon('plus')}</button>
+      <input type="number" inputmode="decimal" id="player-screen-custom-amount" placeholder="סכום" autofocus ${buyinPending?'disabled':''} style="flex:1;padding:14px 8px;font-size:18px;text-align:center;border-radius:9px;border:1px solid var(--gold);background:var(--input);color:var(--text);">
+      <button class="chip-btn" data-player-buyin-custom-confirm ${buyinPending?'disabled':''} style="flex:0 0 auto;padding:14px 18px;font-size:16px;font-weight:700;">${icon('plus')}</button>
     </div>
   ` : `
     <div class="buyin-frame" style="display:flex;gap:8px;margin-bottom:14px;flex-shrink:0;">
-      ${FIXED_BUYIN_AMOUNTS.map(v=>`<button class="chip-btn" data-player-instant-buyin="${v}" style="flex:1;padding:14px 2px;font-size:18px;">₪${v}</button>`).join("")}
-      <button class="chip-btn" data-player-buyin-other style="flex:1;padding:14px 2px;font-size:18px;">אחר</button>
+      ${getBuyinAmounts(c).map(v=>`<button class="chip-btn" data-player-instant-buyin="${v}" ${buyinPending?'disabled':''} style="flex:1;padding:14px 2px;font-size:18px;">₪${v}</button>`).join("")}
+      <button class="chip-btn" data-player-buyin-other ${buyinPending?'disabled':''} style="flex:1;padding:14px 2px;font-size:18px;">אחר</button>
     </div>
   `;
   // Order (top to bottom): name/total, ריביי buttons, purchase history (fixed size, ~3
@@ -3186,11 +3450,17 @@ function renderPlayerScreen(gameId){
       </div>
       ${cashedOut ? "" : `<div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">ריביי</div>`}
       ${cashedOut ? "" : buyinButtonsHtml}
+      ${cashedOut ? "" : `
       <div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">היסטוריית קניות</div>
       <div class="chat-frame" data-player-history data-latest-buyin="${latestHistoryKey}" style="height:110px;margin-bottom:14px;flex-shrink:0;">${historyRows}</div>
       <div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">פעילות בשולחן</div>
-      <div class="chat-frame" data-player-feed data-latest-event="${latestFeedEventKey}" style="flex:1;height:auto;min-height:54px;margin-bottom:${cashedOut?'0':'14px'};">${feedRows}</div>
-      ${cashedOut ? "" : `<button class="btn btn-block" style="background:#57534e;color:#f5f5f4;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:6px;" data-player-leave-table>${icon('out')} יציאה מהשולחן</button>`}
+      <div class="chat-frame" data-player-feed data-latest-event="${latestFeedEventKey}" style="flex:1;height:auto;min-height:54px;margin-bottom:14px;">${feedRows}</div>
+      `}
+      ${cashedOut ? "" : `
+      <div style="display:flex;gap:8px;flex-shrink:0;">
+        <button class="btn flex1" style="background:#B8862B;color:#1a1a1a;display:flex;align-items:center;justify-content:center;gap:6px;" data-player-leave-table>${icon('out')} יציאה עם ז'יטונים</button>
+        <button class="btn flex1" style="background:#B23A3A;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;" data-player-leave-no-chips>${icon('out')} יציאה ללא ז'יטונים</button>
+      </div>`}
     </div>
   `;
 }
@@ -3245,9 +3515,9 @@ function renderAdminScreen(gameId){
         ${notesHtml(pid)}
       </div>
       <div class="row" style="gap:4px;">
-        <button class="icon-btn ok" data-buyin="${pid}" title="הוסף ריביי">${icon('plus')}</button>
-        <button class="icon-btn" style="background:${hasArrangement?'#78350f':'#57534e'};color:${hasArrangement?'#fde68a':'#f5f5f4'};" data-admin-end-night="${pid}" title="${hasArrangement?'יש סידור תשלום ישיר עם השחקן הזה - ':''}סיים ערב">${icon('out')}</button>
-        <button class="icon-btn danger" data-admin-remove-seat="${pid}" title="הסר מושב">${icon('trash')}</button>
+        <button class="icon-btn ok" data-buyin="${pid}" title="הוסף ריביי" style="display:flex;align-items:center;gap:3px;padding:6px 8px;font-size:11px;font-weight:700;width:auto;">${icon('plus')}ריביי</button>
+        <button class="icon-btn" style="background:${hasArrangement?'#78350f':'#57534e'};color:${hasArrangement?'#fde68a':'#f5f5f4'};display:flex;align-items:center;gap:3px;padding:6px 8px;font-size:11px;font-weight:700;width:auto;" data-admin-end-night="${pid}" title="${hasArrangement?'יש סידור תשלום ישיר עם השחקן הזה - ':''}סיים ערב">${icon('out')}יציאה</button>
+        <button class="icon-btn danger" data-admin-remove-seat="${pid}" title="הסר מושב" style="display:flex;align-items:center;gap:3px;padding:6px 8px;font-size:11px;font-weight:700;width:auto;">${icon('trash')}הסרה</button>
       </div>
     </div>
   `;
@@ -3260,7 +3530,7 @@ function renderAdminScreen(gameId){
         <div class="row" style="gap:8px;"><span>${esc(nameOf(pid))}</span><span style="font-weight:700;color:${profitColor(profit)};">${profit>0?'+':''}₪${Math.round(profit)}</span></div>
         ${notesHtml(pid)}
       </div>
-      <button class="btn btn-ghost btn-sm" data-return-to-game="${pid}">${icon('undo')} החזר לשולחן</button>
+      <button class="btn btn-ghost btn-sm" data-admin-return-to-game="${pid}">${icon('undo')} החזר לשולחן</button>
     </div>`;
   }).join("");
 
@@ -4119,11 +4389,12 @@ function renderModal(m){
   } else if (m.type === "buyin") {
     const g = getGame(m.gameId);
     const p = g.players.find(pl=>pl.id===m.playerId);
+    const c = getCommunity(g.communityId);
     title = `תשלום עבור ${esc(p.name)}`;
     body = `
       <div class="field"><label>סכום בשקלים</label><input type="number" inputmode="decimal" id="buyin-amount" value="${m.amount||''}" placeholder="50" autofocus></div>
       <div class="chip-row">
-        ${[50,80,100,200].map(v=>`<button class="chip-btn" data-chip="${v}">₪${v}</button>`).join("")}
+        ${getBuyinAmounts(c).map(v=>`<button class="chip-btn" data-chip="${v}">₪${v}</button>`).join("")}
       </div>
       <button class="btn btn-primary btn-block" data-confirm-buyin>הוסף תשלום</button>
     `;
@@ -4184,7 +4455,7 @@ function renderModal(m){
       <div class="field"><label>סכום בשקלים</label><input type="number" inputmode="decimal" id="direct-pay-amount" value="${m.amount||''}" placeholder="0" autofocus></div>
       <div style="display:flex;gap:8px;margin-bottom:14px;">
         <button class="btn flex1" data-open-bit-generic style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} ביט</button>
-        ${getActivePayboxLink(getCommunity(g.communityId)) ? `<a href="${esc(getActivePayboxLink(getCommunity(g.communityId)))}" target="_blank" rel="noopener" class="btn flex1" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"></a>` : ""}
+        ${getActivePayboxLink(getCommunity(g.communityId)) ? `<a href="${esc(getActivePayboxLink(getCommunity(g.communityId)))}" target="_blank" rel="noopener" class="btn flex1" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</a>` : ""}
       </div>
       <button class="btn btn-primary btn-block" data-confirm-direct-pay>שמור</button>
     `;
@@ -4226,7 +4497,13 @@ function renderModal(m){
         <input type="radio" name="settlement-default" ${settlementDefault==='direct'?'checked':''}>
         <span class="flex1">העברה ישירות בין שחקנים</span>
       </div>
-      ${link ? `<button class="btn btn-primary btn-block" data-save-paybox-entries>שמור שינויים</button>` : ""}
+      <div class="section-title" style="padding:0;margin:0 0 6px;">ריביי</div>
+      <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">3 הסכומים שיוצגו בכל כפתורי הריביי באפליקציה.</p>
+      <div style="display:flex;gap:8px;margin-bottom:6px;">
+        ${getBuyinAmounts(c).map((v,i) => `<input type="number" inputmode="numeric" data-buyin-amount-input="${i}" value="${v}" style="flex:1;text-align:center;">`).join("")}
+      </div>
+      <p style="color:var(--muted);font-size:11px;margin:0 0 18px;">סכום הכניסה לשולחן הוא הסכום הימני (הראשון).</p>
+      <button class="btn btn-primary btn-block" data-save-paybox-entries>שמור שינויים</button>
     `;
   } else if (m.type === "pickSeat") {
     const g = getGame(m.gameId);
@@ -4941,26 +5218,14 @@ function attachHandlers(){
   // Player screen (renderPlayerScreen) - one-tap buy-in row, no separate confirm step
   // like the table action panel's own two-step flow (pick an amount, then tap "הוסף
   // ריביי") since every amount here is a real button that applies itself immediately.
+  // Routed through performBuyin (pending banner/cancel, disables every rebuy button until
+  // it settles, cross-device confirm card) instead of saving directly.
   const doPlayerBuyin = async (amt, fromEl) => {
-    if (!amt || amt <= 0) return;
-    // Purely cosmetic - fires the same flying "+₪X" badge the table action panel uses,
-    // from the tapped button to the big total up top, so the total visibly "receives" the
-    // buy-in instead of just silently changing number on the next render.
-    const totalEl = app.querySelector("[data-player-total]");
-    if (fromEl && totalEl) flyAmountBadge(fromEl, totalEl, amt);
+    if (!amt || amt <= 0 || pendingBuyinRequest) return;
     const gameId = nav.gameId;
     const pid = myIdentity.myPlayers && myIdentity.myPlayers[getGame(gameId).communityId];
-    if (USE_RELATIONAL_API) {
-      try { await v2AddBuyin(gameId, uid(), pid, amt); }
-      catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
-    } else {
-      await mutateAndSave(() => {
-        const g = getGame(gameId);
-        g.buyins.push({id:uid(), playerId: pid, amount: amt, ts: Date.now()});
-      });
-    }
     playerScreenCustomOpen = false;
-    render();
+    await performBuyin(gameId, pid, amt, {fromEl});
   };
   app.querySelectorAll("[data-player-instant-buyin]").forEach(el => el.onclick = () => doPlayerBuyin(parseFloat(el.dataset.playerInstantBuyin), el));
   const playerBuyinOtherBtn = app.querySelector("[data-player-buyin-other]");
@@ -4976,13 +5241,37 @@ function attachHandlers(){
     const pid = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
     openModal({type:"seatChips", gameId: nav.gameId, playerId: pid});
   };
+  // "יציאה ללא ז'יטונים" - skips the chip-entry screen entirely, same underlying cashout
+  // as seatChips' own data-quick-end with chips forced to 0 (nothing left in hand).
+  const playerLeaveNoChipsBtn = app.querySelector("[data-player-leave-no-chips]");
+  if (playerLeaveNoChipsBtn) playerLeaveNoChipsBtn.onclick = async () => {
+    const gameId = nav.gameId;
+    const g = getGame(gameId);
+    const pid = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+    playerLeaveNoChipsBtn.disabled = true;
+    showButtonLoading(playerLeaveNoChipsBtn);
+    if (USE_RELATIONAL_API) {
+      try {
+        await v2SetCashout(gameId, pid, 0, [], 0);
+        await v2MaybeAutoCloseNight(gameId);
+      } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); playerLeaveNoChipsBtn.disabled = false; return; }
+    } else {
+      await mutateAndSave(() => {
+        const freshG = getGame(gameId);
+        if (!freshG.liveChips) freshG.liveChips = {};
+        freshG.liveChips[pid] = 0;
+        freshG.cashouts[pid] = {amount: 0, ts: Date.now(), arrangedWith: []};
+        maybeAutoCloseNight(freshG);
+      });
+    }
+    render();
+  };
 
   app.querySelectorAll("[data-buyin]").forEach(el => el.onclick = () => openModal({type:"buyin", gameId: nav.gameId, playerId: el.dataset.buyin, amount:""}));
   app.querySelectorAll("[data-leave]").forEach(el => el.onclick = () => openModal({type:"leave", gameId: nav.gameId, playerId: el.dataset.leave, amount:""}));
   app.querySelectorAll("[data-history]").forEach(el => el.onclick = () => openModal({type:"history", gameId: nav.gameId, playerId: el.dataset.history}));
   app.querySelectorAll("[data-edit-cashout]").forEach(el => el.onclick = () => openModal({type:"editCashout", gameId: nav.gameId, playerId: el.dataset.editCashout}));
-  app.querySelectorAll("[data-return-to-game]").forEach(el => el.onclick = async () => {
-    const playerId = el.dataset.returnToGame;
+  const performReturnToGame = async (el, playerId) => {
     const g = getGame(nav.gameId);
     const paidPaybox = (g.payboxPayments||[]).filter(pp=>pp.playerId===playerId).reduce((s,pp)=>s+pp.amount,0);
     const paidDirect = (g.playerPayments||[]).filter(dp=>dp.fromPlayerId===playerId).reduce((s,dp)=>s+dp.amount,0);
@@ -4992,7 +5281,9 @@ function attachHandlers(){
       return;
     }
     el.disabled = true;
-    // back in the game with a clean chip count (0), not their old cashout amount
+    // back in the game with a clean chip count (0), not their old cashout amount - the
+    // buy-ins they already had are untouched either way (cashing out never deletes them),
+    // and nothing here adds a new one.
     if (USE_RELATIONAL_API) {
       try {
         await v2DeleteCashout(nav.gameId, playerId);
@@ -5010,6 +5301,17 @@ function attachHandlers(){
       });
     }
     closeModal();
+  };
+  app.querySelectorAll("[data-return-to-game]").forEach(el => el.onclick = () => performReturnToGame(el, el.dataset.returnToGame));
+  // Admin screen only (renderAdminScreen's own "החזר לשולחן" row) - a confirm step first,
+  // since this is the one place an admin can send a DIFFERENT player back into an active
+  // table on their behalf, not something to do with a stray tap.
+  app.querySelectorAll("[data-admin-return-to-game]").forEach(el => el.onclick = async () => {
+    const playerId = el.dataset.adminReturnToGame;
+    const g = getGame(nav.gameId);
+    const name = (g.players.find(p=>p.id===playerId)||{}).name || "השחקן";
+    if (!(await showConfirm(`האם אתה בטוח ש${name} חוזר לשולחן?`))) return;
+    await performReturnToGame(el, playerId);
   });
   app.querySelectorAll("[data-remove-from-game]").forEach(el => el.onclick = () => openModal({type:"removeFromGame", gameId: nav.gameId, playerId: el.dataset.removeFromGame}));
 
@@ -6348,20 +6650,11 @@ function attachHandlers(){
     const confirmBtn = app.querySelector("[data-confirm-buyin]");
     if (confirmBtn) confirmBtn.onclick = async () => {
       const amt = parseFloat(document.getElementById("buyin-amount").value);
-      if (!amt || amt <= 0) return;
+      if (!amt || amt <= 0 || pendingBuyinRequest) return;
       confirmBtn.disabled = true;
       showButtonLoading(confirmBtn);
-      if (USE_RELATIONAL_API) {
-        try { await v2AddBuyin(modal.gameId, uid(), modal.playerId, amt); }
-        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmBtn.disabled = false; return; }
-      } else {
-        await mutateAndSave(() => {
-          const g = getGame(modal.gameId);
-          g.buyins.push({id:uid(), playerId: modal.playerId, amount: amt, ts: Date.now()});
-          logSync(`buyin confirmed player=${modal.playerId} amt=${amt} -> game now has ${g.buyins.length} buyins`);
-        });
-      }
       closeModal();
+      await performBuyin(modal.gameId, modal.playerId, amt, {actorName: myIdentity.name});
     };
   }
 
@@ -6432,14 +6725,22 @@ function attachHandlers(){
         const linkInp = document.querySelector(`[data-paybox-link-input="${pl.id}"]`);
         return {id: pl.id, name: (nameInp && nameInp.value.trim()) || pl.name, link: (linkInp && linkInp.value.trim()) || pl.link};
       });
+      const buyinAmountInputs = Array.from(app.querySelectorAll("[data-buyin-amount-input]"))
+        .sort((a,b) => parseInt(a.dataset.buyinAmountInput) - parseInt(b.dataset.buyinAmountInput));
+      const buyinAmounts = buyinAmountInputs.map(el => parseFloat(el.value));
+      if (buyinAmounts.some(v => isNaN(v) || v <= 0)) { showAlert("סכומי הריביי חייבים להיות מספרים חיוביים."); return; }
       if (USE_RELATIONAL_API) {
-        try { await v2EditPayboxLinks(modal.communityId, edited); }
+        try {
+          await v2EditPayboxLinks(modal.communityId, edited);
+          await v2UpdateCommunity(modal.communityId, {buyinAmounts});
+        }
         catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
       } else {
         edited.forEach(({id, name, link}) => {
           const pl = c.payboxLinks.find(p => p.id === id);
           if (pl) { pl.name = name; pl.link = link; }
         });
+        c.buyinAmounts = buyinAmounts;
         saveState();
       }
       // "שמור שינויים" is the single save action for this whole screen (the settlement-
