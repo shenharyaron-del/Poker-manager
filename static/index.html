@@ -1657,6 +1657,26 @@ let playerScreenCustomOpen = false;
 // table to finish. A Set (not persisted) so closing that modal doesn't re-trigger it on
 // the next render/refresh - it should only ever interrupt the player once per cash-out.
 let autoOpenedDirectPay = new Set();
+// Opens the "who do I pay" modal immediately on whichever device just performed a cashout
+// that left the player negative, mid-game, in a direct-settlement community - covers both
+// a player cashing themselves out and an admin cashing someone else out from the admin
+// screen (the render-time scanner above only ever catches the viewer's OWN seat, which
+// misses the admin-on-someone-else's-behalf case entirely). No-ops once everyone's done
+// or the night's already marked over - the settlement arrows/checkbox own that instead.
+function maybeOpenDirectPayAfterCashout(gameId, playerId, chips){
+  const g = getGame(gameId);
+  if (!g) return;
+  const c = getCommunity(g.communityId);
+  if (!c || c.settlementDefault === "paybox") return;
+  const seatedIds = (g.seats||[]).filter(Boolean);
+  const allOut = seatedIds.length > 0 && seatedIds.every(sid => sid in g.cashouts);
+  if (allOut || g.closed) return;
+  const buyinTotal = g.buyins.filter(b=>b.playerId===playerId).reduce((s,b)=>s+b.amount,0);
+  const profit = chips - buyinTotal;
+  if (profit >= -0.005) return;
+  autoOpenedDirectPay.add(`${gameId}:${playerId}`); // keep the render-time scanner from also firing for the same cash-out
+  openModal({type:"directPay", gameId, fromPlayerId: playerId, amount: String(Math.round(Math.abs(profit)*100)/100)});
+}
 // Which seated players the admin screen's pot-balance-fix section has checked off to
 // share an equal-split correction - UI-only, not persisted, reset on nav (see go()).
 let adminBalanceFixSelected = {};
@@ -1814,6 +1834,7 @@ function runBuyinConfirmQueue(){
   const item = buyinConfirmQueue.shift();
   if (!item) { buyinConfirmShowing = false; return; }
   buyinConfirmShowing = true;
+  playBuyinSound();
   const verb = item.isEntry ? "כניסה לשולחן" : "ריביי";
   const fem = item.isEntry ? "ה" : ""; // "התקבלה/נשמרה" (כניסה, נקבה) vs "התקבל/נשמר" (ריביי, זכר)
   const overlay = document.createElement("div");
@@ -2701,10 +2722,6 @@ function animateSeatCaptions(gameId){
     const value = cashedOut ? Math.round(liveChips[pid]||0) - buyin : buyin;
     next[pid] = value;
     const prevValue = prev[pid];
-    // Any buy-in that raised this seat's caption since the last render plays the coin
-    // sound - the local initiator's own buy-in included, so everyone watching the table
-    // hears it, not just whoever tapped the button.
-    if (!cashedOut && prevValue !== undefined && value > prevValue) playBuyinSound();
     const el = document.querySelector(`[data-caption-for="${pid}"]`);
     if (!el) return;
     const ongoing = activeCaptionAnimations[pid];
@@ -2718,37 +2735,17 @@ function animateSeatCaptions(gameId){
   });
   lastSeatCaptionValues[gameId] = next;
 }
-// Short, synthesized "coins" jingle on a local buy-in - no audio asset to host, and
-// reusing one AudioContext (created lazily, on the first buy-in - the click itself is the
-// user gesture browsers require before audio is allowed to play) avoids accumulating
-// contexts. A few quick high metallic chirps staggered in time (rather than one flat
-// beep) reads more like coins dropping on a table than a plain notification blip.
-let _sharedAudioCtx = null;
+// One real mp3 (item 13), played together with the confirm card (showBuyinConfirmCard) -
+// on every connected device, same trigger as the card itself, not tied to any one local
+// click. A fresh Audio() per play (not one shared/reused element) so two buy-ins landing
+// close together both actually play instead of the second cutting the first off. No mute
+// control by design - best-effort only, errors (autoplay blocked, asset missing) are
+// swallowed so a failed sound never blocks the buy-in itself or the card.
 function playBuyinSound(){
   try {
-    if (!_sharedAudioCtx) _sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const ctx = _sharedAudioCtx;
-    const clinks = [
-      {delay: 0,     freq: 2400},
-      {delay: 0.05,  freq: 3100},
-      {delay: 0.095, freq: 2700},
-      {delay: 0.15,  freq: 3400},
-    ];
-    clinks.forEach(({delay, freq}) => {
-      const t0 = ctx.currentTime + delay;
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = "triangle";
-      osc.frequency.setValueAtTime(freq, t0);
-      osc.frequency.exponentialRampToValueAtTime(freq * 0.8, t0 + 0.07);
-      gain.gain.setValueAtTime(0.11, t0);
-      gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.09);
-      osc.start(t0);
-      osc.stop(t0 + 0.1);
-    });
-  } catch(e) { /* audio unsupported/blocked - never let this block the actual buy-in */ }
+    const audio = new Audio("/static/buyin-sound.mp3");
+    audio.play().catch(() => {});
+  } catch(e) { /* audio unsupported/blocked */ }
 }
 function animateCaptionNumber(el, from, to, isProfit, startTime){
   const duration = 2000;
@@ -3594,8 +3591,8 @@ function renderAdminScreen(gameId){
     </div>
     <div style="flex:1;min-height:0;overflow-y:auto;padding:0 20px 20px;touch-action:pan-y;">
       ${c.settlementDefault === 'paybox' ? "" : `
-      <div class="checkbox-row" style="margin-bottom:16px;">
-        <input type="checkbox" ${g.closed?'checked':''} disabled>
+      <div class="checkbox-row" style="cursor:pointer;margin-bottom:16px;" data-toggle-end-night="${g.id}">
+        <input type="checkbox" ${g.closed?'checked':''} onclick="return false;">
         <span class="flex1">סיום ערב</span>
       </div>`}
       <div class="section-title" style="padding:0;margin:0 0 8px;">שחקנים פעילים</div>
@@ -4458,6 +4455,7 @@ function renderModal(m){
         ${getActivePayboxLink(getCommunity(g.communityId)) ? `<a href="${esc(getActivePayboxLink(getCommunity(g.communityId)))}" target="_blank" rel="noopener" class="btn flex1" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</a>` : ""}
       </div>
       <button class="btn btn-primary btn-block" data-confirm-direct-pay>שמור</button>
+      <button class="btn btn-ghost btn-block" style="margin-top:8px;" data-end-night-from-direct-pay="${m.gameId}">הערב נגמר</button>
     `;
   } else if (m.type === "payboxSettings") {
     const c = getCommunity(m.communityId);
@@ -4673,14 +4671,25 @@ function renderModal(m){
     } else if (mode === "profit") {
       // Sign picked via a toggle instead of typing a minus sign - a plain numeric keypad
       // (inputmode="numeric") doesn't reliably offer a "-" key on mobile, and the picked
-      // sign is clearer at a glance than scanning for one anyway.
+      // sign is clearer at a glance than scanning for one anyway. The toggle and the
+      // amount field are one combined widget (big sign+number display, toggle bar right
+      // under it) rather than a row of mode buttons sitting above a separate plain field.
       const profitSign = m.profitSign === "loss" ? "loss" : "profit";
+      const isLoss = profitSign === "loss";
+      const signColor = isLoss ? "#fb923c" : "#6ee7b7";
       modeBody = `
-        <div style="display:flex;gap:8px;margin-bottom:10px;">
-          <button class="btn ${profitSign==='profit'?'btn-primary':'btn-ghost'} flex1" data-profit-sign="profit">רווח +</button>
-          <button class="btn ${profitSign==='loss'?'btn-primary':'btn-ghost'} flex1" data-profit-sign="loss">הפסד -</button>
+        <div style="background:rgba(255,255,255,.05);border-radius:16px;padding:22px 16px;text-align:center;margin-bottom:10px;">
+          <div style="display:flex;align-items:baseline;justify-content:center;gap:2px;">
+            <span style="font-size:40px;font-weight:800;color:${signColor};">${isLoss?'-':'+'}</span>
+            <input type="number" inputmode="numeric" id="seat-chips-profit" placeholder="0" min="0" style="font-size:40px;font-weight:800;color:${signColor};background:transparent;border:none;width:140px;text-align:center;padding:0;" onfocus="this.select()">
+          </div>
+          <div style="color:var(--muted);font-size:12px;margin-top:8px;">הקש רווח (+) או הפסד (-)</div>
         </div>
-        <div class="field"><label>סכום ה${profitSign==='loss'?'הפסד':'רווח'} בש"ח</label><input type="number" inputmode="numeric" id="seat-chips-profit" placeholder="0" min="0" style="width:100%;color:${profitSign==='loss'?'#fda4af':'#6ee7b7'};" onfocus="this.select()"></div>
+        <div style="display:flex;border-radius:12px;overflow:hidden;margin-bottom:14px;">
+          <button data-profit-sign="profit" style="flex:1;padding:12px 4px;border:none;font-weight:700;font-size:13px;background:${!isLoss?'#15803d':'#262626'};color:#fff;">רווח (+)</button>
+          <div style="flex:1;padding:12px 4px;background:#1f1f1f;color:var(--muted);text-align:center;font-size:12px;display:flex;align-items:center;justify-content:center;">רווח/הפסד</div>
+          <button data-profit-sign="loss" style="flex:1;padding:12px 4px;border:none;font-weight:700;font-size:13px;background:${isLoss?'#c2410c':'#262626'};color:#fff;">הפסד (-)</button>
+        </div>
       `;
     } else {
       modeBody = `<div class="field"><label>סכום ז'יטונים בש"ח</label><input type="number" inputmode="numeric" id="seat-chips-direct" value="${chips}" onfocus="this.select()"></div>`;
@@ -4889,7 +4898,10 @@ function renderModal(m){
     body = rows;
   }
 
-  const dismissable = m.type !== "loginRequired" && !(m.type === "identityName" && m.forced);
+  // directPay (item 15): closes only by picking a recipient or tapping "הערב נגמר",
+  // never by dismissing - someone who left owing money shouldn't be able to just back
+  // out of saying who they paid.
+  const dismissable = m.type !== "loginRequired" && !(m.type === "identityName" && m.forced) && m.type !== "directPay";
   const topAnchored = m.type === "seatChips";
   const isSetupFlow = m.type === "chipSetup" || m.type === "payboxSettings";
   return `
@@ -5265,6 +5277,7 @@ function attachHandlers(){
       });
     }
     render();
+    maybeOpenDirectPayAfterCashout(gameId, pid, 0);
   };
 
   app.querySelectorAll("[data-buyin]").forEach(el => el.onclick = () => openModal({type:"buyin", gameId: nav.gameId, playerId: el.dataset.buyin, amount:""}));
@@ -5323,6 +5336,21 @@ function attachHandlers(){
   app.querySelectorAll("[data-admin-end-night]").forEach(el => el.onclick = () => openModal({type:"seatChips", gameId: nav.gameId, playerId: el.dataset.adminEndNight}));
   app.querySelectorAll("[data-admin-remove-seat]").forEach(el => el.onclick = () => openModal({type:"removeSeat", gameId: nav.gameId, playerId: el.dataset.adminRemoveSeat}));
   app.querySelectorAll("[data-admin-add-seat]").forEach(el => el.onclick = () => openModal({type:"pickSeat", gameId: nav.gameId, seatIndex: parseInt(el.dataset.adminAddSeat)}));
+  // "סיום ערב" checkbox - a plain manual toggle of g.closed (also settable from the
+  // directPay modal's own "הערב נגמר" button, see data-confirm-end-night-button below).
+  app.querySelectorAll("[data-toggle-end-night]").forEach(el => el.onclick = async () => {
+    const gameId = el.dataset.toggleEndNight;
+    const g = getGame(gameId);
+    const checkbox = el.querySelector("input[type=checkbox]");
+    if (checkbox) checkbox.disabled = true;
+    if (USE_RELATIONAL_API) {
+      try { await v2UpdateGame(gameId, {closed: !g.closed}); }
+      catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); if (checkbox) checkbox.disabled = false; return; }
+    } else {
+      await mutateAndSave(() => { getGame(gameId).closed = !g.closed; });
+    }
+    render();
+  });
   app.querySelectorAll("[data-admin-balance-fix-toggle]").forEach(el => el.onchange = () => {
     adminBalanceFixSelected[el.dataset.adminBalanceFixToggle] = el.checked;
     render();
@@ -6701,6 +6729,18 @@ function attachHandlers(){
       }
       closeModal();
     };
+    const endNightFromDirectPayBtn = app.querySelector("[data-end-night-from-direct-pay]");
+    if (endNightFromDirectPayBtn) endNightFromDirectPayBtn.onclick = async () => {
+      endNightFromDirectPayBtn.disabled = true;
+      showButtonLoading(endNightFromDirectPayBtn);
+      if (USE_RELATIONAL_API) {
+        try { await v2UpdateGame(modal.gameId, {closed: true}); }
+        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); endNightFromDirectPayBtn.disabled = false; return; }
+      } else {
+        await mutateAndSave(() => { getGame(modal.gameId).closed = true; });
+      }
+      closeModal();
+    };
   }
 
   if (modal && modal.type === "payboxSettings") {
@@ -7069,24 +7109,27 @@ function attachHandlers(){
       const v = Math.round(computeCounted() * 100) / 100;
       quickEndBtn.disabled = true;
       showButtonLoading(quickEndBtn);
+      const gameId = modal.gameId, playerId = modal.playerId;
+      let chips;
       if (USE_RELATIONAL_API) {
-        const g = getGame(modal.gameId);
-        const chips = (!isNaN(v) && v >= 0) ? v : ((g.liveChips||{})[modal.playerId] || 0);
+        const g = getGame(gameId);
+        chips = (!isNaN(v) && v >= 0) ? v : ((g.liveChips||{})[playerId] || 0);
         try {
-          await v2SetCashout(modal.gameId, modal.playerId, chips, [], chips);
-          await v2MaybeAutoCloseNight(modal.gameId);
+          await v2SetCashout(gameId, playerId, chips, [], chips);
+          await v2MaybeAutoCloseNight(gameId);
         } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); quickEndBtn.disabled = false; return; }
       } else {
         await mutateAndSave(() => {
-          const g = getGame(modal.gameId);
-          const chips = (!isNaN(v) && v >= 0) ? v : ((g.liveChips||{})[modal.playerId] || 0);
+          const g = getGame(gameId);
+          chips = (!isNaN(v) && v >= 0) ? v : ((g.liveChips||{})[playerId] || 0);
           if (!g.liveChips) g.liveChips = {};
-          g.liveChips[modal.playerId] = chips;
-          g.cashouts[modal.playerId] = {amount: chips, ts: Date.now(), arrangedWith: []};
+          g.liveChips[playerId] = chips;
+          g.cashouts[playerId] = {amount: chips, ts: Date.now(), arrangedWith: []};
           maybeAutoCloseNight(g);
         });
       }
       closeModal();
+      maybeOpenDirectPayAfterCashout(gameId, playerId, chips);
     };
   }
 
