@@ -1932,11 +1932,34 @@ let buyinConfirmShowing = false;
 // "seen" record, checked by detectAndAnnounceNewBuyins (not by showBuyinConfirmCard
 // itself, which always shows unconditionally when actually called - see performBuyin,
 // which claims its own id into this set BEFORE the save even starts, for exactly the
-// race that gate is there to close). Never cleared - only ever holds as many ids as
-// buy-ins made this page load, not a real memory concern.
-const announcedBuyinIds = new Set();
+// race that gate is there to close). Persisted to localStorage (not just an in-memory
+// Set) - reported live: a device that's used normally the whole time still occasionally
+// replayed a whole burst of already-seen cards, which only makes sense if the page's own
+// JS had silently restarted at some point (a backgrounded PWA tab getting its process
+// reclaimed by the OS is the common real-world cause) - an in-memory-only set forgets
+// everything the moment that happens, right as hasAppliedFreshStateOnce's own protection
+// also resets. Also pre-seeded with every buy-in already present on the very first load
+// (see init()) as a second, independent guard against the same failure mode.
+let announcedBuyinIds;
+try { announcedBuyinIds = new Set(JSON.parse(localStorage.getItem("poker-announced-buyins")) || []); }
+catch(e) { announcedBuyinIds = new Set(); }
+function persistAnnouncedBuyinIds(){
+  try { localStorage.setItem("poker-announced-buyins", JSON.stringify(Array.from(announcedBuyinIds))); } catch(e) { /* storage full/blocked - still works in-memory for this page load */ }
+}
+function rememberAnnouncedBuyin(id){
+  if (!id || announcedBuyinIds.has(id)) return;
+  announcedBuyinIds.add(id);
+  persistAnnouncedBuyinIds();
+}
+// Same as rememberAnnouncedBuyin but for many ids at once (see init()'s own pre-seed from
+// the very first load) - one localStorage write at the end instead of one per id.
+function rememberAnnouncedBuyinsBulk(ids){
+  let changed = false;
+  (ids||[]).forEach(id => { if (id && !announcedBuyinIds.has(id)) { announcedBuyinIds.add(id); changed = true; } });
+  if (changed) persistAnnouncedBuyinIds();
+}
 function showBuyinConfirmCard(buyinId, playerName, amount, isEntry){
-  if (buyinId) announcedBuyinIds.add(buyinId);
+  if (buyinId) rememberAnnouncedBuyin(buyinId);
   buyinConfirmQueue.push({playerName, amount, isEntry});
   if (!buyinConfirmShowing) runBuyinConfirmQueue();
 }
@@ -1989,7 +2012,7 @@ async function performBuyin(gameId, playerId, amount, opts){
   // g.buyins" and can detect this same id as "new" and announce it a second time (reported
   // live as a 3rd confirm card still showing up after the first fix for this). Claiming
   // the id this early closes that gap outright instead of narrowing it.
-  announcedBuyinIds.add(id);
+  rememberAnnouncedBuyin(id);
 
   pendingBuyinRequest = {gameId, id, playerId, cancelled: false};
   showPendingBuyinBanner(`נרשמה בקשה ל${verb} ₪${amount} ל-${playerName}...`);
@@ -7674,6 +7697,13 @@ window.addEventListener("popstate", async () => {
           state.communities.map(c => v2Fetch("GET", `/communities/${c.id}/games`))
         )).flat();
         state.games = await Promise.all(gameSummaries.map(g => v2Fetch("GET", `/games/${g.id}`)));
+        // Every buy-in that already existed the moment the app opened counts as "already
+        // seen" from the start - an independent backstop alongside hasAppliedFreshStateOnce
+        // (see announcedBuyinIds's own comment) for the exact same failure mode, in case
+        // that guard alone ever gets bypassed (e.g. the invite-link retry fetch a little
+        // further below, which legitimately calls applyFreshState before this device's
+        // startup sequence finishes).
+        rememberAnnouncedBuyinsBulk(state.games.flatMap(g => (g.buyins||[]).map(b => b.id)));
       } catch(e) { logSync("v2 community/game load failed: " + e); }
     }
     if (authSettingsResult.status === "fulfilled" && authSettingsResult.value) authSettings = authSettingsResult.value;
