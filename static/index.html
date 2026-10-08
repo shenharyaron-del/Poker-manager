@@ -3391,7 +3391,7 @@ function renderPlayerScreen(gameId){
   const isFemale = playerId => { const rp = c.roster.find(pl => pl.id === playerId); return !!rp && rp.gender === "female"; };
   const feedCounts = {}, feedTotals = {};
   const feedRows = feedEvents.map(ev => {
-    let text, rowIcon;
+    let text, rowIcon, extraRowHtml = "";
     // All white now - size/weight (see isRecent below) carries the "what's fresh"
     // distinction instead of a gray/white color split.
     const color = FEED_COLORS.white;
@@ -3418,6 +3418,15 @@ function renderPlayerScreen(gameId){
     } else if (ev.kind === "buyin_deleted") {
       const player = g.players.find(pl => pl.id === ev.playerId);
       const pname = player ? player.name : "שחקן";
+      // The deleted buy-in's own row is derived live from g.buyins (see "buyin" above) -
+      // once it's actually deleted there's nothing left to derive it from, so it used to
+      // just vanish from the feed with only this cancellation line left, as if the
+      // purchase never happened. Re-show it here, struck through, right before the
+      // cancellation line - the original buy-in's own timestamp isn't kept (only this
+      // event's own ts is), so it can't go back to its true chronological spot, but
+      // showing it paired with its own cancellation is clearer than not at all.
+      const fem2 = isFemale(ev.playerId);
+      extraRowHtml = `<div class="chat-bubble with-icon" style="color:${FEED_COLORS.gray};text-decoration:line-through;opacity:.7;">${icon('coinsPlus')}<div style="flex:1;min-width:0;"><span class="bubble-time">${fmtTime(ev.ts)}</span>${esc(pname)} ${fem2?'עשתה':'עשה'} ריביי של ₪${ev.amount}</div></div>`;
       text = `${esc(pname)} ${isFemale(ev.playerId)?'ביטלה':'ביטל'} קנייה בסך ₪${ev.amount}${actorSuffix(pname, ev.actorName)}`;
       rowIcon = 'trash';
     } else if (ev.kind === "returned_to_table") {
@@ -3439,7 +3448,7 @@ function renderPlayerScreen(gameId){
     // Bold + one font-size step up for anything in the last 5 minutes - draws the eye to
     // what's actually fresh without needing a separate "new" badge.
     const isRecent = ev.ts && (Date.now() - ev.ts) < 5*60*1000;
-    return `<div class="chat-bubble with-icon" style="color:${color};font-weight:${isRecent?700:400};font-size:${isRecent?15:13}px;">${icon(rowIcon)}<div style="flex:1;min-width:0;"><span class="bubble-time">${fmtTime(ev.ts)}</span>${text}</div></div>`;
+    return extraRowHtml + `<div class="chat-bubble with-icon" style="color:${color};font-weight:${isRecent?700:400};font-size:${isRecent?15:13}px;">${icon(rowIcon)}<div style="flex:1;min-width:0;"><span class="bubble-time">${fmtTime(ev.ts)}</span>${text}</div></div>`;
   }).join("") || `<div class="chat-bubble" style="color:#f5f5f4;">אין עדיין פעילות בשולחן</div>`;
   // Every rebuy control (including "אחר") stays disabled from the moment a buy-in request
   // is sent until it settles (success, cancel, or error) - see performBuyin/
