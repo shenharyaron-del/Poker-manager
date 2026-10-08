@@ -27,6 +27,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@600;700&family=Rubik:wght@400;500;600;700&display=swap');
 
 :root{
+  color-scheme: dark;
   --bg1:#04402f; --bg2:#0c0a09;
   --card:#064e3b; --card-b:#065f46;
   --input:#022c22; --input-b:#047857;
@@ -4748,7 +4749,7 @@ function renderModal(m){
         <div style="background:#1f1f1f;border-radius:16px;overflow:hidden;margin-bottom:14px;">
           <div style="padding:22px 16px 14px;text-align:center;">
             <div style="display:flex;align-items:baseline;justify-content:center;gap:0;">
-              <input type="number" inputmode="numeric" id="seat-chips-profit" placeholder="0" min="0" value="${esc(m.profitAmount||'')}" style="font-size:40px;font-weight:800;color:${signColor};background:transparent;border:none;width:160px;text-align:left;padding:0;" onfocus="this.select()">
+              <input type="number" inputmode="numeric" id="seat-chips-profit" placeholder="0" min="0" value="${esc(m.profitAmount||'')}" style="font-size:40px;font-weight:800;color:${signColor};background:transparent;border:none;width:${Math.max(String(m.profitAmount||'0').length,1)}ch;text-align:center;padding:0;" onfocus="this.select()">
               <span style="font-size:40px;font-weight:800;color:${signColor};">${isLoss?'-':'+'}</span>
             </div>
             <div style="color:var(--muted);font-size:12px;margin-top:8px;">הקש רווח (+) או הפסד (-)</div>
@@ -7169,6 +7170,15 @@ function attachHandlers(){
       if (profitEl) { profitEl.textContent = `${profit>0?'+':''}₪${profit}`; profitEl.style.color = profitColor(profit); }
     };
     app.querySelectorAll("input[type=number]").forEach(el => el.oninput = refreshHeader);
+    // profit mode's big amount field also shrinks/grows to hug its own digits (in "ch"
+    // units, ~1 digit wide each) so the number stays visually centered with the sign snug
+    // against it, instead of sitting in a wide fixed box - overrides the generic
+    // refreshHeader-only binding just set above, layering the resize on top of it.
+    const profitAmountInput = document.getElementById("seat-chips-profit");
+    if (profitAmountInput) profitAmountInput.oninput = () => {
+      profitAmountInput.style.width = Math.max(profitAmountInput.value.length, 1) + "ch";
+      refreshHeader();
+    };
     // "chips" mode's two fields (shekels / chip count) mirror each other live via the
     // community's ratio - overrides the generic refreshHeader-only binding just set above
     // for these two specific inputs, layering the cross-fill on top of it.
