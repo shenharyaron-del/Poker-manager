@@ -1689,6 +1689,15 @@ let adminBuyinUi = {};
 // playerScreenCustomOpen/adminBuyinUi above: a mid-gesture render() would replace the very
 // DOM node being dragged.
 let seatDragInProgress = false;
+// This device's own running record of every buy-in it has personally seen in g.buyins,
+// keyed by gameId then buyinId - {ts, playerId, amount, actorName}. Deliberately
+// per-device/in-memory only (starts empty on every fresh load, never synced or
+// persisted) - its only purpose is letting a deleted buy-in's own feed row reappear
+// struck through AT ITS TRUE ORIGINAL TIMESTAMP once it's gone from g.buyins (see
+// renderPlayerScreen's feedEvents), instead of only showing the separate "ביטל קנייה"
+// log line. A device that wasn't watching the table when the buy-in happened simply
+// never recorded it, so it only sees the cancellation line - same as before this existed.
+let localBuyinLogs = {};
 // `${gameId}:${playerId}` keys already auto-opened by the "directPay" modal (see
 // attachHandlers) - fires once when a player cashes out at a loss mid-game in a direct-
 // settlement community, so they're prompted immediately instead of waiting for the whole
@@ -3367,7 +3376,17 @@ function renderPlayerScreen(gameId){
   // each cash-out shows their final chip count and profit/loss against everything they
   // bought in for up to that point. Color coding (gray/white/red) and "ע"י X" attribution
   // when an admin acted on someone else's behalf - see FEED_COLORS/actorSuffix below.
+  // Record every buy-in this device personally observes (see localBuyinLogs's own
+  // comment), then diff against the current live list - any id that's in the log but no
+  // longer in g.buyins was deleted, and gets its own struck-through "ghost" row back at
+  // its true original timestamp instead of only the separate cancellation line.
+  if (!localBuyinLogs[g.id]) localBuyinLogs[g.id] = {};
+  const myBuyinLog = localBuyinLogs[g.id];
+  g.buyins.forEach(b => { if (!myBuyinLog[b.id]) myBuyinLog[b.id] = {ts:b.ts, playerId:b.playerId, amount:b.amount, actorName:b.actorName}; });
+  const liveBuyinIds = new Set(g.buyins.map(b => b.id));
+  const ghostBuyins = Object.keys(myBuyinLog).filter(id => !liveBuyinIds.has(id)).map(id => Object.assign({id}, myBuyinLog[id]));
   const feedEvents = g.buyins.map(b => ({ts:b.ts, kind:"buyin", buyin:b}));
+  ghostBuyins.forEach(b => feedEvents.push({ts:b.ts, kind:"buyin", buyin:b, ghost:true}));
   Object.keys(g.cashouts||{}).forEach(playerId => {
     feedEvents.push({ts: g.cashouts[playerId].ts, kind:"cashout", playerId, amount: g.cashouts[playerId].amount});
   });
@@ -3391,22 +3410,30 @@ function renderPlayerScreen(gameId){
   const isFemale = playerId => { const rp = c.roster.find(pl => pl.id === playerId); return !!rp && rp.gender === "female"; };
   const feedCounts = {}, feedTotals = {};
   const feedRows = feedEvents.map(ev => {
-    let text, rowIcon, extraRowHtml = "";
+    let text, rowIcon;
     // All white now - size/weight (see isRecent below) carries the "what's fresh"
-    // distinction instead of a gray/white color split.
-    const color = FEED_COLORS.white;
+    // distinction instead of a gray/white color split. A ghost (deleted) buy-in dims to
+    // the gray instead, struck through - see the final return below.
+    const color = ev.ghost ? FEED_COLORS.gray : FEED_COLORS.white;
     if (ev.kind === "buyin") {
       const b = ev.buyin;
       const player = g.players.find(pl => pl.id === b.playerId);
       const name = esc(player ? player.name : "שחקן");
       const fem = isFemale(b.playerId);
-      feedCounts[b.playerId] = (feedCounts[b.playerId]||0) + 1;
-      feedTotals[b.playerId] = (feedTotals[b.playerId]||0) + b.amount;
-      const isRebuy = feedCounts[b.playerId] > 1;
-      text = isRebuy
-        ? `${name} ${fem?'עשתה':'עשה'} ריביי של ₪${b.amount} (סה"כ קנייה של ₪${feedTotals[b.playerId]})${actorSuffix(player?player.name:name, b.actorName)}`
-        : `${name} ${fem?'נכנסה':'נכנס'} לשולחן עם ₪${b.amount}${actorSuffix(player?player.name:name, b.actorName)}`;
       rowIcon = 'coinsPlus';
+      if (ev.ghost) {
+        // Deleted since this device last saw it - a plain "עשה ריביי" without the
+        // entry-vs-rebuy distinction (no longer knowable once it's gone) or a running
+        // total (which must only reflect buy-ins that still actually count).
+        text = `${name} ${fem?'עשתה':'עשה'} ריביי של ₪${b.amount}${actorSuffix(player?player.name:name, b.actorName)}`;
+      } else {
+        feedCounts[b.playerId] = (feedCounts[b.playerId]||0) + 1;
+        feedTotals[b.playerId] = (feedTotals[b.playerId]||0) + b.amount;
+        const isRebuy = feedCounts[b.playerId] > 1;
+        text = isRebuy
+          ? `${name} ${fem?'עשתה':'עשה'} ריביי של ₪${b.amount} (סה"כ קנייה של ₪${feedTotals[b.playerId]})${actorSuffix(player?player.name:name, b.actorName)}`
+          : `${name} ${fem?'נכנסה':'נכנס'} לשולחן עם ₪${b.amount}${actorSuffix(player?player.name:name, b.actorName)}`;
+      }
     } else if (ev.kind === "cashout") {
       const player = g.players.find(pl => pl.id === ev.playerId);
       const name = esc(player ? player.name : "שחקן");
@@ -3418,15 +3445,10 @@ function renderPlayerScreen(gameId){
     } else if (ev.kind === "buyin_deleted") {
       const player = g.players.find(pl => pl.id === ev.playerId);
       const pname = player ? player.name : "שחקן";
-      // The deleted buy-in's own row is derived live from g.buyins (see "buyin" above) -
-      // once it's actually deleted there's nothing left to derive it from, so it used to
-      // just vanish from the feed with only this cancellation line left, as if the
-      // purchase never happened. Re-show it here, struck through, right before the
-      // cancellation line - the original buy-in's own timestamp isn't kept (only this
-      // event's own ts is), so it can't go back to its true chronological spot, but
-      // showing it paired with its own cancellation is clearer than not at all.
-      const fem2 = isFemale(ev.playerId);
-      extraRowHtml = `<div class="chat-bubble with-icon" style="color:${FEED_COLORS.gray};text-decoration:line-through;opacity:.7;">${icon('coinsPlus')}<div style="flex:1;min-width:0;"><span class="bubble-time">${fmtTime(ev.ts)}</span>${esc(pname)} ${fem2?'עשתה':'עשה'} ריביי של ₪${ev.amount}</div></div>`;
+      // The deleted buy-in's own row no longer comes from here - see the ghost-buyin
+      // entries built from localBuyinLogs above, which (when this device saw the original
+      // buy-in itself) show it struck through at its own true original timestamp instead
+      // of paired next to this cancellation line.
       text = `${esc(pname)} ${isFemale(ev.playerId)?'ביטלה':'ביטל'} קנייה בסך ₪${ev.amount}${actorSuffix(pname, ev.actorName)}`;
       rowIcon = 'trash';
     } else if (ev.kind === "returned_to_table") {
@@ -3446,9 +3468,11 @@ function renderPlayerScreen(gameId){
       return "";
     }
     // Bold + one font-size step up for anything in the last 5 minutes - draws the eye to
-    // what's actually fresh without needing a separate "new" badge.
-    const isRecent = ev.ts && (Date.now() - ev.ts) < 5*60*1000;
-    return extraRowHtml + `<div class="chat-bubble with-icon" style="color:${color};font-weight:${isRecent?700:400};font-size:${isRecent?15:13}px;">${icon(rowIcon)}<div style="flex:1;min-width:0;"><span class="bubble-time">${fmtTime(ev.ts)}</span>${text}</div></div>`;
+    // what's actually fresh without needing a separate "new" badge. Never applied to a
+    // ghost row (a cancelled buy-in) regardless of how recent it was - struck through and
+    // dimmed instead, which would otherwise visually fight with "fresh and bold".
+    const isRecent = !ev.ghost && ev.ts && (Date.now() - ev.ts) < 5*60*1000;
+    return `<div class="chat-bubble with-icon" style="color:${color};font-weight:${isRecent?700:400};font-size:${isRecent?15:13}px;${ev.ghost?'text-decoration:line-through;opacity:.7;':''}">${icon(rowIcon)}<div style="flex:1;min-width:0;"><span class="bubble-time">${fmtTime(ev.ts)}</span>${text}</div></div>`;
   }).join("") || `<div class="chat-bubble" style="color:#f5f5f4;">אין עדיין פעילות בשולחן</div>`;
   // Every rebuy control (including "אחר") stays disabled from the moment a buy-in request
   // is sent until it settles (success, cancel, or error) - see performBuyin/
