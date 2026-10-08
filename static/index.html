@@ -2305,6 +2305,18 @@ function openChipSetupModal(communityId){
   setupDirty = false;
   openModal({type:"chipSetup", communityId, imageSrc: null, points: existing});
 }
+function openBuyinSetupModal(communityId){
+  setupDirty = false;
+  openModal({type:"buyinSetup", communityId});
+}
+// One save-button selector per setup-flow modal type - each tab still owns its own save
+// button/handler, this just lets trySwitchSetupTab/tryCloseSetupModal find whichever one
+// is on screen right now without duplicating the 3-way mapping in both places.
+function setupSaveButtonSelector(){
+  if (modal.type === "chipSetup") return "[data-save-chip-values]";
+  if (modal.type === "buyinSetup") return "[data-save-buyin-amounts]";
+  return "[data-save-paybox-entries]";
+}
 // Both called before leaving the setup flow (switching tabs or closing) - if something
 // was edited but not saved, ask first instead of silently discarding it. "Save" reuses
 // the same save button each tab already has, so it stays the one place that logic lives.
@@ -2312,19 +2324,20 @@ async function trySwitchSetupTab(targetTab, communityId){
   if (setupDirty) {
     const shouldSave = await showConfirm("הנתונים שהזנת לא נשמרו. לשמור לפני שממשיכים?");
     if (shouldSave) {
-      const saveBtn = document.querySelector(modal.type === "chipSetup" ? "[data-save-chip-values]" : "[data-save-paybox-entries]");
+      const saveBtn = document.querySelector(setupSaveButtonSelector());
       if (saveBtn) await saveBtn.onclick();
     }
   }
   if (targetTab === "chips") openChipSetupModal(communityId);
+  else if (targetTab === "buyins") openBuyinSetupModal(communityId);
   else openPayboxSettingsModal(communityId);
 }
 async function tryCloseSetupModal(){
   if (setupDirty) {
     const shouldSave = await showConfirm("הנתונים שהזנת לא נשמרו. לשמור לפני שסוגרים?");
     if (shouldSave) {
-      const saveBtn = document.querySelector(modal.type === "chipSetup" ? "[data-save-chip-values]" : "[data-save-paybox-entries]");
-      // Both save handlers already closeModal() themselves on success, and leave the
+      const saveBtn = document.querySelector(setupSaveButtonSelector());
+      // Every save handler already closeModal()s itself on success, and leaves the
       // modal open (with its own alert) on failure - either way, nothing left to do here.
       if (saveBtn) { await saveBtn.onclick(); return; }
     }
@@ -2335,13 +2348,20 @@ async function tryCloseSetupModal(){
 // community-setup flow, opened together from the home card's gear button or the
 // missing-setup warning banner.
 function setupTabsHtml(communityId, activeTab){
-  const chipsActive = activeTab === "chips";
   const c = getCommunity(communityId);
+  // Each tab's own accent color while active (gold/cyan/green), muted/transparent
+  // otherwise - same look the chips/payments pair already had, just generalized to a
+  // 3rd tab (ריביי, promoted out of the payments tab into its own, see buyinSetup).
+  const tab = (key, label, iconHtml, color) => {
+    const active = activeTab === key;
+    return `<button data-setup-tab="${key}" data-setup-community="${communityId}" style="flex:1;padding:9px;border-radius:10px;border:1px solid ${active?color:'var(--card-b)'};background:${active?color+'22':'transparent'};color:${active?color:'var(--muted)'};font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;">${iconHtml} ${label}</button>`;
+  };
   return `
     <div style="text-align:center;color:var(--text);font-size:18px;margin-bottom:14px;">${esc(c ? c.name : "")}</div>
     <div style="display:flex;gap:8px;margin-bottom:16px;">
-      <button data-setup-tab="chips" data-setup-community="${communityId}" style="flex:1;padding:9px;border-radius:10px;border:1px solid ${chipsActive?'var(--gold)':'var(--card-b)'};background:${chipsActive?'rgba(251,191,36,.12)':'transparent'};color:${chipsActive?'var(--gold)':'var(--muted)'};font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">${icon('chip')} ז'יטונים</button>
-      <button data-setup-tab="payments" data-setup-community="${communityId}" style="flex:1;padding:9px;border-radius:10px;border:1px solid ${chipsActive?'var(--card-b)':'#0891b2'};background:${chipsActive?'transparent':'rgba(8,145,178,.15)'};color:${chipsActive?'var(--muted)':'#0891b2'};font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">תשלומים</button>
+      ${tab("chips", "ז'יטונים", icon('chip'), '#fbbf24')}
+      ${tab("payments", "תשלומים", `<img src="/static/paybox-icon.png" style="height:14px;width:auto;display:block;">`, '#0891b2')}
+      ${tab("buyins", "ריביי", icon('coinsPlus'), '#22c55e')}
     </div>
   `;
 }
@@ -2405,7 +2425,7 @@ function updateModal(partial){
   const listEl = document.querySelector(".scroll-list");
   const modalScroll = modalEl ? modalEl.scrollTop : null;
   const listScroll = listEl ? listEl.scrollTop : null;
-  if (modal && (modal.type === "chipSetup" || modal.type === "payboxSettings")) setupDirty = true;
+  if (modal && (modal.type === "chipSetup" || modal.type === "payboxSettings" || modal.type === "buyinSetup")) setupDirty = true;
   modal = Object.assign({}, modal, partial);
   render();
   const modalEl2 = document.querySelector(".modal");
@@ -4230,7 +4250,7 @@ function renderModal(m){
         ${setupTabsHtml(m.communityId, "chips")}
         <div class="section-title" style="padding:0;margin:0 0 6px;">יחס ז'יטונים</div>
         <div class="field">
-          <label>1 שקל עבור <input type="number" inputmode="decimal" id="chip-ratio-input" placeholder="${c.chipRatio ? esc(String(c.chipRatio)) : '4'}" style="width:70px;display:inline-block;text-align:center;"> ז'יטונים</label>
+          <label>1 שקל עבור <input type="number" inputmode="decimal" id="chip-ratio-input" value="${c.chipRatio ? esc(String(c.chipRatio)) : ''}" placeholder="לדוגמה: 4" style="width:70px;display:inline-block;text-align:center;"> ז'יטונים</label>
         </div>
         <p style="color:var(--muted);font-size:12px;margin-top:-8px;">משמש לספירת ז'יטונים כוללת בסיום ערב (כמות ז'יטונים ולא לפי צבע) - למשל, יחס של 4 אומר ש-100 ז'יטונים שווים ל-₪25.</p>
         ${editableList}
@@ -4531,13 +4551,6 @@ function renderModal(m){
     const settlementDefault = c.settlementDefault || "direct";
     body = `
       ${setupTabsHtml(m.communityId, "payments")}
-      <div dir="ltr" style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
-        <span style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;background:#0891b2;flex-shrink:0;"><img src="/static/paybox-icon.png" style="height:22px;width:auto;display:block;"></span>
-        <div style="display:flex;flex-direction:column;align-items:flex-start;">
-          <span style="font-family:system-ui,sans-serif;font-weight:400;font-size:15px;line-height:1.1;">PayBox</span>
-          <span style="font-family:system-ui,sans-serif;font-weight:400;font-size:10px;line-height:1.1;opacity:.65;">Setup</span>
-        </div>
-      </div>
       <div class="section-title" style="padding:0;margin:0 0 8px;">קבוצת פייבוקס</div>
       ${link ? `
         <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:10px;margin-bottom:18px;">
@@ -4560,13 +4573,20 @@ function renderModal(m){
         <input type="radio" name="settlement-default" ${settlementDefault==='direct'?'checked':''}>
         <span class="flex1">העברה ישירות בין שחקנים</span>
       </div>
+      <button class="btn btn-primary btn-block" data-save-paybox-entries>שמור שינויים</button>
+    `;
+  } else if (m.type === "buyinSetup") {
+    const c = getCommunity(m.communityId);
+    title = "הגדרת פרופיל קבוצה";
+    body = `
+      ${setupTabsHtml(m.communityId, "buyins")}
       <div class="section-title" style="padding:0;margin:0 0 6px;">ריביי</div>
-      <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">3 הסכומים שיוצגו בכל כפתורי הריביי באפליקציה.</p>
+      <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">3 הסכומים שיוצגו בכל כפתורי הריביי באפליקציה - כל אחד חייב להיות גדול מהקודם לו.</p>
       <div style="display:flex;gap:8px;margin-bottom:6px;">
         ${getBuyinAmounts(c).map((v,i) => `<input type="number" inputmode="numeric" data-buyin-amount-input="${i}" value="${v}" style="flex:1;text-align:center;">`).join("")}
       </div>
       <p style="color:var(--muted);font-size:11px;margin:0 0 18px;">סכום הכניסה לשולחן הוא הסכום הימני (הראשון).</p>
-      <button class="btn btn-primary btn-block" data-save-paybox-entries>שמור שינויים</button>
+      <button class="btn btn-primary btn-block" data-save-buyin-amounts>שמור שינויים</button>
     `;
   } else if (m.type === "pickSeat") {
     const g = getGame(m.gameId);
@@ -4971,7 +4991,7 @@ function renderModal(m){
   // out of saying who they paid.
   const dismissable = m.type !== "loginRequired" && !(m.type === "identityName" && m.forced) && m.type !== "directPay";
   const topAnchored = m.type === "seatChips";
-  const isSetupFlow = m.type === "chipSetup" || m.type === "payboxSettings";
+  const isSetupFlow = m.type === "chipSetup" || m.type === "payboxSettings" || m.type === "buyinSetup";
   return `
     <div class="overlay${topAnchored ? ' overlay-top' : ''}${isSetupFlow ? ' overlay-fullscreen' : ''}">
       <div class="modal" onclick="event.stopPropagation()">
@@ -5203,7 +5223,7 @@ function attachHandlers(){
   // number inputs and the settlement-default radios go through native input/change
   // events; everything else (photo capture, marker drag, add/remove a point) already goes
   // through updateModal, hooked separately there.
-  if (modal && (modal.type === "chipSetup" || modal.type === "payboxSettings")) {
+  if (modal && (modal.type === "chipSetup" || modal.type === "payboxSettings" || modal.type === "buyinSetup")) {
     const setupModalEl = app.querySelector(".modal");
     if (setupModalEl) {
       setupModalEl.addEventListener("input", () => { setupDirty = true; });
@@ -5687,7 +5707,7 @@ function attachHandlers(){
   // easy to accidentally dismiss a modal (and lose in-progress input) with a stray
   // tap near its edge. Only the explicit X button closes/backs out of a modal.
   const closeModalOrBack = () => {
-    if (modal && (modal.type === "chipSetup" || modal.type === "payboxSettings")) { tryCloseSetupModal(); return; }
+    if (modal && (modal.type === "chipSetup" || modal.type === "payboxSettings" || modal.type === "buyinSetup")) { tryCloseSetupModal(); return; }
     closeModal();
   };
   const closeBtn = app.querySelector("[data-close-modal]");
@@ -6907,22 +6927,14 @@ function attachHandlers(){
         const linkInp = document.querySelector(`[data-paybox-link-input="${pl.id}"]`);
         return {id: pl.id, name: (nameInp && nameInp.value.trim()) || pl.name, link: (linkInp && linkInp.value.trim()) || pl.link};
       });
-      const buyinAmountInputs = Array.from(app.querySelectorAll("[data-buyin-amount-input]"))
-        .sort((a,b) => parseInt(a.dataset.buyinAmountInput) - parseInt(b.dataset.buyinAmountInput));
-      const buyinAmounts = buyinAmountInputs.map(el => parseFloat(el.value));
-      if (buyinAmounts.some(v => isNaN(v) || v <= 0)) { showAlert("סכומי הריביי חייבים להיות מספרים חיוביים."); return; }
       if (USE_RELATIONAL_API) {
-        try {
-          await v2EditPayboxLinks(modal.communityId, edited);
-          await v2UpdateCommunity(modal.communityId, {buyinAmounts});
-        }
+        try { await v2EditPayboxLinks(modal.communityId, edited); }
         catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
       } else {
         edited.forEach(({id, name, link}) => {
           const pl = c.payboxLinks.find(p => p.id === id);
           if (pl) { pl.name = name; pl.link = link; }
         });
-        c.buyinAmounts = buyinAmounts;
         saveState();
       }
       // "שמור שינויים" is the single save action for this whole screen (the settlement-
@@ -6948,6 +6960,32 @@ function attachHandlers(){
         saveState();
       }
       render();
+    };
+  }
+
+  if (modal && modal.type === "buyinSetup") {
+    const saveBuyinBtn = app.querySelector("[data-save-buyin-amounts]");
+    if (saveBuyinBtn) saveBuyinBtn.onclick = async () => {
+      const c = getCommunity(modal.communityId);
+      const buyinAmountInputs = Array.from(app.querySelectorAll("[data-buyin-amount-input]"))
+        .sort((a,b) => parseInt(a.dataset.buyinAmountInput) - parseInt(b.dataset.buyinAmountInput));
+      const buyinAmounts = buyinAmountInputs.map(el => parseFloat(el.value));
+      if (buyinAmounts.some(v => isNaN(v) || v <= 0)) { showAlert("סכומי הריביי חייבים להיות מספרים חיוביים."); return; }
+      // Each amount must be strictly bigger than the one before it - the UI always shows
+      // them left-to-right as "smallest first" (see the "סכום הכניסה..." hint), so out-of-
+      // order values would make that hint and the actual buy-in buttons disagree.
+      const isAscending = buyinAmounts.every((v, i) => i === 0 || v > buyinAmounts[i-1]);
+      if (!isAscending) { showAlert("כל סכום חייב להיות גדול מהסכום שלפניו (לדוגמה: 50, 80, 100)."); return; }
+      saveBuyinBtn.disabled = true;
+      showButtonLoading(saveBuyinBtn);
+      if (USE_RELATIONAL_API) {
+        try { await v2UpdateCommunity(modal.communityId, {buyinAmounts}); }
+        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); saveBuyinBtn.disabled = false; return; }
+      } else {
+        c.buyinAmounts = buyinAmounts;
+        saveState();
+      }
+      closeModal();
     };
   }
 
