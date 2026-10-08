@@ -1702,6 +1702,13 @@ let settlementFilterPlayerId = null;
 // existing communities with buyinAmounts still NULL in the DB get this, no migration
 // needed.
 const DEFAULT_BUYIN_AMOUNTS = [50, 80, 100];
+// Preloaded once at startup (not inside playBuyinSound's hot path) so the browser has
+// already fetched and decoded the file by the time any buy-in actually happens - a fresh
+// `new Audio(src)` with no warm-up pays that fetch+decode cost right at play() time,
+// which is exactly the moment the sound needs to line up with the confirm card's own
+// animation start. playBuyinSound() clones this (not shared directly) so two buy-ins
+// landing close together both still play instead of the second cutting the first off.
+const BUYIN_SOUND_TEMPLATE = (() => { try { const a = new Audio("/static/buyin-sound.mp3"); a.preload = "auto"; a.load(); return a; } catch(e) { return null; } })();
 function getBuyinAmounts(c){
   return (c && Array.isArray(c.buyinAmounts) && c.buyinAmounts.length === 3) ? c.buyinAmounts : DEFAULT_BUYIN_AMOUNTS;
 }
@@ -2746,7 +2753,7 @@ function animateSeatCaptions(gameId){
 // swallowed so a failed sound never blocks the buy-in itself or the card.
 function playBuyinSound(){
   try {
-    const audio = new Audio("/static/buyin-sound.mp3");
+    const audio = BUYIN_SOUND_TEMPLATE ? BUYIN_SOUND_TEMPLATE.cloneNode(true) : new Audio("/static/buyin-sound.mp3");
     audio.play().catch(() => {});
   } catch(e) { /* audio unsupported/blocked */ }
 }
@@ -2910,6 +2917,9 @@ const ICONS = {
   percent: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>',
   paybox: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="6" r="2.6"/><path d="M12 9.5v8.5M12 12l-4.5-3.5M12 12l4.5-3.5M12 16l-3.5 4M12 16l3.5 4"/></svg>',
   coins: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v5c0 1.66 3.13 3 7 3s7-1.34 7-3V6"/><path d="M5 11v5c0 1.66 3.13 3 7 3s7-1.34 7-3v-5"/></svg>',
+  // Coin stack with a "+" badge - the ריביי (buy-in) icon specifically, distinct from the
+  // generic "plus" used for every other "add X" action (seating, avatars, chip setup...).
+  coinsPlus: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="9" cy="16" rx="7" ry="3"/><path d="M2 16v2c0 1.66 3.13 3 7 3s7-1.34 7-3v-2"/><path d="M18 3v7M14.5 6.5h7" stroke-width="2.5"/></svg>',
   download: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>',
   upload: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>',
   shield: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>',
@@ -3414,7 +3424,7 @@ function renderPlayerScreen(gameId){
   const buyinButtonsHtml = playerScreenCustomOpen ? `
     <div class="buyin-frame" style="display:flex;gap:8px;margin-bottom:14px;flex-shrink:0;">
       <input type="number" inputmode="decimal" id="player-screen-custom-amount" placeholder="סכום" autofocus ${buyinPending?'disabled':''} style="flex:1;padding:14px 8px;font-size:18px;text-align:center;border-radius:9px;border:1px solid var(--gold);background:var(--input);color:var(--text);">
-      <button class="chip-btn" data-player-buyin-custom-confirm ${buyinPending?'disabled':''} style="flex:0 0 auto;padding:14px 18px;font-size:16px;font-weight:700;">${icon('plus')}</button>
+      <button class="chip-btn" data-player-buyin-custom-confirm ${buyinPending?'disabled':''} style="flex:0 0 auto;padding:14px 18px;font-size:16px;font-weight:700;">${icon('coinsPlus')}</button>
     </div>
   ` : `
     <div class="buyin-frame" style="display:flex;gap:8px;margin-bottom:14px;flex-shrink:0;">
@@ -3509,15 +3519,15 @@ function renderAdminScreen(gameId){
     // once they do.
     const hasArrangement = getArrangementNotes(g, pid).length > 0;
     return `
-    <div class="roster-row">
-      <div>
-        <div class="row" style="gap:8px;"><span>${esc(nameOf(pid))}</span><span style="color:var(--gold);font-weight:700;">₪${buyinTotals[pid]||0}</span></div>
+    <div class="roster-row" style="display:block;padding:0;overflow:hidden;">
+      <div style="padding:12px 14px 10px;">
+        <div class="row" style="justify-content:space-between;"><span style="font-weight:700;font-size:16px;">${esc(nameOf(pid))}</span><span style="color:var(--gold);font-weight:800;font-size:20px;">₪${buyinTotals[pid]||0}</span></div>
         ${notesHtml(pid)}
       </div>
-      <div class="row" style="gap:4px;">
-        <button class="icon-btn ok" data-buyin="${pid}" title="הוסף ריביי" style="display:flex;align-items:center;gap:3px;padding:6px 8px;font-size:11px;font-weight:700;width:auto;">${icon('plus')}ריביי</button>
-        <button class="icon-btn" style="background:${hasArrangement?'#78350f':'#57534e'};color:${hasArrangement?'#fde68a':'#f5f5f4'};display:flex;align-items:center;gap:3px;padding:6px 8px;font-size:11px;font-weight:700;width:auto;" data-admin-end-night="${pid}" title="${hasArrangement?'יש סידור תשלום ישיר עם השחקן הזה - ':''}סיים ערב">${icon('out')}יציאה</button>
-        <button class="icon-btn danger" data-admin-remove-seat="${pid}" title="הסר מושב" style="display:flex;align-items:center;gap:3px;padding:6px 8px;font-size:11px;font-weight:700;width:auto;">${icon('trash')}הסרה</button>
+      <div style="display:flex;border-top:1px solid var(--card-b);">
+        <button class="icon-btn danger" data-admin-remove-seat="${pid}" title="הסר מושב" style="flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:10px 4px;font-size:12px;font-weight:700;border-radius:0 0 12px 0;">${icon('trash')}הסרה מהשולחן</button>
+        <button class="icon-btn" style="flex:1;background:${hasArrangement?'#78350f':'#57534e'};color:${hasArrangement?'#fde68a':'#f5f5f4'};display:flex;align-items:center;justify-content:center;gap:5px;padding:10px 4px;font-size:12px;font-weight:700;border-radius:0;" data-admin-end-night="${pid}" title="${hasArrangement?'יש סידור תשלום ישיר עם השחקן הזה - ':''}סיים ערב">${icon('out')}סיום ערב</button>
+        <button class="icon-btn ok" data-buyin="${pid}" title="הוסף ריביי" style="flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:10px 4px;font-size:12px;font-weight:700;border-radius:0 0 0 12px;">${icon('coinsPlus')}ריביי</button>
       </div>
     </div>
   `;
