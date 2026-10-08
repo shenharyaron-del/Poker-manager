@@ -5924,7 +5924,12 @@ function attachHandlers(){
     app.querySelectorAll("[data-device-choice]").forEach(el => el.onclick = async () => {
       const choice = el.dataset.deviceChoice;
       el.disabled = true;
-      updateModal({deviceChoice: choice});
+      showButtonLoading(el);
+      // Stored directly rather than through updateModal - the body doesn't actually branch
+      // on deviceChoice itself (only sendLoginCodeFor below reads it), so a re-render here
+      // would just replace this button with a fresh, non-disabled one and lose the
+      // loading state we just set, for no visible change.
+      modal.deviceChoice = choice;
       await sendLoginCodeFor(modal.loginEmail);
     });
     const deviceChoiceCancelBtn = app.querySelector("[data-device-choice-cancel]");
