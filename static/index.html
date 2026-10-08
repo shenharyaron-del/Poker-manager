@@ -4744,18 +4744,19 @@ function renderModal(m){
       const isLoss = profitSign === "loss";
       const signColor = isLoss ? "#fb923c" : "#6ee7b7";
       modeBody = `
+        <style>#seat-chips-profit::selection{color:${signColor};background:#1d4ed8;}</style>
         <div style="background:#1f1f1f;border-radius:16px;overflow:hidden;margin-bottom:14px;">
           <div style="padding:22px 16px 14px;text-align:center;">
-            <div style="display:flex;align-items:baseline;justify-content:center;gap:1px;">
+            <div style="display:flex;align-items:baseline;justify-content:center;gap:0;">
               <input type="number" inputmode="numeric" id="seat-chips-profit" placeholder="0" min="0" value="${esc(m.profitAmount||'')}" style="font-size:40px;font-weight:800;color:${signColor};background:transparent;border:none;width:140px;text-align:center;padding:0;" onfocus="this.select()">
               <span style="font-size:40px;font-weight:800;color:${signColor};">${isLoss?'-':'+'}</span>
             </div>
             <div style="color:var(--muted);font-size:12px;margin-top:8px;">הקש רווח (+) או הפסד (-)</div>
           </div>
           <div style="display:flex;">
-            <button data-profit-sign="profit" style="flex:1;padding:12px 4px;border:none;font-weight:700;font-size:13px;background:${!isLoss?'#15803d':'transparent'};color:#fff;">רווח (+)</button>
+            <button data-profit-sign="profit" style="flex:1;padding:12px 4px;border:none;font-weight:700;font-size:13px;background:#15803d;opacity:${!isLoss?1:.55};color:#fff;">רווח (+)</button>
             <div style="flex:1;padding:12px 4px;color:var(--muted);text-align:center;font-size:12px;display:flex;align-items:center;justify-content:center;">רווח/הפסד</div>
-            <button data-profit-sign="loss" style="flex:1;padding:12px 4px;border:none;font-weight:700;font-size:13px;background:${isLoss?'#c2410c':'transparent'};color:#fff;">הפסד (-)</button>
+            <button data-profit-sign="loss" style="flex:1;padding:12px 4px;border:none;font-weight:700;font-size:13px;background:#c2410c;opacity:${isLoss?1:.55};color:#fff;">הפסד (-)</button>
           </div>
         </div>
       `;
