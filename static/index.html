@@ -697,6 +697,12 @@ function detectAndAnnounceNewBuyins(oldGames, newGames){
       if (oldIds.has(b.id)) return;
       if (pendingBuyinRequest && pendingBuyinRequest.gameId === ng.id && pendingBuyinRequest.id === b.id) return;
       if (announcedBuyinIds.has(b.id)) return;
+      // Belt-and-suspenders against every other guard somehow missing at once (see
+      // announcedBuyinIds's own comment on the silent-restart failure mode this is all
+      // defending against): a buy-in old enough that it can't plausibly be "just
+      // happened" doesn't deserve a popping confirm card even if it IS genuinely new to
+      // this device - mark it seen and move on instead of animating a stale notification.
+      if (b.ts && (Date.now() - b.ts) > 2*60*1000) { rememberAnnouncedBuyin(b.id); return; }
       const player = (ng.players||[]).find(p => p.id === b.playerId);
       const sorted = (playerBuyins[b.playerId]||[]).slice().sort((a,c)=>(a.ts||0)-(c.ts||0));
       const isEntry = sorted.length > 0 && sorted[0].id === b.id;
