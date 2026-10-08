@@ -1712,6 +1712,24 @@ const BUYIN_SOUND_TEMPLATE = (() => { try { const a = new Audio("/static/buyin-s
 function getBuyinAmounts(c){
   return (c && Array.isArray(c.buyinAmounts) && c.buyinAmounts.length === 3) ? c.buyinAmounts : DEFAULT_BUYIN_AMOUNTS;
 }
+// The admin screen's own display order for active players (move up/down) - deliberately
+// per-device (localStorage, never saved to the DB/synced) since every admin is explicitly
+// allowed their own personal ordering, not one shared order everyone sees the same way.
+function getAdminOrder(gameId){
+  try { return JSON.parse(localStorage.getItem(`poker-admin-order-${gameId}`)) || []; }
+  catch(e) { return []; }
+}
+function saveAdminOrder(gameId, order){
+  try { localStorage.setItem(`poker-admin-order-${gameId}`, JSON.stringify(order)); } catch(e) { /* storage full/blocked - order just resets to default */ }
+}
+// Applies the saved order to `ids` (natural order), keeping any id not yet in the saved
+// order in its natural relative position, appended after the ones that are - so a newly
+// seated player shows up sensibly instead of jumping to a random spot.
+function applyAdminOrder(gameId, ids){
+  const saved = getAdminOrder(gameId).filter(id => ids.includes(id));
+  const rest = ids.filter(id => !saved.includes(id));
+  return [...saved, ...rest];
+}
 // Community-level admin (the admin screen's own gate, and full table-admin rights in
 // every game under this community - see isTableAdmin below) - the community's creator
 // always has this, even before any roster row is ever marked, same as isTableAdmin's own
@@ -3495,7 +3513,7 @@ function renderAdminScreen(gameId){
   g.buyins.forEach(b => { buyinTotals[b.playerId] = (buyinTotals[b.playerId]||0) + b.amount; });
   const liveChips = g.liveChips || {};
   const seatedIds = seats.filter(Boolean);
-  const activeIds = seatedIds.filter(pid => !(pid in g.cashouts));
+  const activeIds = applyAdminOrder(gameId, seatedIds.filter(pid => !(pid in g.cashouts)));
   const cashedOutIds = seatedIds.filter(pid => pid in g.cashouts);
   const allCashedOut = seatedIds.length > 0 && cashedOutIds.length === seatedIds.length;
   const totalBuyinAll = seatedIds.reduce((s,pid)=>s+(buyinTotals[pid]||0),0);
@@ -3512,16 +3530,26 @@ function renderAdminScreen(gameId){
     return `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${notes.map(n => `${n.received?'קיבל':'העביר'} ₪${n.amount} ${n.received?'מ-':'ל-'}${esc(n.name)}`).join(' · ')}</div>`;
   };
 
-  const activeRows = activeIds.map(pid => {
+  const activeRows = activeIds.map((pid, idx) => {
     // A still-active player can already be the OTHER side of someone else's arrangement
     // (that someone already cashed out and named them) even before they themselves cash
     // out - lighting up their own "סיים ערב" button is a heads-up not to lose track of it
     // once they do.
     const hasArrangement = getArrangementNotes(g, pid).length > 0;
+    const isFirst = idx === 0, isLast = idx === activeIds.length - 1;
     return `
     <div class="roster-row" style="display:block;padding:0;overflow:hidden;">
       <div style="padding:12px 14px 10px;">
-        <div class="row" style="justify-content:space-between;"><span style="font-weight:700;font-size:16px;">${esc(nameOf(pid))}</span><span style="color:var(--gold);font-weight:800;font-size:20px;">₪${buyinTotals[pid]||0}</span></div>
+        <div class="row" style="justify-content:space-between;">
+          <span style="font-weight:700;font-size:16px;">${esc(nameOf(pid))}</span>
+          <span style="display:flex;align-items:center;gap:8px;">
+            <span style="color:var(--gold);font-weight:800;font-size:20px;">₪${buyinTotals[pid]||0}</span>
+            <span style="display:flex;flex-direction:column;gap:1px;">
+              <button data-admin-order-up="${pid}" title="הזז למעלה" ${isFirst?"disabled":""} style="background:none;border:none;color:var(--muted);padding:2px;cursor:pointer;line-height:0;opacity:${isFirst?.3:1};">${icon('up')}</button>
+              <button data-admin-order-down="${pid}" title="הזז למטה" ${isLast?"disabled":""} style="background:none;border:none;color:var(--muted);padding:2px;cursor:pointer;line-height:0;opacity:${isLast?.3:1};">${icon('down')}</button>
+            </span>
+          </span>
+        </div>
         ${notesHtml(pid)}
       </div>
       <div style="display:flex;border-top:1px solid var(--card-b);">
@@ -5355,6 +5383,22 @@ function attachHandlers(){
   app.querySelectorAll("[data-admin-end-night]").forEach(el => el.onclick = () => openModal({type:"seatChips", gameId: nav.gameId, playerId: el.dataset.adminEndNight}));
   app.querySelectorAll("[data-admin-remove-seat]").forEach(el => el.onclick = () => openModal({type:"removeSeat", gameId: nav.gameId, playerId: el.dataset.adminRemoveSeat}));
   app.querySelectorAll("[data-admin-add-seat]").forEach(el => el.onclick = () => openModal({type:"pickSeat", gameId: nav.gameId, seatIndex: parseInt(el.dataset.adminAddSeat)}));
+  // Up/down reordering of the admin screen's active-player cards - purely local to this
+  // device (see getAdminOrder/saveAdminOrder's own comment), so no save-to-server/render
+  // conflict handling needed, just swap the two adjacent ids and persist.
+  const swapAdminOrder = (pid, dir) => {
+    const g = getGame(nav.gameId);
+    const seatedActive = (g.seats||[]).filter(Boolean).filter(sid => !(sid in g.cashouts));
+    const order = applyAdminOrder(nav.gameId, seatedActive);
+    const i = order.indexOf(pid);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= order.length) return;
+    [order[i], order[j]] = [order[j], order[i]];
+    saveAdminOrder(nav.gameId, order);
+    render();
+  };
+  app.querySelectorAll("[data-admin-order-up]").forEach(el => el.onclick = () => swapAdminOrder(el.dataset.adminOrderUp, -1));
+  app.querySelectorAll("[data-admin-order-down]").forEach(el => el.onclick = () => swapAdminOrder(el.dataset.adminOrderDown, 1));
   // "סיום ערב" checkbox - a plain manual toggle of g.closed (also settable from the
   // directPay modal's own "הערב נגמר" button, see data-confirm-end-night-button below).
   app.querySelectorAll("[data-toggle-end-night]").forEach(el => el.onclick = async () => {
