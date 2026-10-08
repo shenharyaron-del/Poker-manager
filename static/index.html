@@ -3371,7 +3371,10 @@ function renderPlayerScreen(gameId){
   const isFemale = playerId => { const rp = c.roster.find(pl => pl.id === playerId); return !!rp && rp.gender === "female"; };
   const feedCounts = {}, feedTotals = {};
   const feedRows = feedEvents.map(ev => {
-    let text, color, rowIcon;
+    let text, rowIcon;
+    // All white now - size/weight (see isRecent below) carries the "what's fresh"
+    // distinction instead of a gray/white color split.
+    const color = FEED_COLORS.white;
     if (ev.kind === "buyin") {
       const b = ev.buyin;
       const player = g.players.find(pl => pl.id === b.playerId);
@@ -3383,7 +3386,6 @@ function renderPlayerScreen(gameId){
       text = isRebuy
         ? `${name} ${fem?'עשתה':'עשה'} ריביי של ₪${b.amount} (סה"כ קנייה של ₪${feedTotals[b.playerId]})${actorSuffix(player?player.name:name, b.actorName)}`
         : `${name} ${fem?'נכנסה':'נכנס'} לשולחן עם ₪${b.amount}${actorSuffix(player?player.name:name, b.actorName)}`;
-      color = isRebuy ? FEED_COLORS.white : FEED_COLORS.gray;
       rowIcon = 'coinsPlus';
     } else if (ev.kind === "cashout") {
       const player = g.players.find(pl => pl.id === ev.playerId);
@@ -3392,38 +3394,33 @@ function renderPlayerScreen(gameId){
       const profit = ev.amount - totalBuyin;
       const profitText = profit >= 0 ? `₪${Math.round(profit)} רווח` : `₪${Math.abs(Math.round(profit))} הפסד`;
       text = `${name} ${isFemale(ev.playerId)?'יצאה':'יצא'} מהשולחן עם ₪${ev.amount} ז'יטונים בספירה (${profitText})`;
-      color = FEED_COLORS.gray;
       rowIcon = 'out';
     } else if (ev.kind === "buyin_deleted") {
       const player = g.players.find(pl => pl.id === ev.playerId);
       const pname = player ? player.name : "שחקן";
       text = `${esc(pname)} ${isFemale(ev.playerId)?'ביטלה':'ביטל'} קנייה בסך ₪${ev.amount}${actorSuffix(pname, ev.actorName)}`;
-      color = FEED_COLORS.gray;
       rowIcon = 'trash';
     } else if (ev.kind === "returned_to_table") {
       const player = g.players.find(pl => pl.id === ev.playerId);
       const pname = player ? player.name : "שחקן";
       text = `${esc(pname)} ${isFemale(ev.playerId)?'חזרה':'חזר'} לשולחן${actorSuffix(pname, ev.actorName)}`;
-      color = FEED_COLORS.gray;
       rowIcon = 'undo';
     } else if (ev.kind === "seat_removed") {
       const player = g.players.find(pl => pl.id === ev.playerId);
       const pname = player ? player.name : "שחקן";
       text = `${esc(pname)} ${isFemale(ev.playerId)?'הוצאה':'הוצא'} מהשולחן${actorSuffix(pname, ev.actorName)}`;
-      color = FEED_COLORS.gray;
       rowIcon = 'x';
     } else if (ev.kind === "night_declared_over") {
       text = `הוכרז על סיום ערב`;
-      color = FEED_COLORS.gray;
       rowIcon = 'check';
     } else {
       return "";
     }
-    // Bold for anything in the last 5 minutes - draws the eye to what's actually fresh
-    // without needing a separate "new" badge.
+    // Bold + one font-size step up for anything in the last 5 minutes - draws the eye to
+    // what's actually fresh without needing a separate "new" badge.
     const isRecent = ev.ts && (Date.now() - ev.ts) < 5*60*1000;
-    return `<div class="chat-bubble with-icon" style="color:${color};font-weight:${isRecent?700:400};">${icon(rowIcon)}<div style="flex:1;min-width:0;"><span class="bubble-time">${fmtTime(ev.ts)}</span>${text}</div></div>`;
-  }).join("") || `<div class="chat-bubble" style="color:#5c5c5c;">אין עדיין פעילות בשולחן</div>`;
+    return `<div class="chat-bubble with-icon" style="color:${color};font-weight:${isRecent?700:400};font-size:${isRecent?15:13}px;">${icon(rowIcon)}<div style="flex:1;min-width:0;"><span class="bubble-time">${fmtTime(ev.ts)}</span>${text}</div></div>`;
+  }).join("") || `<div class="chat-bubble" style="color:#f5f5f4;">אין עדיין פעילות בשולחן</div>`;
   // Every rebuy control (including "אחר") stays disabled from the moment a buy-in request
   // is sent until it settles (success, cancel, or error) - see performBuyin/
   // pendingBuyinRequest - so a second tap can't fire a genuine duplicate buy-in while the
