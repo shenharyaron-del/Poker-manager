@@ -799,9 +799,9 @@ def v2_update_roster_player(community_id, player_id):
     # the fact - the backfill path in autoSeatSelf/autoJoinViaInvite for a player who
     # self-identified before global-player linking existed. Structural (single row,
     # single field), so no conflict token needed, same reasoning as the rest of Phase 3.
-    # isAdmin (the admin-screen feature) and gender (player settings) reuse this same
-    # endpoint rather than a new one each - same "single row, a handful of fields" shape.
-    # Accepts any of them present; the client always sends exactly one per call today.
+    # isAdmin (the admin-screen feature) reuses this same endpoint rather than a new one -
+    # same "single row, single field" shape, just a different field. Accepts either or
+    # both fields present; the client always sends exactly one of them per call today.
     body = request.get_json(silent=True) or {}
     sets, params = [], []
     if "clientId" in body:
@@ -810,11 +810,8 @@ def v2_update_roster_player(community_id, player_id):
     if "isAdmin" in body:
         sets.append("is_admin = %s")
         params.append(bool(body["isAdmin"]))
-    if "gender" in body:
-        sets.append("gender = %s")
-        params.append("female" if body["gender"] == "female" else "male")
     if not sets:
-        return jsonify({"error": "clientId, isAdmin or gender required"}), 400
+        return jsonify({"error": "clientId or isAdmin required"}), 400
     params.extend([player_id, community_id])
     with get_db() as conn:
         with conn.cursor() as cur:
@@ -865,6 +862,21 @@ def v2_rename_player_everywhere(client_id):
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute("UPDATE roster_players SET name = %s WHERE client_id = %s", (name, client_id))
+            updated = cur.rowcount
+        conn.commit()
+    return jsonify({"ok": True, "updated": updated})
+
+
+@app.route("/api/v2/players/<client_id>/gender", methods=["PATCH"])
+def v2_set_gender_everywhere(client_id):
+    # Cross-community, same reasoning as the name endpoint just above - a real person's
+    # gender doesn't vary by which community's roster row you're looking at. Used only to
+    # pick the right verb gender in the table activity feed.
+    body = request.get_json(silent=True) or {}
+    gender = "female" if body.get("gender") == "female" else "male"
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE roster_players SET gender = %s WHERE client_id = %s", (gender, client_id))
             updated = cur.rowcount
         conn.commit()
     return jsonify({"ok": True, "updated": updated})

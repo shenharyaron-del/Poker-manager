@@ -919,13 +919,19 @@ async function v2SetRosterAdmin(communityId, playerId, isAdmin){
   if (p) p.isAdmin = isAdmin;
 }
 
-// Player settings' own gender field (default "male" - see schema) - only used to pick the
-// right verb gender ("עשה"/"עשתה" etc.) in the table activity feed. Same PATCH endpoint as
-// v2LinkRosterPlayer/v2SetRosterAdmin, just the other field.
-async function v2SetRosterGender(communityId, playerId, gender){
-  await v2Fetch("PATCH", `/communities/${communityId}/roster/${playerId}`, {gender});
-  const p = getCommunity(communityId).roster.find(pl => pl.id === playerId);
-  if (p) p.gender = gender;
+// Gender (identityName screen, default "male" - see schema) - only used to pick the right
+// verb gender ("עשה"/"עשתה" etc.) in the table activity feed. Cross-community by design,
+// same reasoning/endpoint shape as v2RenamePlayerEverywhere just above - a real person's
+// gender doesn't vary by which community's roster row you're looking at.
+async function v2SetGenderEverywhere(clientId, gender){
+  await v2Fetch("PATCH", `/players/${clientId}/gender`, {gender});
+  state.communities.forEach(c => c.roster.forEach(p => { if (p.clientId === clientId) p.gender = gender; }));
+}
+function setGenderEverywhere(clientId, gender){
+  if (!clientId) return;
+  state.communities.forEach(c => {
+    (c.roster||[]).forEach(p => { if (p.clientId === clientId) p.gender = gender; });
+  });
 }
 
 // Adds a NEW permanent roster player already linked to an account for the given email,
@@ -1873,6 +1879,7 @@ function runBuyinConfirmQueue(){
   if (!item) { buyinConfirmShowing = false; return; }
   buyinConfirmShowing = true;
   playBuyinSound();
+  if (navigator.vibrate) navigator.vibrate(80);
   const verb = item.isEntry ? "כניסה לשולחן" : "ריביי";
   const fem = item.isEntry ? "ה" : ""; // "התקבלה/נשמרה" (כניסה, נקבה) vs "התקבל/נשמר" (ריביי, זכר)
   const overlay = document.createElement("div");
@@ -3344,8 +3351,9 @@ function renderPlayerScreen(gameId){
   // reads. Omitted entirely (not "ע"י [own name]") when the actor IS the player it's about.
   const actorSuffix = (playerName, actorName) => (actorName && actorName !== playerName) ? ` ע"י ${esc(actorName)}` : "";
   // Picks the right verb form for the table activity feed - gender comes from the
-  // player's own roster row (see playerSettings/v2SetRosterGender), defaulting to male
-  // for a one-off guest (never in the roster at all) same as the server does.
+  // player's own roster row (set from the identityName screen, see
+  // v2SetGenderEverywhere), defaulting to male for a one-off guest (never in the roster
+  // at all) same as the server does.
   const isFemale = playerId => { const rp = c.roster.find(pl => pl.id === playerId); return !!rp && rp.gender === "female"; };
   const feedCounts = {}, feedTotals = {};
   const feedRows = feedEvents.map(ev => {
@@ -3873,6 +3881,16 @@ function renderModal(m){
         </div>
       </div>
     `;
+    // Gender lives on each roster row (cross-community, see v2SetGenderEverywhere/
+    // setGenderEverywhere), not on myIdentity itself - read it off any one of this
+    // person's own rows (they're kept in sync with each other), defaulting to male for
+    // someone not yet in any roster (e.g. a first-time visitor still on this very screen).
+    let myGender = "male";
+    outer: for (const comm of state.communities) {
+      for (const pl of (comm.roster||[])) {
+        if (pl.clientId === myIdentity.id) { myGender = pl.gender === "female" ? "female" : "male"; break outer; }
+      }
+    }
     body = `
       <div style="text-align:center;margin-bottom:14px;">
         <img src="${myPhoto || '/static/logo-watermark.png'}" style="width:76px;height:76px;border-radius:50%;object-fit:cover;display:block;margin:0 auto 8px;border:2px solid var(--gold);">
@@ -3880,6 +3898,10 @@ function renderModal(m){
       </div>
       <div style="margin-bottom:12px;">
         <input type="text" id="identity-name-input" value="${esc(myIdentity.name || '')}" placeholder="השם שלך" style="width:100%;" autofocus>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        <button class="btn ${myGender==='male'?'btn-primary':'btn-ghost'} flex1" data-identity-gender="male">זכר</button>
+        <button class="btn ${myGender==='female'?'btn-primary':'btn-ghost'} flex1" data-identity-gender="female">נקבה</button>
       </div>
       <div class="section-title" style="padding:0;margin:0 0 6px;">המיקום שלי בשולחן</div>
       <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">הקישו על מקום כדי לבחור איפה תופיעו תמיד סביב השולחן.</p>
@@ -4744,22 +4766,6 @@ function renderModal(m){
       ${(hasBuyins || hasChips) ? `<p style="color:#fbbf24;font-size:12px;">לשחקן יש קניות/ז'יטונים בשולחן - הם יאופסו, כאילו לא ישב בשולחן. אם יחזור, הכל יעמוד על אפס.</p>` : ""}
       <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-clear-seat>הסר מהשולחן</button>
     `;
-  } else if (m.type === "playerSettings") {
-    const c = getCommunity(m.communityId);
-    const p = c ? c.roster.find(pl => pl.id === m.playerId) : null;
-    title = `הגדרות שחקן: ${esc(p ? p.name : "")}`;
-    body = !p ? `<div class="empty">שחקן לא נמצא ברשימת הקבוצה</div>` : (() => {
-      const gender = p.gender === "female" ? "female" : "male";
-      return `
-        <div class="field">
-          <label>מגדר</label>
-          <div style="display:flex;gap:8px;">
-            <button class="btn ${gender==='male'?'btn-primary':'btn-ghost'} flex1" data-player-settings-gender="male">זכר</button>
-            <button class="btn ${gender==='female'?'btn-primary':'btn-ghost'} flex1" data-player-settings-gender="female">נקבה</button>
-          </div>
-        </div>
-      `;
-    })();
   } else if (m.type === "returnToGamePayment") {
     const g = getGame(m.gameId);
     const p = g.players.find(pl=>pl.id===m.playerId);
@@ -5519,16 +5525,18 @@ function attachHandlers(){
       if (infoEl) infoEl.addEventListener("click", filterClick);
       return;
     }
-    // Your own seat opens player settings on a tap instead of the drag/swap flow below -
-    // and never gets the drag listeners at all, so it can't be dragged either (only other
-    // players' seats can be rearranged around the table, not your own).
+    // Your own seat opens the existing player-settings screen (identityName - the same
+    // one reachable from the name on the home screen, see data-edit-identity-name) on a
+    // tap instead of the drag/swap flow below - and never gets the drag listeners at all,
+    // so it can't be dragged either (only other players' seats can be rearranged around
+    // the table, not your own).
     {
       const g0 = getGame(nav.gameId);
       const seats0 = g0.seats || new Array(9).fill(null);
       const idx0 = parseInt(el.dataset.seat);
       const myPlayerId0 = myIdentity.myPlayers && myIdentity.myPlayers[g0.communityId];
       if (seats0[idx0] && myPlayerId0 && seats0[idx0] === myPlayerId0) {
-        el.onclick = () => openModal({type:"playerSettings", communityId: g0.communityId, playerId: myPlayerId0});
+        el.onclick = () => openModal({type:"identityName", forced:false});
         return;
       }
     }
@@ -5561,10 +5569,23 @@ function attachHandlers(){
       el.style.opacity = "";
       drag = null;
       if (!wasMoved) return; // a plain tap on an already-seated player is a no-op
-      el.style.pointerEvents = "none";
-      const under = document.elementFromPoint(e.clientX, e.clientY);
-      el.style.pointerEvents = "";
-      const targetEl = under ? under.closest("[data-seat]") : null;
+      // Nearest seat center to the drop point, not document.elementFromPoint - that was
+      // exact-hit-test-only (gaps between circles, or landing a few px off a small target
+      // on a touch screen, silently found nothing), which is why this worked some drags
+      // and not others. Comparing against every OTHER seat's own (unmoved) center is
+      // forgiving the same way a real drag-and-drop should be.
+      const allSeatEls = Array.from(document.querySelectorAll("[data-seat]")).filter(se => se !== el);
+      let targetEl = null, nearestDist = Infinity, nearestSize = 0;
+      allSeatEls.forEach(se => {
+        const r = se.getBoundingClientRect();
+        if (!r.width || !r.height) return;
+        const dist = Math.hypot((r.left+r.width/2) - e.clientX, (r.top+r.height/2) - e.clientY);
+        if (dist < nearestDist) { nearestDist = dist; targetEl = se; nearestSize = Math.max(r.width, r.height); }
+      });
+      // Still requires landing reasonably close to SOME seat - a drop way off into empty
+      // space (e.g. dragged up into the header) shouldn't swap with whatever happens to be
+      // nearest regardless of distance.
+      if (targetEl && nearestDist > nearestSize * 1.5) targetEl = null;
       if (targetEl) {
         const toIdx = parseInt(targetEl.dataset.seat);
         if (toIdx !== fromIdx) {
@@ -5677,6 +5698,21 @@ function attachHandlers(){
       if (nameInput) myIdentity.name = nameInput.value;
       setGlobalPlayer(myIdentity.id, {seatPosition: Number(el.dataset.pickSeatPosition)});
       saveState();
+      render();
+    });
+    app.querySelectorAll("[data-identity-gender]").forEach(el => el.onclick = async () => {
+      // Preserve an unsaved name edit across the re-render below, same reasoning as the
+      // seat-position picker just above.
+      const nameInput = document.getElementById("identity-name-input");
+      if (nameInput) myIdentity.name = nameInput.value;
+      const gender = el.dataset.identityGender;
+      if (USE_RELATIONAL_API) {
+        try { await v2SetGenderEverywhere(myIdentity.id, gender); }
+        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+      } else {
+        setGenderEverywhere(myIdentity.id, gender);
+        await saveState();
+      }
       render();
     });
   }
@@ -6972,27 +7008,6 @@ function attachHandlers(){
         else { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); addPermanentBtn.disabled = false; }
       }
     };
-  }
-
-  if (modal && modal.type === "playerSettings") {
-    app.querySelectorAll("[data-player-settings-gender]").forEach(el => el.onclick = async () => {
-      const gender = el.dataset.playerSettingsGender;
-      const communityId = modal.communityId, playerId = modal.playerId;
-      const c = getCommunity(communityId);
-      const p = c && c.roster.find(pl => pl.id === playerId);
-      if (!p || p.gender === gender || (gender === "male" && !p.gender)) return;
-      el.disabled = true;
-      if (USE_RELATIONAL_API) {
-        try { await v2SetRosterGender(communityId, playerId, gender); }
-        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); el.disabled = false; return; }
-      } else {
-        await mutateAndSave(() => {
-          const pp = getCommunity(communityId).roster.find(pl => pl.id === playerId);
-          if (pp) pp.gender = gender;
-        });
-      }
-      updateModal({});
-    });
   }
 
   if (modal && modal.type === "removeSeat") {
