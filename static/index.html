@@ -696,6 +696,7 @@ function detectAndAnnounceNewBuyins(oldGames, newGames){
     (ng.buyins||[]).forEach(b => {
       if (oldIds.has(b.id)) return;
       if (pendingBuyinRequest && pendingBuyinRequest.gameId === ng.id && pendingBuyinRequest.id === b.id) return;
+      if (announcedBuyinIds.has(b.id)) return;
       const player = (ng.players||[]).find(p => p.id === b.playerId);
       const sorted = (playerBuyins[b.playerId]||[]).slice().sort((a,c)=>(a.ts||0)-(c.ts||0));
       const isEntry = sorted.length > 0 && sorted[0].id === b.id;
@@ -1893,15 +1894,15 @@ function clearPendingBuyinBanner(){
 // two players) show one at a time instead of stacking on top of each other.
 let buyinConfirmQueue = [];
 let buyinConfirmShowing = false;
-// Belt-and-suspenders against the same buy-in's card showing twice on one device - the
-// acting device already shows its own card directly from performBuyin, and could in
-// theory also pick the same id back up a moment later via detectAndAnnounceNewBuyins's
-// own refresh-triggered diff (reported live as an extra card during near-simultaneous
-// buy-ins from several phones). Keyed by buyinId, never cleared - the set only ever holds
-// as many ids as buy-ins made this page load, not a real memory concern.
+// Which buy-in ids this device has already claimed/shown a confirm card for - a pure
+// "seen" record, checked by detectAndAnnounceNewBuyins (not by showBuyinConfirmCard
+// itself, which always shows unconditionally when actually called - see performBuyin,
+// which claims its own id into this set BEFORE the save even starts, for exactly the
+// race that gate is there to close). Never cleared - only ever holds as many ids as
+// buy-ins made this page load, not a real memory concern.
 const announcedBuyinIds = new Set();
 function showBuyinConfirmCard(buyinId, playerName, amount, isEntry){
-  if (buyinId) { if (announcedBuyinIds.has(buyinId)) return; announcedBuyinIds.add(buyinId); }
+  if (buyinId) announcedBuyinIds.add(buyinId);
   buyinConfirmQueue.push({playerName, amount, isEntry});
   if (!buyinConfirmShowing) runBuyinConfirmQueue();
 }
@@ -1946,6 +1947,15 @@ async function performBuyin(gameId, playerId, amount, opts){
   const playerName = (g.players.find(p=>p.id===playerId)||{}).name || "שחקן";
   const id = uid();
   const verb = isEntry ? "כניסה לשולחן" : "ריביי";
+  // Claims this id against a duplicate announcement (see announcedBuyinIds's own comment)
+  // BEFORE any network round-trip starts, not when the save later succeeds - there's a
+  // real gap between v2Fetch's own in-flight tracker clearing (as part of resolving) and
+  // v2AddBuyin's local buyins.push() actually running one tick later, during which a
+  // refresh/SSE event elsewhere isn't blocked by either pendingBuyinRequest or "already in
+  // g.buyins" and can detect this same id as "new" and announce it a second time (reported
+  // live as a 3rd confirm card still showing up after the first fix for this). Claiming
+  // the id this early closes that gap outright instead of narrowing it.
+  announcedBuyinIds.add(id);
 
   pendingBuyinRequest = {gameId, id, playerId, cancelled: false};
   showPendingBuyinBanner(`נרשמה בקשה ל${verb} ₪${amount} ל-${playerName}...`);
