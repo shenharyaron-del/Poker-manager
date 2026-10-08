@@ -6126,6 +6126,13 @@ function attachHandlers(){
             }
             await v2LinkRosterPlayer(c.id, creatorPlayer.id, myIdentity.id);
             await v2CreateGame(gid, c.id, name || null, modal.date, myIdentity.name, creatorPlayer.id, creatorPlayer.name);
+            // The server seats the creator directly as part of creating the game (so the
+            // table never exists with an empty seat 0 even for an instant) - that bypasses
+            // v2ClaimSeat entirely, which is the only place the "first time seated here ->
+            // auto buy-in the community's first amount" trigger otherwise lives. Without
+            // this, the creator's own table opened with ₪0 bought in instead of the usual
+            // default. Fire-and-forget, same reasoning as v2ClaimSeat's own call.
+            performBuyin(gid, creatorPlayer.id, getBuyinAmounts(c)[0], {isEntry: true, actorName: myIdentity.name});
           } catch(e) {
             showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב.");
             createBtn.disabled = false; nameInput.disabled = false; createBtn.textContent = "פתח שולחן";
@@ -6149,14 +6156,19 @@ function attachHandlers(){
       // Explicitly seat whoever's creating the table, by name - independent of whatever
       // this device's remembered-player link happens to be, so opening a new table
       // reliably seats its actual creator rather than depending on that link being right.
+      let creatorPlayer = null;
       if (myIdentity.name) {
-        let creatorPlayer = c.roster.find(pl => pl.name === myIdentity.name);
+        creatorPlayer = c.roster.find(pl => pl.name === myIdentity.name);
         if (!creatorPlayer) { creatorPlayer = {id: uid(), name: myIdentity.name}; c.roster.push(creatorPlayer); }
         linkToGlobalPlayer(creatorPlayer);
         seatPlayerIfRoom(g, creatorPlayer.id, creatorPlayer);
       }
       state.games.push(g);
       saveState();
+      // seatPlayerIfRoom just now only occupies the seat - unlike v2ClaimSeat (the
+      // relational equivalent), it has no "first time seated here -> auto buy-in" trigger
+      // of its own, so the creator's own table would otherwise open with ₪0 bought in.
+      if (creatorPlayer) performBuyin(g.id, creatorPlayer.id, getBuyinAmounts(c)[0], {isEntry: true, actorName: myIdentity.name});
       // Land back on the games list, not straight into the table - the new game's card
       // is right there with an "invite players" button, so that's reachable in one tap
       // instead of having to navigate back to it after creating the table.
