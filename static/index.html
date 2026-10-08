@@ -1712,23 +1712,18 @@ const BUYIN_SOUND_TEMPLATE = (() => { try { const a = new Audio("/static/buyin-s
 function getBuyinAmounts(c){
   return (c && Array.isArray(c.buyinAmounts) && c.buyinAmounts.length === 3) ? c.buyinAmounts : DEFAULT_BUYIN_AMOUNTS;
 }
-// The admin screen's own display order for active players (move up/down) - deliberately
-// per-device (localStorage, never saved to the DB/synced) since every admin is explicitly
-// allowed their own personal ordering, not one shared order everyone sees the same way.
-function getAdminOrder(gameId){
-  try { return JSON.parse(localStorage.getItem(`poker-admin-order-${gameId}`)) || []; }
+// The admin screen's own "sent to the bottom" set of active players - deliberately
+// per-device (localStorage, never saved to the DB/synced) since every admin can tuck away
+// players they don't need to interact with right now without affecting what other admins
+// see.
+function getAdminCollapsed(gameId){
+  try { return JSON.parse(localStorage.getItem(`poker-admin-collapsed-${gameId}`)) || []; }
   catch(e) { return []; }
 }
-function saveAdminOrder(gameId, order){
-  try { localStorage.setItem(`poker-admin-order-${gameId}`, JSON.stringify(order)); } catch(e) { /* storage full/blocked - order just resets to default */ }
-}
-// Applies the saved order to `ids` (natural order), keeping any id not yet in the saved
-// order in its natural relative position, appended after the ones that are - so a newly
-// seated player shows up sensibly instead of jumping to a random spot.
-function applyAdminOrder(gameId, ids){
-  const saved = getAdminOrder(gameId).filter(id => ids.includes(id));
-  const rest = ids.filter(id => !saved.includes(id));
-  return [...saved, ...rest];
+function setAdminCollapsed(gameId, pid, collapsed){
+  const cur = getAdminCollapsed(gameId).filter(id => id !== pid);
+  if (collapsed) cur.push(pid);
+  try { localStorage.setItem(`poker-admin-collapsed-${gameId}`, JSON.stringify(cur)); } catch(e) { /* storage full/blocked - just stays expanded */ }
 }
 // Community-level admin (the admin screen's own gate, and full table-admin rights in
 // every game under this community - see isTableAdmin below) - the community's creator
@@ -2937,7 +2932,8 @@ const ICONS = {
   coins: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v5c0 1.66 3.13 3 7 3s7-1.34 7-3V6"/><path d="M5 11v5c0 1.66 3.13 3 7 3s7-1.34 7-3v-5"/></svg>',
   // Coin stack with a "+" badge - the ריביי (buy-in) icon specifically, distinct from the
   // generic "plus" used for every other "add X" action (seating, avatars, chip setup...).
-  coinsPlus: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="9" cy="16" rx="7" ry="3"/><path d="M2 16v2c0 1.66 3.13 3 7 3s7-1.34 7-3v-2"/><path d="M18 3v7M14.5 6.5h7" stroke-width="2.5"/></svg>',
+  coinsPlus: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="17.5" r="5"/><circle cx="7.5" cy="12.5" r="5"/><circle cx="7.5" cy="12.5" r="2"/><path d="M7.5 7.7v1M3.3 10.1l.9.5M11.7 10.1l-.9.5M3.3 14.9l.9-.5M11.7 14.9l-.9-.5" stroke-width="1.3"/><path d="M16.5 3v7M13 6.5h7" stroke-width="2.5"/></svg>',
+  collapseDown: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6M6 15l6 6 6-6"/></svg>',
   download: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>',
   upload: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>',
   shield: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>',
@@ -3460,7 +3456,7 @@ function renderPlayerScreen(gameId){
       <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
       <div class="flex1">
         <h1 class="serif sm" style="color:var(--gold);">${esc(g.name || c.name)}</h1>
-        <div class="meta" style="color:#6ee7b7;font-size:12px;display:flex;align-items:center;gap:5px;">${icon('cal')}${esc(g.date)}</div>
+        <div class="meta" style="color:#6ee7b7;font-size:12px;display:flex;align-items:center;gap:5px;">${icon('cal')}${esc(g.date)}${g.createdByName ? ` · נוצר ע"י ${esc(g.createdByName)}` : ""}</div>
       </div>
     </div>
     <div class="player-screen-scroll">
@@ -3513,7 +3509,9 @@ function renderAdminScreen(gameId){
   g.buyins.forEach(b => { buyinTotals[b.playerId] = (buyinTotals[b.playerId]||0) + b.amount; });
   const liveChips = g.liveChips || {};
   const seatedIds = seats.filter(Boolean);
-  const activeIds = applyAdminOrder(gameId, seatedIds.filter(pid => !(pid in g.cashouts)));
+  const stillActiveIds = seatedIds.filter(pid => !(pid in g.cashouts));
+  const collapsedIds = getAdminCollapsed(gameId).filter(pid => stillActiveIds.includes(pid));
+  const activeIds = stillActiveIds.filter(pid => !collapsedIds.includes(pid));
   const cashedOutIds = seatedIds.filter(pid => pid in g.cashouts);
   const allCashedOut = seatedIds.length > 0 && cashedOutIds.length === seatedIds.length;
   const totalBuyinAll = seatedIds.reduce((s,pid)=>s+(buyinTotals[pid]||0),0);
@@ -3536,30 +3534,37 @@ function renderAdminScreen(gameId){
     // out - lighting up their own "סיים ערב" button is a heads-up not to lose track of it
     // once they do.
     const hasArrangement = getArrangementNotes(g, pid).length > 0;
-    const isFirst = idx === 0, isLast = idx === activeIds.length - 1;
     return `
     <div class="roster-row" style="display:block;padding:0;overflow:hidden;">
-      <div style="padding:12px 14px 10px;">
+      <div style="padding:12px 14px 8px;">
         <div class="row" style="justify-content:space-between;">
           <span style="font-weight:700;font-size:16px;">${esc(nameOf(pid))}</span>
           <span style="display:flex;align-items:center;gap:8px;">
             <span style="color:var(--gold);font-weight:800;font-size:20px;">₪${buyinTotals[pid]||0}</span>
-            <span style="display:flex;flex-direction:column;gap:1px;">
-              <button data-admin-order-up="${pid}" title="הזז למעלה" ${isFirst?"disabled":""} style="background:none;border:none;color:var(--muted);padding:2px;cursor:pointer;line-height:0;opacity:${isFirst?.3:1};">${icon('up')}</button>
-              <button data-admin-order-down="${pid}" title="הזז למטה" ${isLast?"disabled":""} style="background:none;border:none;color:var(--muted);padding:2px;cursor:pointer;line-height:0;opacity:${isLast?.3:1};">${icon('down')}</button>
-            </span>
+            <button data-admin-collapse="${pid}" title="העבר למטה" style="background:none;border:none;color:var(--muted);padding:3px;cursor:pointer;line-height:0;">${icon('collapseDown')}</button>
           </span>
         </div>
         ${notesHtml(pid)}
       </div>
-      <div style="display:flex;border-top:1px solid var(--card-b);">
-        <button class="icon-btn danger" data-admin-remove-seat="${pid}" title="הסר מושב" style="flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:10px 4px;font-size:12px;font-weight:700;border-radius:0 0 12px 0;">${icon('trash')}הסרה מהשולחן</button>
-        <button class="icon-btn" style="flex:1;background:${hasArrangement?'#78350f':'#57534e'};color:${hasArrangement?'#fde68a':'#f5f5f4'};display:flex;align-items:center;justify-content:center;gap:5px;padding:10px 4px;font-size:12px;font-weight:700;border-radius:0;" data-admin-end-night="${pid}" title="${hasArrangement?'יש סידור תשלום ישיר עם השחקן הזה - ':''}סיים ערב">${icon('out')}סיום ערב</button>
-        <button class="icon-btn ok" data-buyin="${pid}" title="הוסף ריביי" style="flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:10px 4px;font-size:12px;font-weight:700;border-radius:0 0 0 12px;">${icon('coinsPlus')}ריביי</button>
+      <div style="display:flex;gap:8px;padding:0 14px 12px;">
+        <button class="icon-btn ok" data-buyin="${pid}" title="הוסף ריביי" style="flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:10px 4px;font-size:12px;font-weight:700;border-radius:10px;">${icon('coinsPlus')}ריביי</button>
+        <button class="icon-btn" style="flex:1;background:${hasArrangement?'#78350f':'#57534e'};color:${hasArrangement?'#fde68a':'#f5f5f4'};display:flex;align-items:center;justify-content:center;gap:5px;padding:10px 4px;font-size:12px;font-weight:700;border-radius:10px;" data-admin-end-night="${pid}" title="${hasArrangement?'יש סידור תשלום ישיר עם השחקן הזה - ':''}סיים ערב">${icon('out')}סיום ערב</button>
+        <button class="icon-btn danger" data-admin-remove-seat="${pid}" title="הסר מושב" style="flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:10px 4px;font-size:12px;font-weight:700;border-radius:10px;">${icon('trash')}הסרה מהשולחן</button>
       </div>
     </div>
   `;
   }).join("") || `<div class="empty" style="padding:10px 0;font-size:13px;">אין שחקנים פעילים</div>`;
+
+  const collapsedRowsHtml = collapsedIds.length ? `
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px;">
+      ${collapsedIds.map(pid => `
+        <div style="display:flex;align-items:center;gap:4px;background:var(--card);border:1px solid var(--card-b);border-radius:10px;padding:6px 8px;min-width:0;">
+          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:600;">${esc(nameOf(pid))}</span>
+          <button data-admin-restore="${pid}" title="החזר לרשימה" style="background:none;border:none;color:var(--muted);padding:2px;cursor:pointer;line-height:0;flex-shrink:0;">${icon('undo')}</button>
+        </div>
+      `).join("")}
+    </div>
+  ` : "";
 
   const cashedOutRows = cashedOutIds.map(pid => {
     const profit = (liveChips[pid]||0) - (buyinTotals[pid]||0);
@@ -3627,7 +3632,7 @@ function renderAdminScreen(gameId){
       <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
       <div class="flex1">
         <h1 class="serif sm" style="color:var(--gold);">${esc(g.name || c.name)}</h1>
-        <div class="meta" style="color:#6ee7b7;font-size:12px;display:flex;align-items:center;gap:5px;">${icon('cal')}${esc(g.date)}</div>
+        <div class="meta" style="color:#6ee7b7;font-size:12px;display:flex;align-items:center;gap:5px;">${icon('cal')}${esc(g.date)}${g.createdByName ? ` · נוצר ע"י ${esc(g.createdByName)}` : ""}</div>
       </div>
     </div>
     <div style="flex:1;min-height:0;overflow-y:auto;padding:0 20px 20px;touch-action:pan-y;">
@@ -3638,6 +3643,7 @@ function renderAdminScreen(gameId){
       </div>`}
       <div class="section-title" style="padding:0;margin:0 0 8px;">שחקנים פעילים</div>
       ${activeRows}
+      ${collapsedRowsHtml}
       ${cashedOutIds.length ? `<div class="section-title" style="padding:0;margin:16px 0 8px;">יצאו מהשולחן</div>${cashedOutRows}` : ""}
       ${emptySeatRows ? `<div class="section-title" style="padding:0;margin:16px 0 8px;">מושבים פנויים</div>${emptySeatRows}` : ""}
       ${potFixHtml}
@@ -4434,11 +4440,11 @@ function renderModal(m){
     const g = getGame(m.gameId);
     const p = g.players.find(pl=>pl.id===m.playerId);
     const c = getCommunity(g.communityId);
-    title = `תשלום עבור ${esc(p.name)}`;
+    title = `ריביי עבור ${esc(p.name)}`;
     body = `
-      <div class="field"><label>סכום בשקלים</label><input type="number" inputmode="decimal" id="buyin-amount" value="${m.amount||''}" placeholder="50" autofocus></div>
       <div class="chip-row">
         ${getBuyinAmounts(c).map(v=>`<button class="chip-btn" data-chip="${v}">₪${v}</button>`).join("")}
+        <input type="number" inputmode="decimal" id="buyin-amount" value="${m.amount||''}" placeholder="אחר" autofocus style="flex:1;text-align:center;">
       </div>
       <button class="btn btn-primary btn-block" data-confirm-buyin>הוסף תשלום</button>
     `;
@@ -5383,22 +5389,11 @@ function attachHandlers(){
   app.querySelectorAll("[data-admin-end-night]").forEach(el => el.onclick = () => openModal({type:"seatChips", gameId: nav.gameId, playerId: el.dataset.adminEndNight}));
   app.querySelectorAll("[data-admin-remove-seat]").forEach(el => el.onclick = () => openModal({type:"removeSeat", gameId: nav.gameId, playerId: el.dataset.adminRemoveSeat}));
   app.querySelectorAll("[data-admin-add-seat]").forEach(el => el.onclick = () => openModal({type:"pickSeat", gameId: nav.gameId, seatIndex: parseInt(el.dataset.adminAddSeat)}));
-  // Up/down reordering of the admin screen's active-player cards - purely local to this
-  // device (see getAdminOrder/saveAdminOrder's own comment), so no save-to-server/render
-  // conflict handling needed, just swap the two adjacent ids and persist.
-  const swapAdminOrder = (pid, dir) => {
-    const g = getGame(nav.gameId);
-    const seatedActive = (g.seats||[]).filter(Boolean).filter(sid => !(sid in g.cashouts));
-    const order = applyAdminOrder(nav.gameId, seatedActive);
-    const i = order.indexOf(pid);
-    const j = i + dir;
-    if (i < 0 || j < 0 || j >= order.length) return;
-    [order[i], order[j]] = [order[j], order[i]];
-    saveAdminOrder(nav.gameId, order);
-    render();
-  };
-  app.querySelectorAll("[data-admin-order-up]").forEach(el => el.onclick = () => swapAdminOrder(el.dataset.adminOrderUp, -1));
-  app.querySelectorAll("[data-admin-order-down]").forEach(el => el.onclick = () => swapAdminOrder(el.dataset.adminOrderDown, 1));
+  // Sending an active-player card down to the collapsed tray and back - purely local to
+  // this device (see getAdminCollapsed/setAdminCollapsed's own comment), so no
+  // save-to-server/render conflict handling needed.
+  app.querySelectorAll("[data-admin-collapse]").forEach(el => el.onclick = () => { setAdminCollapsed(nav.gameId, el.dataset.adminCollapse, true); render(); });
+  app.querySelectorAll("[data-admin-restore]").forEach(el => el.onclick = () => { setAdminCollapsed(nav.gameId, el.dataset.adminRestore, false); render(); });
   // "סיום ערב" checkbox - a plain manual toggle of g.closed (also settable from the
   // directPay modal's own "הערב נגמר" button, see data-confirm-end-night-button below).
   app.querySelectorAll("[data-toggle-end-night]").forEach(el => el.onclick = async () => {
