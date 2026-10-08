@@ -3887,7 +3887,7 @@ function renderModal(m){
       <button class="btn btn-ghost btn-block" data-device-choice-cancel>ביטול</button>
     ` : m.loginStep === "code" ? `
       <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">שלחנו קוד בן 6 ספרות ל-<span dir="ltr">${esc(m.loginEmail)}</span></p>
-      <input type="text" inputmode="numeric" id="login-code-input" placeholder="קוד בן 6 ספרות" style="width:100%;text-align:center;letter-spacing:4px;font-size:18px;margin-bottom:8px;" autofocus>
+      <input type="text" inputmode="numeric" id="login-code-input" placeholder="קוד בן 6 ספרות" autocomplete="one-time-code" style="width:100%;text-align:center;letter-spacing:4px;font-size:18px;margin-bottom:8px;" autofocus>
       ${m.loginError ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.loginError)}</p>` : ""}
       <button class="btn btn-primary btn-block" data-confirm-login-code style="margin-bottom:8px;">אשר קוד</button>
       <button class="btn btn-ghost btn-block" data-resend-login-code>שלח קוד שוב</button>
@@ -3895,7 +3895,7 @@ function renderModal(m){
       <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">${authSettings.requireVerifyExistingEmail
         ? "כדי להשתמש באפליקציה, התחברו עם האימייל שלכם - משתמשים חדשים ייכנסו ישר, ולחשבון קיים נשלח קוד בן 6 ספרות."
         : "כדי להשתמש באפליקציה, התחברו עם האימייל שלכם."}</p>
-      <input type="email" id="login-email-input" placeholder="האימייל שלך" dir="ltr" style="width:100%;text-align:center;margin-bottom:8px;" value="${esc(m.loginEmail||'')}" autofocus>
+      <input type="email" id="login-email-input" placeholder="האימייל שלך" dir="ltr" autocomplete="email" style="width:100%;text-align:center;margin-bottom:8px;" value="${esc(m.loginEmail||'')}" autofocus>
       ${m.loginError ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.loginError)}</p>` : ""}
       <button class="btn btn-primary btn-block" data-send-login-code>${authSettings.requireVerifyExistingEmail ? `${icon('share')} שלח קוד כניסה` : "כנס ל-Poker Manager"}</button>
     `;
