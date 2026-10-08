@@ -1754,6 +1754,40 @@ const DEFAULT_BUYIN_AMOUNTS = [50, 80, 100];
 // animation start. playBuyinSound() clones this (not shared directly) so two buy-ins
 // landing close together both still play instead of the second cutting the first off.
 const BUYIN_SOUND_TEMPLATE = (() => { try { const a = new Audio("/static/buyin-sound.mp3"); a.preload = "auto"; a.load(); return a; } catch(e) { return null; } })();
+// iOS Safari blocks audio.play() when it isn't called directly inside a user gesture's own
+// call stack - fine for a self-triggered buy-in (the tap itself is the gesture) but not for
+// one that arrives in the background via SSE/refresh from someone else's device (reported
+// live: sound plays on Android every time, but misses on iPhone specifically for that
+// case). The standard workaround: unlock a single AudioContext inside the very first real
+// tap this page ever gets, then play every later sound - gesture-triggered or not - through
+// that already-running context instead of a fresh Audio() each time, which iOS treats far
+// more leniently than a brand new element's own play() call. Not guaranteed (still an OS
+// policy, not something JS fully controls) - playBuyinSound() below falls back to the
+// original Audio-clone approach whenever this hasn't unlocked successfully.
+let unlockedAudioCtx = null;
+let buyinSoundBuffer = null;
+function tryUnlockAudioForIOS(){
+  if (unlockedAudioCtx) return;
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    unlockedAudioCtx = new Ctx();
+    // A silent zero-length play right inside this gesture is what actually unlocks the
+    // context on iOS - resume() alone isn't always enough on older WebKit versions.
+    const silent = unlockedAudioCtx.createBuffer(1, 1, 22050);
+    const src = unlockedAudioCtx.createBufferSource();
+    src.buffer = silent;
+    src.connect(unlockedAudioCtx.destination);
+    src.start(0);
+    unlockedAudioCtx.resume().catch(() => {});
+    fetch("/static/buyin-sound.mp3")
+      .then(r => r.arrayBuffer())
+      .then(buf => unlockedAudioCtx.decodeAudioData(buf))
+      .then(decoded => { buyinSoundBuffer = decoded; })
+      .catch(() => { /* decode failed - playBuyinSound falls back to Audio() */ });
+  } catch(e) { unlockedAudioCtx = null; }
+}
+document.addEventListener("pointerdown", tryUnlockAudioForIOS, {once: true});
 function getBuyinAmounts(c){
   return (c && Array.isArray(c.buyinAmounts) && c.buyinAmounts.length === 3) ? c.buyinAmounts : DEFAULT_BUYIN_AMOUNTS;
 }
@@ -2810,6 +2844,19 @@ function getArrangementNotes(g, playerId){
 // control by design - best-effort only, errors (autoplay blocked, asset missing) are
 // swallowed so a failed sound never blocks the buy-in itself or the card.
 function playBuyinSound(){
+  // Prefer the pre-unlocked AudioContext (see tryUnlockAudioForIOS) when it's ready - far
+  // more likely to actually play on iOS for a sound triggered by someone else's buy-in
+  // arriving in the background, not this device's own tap.
+  if (unlockedAudioCtx && buyinSoundBuffer) {
+    try {
+      unlockedAudioCtx.resume().catch(() => {});
+      const src = unlockedAudioCtx.createBufferSource();
+      src.buffer = buyinSoundBuffer;
+      src.connect(unlockedAudioCtx.destination);
+      src.start(0);
+      return;
+    } catch(e) { /* fall through to the plain Audio() path below */ }
+  }
   try {
     const audio = BUYIN_SOUND_TEMPLATE ? BUYIN_SOUND_TEMPLATE.cloneNode(true) : new Audio("/static/buyin-sound.mp3");
     audio.play().catch(() => {});
