@@ -123,6 +123,10 @@ _INIT_STATEMENTS = (
     # Postgres, unlike CREATE TABLE above - no DuplicateTable/UniqueViolation handling
     # needed for it.
     "ALTER TABLE roster_players ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT false",
+    # Used only to pick the right verb gender ("עשה"/"עשתה" etc.) in the table activity
+    # feed - 'male' is the default for every existing row and every new one unless set
+    # otherwise in player settings.
+    "ALTER TABLE roster_players ADD COLUMN IF NOT EXISTS gender TEXT NOT NULL DEFAULT 'male'",
     # The 3 quick-buyin amounts shown on every buy-in button in this community (plus
     # "אחר" for anything else) - NULL means "use the app default" (client-side
     # DEFAULT_BUYIN_AMOUNTS), so existing communities don't need a migration/backfill.
@@ -464,11 +468,11 @@ def v2_list_communities():
                     by_id[community_id]["payboxLinks"].append({"id": link_id, "name": name, "link": link})
 
                 cur.execute(
-                    "SELECT community_id, id, name, client_id, is_admin FROM roster_players WHERE community_id = ANY(%s)",
+                    "SELECT community_id, id, name, client_id, is_admin, gender FROM roster_players WHERE community_id = ANY(%s)",
                     (ids,),
                 )
-                for community_id, pid, pname, client_id, is_admin in cur.fetchall():
-                    entry = {"id": pid, "name": pname}
+                for community_id, pid, pname, client_id, is_admin, gender in cur.fetchall():
+                    entry = {"id": pid, "name": pname, "gender": gender or "male"}
                     if client_id:
                         entry["clientId"] = client_id
                     if is_admin:
@@ -795,9 +799,9 @@ def v2_update_roster_player(community_id, player_id):
     # the fact - the backfill path in autoSeatSelf/autoJoinViaInvite for a player who
     # self-identified before global-player linking existed. Structural (single row,
     # single field), so no conflict token needed, same reasoning as the rest of Phase 3.
-    # isAdmin (the admin-screen feature) reuses this same endpoint rather than a new one -
-    # same "single row, single field" shape, just a different field. Accepts either or
-    # both fields present; the client always sends exactly one of them per call today.
+    # isAdmin (the admin-screen feature) and gender (player settings) reuse this same
+    # endpoint rather than a new one each - same "single row, a handful of fields" shape.
+    # Accepts any of them present; the client always sends exactly one per call today.
     body = request.get_json(silent=True) or {}
     sets, params = [], []
     if "clientId" in body:
@@ -806,8 +810,11 @@ def v2_update_roster_player(community_id, player_id):
     if "isAdmin" in body:
         sets.append("is_admin = %s")
         params.append(bool(body["isAdmin"]))
+    if "gender" in body:
+        sets.append("gender = %s")
+        params.append("female" if body["gender"] == "female" else "male")
     if not sets:
-        return jsonify({"error": "clientId or isAdmin required"}), 400
+        return jsonify({"error": "clientId, isAdmin or gender required"}), 400
     params.extend([player_id, community_id])
     with get_db() as conn:
         with conn.cursor() as cur:
