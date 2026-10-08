@@ -4744,11 +4744,11 @@ function renderModal(m){
       const isLoss = profitSign === "loss";
       const signColor = isLoss ? "#fb923c" : "#6ee7b7";
       modeBody = `
-        <style>#seat-chips-profit::selection{color:${signColor};background:#1d4ed8;}</style>
+        <style>#seat-chips-profit::selection{color:${signColor};background:#1d4ed8;-webkit-text-fill-color:${signColor};}</style>
         <div style="background:#1f1f1f;border-radius:16px;overflow:hidden;margin-bottom:14px;">
           <div style="padding:22px 16px 14px;text-align:center;">
             <div style="display:flex;align-items:baseline;justify-content:center;gap:0;">
-              <input type="number" inputmode="numeric" id="seat-chips-profit" placeholder="0" min="0" value="${esc(m.profitAmount||'')}" style="font-size:40px;font-weight:800;color:${signColor};background:transparent;border:none;width:140px;text-align:center;padding:0;" onfocus="this.select()">
+              <input type="number" inputmode="numeric" id="seat-chips-profit" placeholder="0" min="0" value="${esc(m.profitAmount||'')}" style="font-size:40px;font-weight:800;color:${signColor};background:transparent;border:none;width:160px;text-align:left;padding:0;" onfocus="this.select()">
               <span style="font-size:40px;font-weight:800;color:${signColor};">${isLoss?'-':'+'}</span>
             </div>
             <div style="color:var(--muted);font-size:12px;margin-top:8px;">הקש רווח (+) או הפסד (-)</div>
