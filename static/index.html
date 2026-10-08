@@ -172,7 +172,11 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
    supplied WhatsApp-style reference image, tiled; the dark overlay underneath keeps the
    bubbles/text readable against it instead of the image's own light color showing
    through at full strength. */
-.chat-frame{background:linear-gradient(rgba(4,64,47,.8),rgba(4,64,47,.8)),url('/static/chat-bg.png');background-repeat:repeat;background-size:auto,220px;border-radius:12px;padding:10px;height:158px;overflow-y:auto;touch-action:pan-y;}
+.chat-frame{background-repeat:repeat;background-size:auto,220px;border-radius:12px;padding:10px;height:158px;overflow-y:auto;touch-action:pan-y;}
+/* Purchase history (dark blue) vs table activity (charcoal) - picked from a handful of
+   proposed options, see git history. */
+.chat-frame[data-player-history]{background:linear-gradient(rgba(10,25,55,.85),rgba(10,25,55,.85)),url('/static/chat-bg.png');}
+.chat-frame[data-player-feed]{background:linear-gradient(rgba(20,20,24,.85),rgba(20,20,24,.85)),url('/static/chat-bg.png');}
 /* Same "bounded panel" idea as .chat-frame above, for the buy-in button row - a plain
    border box rather than a dark fill, so the gold buttons inside stay the brightest thing
    in it instead of competing with a tinted background. */
@@ -3415,7 +3419,10 @@ function renderPlayerScreen(gameId){
     } else {
       return "";
     }
-    return `<div class="chat-bubble with-icon" style="color:${color};">${icon(rowIcon)}<div style="flex:1;min-width:0;"><span class="bubble-time">${fmtTime(ev.ts)}</span>${text}</div></div>`;
+    // Bold for anything in the last 5 minutes - draws the eye to what's actually fresh
+    // without needing a separate "new" badge.
+    const isRecent = ev.ts && (Date.now() - ev.ts) < 5*60*1000;
+    return `<div class="chat-bubble with-icon" style="color:${color};font-weight:${isRecent?700:400};">${icon(rowIcon)}<div style="flex:1;min-width:0;"><span class="bubble-time">${fmtTime(ev.ts)}</span>${text}</div></div>`;
   }).join("") || `<div class="chat-bubble" style="color:#5c5c5c;">אין עדיין פעילות בשולחן</div>`;
   // Every rebuy control (including "אחר") stays disabled from the moment a buy-in request
   // is sent until it settles (success, cancel, or error) - see performBuyin/
