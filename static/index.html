@@ -1292,7 +1292,7 @@ let refreshQueued = false;
 async function doRefreshNow(source){
   const callId = DEBUG_SYNC ? Math.random().toString(36).slice(2,6) : "";
   logSync(`refresh[${callId}] triggered by ${source}, modal=${!!modal}`);
-  if (modal || playerScreenCustomOpen) { logSync(`refresh[${callId}] SKIPPED - modal or custom-amount input open`); return; }
+  if (modal || playerScreenCustomOpen || Object.keys(adminBuyinUi).length) { logSync(`refresh[${callId}] SKIPPED - modal or custom-amount input open`); return; }
   if (refreshInProgress) {
     // Another refresh is already running its own GET - don't start a second one
     // concurrently (two in-flight GETs can resolve out of order, and the one that
@@ -1380,7 +1380,7 @@ async function doRefreshNow(source){
         // next attempt once the refresh had already finished. The fetched state is still
         // applied either way - only the render is skipped - so the next render (the modal
         // closing, or the next refresh with neither open) already reflects it.
-        if (modal || playerScreenCustomOpen) {
+        if (modal || playerScreenCustomOpen || Object.keys(adminBuyinUi).length) {
           logSync(`refresh[${callId}] applied but SKIPPED render - modal or custom-amount input opened mid-fetch`);
         } else {
           const scrollY = window.scrollY;
@@ -1654,6 +1654,11 @@ let openHistorySeatPlayerId = null;
 let tableSubView = "player";
 // Inline "custom amount" toggle for the player screen's one-tap buy-in row.
 let playerScreenCustomOpen = false;
+// Admin screen's own inline ריביי row per active-player card (replaces the old "buyin"
+// modal) - not persisted/per-device like getAdminCollapsed, just ephemeral UI state reset
+// on nav like playerScreenCustomOpen above. Keyed by playerId: "presets" shows the amount
+// chips, "custom" shows the "אחר" input instead; absent/undefined means closed.
+let adminBuyinUi = {};
 // `${gameId}:${playerId}` keys already auto-opened by the "directPay" modal (see
 // attachHandlers) - fires once when a player cashes out at a loss mid-game in a direct-
 // settlement community, so they're prompted immediately instead of waiting for the whole
@@ -1936,6 +1941,7 @@ function go(screen, extra){
   openHistorySeatPlayerId = null;
   tableSubView = "player";
   playerScreenCustomOpen = false;
+  adminBuyinUi = {};
   adminBalanceFixSelected = {};
   lastSeenFeedEventKey = null;
   lastSeenHistoryKey = null;
@@ -3534,6 +3540,24 @@ function renderAdminScreen(gameId){
     // out - lighting up their own "סיים ערב" button is a heads-up not to lose track of it
     // once they do.
     const hasArrangement = getArrangementNotes(g, pid).length > 0;
+    // Inline ריביי row (replaces the old "buyin" modal) - "presets" shows the group's
+    // configured amounts + "אחר" like the player screen's own one-tap row (see
+    // buyinButtonsHtml), "custom" swaps that for a plain amount input, same two-level
+    // toggle as playerScreenCustomOpen there. Disabling the other two buttons while open
+    // avoids starting a conflicting action (end-night/remove-seat) mid-buy-in.
+    const buyinUi = adminBuyinUi[pid] || "closed";
+    const buyinOpen = buyinUi !== "closed";
+    const buyinRowHtml = buyinUi === "custom" ? `
+      <div style="display:flex;gap:6px;padding:0 10px 12px;">
+        <input type="number" inputmode="decimal" id="admin-buyin-custom-${pid}" placeholder="סכום" autofocus ${pendingBuyinRequest?'disabled':''} style="flex:1;padding:10px 8px;font-size:15px;text-align:center;border-radius:9px;border:1px solid var(--gold);background:var(--input);color:var(--text);">
+        <button class="chip-btn" data-admin-buyin-custom-confirm="${pid}" ${pendingBuyinRequest?'disabled':''} style="flex:0 0 auto;padding:10px 16px;font-size:14px;font-weight:700;">${icon('coinsPlus')}</button>
+      </div>
+    ` : buyinUi === "presets" ? `
+      <div style="display:flex;gap:6px;padding:0 10px 12px;">
+        ${getBuyinAmounts(c).map(v=>`<button class="chip-btn" data-admin-instant-buyin="${pid}" data-amount="${v}" ${pendingBuyinRequest?'disabled':''} style="flex:1;padding:10px 2px;font-size:13px;">₪${v}</button>`).join("")}
+        <button class="chip-btn" data-admin-buyin-other="${pid}" ${pendingBuyinRequest?'disabled':''} style="flex:1;padding:10px 2px;font-size:13px;">אחר</button>
+      </div>
+    ` : "";
     return `
     <div class="roster-row" style="display:block;padding:0;overflow:hidden;">
       <div style="padding:12px 14px 8px;">
@@ -3547,10 +3571,11 @@ function renderAdminScreen(gameId){
         ${notesHtml(pid)}
       </div>
       <div style="display:flex;gap:5px;padding:0 10px 12px;">
-        <button class="icon-btn ok" data-buyin="${pid}" title="הוסף ריביי" style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 1px;font-size:12px;font-weight:700;border-radius:10px;white-space:nowrap;">${icon('coinsPlus')}ריביי</button>
-        <button class="icon-btn" style="flex:1;background:${hasArrangement?'#78350f':'#57534e'};color:${hasArrangement?'#fde68a':'#f5f5f4'};display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 1px;font-size:12px;font-weight:700;border-radius:10px;white-space:nowrap;" data-admin-end-night="${pid}" title="${hasArrangement?'יש סידור תשלום ישיר עם השחקן הזה - ':''}סיים ערב">${icon('out')}סיום ערב</button>
-        <button class="icon-btn danger" data-admin-remove-seat="${pid}" title="הסר מושב" style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 1px;font-size:12px;font-weight:700;border-radius:10px;white-space:nowrap;">${icon('trash')}הסרה מהשולחן</button>
+        <button class="icon-btn ok" data-admin-buyin-toggle="${pid}" title="${buyinOpen?'בטל ריביי':'הוסף ריביי'}" ${pendingBuyinRequest?'disabled':''} style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 1px;font-size:12px;font-weight:700;border-radius:10px;white-space:nowrap;">${buyinOpen?'':icon('coinsPlus')}${buyinOpen?'ביטול ריביי':'ריביי'}</button>
+        <button class="icon-btn" style="flex:1;background:${hasArrangement?'#78350f':'#57534e'};color:${hasArrangement?'#fde68a':'#f5f5f4'};display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 1px;font-size:12px;font-weight:700;border-radius:10px;white-space:nowrap;opacity:${buyinOpen?.4:1};" data-admin-end-night="${pid}" ${buyinOpen?'disabled':''} title="${hasArrangement?'יש סידור תשלום ישיר עם השחקן הזה - ':''}סיים ערב">${icon('out')}סיום ערב</button>
+        <button class="icon-btn danger" data-admin-remove-seat="${pid}" title="הסר מושב" ${buyinOpen?'disabled':''} style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 1px;font-size:12px;font-weight:700;border-radius:10px;white-space:nowrap;opacity:${buyinOpen?.4:1};">${icon('trash')}הסרה מהשולחן</button>
       </div>
+      ${buyinRowHtml}
     </div>
   `;
   }).join("") || `<div class="empty" style="padding:10px 0;font-size:13px;">אין שחקנים פעילים</div>`;
@@ -4436,18 +4461,6 @@ function renderModal(m){
     const avail = c.roster.filter(p => !g.players.some(gp=>gp.id===p.id)).sort((a,b) => a.name.localeCompare(b.name, 'he'));
     title = "הוספת שחקן למשחק";
     body = avail.map(p => `<div class="card" data-add-to-game="${p.id}"><span class="flex1">${esc(p.name)}</span>${netBadge(playerNetProfit(c.id, p.id))}<span style="color:var(--gold)">${icon('plus')}</span></div>`).join("");
-  } else if (m.type === "buyin") {
-    const g = getGame(m.gameId);
-    const p = g.players.find(pl=>pl.id===m.playerId);
-    const c = getCommunity(g.communityId);
-    title = `ריביי עבור ${esc(p.name)}`;
-    body = `
-      <div class="chip-row">
-        ${getBuyinAmounts(c).map(v=>`<button class="chip-btn" data-chip="${v}">₪${v}</button>`).join("")}
-        <input type="number" inputmode="decimal" id="buyin-amount" value="${m.amount||''}" placeholder="אחר" autofocus style="flex:1;text-align:center;">
-      </div>
-      <button class="btn btn-primary btn-block" data-confirm-buyin>הוסף תשלום</button>
-    `;
   } else if (m.type === "bulkBuyin") {
     const g = getGame(m.gameId);
     const active = g.players.filter(p => !(p.id in g.cashouts));
@@ -5333,7 +5346,6 @@ function attachHandlers(){
     maybeOpenDirectPayAfterCashout(gameId, pid, 0);
   };
 
-  app.querySelectorAll("[data-buyin]").forEach(el => el.onclick = () => openModal({type:"buyin", gameId: nav.gameId, playerId: el.dataset.buyin, amount:""}));
   app.querySelectorAll("[data-leave]").forEach(el => el.onclick = () => openModal({type:"leave", gameId: nav.gameId, playerId: el.dataset.leave, amount:""}));
   app.querySelectorAll("[data-history]").forEach(el => el.onclick = () => openModal({type:"history", gameId: nav.gameId, playerId: el.dataset.history}));
   app.querySelectorAll("[data-edit-cashout]").forEach(el => el.onclick = () => openModal({type:"editCashout", gameId: nav.gameId, playerId: el.dataset.editCashout}));
@@ -5381,14 +5393,34 @@ function attachHandlers(){
   });
   app.querySelectorAll("[data-remove-from-game]").forEach(el => el.onclick = () => openModal({type:"removeFromGame", gameId: nav.gameId, playerId: el.dataset.removeFromGame}));
 
-  // Admin screen (renderAdminScreen) - buy-in reuses [data-buyin] and return-to-game
-  // reuses [data-return-to-game] above as-is (both already generic on playerId); these
-  // are the ones with no existing generic trigger left after the old table-screen panel
-  // (which read a single selectedSeatPlayerId instead of carrying playerId per button)
-  // was removed.
+  // Admin screen (renderAdminScreen) - return-to-game reuses [data-return-to-game] above
+  // as-is (already generic on playerId); these are the ones with no existing generic
+  // trigger left after the old table-screen panel (which read a single
+  // selectedSeatPlayerId instead of carrying playerId per button) was removed.
   app.querySelectorAll("[data-admin-end-night]").forEach(el => el.onclick = () => openModal({type:"seatChips", gameId: nav.gameId, playerId: el.dataset.adminEndNight}));
   app.querySelectorAll("[data-admin-remove-seat]").forEach(el => el.onclick = () => openModal({type:"removeSeat", gameId: nav.gameId, playerId: el.dataset.adminRemoveSeat}));
   app.querySelectorAll("[data-admin-add-seat]").forEach(el => el.onclick = () => openModal({type:"pickSeat", gameId: nav.gameId, seatIndex: parseInt(el.dataset.adminAddSeat)}));
+  // Admin screen's own inline ריביי row (replaces the old "buyin" modal - see
+  // adminBuyinUi's own comment). Mirrors the player screen's one-tap buy-in row
+  // (doPlayerBuyin/playerScreenCustomOpen below) but keyed per playerId since several of
+  // these cards can exist on screen at once.
+  app.querySelectorAll("[data-admin-buyin-toggle]").forEach(el => el.onclick = () => {
+    const pid = el.dataset.adminBuyinToggle;
+    if (adminBuyinUi[pid]) delete adminBuyinUi[pid]; else adminBuyinUi[pid] = "presets";
+    render();
+  });
+  const doAdminBuyin = async (pid, amt) => {
+    if (!amt || amt <= 0 || pendingBuyinRequest) return;
+    delete adminBuyinUi[pid];
+    await performBuyin(nav.gameId, pid, amt, {actorName: myIdentity.name});
+  };
+  app.querySelectorAll("[data-admin-instant-buyin]").forEach(el => el.onclick = () => doAdminBuyin(el.dataset.adminInstantBuyin, parseFloat(el.dataset.amount)));
+  app.querySelectorAll("[data-admin-buyin-other]").forEach(el => el.onclick = () => { adminBuyinUi[el.dataset.adminBuyinOther] = "custom"; render(); });
+  app.querySelectorAll("[data-admin-buyin-custom-confirm]").forEach(el => el.onclick = () => {
+    const pid = el.dataset.adminBuyinCustomConfirm;
+    const amt = parseFloat(document.getElementById(`admin-buyin-custom-${pid}`).value);
+    doAdminBuyin(pid, amt);
+  });
   // Sending an active-player card down to the collapsed tray and back - purely local to
   // this device (see getAdminCollapsed/setAdminCollapsed's own comment), so no
   // save-to-server/render conflict handling needed.
@@ -6731,18 +6763,6 @@ function attachHandlers(){
     });
   }
 
-  if (modal && modal.type === "buyin") {
-    app.querySelectorAll("[data-chip]").forEach(el => el.onclick = () => { document.getElementById("buyin-amount").value = el.dataset.chip; });
-    const confirmBtn = app.querySelector("[data-confirm-buyin]");
-    if (confirmBtn) confirmBtn.onclick = async () => {
-      const amt = parseFloat(document.getElementById("buyin-amount").value);
-      if (!amt || amt <= 0 || pendingBuyinRequest) return;
-      confirmBtn.disabled = true;
-      showButtonLoading(confirmBtn);
-      closeModal();
-      await performBuyin(modal.gameId, modal.playerId, amt, {actorName: myIdentity.name});
-    };
-  }
 
   if (modal && modal.type === "paybox") {
     app.querySelectorAll("[data-paybox-chip]").forEach(el => el.onclick = () => { document.getElementById("paybox-amount").value = el.dataset.payboxChip; });
