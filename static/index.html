@@ -699,7 +699,7 @@ function detectAndAnnounceNewBuyins(oldGames, newGames){
       const player = (ng.players||[]).find(p => p.id === b.playerId);
       const sorted = (playerBuyins[b.playerId]||[]).slice().sort((a,c)=>(a.ts||0)-(c.ts||0));
       const isEntry = sorted.length > 0 && sorted[0].id === b.id;
-      showBuyinConfirmCard(player ? player.name : "שחקן", b.amount, isEntry);
+      showBuyinConfirmCard(b.id, player ? player.name : "שחקן", b.amount, isEntry);
     });
   });
 }
@@ -1893,7 +1893,15 @@ function clearPendingBuyinBanner(){
 // two players) show one at a time instead of stacking on top of each other.
 let buyinConfirmQueue = [];
 let buyinConfirmShowing = false;
-function showBuyinConfirmCard(playerName, amount, isEntry){
+// Belt-and-suspenders against the same buy-in's card showing twice on one device - the
+// acting device already shows its own card directly from performBuyin, and could in
+// theory also pick the same id back up a moment later via detectAndAnnounceNewBuyins's
+// own refresh-triggered diff (reported live as an extra card during near-simultaneous
+// buy-ins from several phones). Keyed by buyinId, never cleared - the set only ever holds
+// as many ids as buy-ins made this page load, not a real memory concern.
+const announcedBuyinIds = new Set();
+function showBuyinConfirmCard(buyinId, playerName, amount, isEntry){
+  if (buyinId) { if (announcedBuyinIds.has(buyinId)) return; announcedBuyinIds.add(buyinId); }
   buyinConfirmQueue.push({playerName, amount, isEntry});
   if (!buyinConfirmShowing) runBuyinConfirmQueue();
 }
@@ -1970,7 +1978,7 @@ async function performBuyin(gameId, playerId, amount, opts){
       else await mutateAndSave(() => { const freshG = getGame(gameId); freshG.buyins = freshG.buyins.filter(b=>b.id!==id); });
     } catch(e) { /* best-effort - a failed rollback just leaves one real row behind */ }
   } else if (ok) {
-    showBuyinConfirmCard(playerName, amount, isEntry);
+    showBuyinConfirmCard(id, playerName, amount, isEntry);
   }
   render();
 }
