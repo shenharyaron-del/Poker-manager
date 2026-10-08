@@ -3474,11 +3474,11 @@ function renderPlayerScreen(gameId){
   return `
     <div class="top row" style="padding-top:14px;padding-bottom:16px;flex-shrink:0;">
       <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
-      <div class="flex1">
-        <h1 class="serif sm" style="color:var(--gold);">${esc(g.name || c.name)}</h1>
-        <div class="meta" style="color:#6ee7b7;font-size:12px;display:flex;align-items:center;gap:5px;">${icon('cal')}${esc(g.date)}${g.createdByName ? ` · נוצר ע"י ${esc(g.createdByName)}` : ""}</div>
+      <div class="flex1" style="min-width:0;">
+        <h1 class="serif sm" style="color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g.name || c.name)}</h1>
+        <div class="meta" style="color:#6ee7b7;font-size:11px;display:flex;align-items:center;gap:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${icon('cal')}${esc(g.date)}${g.createdByName ? ` · נוצר ע"י ${esc(g.createdByName)}` : ""}</div>
       </div>
-      <button class="icon-btn gold" data-invite-game="${g.id}" title="הזמנת שחקן" style="flex-shrink:0;display:flex;align-items:center;gap:4px;font-size:11px;font-weight:700;white-space:nowrap;">${icon('share')}הזמנת שחקן</button>
+      <button class="icon-btn gold" data-invite-game="${g.id}" title="הזמנת שחקן" style="flex-shrink:0;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;white-space:nowrap;padding:5px 7px;">${icon('share')}הזמנת שחקן</button>
     </div>
     <div class="player-screen-scroll">
       <div style="text-align:center;padding:6px 0 16px;flex-shrink:0;">
@@ -3502,9 +3502,9 @@ function renderPlayerScreen(gameId){
       <div class="chat-frame" data-player-feed data-latest-event="${latestFeedEventKey}" style="flex:1;height:auto;min-height:54px;margin-bottom:14px;">${feedRows}</div>
       `}
       ${cashedOut ? "" : `
-      <div style="display:flex;gap:8px;flex-shrink:0;">
-        <button class="btn flex1" style="background:#B8862B;color:#1a1a1a;display:flex;align-items:center;justify-content:center;gap:6px;" data-player-leave-table>${icon('out')} יציאה עם ז'יטונים</button>
-        <button class="btn flex1" style="background:#B23A3A;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;" data-player-leave-no-chips>${icon('out')} יציאה ללא ז'יטונים</button>
+      <div style="display:flex;gap:6px;flex-shrink:0;">
+        <button class="btn flex1" style="background:#B8862B;color:#1a1a1a;display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 4px;font-size:13px;white-space:nowrap;" data-player-leave-table>${icon('out')}יציאה עם ז'יטונים</button>
+        <button class="btn flex1" style="background:#B23A3A;color:#fff;display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 4px;font-size:13px;white-space:nowrap;" data-player-leave-no-chips>${icon('out')}יציאה ללא ז'יטונים</button>
       </div>`}
     </div>
   `;
@@ -3670,11 +3670,11 @@ function renderAdminScreen(gameId){
   return `
     <div class="top row" style="padding-top:14px;padding-bottom:16px;flex-shrink:0;">
       <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
-      <div class="flex1">
-        <h1 class="serif sm" style="color:var(--gold);">${esc(g.name || c.name)}</h1>
-        <div class="meta" style="color:#6ee7b7;font-size:12px;display:flex;align-items:center;gap:5px;">${icon('cal')}${esc(g.date)}${g.createdByName ? ` · נוצר ע"י ${esc(g.createdByName)}` : ""}</div>
+      <div class="flex1" style="min-width:0;">
+        <h1 class="serif sm" style="color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g.name || c.name)}</h1>
+        <div class="meta" style="color:#6ee7b7;font-size:11px;display:flex;align-items:center;gap:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${icon('cal')}${esc(g.date)}${g.createdByName ? ` · נוצר ע"י ${esc(g.createdByName)}` : ""}</div>
       </div>
-      <button class="icon-btn gold" data-invite-game="${g.id}" title="הזמנת שחקן" style="flex-shrink:0;display:flex;align-items:center;gap:4px;font-size:11px;font-weight:700;white-space:nowrap;">${icon('share')}הזמנת שחקן</button>
+      <button class="icon-btn gold" data-invite-game="${g.id}" title="הזמנת שחקן" style="flex-shrink:0;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;white-space:nowrap;padding:5px 7px;">${icon('share')}הזמנת שחקן</button>
     </div>
     <div style="flex:1;min-height:0;overflow-y:auto;padding:0 20px 20px;touch-action:pan-y;">
       ${c.settlementDefault === 'paybox' ? "" : `
@@ -3847,11 +3847,11 @@ function renderTable(gameId){
   return `
     <div class="top row" style="padding-top:14px;padding-bottom:16px;">
       <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
-      <div class="flex1">
-        <h1 class="serif sm" style="color:var(--gold);">${esc(g.name || c.name)}</h1>
-        <div class="meta" style="color:#6ee7b7;font-size:12px;display:flex;align-items:center;gap:5px;">${icon('cal')}${esc(g.date)}${g.createdByName ? ` · נוצר ע"י ${esc(g.createdByName)}` : ""}</div>
+      <div class="flex1" style="min-width:0;">
+        <h1 class="serif sm" style="color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g.name || c.name)}</h1>
+        <div class="meta" style="color:#6ee7b7;font-size:11px;display:flex;align-items:center;gap:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${icon('cal')}${esc(g.date)}${g.createdByName ? ` · נוצר ע"י ${esc(g.createdByName)}` : ""}</div>
       </div>
-      <button class="icon-btn gold" data-invite-game="${g.id}" title="הזמנת שחקן" style="flex-shrink:0;display:flex;align-items:center;gap:4px;font-size:11px;font-weight:700;white-space:nowrap;">${icon('share')}הזמנת שחקן</button>
+      <button class="icon-btn gold" data-invite-game="${g.id}" title="הזמנת שחקן" style="flex-shrink:0;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;white-space:nowrap;padding:5px 7px;">${icon('share')}הזמנת שחקן</button>
     </div>
     ${!allCashedOut ? `
     <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:0 20px 10px;">
