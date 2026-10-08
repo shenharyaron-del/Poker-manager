@@ -172,7 +172,7 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
    supplied WhatsApp-style reference image, tiled; the dark overlay underneath keeps the
    bubbles/text readable against it instead of the image's own light color showing
    through at full strength. */
-.chat-frame{background:linear-gradient(rgba(0,0,0,.62),rgba(0,0,0,.62)),url('/static/chat-bg.png');background-repeat:repeat;background-size:auto,220px;border-radius:12px;padding:10px;height:158px;overflow-y:auto;touch-action:pan-y;}
+.chat-frame{background:linear-gradient(rgba(4,64,47,.8),rgba(4,64,47,.8)),url('/static/chat-bg.png');background-repeat:repeat;background-size:auto,220px;border-radius:12px;padding:10px;height:158px;overflow-y:auto;touch-action:pan-y;}
 /* Same "bounded panel" idea as .chat-frame above, for the buy-in button row - a plain
    border box rather than a dark fill, so the gold buttons inside stay the brightest thing
    in it instead of competing with a tinted background. */
@@ -1308,7 +1308,7 @@ let refreshQueued = false;
 async function doRefreshNow(source){
   const callId = DEBUG_SYNC ? Math.random().toString(36).slice(2,6) : "";
   logSync(`refresh[${callId}] triggered by ${source}, modal=${!!modal}`);
-  if (modal || playerScreenCustomOpen || Object.keys(adminBuyinUi).length) { logSync(`refresh[${callId}] SKIPPED - modal or custom-amount input open`); return; }
+  if (modal || playerScreenCustomOpen || Object.keys(adminBuyinUi).length || seatDragInProgress) { logSync(`refresh[${callId}] SKIPPED - modal or custom-amount input open`); return; }
   if (refreshInProgress) {
     // Another refresh is already running its own GET - don't start a second one
     // concurrently (two in-flight GETs can resolve out of order, and the one that
@@ -1396,7 +1396,7 @@ async function doRefreshNow(source){
         // next attempt once the refresh had already finished. The fetched state is still
         // applied either way - only the render is skipped - so the next render (the modal
         // closing, or the next refresh with neither open) already reflects it.
-        if (modal || playerScreenCustomOpen || Object.keys(adminBuyinUi).length) {
+        if (modal || playerScreenCustomOpen || Object.keys(adminBuyinUi).length || seatDragInProgress) {
           logSync(`refresh[${callId}] applied but SKIPPED render - modal or custom-amount input opened mid-fetch`);
         } else {
           const scrollY = window.scrollY;
@@ -1675,6 +1675,11 @@ let playerScreenCustomOpen = false;
 // on nav like playerScreenCustomOpen above. Keyed by playerId: "presets" shows the amount
 // chips, "custom" shows the "אחר" input instead; absent/undefined means closed.
 let adminBuyinUi = {};
+// True between a seat's pointerdown and its pointerup/pointercancel on the table screen
+// (see the [data-seat] drag handlers) - checked by doRefreshNow below, same reasoning as
+// playerScreenCustomOpen/adminBuyinUi above: a mid-gesture render() would replace the very
+// DOM node being dragged.
+let seatDragInProgress = false;
 // `${gameId}:${playerId}` keys already auto-opened by the "directPay" modal (see
 // attachHandlers) - fires once when a player cashes out at a loss mid-game in a direct-
 // settlement community, so they're prompted immediately instead of waiting for the whole
@@ -3446,7 +3451,7 @@ function renderPlayerScreen(gameId){
       ${cashedOut ? "" : `<div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">ריביי</div>`}
       ${cashedOut ? "" : buyinButtonsHtml}
       ${cashedOut ? "" : `
-      <div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">היסטוריית קניות</div>
+      <div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">היסטוריית הקניות שלי</div>
       <div class="chat-frame" data-player-history data-latest-buyin="${latestHistoryKey}" style="height:110px;margin-bottom:14px;flex-shrink:0;">${historyRows}</div>
       <div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">פעילות בשולחן</div>
       <div class="chat-frame" data-player-feed data-latest-event="${latestFeedEventKey}" style="flex:1;height:auto;min-height:54px;margin-bottom:14px;">${feedRows}</div>
@@ -5547,6 +5552,15 @@ function attachHandlers(){
       const idx = parseInt(el.dataset.seat);
       if (!seats[idx]) return; // only occupied seats can be dragged
       drag = { fromIdx: idx, startX: e.clientX, startY: e.clientY, moved: false };
+      // The periodic/SSE refresh (doRefreshNow) replaces the whole DOM via render() every
+      // few seconds regardless of what the user is mid-doing - landing during an active
+      // drag swaps out the very element being dragged for a fresh one with no transform
+      // applied, which is what made the dragged player visibly snap back to their old
+      // seat even on an otherwise precise drop. Same skip-while-mid-interaction pattern
+      // already used for an open modal/playerScreenCustomOpen/adminBuyinUi below. Set
+      // before setPointerCapture (which can throw on some browsers/synthetic events) so
+      // the guard is in place regardless of whether capture itself succeeds.
+      seatDragInProgress = true;
       dragHandle.setPointerCapture(e.pointerId);
     });
     dragHandle.addEventListener("pointermove", (e) => {
@@ -5568,6 +5582,7 @@ function attachHandlers(){
       el.style.zIndex = "";
       el.style.opacity = "";
       drag = null;
+      seatDragInProgress = false;
       if (!wasMoved) return; // a plain tap on an already-seated player is a no-op
       // Nearest seat center to the drop point, not document.elementFromPoint - that was
       // exact-hit-test-only (gaps between circles, or landing a few px off a small target
@@ -5619,6 +5634,7 @@ function attachHandlers(){
       el.style.zIndex = "";
       el.style.opacity = "";
       drag = null;
+      seatDragInProgress = false;
     });
     el.onclick = () => {
       const g = getGame(nav.gameId);
