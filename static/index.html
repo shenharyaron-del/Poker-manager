@@ -180,9 +180,14 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
 /* Time sits tucked in the bubble's own bottom-left corner instead of a separate full-width
    row underneath - floating it lets the message text wrap around it exactly like a real
    chat bubble, landing beside the last line when there's room and below it otherwise. */
-.chat-bubble{background:rgba(255,255,255,.07);border-radius:10px;padding:6px 10px;margin-bottom:6px;font-size:13px;color:var(--text);overflow:hidden;}
+.chat-bubble{background:rgba(0,0,0,.3);border-radius:10px;padding:6px 10px;margin-bottom:6px;font-size:13px;color:var(--text);overflow:hidden;}
 .chat-bubble:last-child{margin-bottom:0;}
 .chat-bubble .bubble-time{float:left;font-size:10px;color:var(--muted);margin:3px 0 0 6px;}
+/* Table-activity rows only (not the plain chat-bubble ones elsewhere, which rely on
+   .bubble-time's float) - an icon ahead of the time+text block, which keeps its own float
+   layout since it's still a plain block, just no longer the bubble's only child. */
+.chat-bubble.with-icon{display:flex;gap:6px;align-items:flex-start;}
+.chat-bubble.with-icon>svg{flex-shrink:0;margin-top:2px;opacity:.85;}
 .empty{text-align:center;padding:50px 20px;color:#059669;font-size:14px;}
 .section-title{color:var(--gold);font-size:11px;font-weight:700;letter-spacing:.05em;margin:0 0 8px;padding:0 20px;}
 .field{display:block;margin-bottom:14px;}
@@ -3348,7 +3353,7 @@ function renderPlayerScreen(gameId){
   // a re-render of the same data (see lastSeenFeedEventKey) - the vibrate trigger.
   const latestFeedEvent = feedEvents[feedEvents.length-1];
   const latestFeedEventKey = latestFeedEvent ? `${latestFeedEvent.ts}-${latestFeedEvent.kind}-${latestFeedEvent.kind==='buyin'?latestFeedEvent.buyin.id:latestFeedEvent.playerId}` : "";
-  const FEED_COLORS = { gray: "#888", white: "var(--text)", red: "#fda4af" };
+  const FEED_COLORS = { gray: "#5c5c5c", white: "var(--text)" };
   // Carries an actorName whenever the actor differs from the player it's about - the 4
   // log-based event types always have (see logGameEvent/v2AddGameEvent); a buyin only does
   // for ones saved since actor_name was added to the buyins table (see performBuyin) -
@@ -3362,7 +3367,7 @@ function renderPlayerScreen(gameId){
   const isFemale = playerId => { const rp = c.roster.find(pl => pl.id === playerId); return !!rp && rp.gender === "female"; };
   const feedCounts = {}, feedTotals = {};
   const feedRows = feedEvents.map(ev => {
-    let text, color;
+    let text, color, rowIcon;
     if (ev.kind === "buyin") {
       const b = ev.buyin;
       const player = g.players.find(pl => pl.id === b.playerId);
@@ -3375,6 +3380,7 @@ function renderPlayerScreen(gameId){
         ? `${name} ${fem?'עשתה':'עשה'} ריביי של ₪${b.amount} (סה"כ קנייה של ₪${feedTotals[b.playerId]})${actorSuffix(player?player.name:name, b.actorName)}`
         : `${name} ${fem?'נכנסה':'נכנס'} לשולחן עם ₪${b.amount}${actorSuffix(player?player.name:name, b.actorName)}`;
       color = isRebuy ? FEED_COLORS.white : FEED_COLORS.gray;
+      rowIcon = 'coinsPlus';
     } else if (ev.kind === "cashout") {
       const player = g.players.find(pl => pl.id === ev.playerId);
       const name = esc(player ? player.name : "שחקן");
@@ -3383,29 +3389,34 @@ function renderPlayerScreen(gameId){
       const profitText = profit >= 0 ? `₪${Math.round(profit)} רווח` : `₪${Math.abs(Math.round(profit))} הפסד`;
       text = `${name} ${isFemale(ev.playerId)?'יצאה':'יצא'} מהשולחן עם ₪${ev.amount} ז'יטונים בספירה (${profitText})`;
       color = FEED_COLORS.gray;
+      rowIcon = 'out';
     } else if (ev.kind === "buyin_deleted") {
       const player = g.players.find(pl => pl.id === ev.playerId);
       const pname = player ? player.name : "שחקן";
       text = `${esc(pname)} ${isFemale(ev.playerId)?'ביטלה':'ביטל'} קנייה בסך ₪${ev.amount}${actorSuffix(pname, ev.actorName)}`;
-      color = FEED_COLORS.red;
+      color = FEED_COLORS.gray;
+      rowIcon = 'trash';
     } else if (ev.kind === "returned_to_table") {
       const player = g.players.find(pl => pl.id === ev.playerId);
       const pname = player ? player.name : "שחקן";
       text = `${esc(pname)} ${isFemale(ev.playerId)?'חזרה':'חזר'} לשולחן${actorSuffix(pname, ev.actorName)}`;
       color = FEED_COLORS.gray;
+      rowIcon = 'undo';
     } else if (ev.kind === "seat_removed") {
       const player = g.players.find(pl => pl.id === ev.playerId);
       const pname = player ? player.name : "שחקן";
       text = `${esc(pname)} ${isFemale(ev.playerId)?'הוצאה':'הוצא'} מהשולחן${actorSuffix(pname, ev.actorName)}`;
-      color = FEED_COLORS.red;
+      color = FEED_COLORS.gray;
+      rowIcon = 'x';
     } else if (ev.kind === "night_declared_over") {
       text = `הוכרז על סיום ערב`;
       color = FEED_COLORS.gray;
+      rowIcon = 'check';
     } else {
       return "";
     }
-    return `<div class="chat-bubble" style="color:${color};"><span class="bubble-time">${fmtTime(ev.ts)}</span>${text}</div>`;
-  }).join("") || `<div class="chat-bubble" style="color:#888;">אין עדיין פעילות בשולחן</div>`;
+    return `<div class="chat-bubble with-icon" style="color:${color};">${icon(rowIcon)}<div style="flex:1;min-width:0;"><span class="bubble-time">${fmtTime(ev.ts)}</span>${text}</div></div>`;
+  }).join("") || `<div class="chat-bubble" style="color:#5c5c5c;">אין עדיין פעילות בשולחן</div>`;
   // Every rebuy control (including "אחר") stays disabled from the moment a buy-in request
   // is sent until it settles (success, cancel, or error) - see performBuyin/
   // pendingBuyinRequest - so a second tap can't fire a genuine duplicate buy-in while the
