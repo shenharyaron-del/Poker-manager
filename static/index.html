@@ -231,7 +231,7 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 /* Quick fade-in (opacity only, scale untouched) at 0-3%, then a constant-rate (linear)
    grow to 120% over the next 1.5s (3%-37.5% of the 4s total), back down to 100% over
    another 1.5s at the same rate (37.5%-75%), then holds at 100% for the remaining ~1s. */
-@keyframes buyin-confirm-pop{0%{transform:scale(1);opacity:0;}3%{transform:scale(1);opacity:1;}37.5%{transform:scale(1.2);opacity:1;}75%{transform:scale(1);opacity:1;}100%{transform:scale(1);opacity:1;}}
+@keyframes buyin-confirm-pop{0%{transform:scale(.3);opacity:0;}3%{transform:scale(.3);opacity:1;}37.5%{transform:scale(1.2);opacity:1;}75%{transform:scale(1);opacity:1;}100%{transform:scale(1);opacity:1;}}
 @keyframes buyin-confirm-fade{to{opacity:0;transform:scale(.95);}}
 .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
 .modal-head h3{margin:0;font-size:18px;}
@@ -3769,7 +3769,7 @@ function renderTable(gameId){
     </div>
     ${!allCashedOut ? `
     <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:0 20px 10px;">
-      <span style="color:var(--muted);font-size:12px;text-align:center;line-height:1.3;">מחשבון<br>סיכויי פוקר</span>
+      <span style="color:#C8902F;font-size:12px;text-align:center;line-height:1.3;">מחשבון<br>סיכויי פוקר</span>
       <button class="icon-btn" data-open-poker-odds title="מה הסיכויים שלי" style="flex-shrink:0;width:48px;height:auto;background:none;border:none;padding:0;display:inline-flex;align-items:center;justify-content:center;">
         <img src="/static/odds-coin.png" style="width:48px;height:auto;display:block;">
       </button>
