@@ -3468,6 +3468,7 @@ function renderGameWelcomeOverlay(gameId, playerId){
         </p>
         <p style="color:var(--muted);font-size:13px;margin:0 0 20px;">שיהיה לך ערב מוצלח!</p>
         <button class="btn btn-primary btn-block" data-dismiss-game-welcome="${gameId}">הבנתי, נתחיל לשחק</button>
+        <button data-cancel-game-welcome="${gameId}" data-cancel-game-welcome-player="${playerId}" style="display:block;width:100%;background:none;border:none;color:var(--muted);font-size:12px;font-weight:600;margin-top:12px;padding:6px;cursor:pointer;font-family:inherit;text-decoration:underline;text-underline-offset:3px;">ביטול – נכנסתי בטעות</button>
       </div>
     </div>
   `;
@@ -5958,6 +5959,44 @@ function attachHandlers(){
   // and no overlay-click dismissal anywhere - only this button clears its per-device flag.
   const welcomeBtn = app.querySelector("[data-dismiss-game-welcome]");
   if (welcomeBtn) welcomeBtn.onclick = () => { markGameWelcomed(welcomeBtn.dataset.dismissGameWelcome); render(); };
+
+  // "ביטול - נכנסתי בטעות" on that same welcome screen - undoes the auto-entry seat/buy-in
+  // entirely (not just dismissing the screen) and drops the player back on their
+  // community's screen. Deliberately does NOT call markGameWelcomed - they never really
+  // entered, so claiming a seat in this game again later should show the welcome screen
+  // again, same as any other first entry.
+  const cancelWelcomeBtn = app.querySelector("[data-cancel-game-welcome]");
+  if (cancelWelcomeBtn) cancelWelcomeBtn.onclick = async () => {
+    const gameId = cancelWelcomeBtn.dataset.cancelGameWelcome;
+    const playerId = cancelWelcomeBtn.dataset.cancelGameWelcomePlayer;
+    if (!(await showConfirm("להסיר אותך מהשולחן ולבטל את הכניסה שנרשמה?"))) return;
+    cancelWelcomeBtn.disabled = true;
+    showButtonLoading(cancelWelcomeBtn);
+    const g = getGame(gameId);
+    const communityId = g.communityId;
+    if (USE_RELATIONAL_API) {
+      const idx = (g.seats||[]).indexOf(playerId);
+      if (idx !== -1) {
+        try {
+          await v2ClearSeat(gameId, idx);
+          v2AddGameEvent(gameId, "seat_removed", playerId, myIdentity.name, undefined);
+        } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); cancelWelcomeBtn.disabled = false; return; }
+      }
+    } else {
+      await mutateAndSave(() => {
+        const freshG = getGame(gameId);
+        if (freshG.seats) {
+          const idx2 = freshG.seats.indexOf(playerId);
+          if (idx2 !== -1) freshG.seats[idx2] = null;
+        }
+        freshG.buyins = freshG.buyins.filter(b => b.playerId !== playerId);
+        if (freshG.liveChips) delete freshG.liveChips[playerId];
+        logGameEvent(freshG, "seat_removed", playerId, myIdentity.name, undefined);
+        maybeAutoCloseNight(freshG);
+      });
+    }
+    go("community", {communityId});
+  };
 
   if (modal && modal.type === "identityName") {
     const confirmBtn = app.querySelector("[data-confirm-identity-name]");
