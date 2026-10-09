@@ -743,26 +743,25 @@ function applyFreshState(fresh){
     state = fresh;
   }
 }
-// Relational mode's periodic refresh (loadStateV2/applyFreshState above) only ever pulls
-// communities/games from the v2 tables - globalPlayers/customAvatars/hiddenAvatarKeys/the
-// avatar-category overrides never got a v2 table (see applyFreshState's own comment), so a
-// change made purely via setGlobalPlayer+saveState() on one device (a new avatar photo, a
-// phone number, a custom-avatar-library edit) never reached any OTHER device already
-// running - only a full page reload re-read the legacy blob fresh (reported live as "X
-// uploaded a new avatar but I still see their old one"). Re-fetches just that handful of
-// fields on the same cadence as the regular refresh (called from doRefreshNow), hash-gated
-// the same cheap way loadState() already is - reuses lastStateHash since nothing else reads
-// or writes it in relational mode (mutateAndSave/its baseHash conflict check is legacy-path
-// only), so most ticks cost just the tiny /api/state/hash request.
-async function refreshLegacyOnlyFields(){
-  if (!USE_RELATIONAL_API) return; // loadState() already refreshes these every tick
+// globalPlayers/customAvatars/hiddenAvatarKeys/the avatar-category overrides never got a
+// v2 table (see applyFreshState's own comment) - they're still written as a POST of the
+// ENTIRE legacy blob (saveState(), with no baseHash/conflict check for this call path - see
+// every setGlobalPlayer(...); saveState(); site), so whichever of those saves lands last on
+// the server wins outright, silently discarding any OTHER field someone else changed in the
+// meantime (reported live as "I uploaded a new avatar and it reverted back to my old one" -
+// someone else saving their own unrelated change, built on a copy from before the upload,
+// overwrote it). Fetches just this handful of fields fresh from the server, hash-gated the
+// same cheap way loadState() already is - reuses lastStateHash since nothing else reads or
+// writes it in relational mode (mutateAndSave/its baseHash conflict check is legacy-path
+// only). Returns whether it actually found something new to merge in.
+async function syncLegacyOnlyFields(){
   try {
     const hashRes = await fetch("/api/state/hash");
-    if (!hashRes.ok) return;
+    if (!hashRes.ok) return false;
     const { hash } = await hashRes.json();
-    if (hash === lastStateHash) return;
+    if (hash === lastStateHash) return false;
     const res = await fetch("/api/state");
-    if (!res.ok) return;
+    if (!res.ok) return false;
     const fresh = await res.json();
     lastStateHash = hash;
     state.globalPlayers = fresh.globalPlayers;
@@ -770,8 +769,19 @@ async function refreshLegacyOnlyFields(){
     state.hiddenAvatarKeys = fresh.hiddenAvatarKeys;
     state.avatarCategoryLabelOverrides = fresh.avatarCategoryLabelOverrides;
     state.avatarCategoryOrder = fresh.avatarCategoryOrder;
-    if (!modal && !playerScreenCustomOpen && !Object.keys(adminBuyinUi).length && !seatDragInProgress && !shouldShowGameWelcome()) render();
-  } catch(e) { /* best-effort - next tick retries */ }
+    return true;
+  } catch(e) { return false; /* best-effort - caller proceeds on whatever it already had */ }
+}
+// Periodic-refresh side of syncLegacyOnlyFields (called from doRefreshNow, same cadence as
+// the regular refresh) - re-renders if it actually found something new, same skip-guard the
+// rest of that refresh already uses. The OTHER side - syncing immediately before writing
+// one of these fields - is each write site's own `await syncLegacyOnlyFields();` right
+// before its local mutation (see setGlobalPlayer's callers), which closes most of the same
+// lost-update race syncBeforeMutate already closes for buy-ins, just for this field instead.
+async function refreshLegacyOnlyFields(){
+  if (!USE_RELATIONAL_API) return; // loadState() already refreshes these every tick
+  const changed = await syncLegacyOnlyFields();
+  if (changed && !modal && !playerScreenCustomOpen && !Object.keys(adminBuyinUi).length && !seatDragInProgress && !shouldShowGameWelcome()) render();
 }
 
 // Temporary diagnostic overlay for tracking down a reported sync-flicker bug.
@@ -2690,6 +2700,9 @@ function openFilePicker(communityId, playerId, useCamera){
       let photo;
       try { photo = await uploadPhoto(dataUrl); }
       catch(e) { showAlert("העלאת התמונה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+      // Re-syncs this handful of fields immediately before writing one of them - see
+      // syncLegacyOnlyFields's own comment on the lost-update race this closes.
+      await syncLegacyOnlyFields();
       // No communityId means this was opened from the identity/name screen - set the
       // viewer's own global avatar directly rather than a specific roster entry.
       if (!communityId) { setGlobalPlayer(myIdentity.id, {photo}); saveState(); updateAccount({photo}); render(); return; }
@@ -6061,13 +6074,16 @@ function attachHandlers(){
     if (changeAvatarBtn) changeAvatarBtn.onclick = () => openModal({type:"photoSource"});
     const myStatsBtn = app.querySelector("[data-my-stats]");
     if (myStatsBtn) myStatsBtn.onclick = () => openModal({type:"stats", clientId: myIdentity.id});
-    app.querySelectorAll("[data-pick-seat-position]").forEach(el => el.onclick = () => {
+    app.querySelectorAll("[data-pick-seat-position]").forEach(el => el.onclick = async () => {
       // Preserve an unsaved name edit across the re-render below - render() rebuilds
       // this whole screen from myIdentity.name, which would otherwise silently discard
       // whatever's typed but not yet written back via the "שמור" button (confirmed bug:
       // type a new name, tap a seat position, the name reverted to the old one).
       const nameInput = document.getElementById("identity-name-input");
       if (nameInput) myIdentity.name = nameInput.value;
+      // Re-syncs this handful of fields immediately before writing one of them - see
+      // syncLegacyOnlyFields's own comment on the lost-update race this closes.
+      await syncLegacyOnlyFields();
       setGlobalPlayer(myIdentity.id, {seatPosition: Number(el.dataset.pickSeatPosition)});
       saveState();
       render();
@@ -6185,7 +6201,7 @@ function attachHandlers(){
     if (camBtn) camBtn.onclick = () => openFilePicker(modal.communityId, modal.playerId, true);
     const galBtn = app.querySelector("[data-photo-gallery]");
     if (galBtn) galBtn.onclick = () => openFilePicker(modal.communityId, modal.playerId, false);
-    app.querySelectorAll("[data-pick-avatar]").forEach(el => el.onclick = () => {
+    app.querySelectorAll("[data-pick-avatar]").forEach(el => el.onclick = async () => {
       const key = el.dataset.pickAvatar;
       let photo = null;
       if (key.startsWith("builtin:")) photo = "/static/avatars/" + key.slice(8) + ".jpg";
@@ -6193,6 +6209,9 @@ function attachHandlers(){
         const av = (state.customAvatars||[]).find(a => a.id === key.slice(7));
         photo = av ? av.image : null;
       }
+      // Re-syncs this handful of fields immediately before writing one of them - see
+      // syncLegacyOnlyFields's own comment on the lost-update race this closes.
+      await syncLegacyOnlyFields();
       // No communityId/playerId means this was opened from the identity/name screen -
       // set the viewer's own global avatar directly rather than a specific roster entry.
       if (!modal.communityId) {
@@ -6302,6 +6321,9 @@ function attachHandlers(){
       e.stopPropagation();
       const key = el.dataset.deleteAvatar;
       if (!(await showConfirm("למחוק את האווטר?"))) return;
+      // Re-syncs this handful of fields immediately before writing one of them - see
+      // syncLegacyOnlyFields's own comment on the lost-update race this closes.
+      await syncLegacyOnlyFields();
       if (key.startsWith("custom:")) {
         const id = key.slice(7);
         state.customAvatars = (state.customAvatars||[]).filter(a => a.id !== id);
@@ -6312,7 +6334,13 @@ function attachHandlers(){
       saveState();
       render();
     });
-    app.querySelectorAll("[data-move-avatar-cat-up]").forEach(el => el.onclick = () => {
+    app.querySelectorAll("[data-move-avatar-cat-up]").forEach(el => el.onclick = async () => {
+      // Re-syncs this handful of fields (and ONLY then reads the groups built from them)
+      // immediately before writing one of them - see syncLegacyOnlyFields's own comment on
+      // the lost-update race this closes. Must run before getAvatarGroups() below, not
+      // after - reordering on top of a stale group list would silently drop whatever this
+      // sync just found (e.g. a category someone else just added).
+      await syncLegacyOnlyFields();
       const groups = getAvatarGroups();
       const i = groups.findIndex(g => g.key === el.dataset.moveAvatarCatUp);
       if (i > 0) {
@@ -6323,7 +6351,9 @@ function attachHandlers(){
         render();
       }
     });
-    app.querySelectorAll("[data-move-avatar-cat-down]").forEach(el => el.onclick = () => {
+    app.querySelectorAll("[data-move-avatar-cat-down]").forEach(el => el.onclick = async () => {
+      // See data-move-avatar-cat-up's own comment just above - same reasoning.
+      await syncLegacyOnlyFields();
       const groups = getAvatarGroups();
       const i = groups.findIndex(g => g.key === el.dataset.moveAvatarCatDown);
       if (i >= 0 && i < groups.length - 1) {
@@ -6969,6 +6999,9 @@ function attachHandlers(){
         newAvatars = await Promise.all(pending.map(async ({pt, name, category}) =>
           ({id: uid(), name, category, image: await uploadPhoto(pt.image)})));
       } catch(e) { showAlert("העלאת האווטרים נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); render(); return; }
+      // Re-syncs this handful of fields immediately before writing one of them - see
+      // syncLegacyOnlyFields's own comment on the lost-update race this closes.
+      await syncLegacyOnlyFields();
       state.customAvatars = (state.customAvatars||[]).concat(newAvatars);
       saveState();
       if (modal.communityId) openModal({type:"photoSource", communityId: modal.communityId, playerId: modal.playerId});
