@@ -243,6 +243,12 @@ input:focus,.select-input:focus{border-color:var(--gold);}
    another 1.5s at the same rate (37.5%-75%), then holds at 100% for the remaining ~1s. */
 @keyframes buyin-confirm-pop{0%{transform:scale(.3);opacity:0;}3%{transform:scale(.3);opacity:1;}37.5%{transform:scale(1.2);opacity:1;}75%{transform:scale(1);opacity:1;}100%{transform:scale(1);opacity:1;}}
 @keyframes buyin-confirm-fade{to{opacity:0;transform:scale(.95);}}
+/* Blocking first-entry welcome screen (replaces the green confirm card for isEntry
+   buy-ins) - unlike .overlay (solid black), this sits above the already-rendered player
+   screen with a translucent+blurred backdrop so the app is visible-but-blurred behind it,
+   and has no close-x/outside-tap dismissal anywhere - only its own button clears it. */
+.game-welcome-overlay{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(4,20,14,.6);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:custom-alert-in .25s ease-out;}
+.game-welcome-card{background:#064e3b;border:1px solid var(--card-b);border-radius:20px;padding:30px 24px;width:100%;max-width:400px;text-align:center;box-shadow:0 16px 50px rgba(0,0,0,.55);}
 .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
 .modal-head h3{margin:0;font-size:18px;}
 .close-x{background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;}
@@ -1964,8 +1970,23 @@ function rememberAnnouncedBuyinsBulk(ids){
   (ids||[]).forEach(id => { if (id && !announcedBuyinIds.has(id)) { announcedBuyinIds.add(id); changed = true; } });
   if (changed) persistAnnouncedBuyinIds();
 }
+// Per-device "already saw the welcome screen for this game" flag - same pattern as
+// announcedBuyinIds, but keyed by gameId instead of buyinId, so the blocking welcome
+// overlay (see renderGameWelcomeOverlay) fires exactly once per game per device.
+let welcomedGameIds;
+try { welcomedGameIds = new Set(JSON.parse(localStorage.getItem("poker-welcomed-games")) || []); }
+catch(e) { welcomedGameIds = new Set(); }
+function hasWelcomedGame(gameId){ return welcomedGameIds.has(gameId); }
+function markGameWelcomed(gameId){
+  if (!gameId || welcomedGameIds.has(gameId)) return;
+  welcomedGameIds.add(gameId);
+  try { localStorage.setItem("poker-welcomed-games", JSON.stringify(Array.from(welcomedGameIds))); } catch(e) { /* storage full/blocked - still works in-memory for this page load */ }
+}
 function showBuyinConfirmCard(buyinId, playerName, amount, isEntry){
   if (buyinId) rememberAnnouncedBuyin(buyinId);
+  // A first entry gets the blocking welcome screen instead (see renderGameWelcomeOverlay) -
+  // the green card/sound stays only for actual rebuys.
+  if (isEntry) return;
   buyinConfirmQueue.push({playerName, amount, isEntry});
   if (!buyinConfirmShowing) runBuyinConfirmQueue();
 }
@@ -3073,6 +3094,7 @@ function render(){
   document.body.classList.toggle("table-screen", nav.screen === "table");
   let html = "";
   let seated = false;
+  let welcomeGameId = null, welcomePlayerId = null;
   if (nav.screen === "home") html = renderHome();
   else if (nav.screen === "community") html = renderCommunity(nav.communityId);
   else if (nav.screen === "table") {
@@ -3080,6 +3102,8 @@ function render(){
     const c = g && getCommunity(g.communityId);
     seated = isSeatedInGame(g);
     if (seated) {
+      const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+      if (myPlayerId && !hasWelcomedGame(g.id)) { welcomeGameId = g.id; welcomePlayerId = myPlayerId; }
       const pageOrder = swipePageOrder(g, c);
       // Losing admin rights (or just never having had them) between renders shouldn't
       // strand tableSubView on a page that no longer exists in the carousel - falls back
@@ -3140,6 +3164,7 @@ function render(){
   const screenTag = `<div class="screen-tag">${esc(screenLabel)}</div>`;
   html = screenTag + html;
   if (modal) html += renderModal(modal);
+  else if (welcomeGameId) html += renderGameWelcomeOverlay(welcomeGameId, welcomePlayerId);
   // Captured BEFORE replacing the DOM below - app.innerHTML wipes and recreates these
   // elements from scratch every render, so a brand new element always starts at
   // scrollTop 0 regardless of where the old one was left. Not explicitly restoring that
@@ -3371,6 +3396,34 @@ const SEAT_POS = [
 // feed of the whole table's recent buy-ins. Swipe left (see attachHandlers) to reach the
 // classic circles view (renderTable) instead - isSeatedInGame in render() is what decides
 // whether this screen is even reachable for the current viewer.
+// Blocking welcome screen shown the first time a player opens their own player screen for
+// a given game (see showBuyinConfirmCard, which now skips the green card/sound entirely for
+// isEntry buy-ins in favor of this). hasWelcomedGame/markGameWelcomed (per-device
+// localStorage, same pattern as announcedBuyinIds) make this fire exactly once per game.
+function renderGameWelcomeOverlay(gameId, playerId){
+  const g = getGame(gameId);
+  if (!g) return "";
+  const c = getCommunity(g.communityId) || {roster:[]};
+  const p = g.players.find(pl => pl.id === playerId);
+  const buyinTotal = g.buyins.filter(b => b.playerId === playerId).reduce((s,b) => s+b.amount, 0);
+  const rp = c.roster.find(pl => pl.id === playerId);
+  const female = !!rp && rp.gender === "female";
+  const name = (p && p.name) || myIdentity.name || "שחקן";
+  const careVerb = female ? "דאגי" : "דאג";
+  return `
+    <div class="game-welcome-overlay">
+      <div class="game-welcome-card">
+        <h2 class="serif" style="color:var(--gold);margin:0 0 14px;font-size:21px;">שלום ${esc(name)}!</h2>
+        <p style="color:var(--text);font-size:15px;line-height:1.7;margin:0 0 16px;">
+          נכנסת למשחק חדש עם <b style="color:var(--gold);">₪${buyinTotal}</b> בזיטונים.<br>
+          כדי ש-Poker Manager ימשיך לעבוד כמו שצריך, ${careVerb} להישאר בתוך האפליקציה במהלך הערב ולשמור שהטלפון יהיה בהישג יד.
+        </p>
+        <p style="color:var(--muted);font-size:13px;margin:0 0 20px;">שיהיה לך ערב מוצלח!</p>
+        <button class="btn btn-primary btn-block" data-dismiss-game-welcome="${gameId}">הבנתי, נתחיל לשחק</button>
+      </div>
+    </div>
+  `;
+}
 function renderPlayerScreen(gameId){
   const g = getGame(gameId);
   if (!g) return `<div class="empty">משחק לא נמצא</div>`;
@@ -5842,6 +5895,11 @@ function attachHandlers(){
   };
   const closeBtn = app.querySelector("[data-close-modal]");
   if (closeBtn) closeBtn.onclick = closeModalOrBack;
+
+  // The blocking first-entry welcome screen (see renderGameWelcomeOverlay) has no close-x
+  // and no overlay-click dismissal anywhere - only this button clears its per-device flag.
+  const welcomeBtn = app.querySelector("[data-dismiss-game-welcome]");
+  if (welcomeBtn) welcomeBtn.onclick = () => { markGameWelcomed(welcomeBtn.dataset.dismissGameWelcome); render(); };
 
   if (modal && modal.type === "identityName") {
     const confirmBtn = app.querySelector("[data-confirm-identity-name]");
