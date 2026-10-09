@@ -190,8 +190,11 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
 .player-history-feed.mode-history{background-image:linear-gradient(rgba(10,25,55,.85),rgba(10,25,55,.85)),url('/static/chat-bg.png');}
 .player-history-feed.mode-feed{background-image:linear-gradient(rgba(20,20,24,.85),rgba(20,20,24,.85)),url('/static/chat-bg.png');}
 .player-history-feed-tabs{display:flex;flex-shrink:0;}
-.player-history-feed-tab{flex:1;padding:10px 4px;text-align:center;font-size:12px;font-weight:700;letter-spacing:.04em;background:none;border:none;border-bottom:2px solid transparent;color:rgba(255,255,255,.45);cursor:pointer;font-family:inherit;}
-.player-history-feed-tab.active{color:var(--gold);border-bottom-color:var(--gold);}
+/* Unselected tab gets the app's own general background (var(--bg1)) instead of blending
+   into the panel below it - reads as "receded, not the current one", same idea as a
+   browser tab: only the active tab visually merges with the content under it. */
+.player-history-feed-tab{flex:1;padding:10px 4px;text-align:center;font-size:12px;font-weight:700;letter-spacing:.04em;background:var(--bg1);border:none;border-bottom:2px solid transparent;color:rgba(255,255,255,.45);cursor:pointer;font-family:inherit;}
+.player-history-feed-tab.active{background:none;color:var(--gold);border-bottom-color:var(--gold);}
 .player-history-feed-body{flex:1;min-height:0;overflow-y:auto;padding:10px;touch-action:pan-y;}
 /* Time sits tucked in the bubble's own bottom-left corner instead of a separate full-width
    row underneath - floating it lets the message text wrap around it exactly like a real
