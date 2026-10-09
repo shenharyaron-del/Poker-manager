@@ -1825,15 +1825,31 @@ function getBuyinAmounts(c){
 // The admin screen's own "sent to the bottom" set of active players - deliberately
 // per-device (localStorage, never saved to the DB/synced) since every admin can tuck away
 // players they don't need to interact with right now without affecting what other admins
-// see.
-function getAdminCollapsed(gameId){
+// see. Stores pids whose collapsed state has been manually toggled AWAY from its default
+// (see defaultAdminCollapsed) - not the absolute collapsed state itself, so a player who
+// defaults to collapsed and one who defaults to open share the same override list; the
+// effective state (see renderAdminScreen) flips the default whenever a pid is in here.
+function getAdminCollapseOverrides(gameId){
   try { return JSON.parse(localStorage.getItem(`poker-admin-collapsed-${gameId}`)) || []; }
   catch(e) { return []; }
 }
-function setAdminCollapsed(gameId, pid, collapsed){
-  const cur = getAdminCollapsed(gameId).filter(id => id !== pid);
-  if (collapsed) cur.push(pid);
-  try { localStorage.setItem(`poker-admin-collapsed-${gameId}`, JSON.stringify(cur)); } catch(e) { /* storage full/blocked - just stays expanded */ }
+function toggleAdminCollapseOverride(gameId, pid){
+  const cur = getAdminCollapseOverrides(gameId);
+  const idx = cur.indexOf(pid);
+  if (idx === -1) cur.push(pid); else cur.splice(idx, 1);
+  try { localStorage.setItem(`poker-admin-collapsed-${gameId}`, JSON.stringify(cur)); } catch(e) { /* storage full/blocked - just stays at its default */ }
+}
+// Default collapse state for an active player's card, before any manual per-device
+// override above - a player who claimed their own seat (their entry buy-in has no
+// actorName - see v2ClaimSeat/performBuyin's actorName===playerName self-buy check)
+// doesn't need the viewing admin's attention and starts collapsed; the viewing admin's
+// own seat and anyone an admin actually seated themselves (their entry buy-in DOES carry
+// an actorName, since it differs from the player's own name) start open instead.
+function defaultAdminCollapsed(g, pid){
+  const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+  if (pid === myPlayerId) return false;
+  const entryBuyin = g.buyins.filter(b => b.playerId === pid).sort((a,b)=>(a.ts||0)-(b.ts||0))[0];
+  return !!(entryBuyin && !entryBuyin.actorName);
 }
 // Community-level admin (the admin screen's own gate, and full table-admin rights in
 // every game under this community - see isTableAdmin below) - the community's creator
@@ -3740,7 +3756,8 @@ function renderAdminScreen(gameId){
   const liveChips = g.liveChips || {};
   const seatedIds = seats.filter(Boolean);
   const stillActiveIds = seatedIds.filter(pid => !(pid in g.cashouts));
-  const collapsedIds = getAdminCollapsed(gameId).filter(pid => stillActiveIds.includes(pid));
+  const collapseOverrides = getAdminCollapseOverrides(gameId);
+  const collapsedIds = stillActiveIds.filter(pid => defaultAdminCollapsed(g, pid) !== collapseOverrides.includes(pid));
   const activeIds = stillActiveIds.filter(pid => !collapsedIds.includes(pid));
   const cashedOutIds = seatedIds.filter(pid => pid in g.cashouts);
   const allCashedOut = seatedIds.length > 0 && cashedOutIds.length === seatedIds.length;
@@ -5666,10 +5683,12 @@ function attachHandlers(){
     doAdminBuyin(pid, amt);
   });
   // Sending an active-player card down to the collapsed tray and back - purely local to
-  // this device (see getAdminCollapsed/setAdminCollapsed's own comment), so no
-  // save-to-server/render conflict handling needed.
-  app.querySelectorAll("[data-admin-collapse]").forEach(el => el.onclick = () => { setAdminCollapsed(nav.gameId, el.dataset.adminCollapse, true); render(); });
-  app.querySelectorAll("[data-admin-restore]").forEach(el => el.onclick = () => { setAdminCollapsed(nav.gameId, el.dataset.adminRestore, false); render(); });
+  // this device (see getAdminCollapseOverrides/toggleAdminCollapseOverride's own comment),
+  // so no save-to-server/render conflict handling needed. Both buttons only ever appear on
+  // a card already at the opposite effective state, so a plain toggle always lands on the
+  // state the tap asked for.
+  app.querySelectorAll("[data-admin-collapse]").forEach(el => el.onclick = () => { toggleAdminCollapseOverride(nav.gameId, el.dataset.adminCollapse); render(); });
+  app.querySelectorAll("[data-admin-restore]").forEach(el => el.onclick = () => { toggleAdminCollapseOverride(nav.gameId, el.dataset.adminRestore); render(); });
   // "סיום ערב" checkbox - a plain manual toggle of g.closed (also settable from the
   // directPay modal's own "הערב נגמר" button, see data-confirm-end-night-button below).
   app.querySelectorAll("[data-toggle-end-night]").forEach(el => el.onclick = async () => {
