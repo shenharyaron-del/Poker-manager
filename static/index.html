@@ -3365,7 +3365,12 @@ function renderHome(){
       </div>
       <h1 class="serif">הקבוצות שלי</h1>
       <div class="sub">בחרו קבוצה כדי לנהל שחקנים וערבי משחק</div>
-      <div style="color:var(--muted);font-size:12px;margin-top:6px;line-height:1.5;">קבוצה מאגדת את כל חברי הקבוצה שלכם - ותחתיה נפתחים ערבי המשחק (השולחנות) שלהם.</div>
+      <div style="color:var(--muted);font-size:12px;margin-top:6px;line-height:1.6;">
+        קבוצה מאגדת את כל חברי הקבוצה שלכם - ותחתיה נפתחים ערבי המשחק (השולחנות) שלהם. בהגדרות הקבוצה אפשר להגדיר:
+        <br>• <b>ז'יטונים</b> - ערכי הז'יטונים ויחס ההמרה (אופציונלי), כלי עזר לספירת הז'יטונים בסוף הערב.
+        <br>• <b>תשלומים</b> - פתיחה מהירה לקבוצת הפייבוקס לטובת הסדר התשלומים. אם אין, Poker Manager יציע העברות ישירות בין השחקנים.
+        <br>• <b>ריביי</b> - הגדרת סכומי הריביי וסכום הכניסה לשולחן.
+      </div>
     </div>
     <div class="px5" style="margin-bottom:80px;">${cards}</div>
   `;
@@ -4491,9 +4496,9 @@ function renderModal(m){
         <p style="color:var(--muted);font-size:12px;margin:0 0 14px;">ערכי הז'יטונים ויחס ההמרה (אופציונלי) - כלי עזר לספירת הז'יטונים בסוף הערב.</p>
         <div class="section-title" style="padding:0;margin:0 0 6px;">יחס ז'יטונים</div>
         <div class="field">
-          <label>1 שקל עבור <input type="number" inputmode="decimal" id="chip-ratio-input" value="${c.chipRatio ? esc(String(c.chipRatio)) : ''}" placeholder="לדוגמה: 4" style="width:70px;display:inline-block;text-align:center;"> ז'יטונים</label>
+          <label>1 שקל עבור <input type="number" inputmode="decimal" id="chip-ratio-input" value="${c.chipRatio ? esc(String(c.chipRatio)) : '1'}" style="width:70px;display:inline-block;text-align:center;"> ז'יטונים</label>
         </div>
-        <p style="color:var(--muted);font-size:12px;margin-top:-8px;">משמש לספירת ז'יטונים כוללת בסיום ערב (כמות ז'יטונים ולא לפי צבע) - למשל, יחס של 4 אומר ש-100 ז'יטונים שווים ל-₪25.</p>
+        <p style="color:var(--muted);font-size:12px;margin-top:-8px;">משמש לספירת ז'יטונים כוללת בסיום ערב - למשל, יחס של 4 אומר ש-100 ז'יטונים שווים ל-₪25.</p>
         ${editableList}
         <p style="color:var(--muted);font-size:13px;">כדי להוסיף ז'יטונים: צלמו תמונה עם כל הז'יטונים פרוסים בנפרד על משטח, ממבט על (מלמעלה) - נזהה אותם אוטומטית ונסמן מסגרת סביב כל אחד. אפשר לגרור, לשנות גודל, או להקיש על התמונה כדי להוסיף עוד ידנית. או, הוסיפו ז'יטון ידנית בלי תמונה בכלל.</p>
         ${pickButtons}
@@ -4793,7 +4798,7 @@ function renderModal(m){
     const settlementDefault = c.settlementDefault || "direct";
     body = `
       ${setupTabsHtml(m.communityId, "payments")}
-      <p style="color:var(--muted);font-size:12px;margin:0 0 14px;">פתיחה מהירה לקבוצת הפייבוקס לטובת הסדר התשלומים - אם אין, Poker Manager יציע העברות ישירות בין השחקנים.</p>
+      <p style="color:var(--muted);font-size:12px;margin:0 0 14px;">פתיחה מהירה לקבוצת הפייבוקס לטובת הסדר התשלומים.<br>אם אין, Poker Manager יציע העברות ישירות בין השחקנים.</p>
       <div class="section-title" style="padding:0;margin:0 0 8px;">קבוצת פייבוקס</div>
       ${link ? `
         <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:10px;margin-bottom:18px;">
