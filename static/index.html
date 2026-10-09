@@ -3454,10 +3454,10 @@ function renderCommunity(communityId){
       <button class="back-arrow" data-back-home>${icon('back')}</button>
       <h1 class="serif sm flex1">${esc(c.name)}</h1>
     </div>
-    <div class="row" style="justify-content:flex-end;padding-bottom:4px;">
-      <button class="btn btn-ghost btn-sm" data-show-roster style="display:flex;align-items:center;gap:6px;">${icon('users')} שחקנים (${c.roster.length})</button>
+    <div class="px5 row" style="justify-content:flex-end;align-items:center;gap:10px;margin-bottom:10px;">
+      <button class="btn btn-ghost btn-sm" data-show-roster style="display:flex;align-items:center;gap:6px;flex-shrink:0;">${icon('users')} שחקנים (${c.roster.length})</button>
+      <div style="color:var(--muted);font-size:11px;line-height:1.4;">דרך כפתור "שחקנים"<br>ניתן למנות אדמינים</div>
     </div>
-    <div style="color:var(--muted);font-size:11px;margin-bottom:10px;">דרך "שחקנים" אפשר למנות אדמינים.</div>
     ${(() => {
       const missingChips = !c.chipValues || !c.chipValues.length;
       const missingPaybox = !getActivePayboxEntry(c);
