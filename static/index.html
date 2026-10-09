@@ -3399,7 +3399,7 @@ function renderHome(){
       </div>
       <div class="chev">${icon('chev')}</div>
     </div>`;
-  cards = cards + newCommunityCard;
+  cards = newCommunityCard + cards;
   return `
     <button data-share-app style="position:fixed;left:16px;top:45px;z-index:20;display:flex;align-items:center;gap:7px;background:#25D366;color:#fff;border:none;border-radius:20px;padding:9px 14px 9px 12px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.45);">${icon('share')} שיתוף חברים</button>
     <div class="top">
@@ -5286,7 +5286,7 @@ function renderModal(m){
   // never by dismissing - someone who left owing money shouldn't be able to just back
   // out of saying who they paid.
   const dismissable = m.type !== "loginRequired" && !(m.type === "identityName" && m.forced) && m.type !== "directPay";
-  const topAnchored = m.type === "seatChips";
+  const topAnchored = m.type === "seatChips" || m.type === "loginRequired";
   const isSetupFlow = m.type === "chipSetup" || m.type === "payboxSettings" || m.type === "buyinSetup";
   return `
     <div class="overlay${topAnchored ? ' overlay-top' : ''}${isSetupFlow ? ' overlay-fullscreen' : ''}">
