@@ -743,6 +743,36 @@ function applyFreshState(fresh){
     state = fresh;
   }
 }
+// Relational mode's periodic refresh (loadStateV2/applyFreshState above) only ever pulls
+// communities/games from the v2 tables - globalPlayers/customAvatars/hiddenAvatarKeys/the
+// avatar-category overrides never got a v2 table (see applyFreshState's own comment), so a
+// change made purely via setGlobalPlayer+saveState() on one device (a new avatar photo, a
+// phone number, a custom-avatar-library edit) never reached any OTHER device already
+// running - only a full page reload re-read the legacy blob fresh (reported live as "X
+// uploaded a new avatar but I still see their old one"). Re-fetches just that handful of
+// fields on the same cadence as the regular refresh (called from doRefreshNow), hash-gated
+// the same cheap way loadState() already is - reuses lastStateHash since nothing else reads
+// or writes it in relational mode (mutateAndSave/its baseHash conflict check is legacy-path
+// only), so most ticks cost just the tiny /api/state/hash request.
+async function refreshLegacyOnlyFields(){
+  if (!USE_RELATIONAL_API) return; // loadState() already refreshes these every tick
+  try {
+    const hashRes = await fetch("/api/state/hash");
+    if (!hashRes.ok) return;
+    const { hash } = await hashRes.json();
+    if (hash === lastStateHash) return;
+    const res = await fetch("/api/state");
+    if (!res.ok) return;
+    const fresh = await res.json();
+    lastStateHash = hash;
+    state.globalPlayers = fresh.globalPlayers;
+    state.customAvatars = fresh.customAvatars;
+    state.hiddenAvatarKeys = fresh.hiddenAvatarKeys;
+    state.avatarCategoryLabelOverrides = fresh.avatarCategoryLabelOverrides;
+    state.avatarCategoryOrder = fresh.avatarCategoryOrder;
+    if (!modal && !playerScreenCustomOpen && !Object.keys(adminBuyinUi).length && !seatDragInProgress && !shouldShowGameWelcome()) render();
+  } catch(e) { /* best-effort - next tick retries */ }
+}
 
 // Temporary diagnostic overlay for tracking down a reported sync-flicker bug.
 // Turn on by opening the app with ?debug=1 in the URL. Shows a small scrolling
@@ -1444,6 +1474,7 @@ async function doRefreshNow(source){
         }
       }
     } while (refreshQueued);
+    refreshLegacyOnlyFields();
   } catch(e) { logSync(`refresh[${callId}] ERROR ${e}`); /* offline or a hiccup - next refresh will retry */ }
   finally { refreshInProgress = false; }
 }
@@ -2402,10 +2433,11 @@ async function autoJoinViaInvite(gameId){
   });
   render();
 }
-// Community-level invite (WhatsApp "?community=" link, see data-invite-community): joins
-// the visitor straight into the community's roster, same identity/linking rules and
-// same mutateAndSave race protection as autoJoinViaInvite, but without seating them at
-// any particular game/table.
+// Community-level invite (WhatsApp "?community=" link) - joins the visitor straight into
+// the community's roster, same identity/linking rules and same mutateAndSave race
+// protection as autoJoinViaInvite, but without seating them at any particular game/table.
+// The button that generated these links was removed (redundant with the per-game invite -
+// see data-invite-game) but old links already shared still work, so this join handler stays.
 async function autoJoinViaCommunityInvite(communityId){
   if (USE_RELATIONAL_API) {
     const c = getCommunity(communityId);
@@ -3364,9 +3396,10 @@ function renderHome(){
         ${isSuperAdmin() ? `<button class="icon-btn" data-open-admin-settings title="הגדרות">${icon('gear')}</button>` : ""}
       </div>
       <h1 class="serif">הקבוצות שלי</h1>
-      <div class="sub">בחרו קבוצה כדי לנהל שחקנים וערבי משחק</div>
+      <div class="sub">צרו קבוצה כדי לנהל שחקנים וערבי משחק</div>
       <div style="color:var(--muted);font-size:12px;margin-top:6px;line-height:1.6;">
-        קבוצה מאגדת את כל חברי הקבוצה שלכם - ותחתיה נפתחים ערבי המשחק (השולחנות) שלהם. בהגדרות הקבוצה אפשר להגדיר:
+        קבוצה מאגדת את כל חברי הקבוצה שלכם - ותחתיה נפתחים ערבי המשחק (השולחנות) שלהם.
+        <br>בהגדרות הקבוצה אפשר להגדיר:
         <br>• <b>ז'יטונים</b> - ערכי הז'יטונים ויחס ההמרה (אופציונלי), כלי עזר לספירת הז'יטונים בסוף הערב.
         <br>• <b>תשלומים</b> - פתיחה מהירה לקבוצת הפייבוקס לטובת הסדר התשלומים. אם אין, Poker Manager יציע העברות ישירות בין השחקנים.
         <br>• <b>ריביי</b> - הגדרת סכומי הריביי וסכום הכניסה לשולחן.
@@ -3408,10 +3441,10 @@ function renderCommunity(communityId){
       <button class="back-arrow" data-back-home>${icon('back')}</button>
       <h1 class="serif sm flex1">${esc(c.name)}</h1>
     </div>
-    <div class="row" style="justify-content:flex-end;padding-bottom:10px;">
-      ${c.createdByName && myIdentity.name && c.createdByName === myIdentity.name ? `<button class="icon-btn gold" data-invite-community="${c.id}" title="הזמנה דרך WhatsApp">${icon('share')}</button>` : ""}
+    <div class="row" style="justify-content:flex-end;padding-bottom:4px;">
       <button class="btn btn-ghost btn-sm" data-show-roster style="display:flex;align-items:center;gap:6px;">${icon('users')} שחקנים (${c.roster.length})</button>
     </div>
+    <div style="color:var(--muted);font-size:11px;margin-bottom:10px;">דרך "שחקנים" אפשר גם למנות אדמינים שינהלו שחקנים בשמכם.</div>
     ${(() => {
       const missingChips = !c.chipValues || !c.chipValues.length;
       const missingPaybox = !getActivePayboxEntry(c);
@@ -4585,6 +4618,7 @@ function renderModal(m){
       </div>`;
     }).join("");
     body = `
+      <p style="color:var(--muted);font-size:12px;margin:0 0 14px;">כפתור המגן ${icon('shield')} הופך שחקן לאדמין - אדמין יכול לנהל שחקנים אחרים בשמם (ריביי, הושבה, יציאה מהשולחן ועוד).</p>
       <div class="scroll-list" style="margin-bottom:16px;">${rows || '<div class="empty" style="padding:10px 0;">אין עדיין שחקנים ברשימה</div>'}</div>
     `;
   } else if (m.type === "confirmRestoreFromFile") {
@@ -5505,14 +5539,6 @@ function attachHandlers(){
     const text = `בואו תנסו את Poker Manager - אפליקציה לניהול ערבי פוקר, ז'יטונים ומאזנים בין חברים - ${url}`;
     window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank", "noopener");
   };
-  app.querySelectorAll("[data-invite-community]").forEach(el => el.onclick = (e) => {
-    e.stopPropagation();
-    const c = getCommunity(el.dataset.inviteCommunity);
-    if (!c) return;
-    const url = location.origin + location.pathname + "?community=" + encodeURIComponent(c.id);
-    const text = `הצטרפו אליי לקבוצת הפוקר ${c.name} - ${url}`;
-    window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank", "noopener");
-  });
   const backHome = app.querySelector("[data-back-home]"); if (backHome) backHome.onclick = () => go("home");
   // querySelectorAll, not querySelector - the table screen's carousel mounts every page
   // at once (player/table, plus admin for a table admin - see render()), each with its
