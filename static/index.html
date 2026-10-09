@@ -1418,8 +1418,8 @@ async function doRefreshNow(source){
         // next attempt once the refresh had already finished. The fetched state is still
         // applied either way - only the render is skipped - so the next render (the modal
         // closing, or the next refresh with neither open) already reflects it.
-        if (modal || playerScreenCustomOpen || Object.keys(adminBuyinUi).length || seatDragInProgress) {
-          logSync(`refresh[${callId}] applied but SKIPPED render - modal or custom-amount input opened mid-fetch`);
+        if (modal || playerScreenCustomOpen || Object.keys(adminBuyinUi).length || seatDragInProgress || shouldShowGameWelcome()) {
+          logSync(`refresh[${callId}] applied but SKIPPED render - modal, custom-amount input, or game-welcome screen open`);
         } else {
           const scrollY = window.scrollY;
           render();
@@ -1981,6 +1981,18 @@ function markGameWelcomed(gameId){
   if (!gameId || welcomedGameIds.has(gameId)) return;
   welcomedGameIds.add(gameId);
   try { localStorage.setItem("poker-welcomed-games", JSON.stringify(Array.from(welcomedGameIds))); } catch(e) { /* storage full/blocked - still works in-memory for this page load */ }
+}
+// Whether render() would currently show the blocking welcome overlay (see
+// renderGameWelcomeOverlay) for whatever game is on screen right now - used by
+// doRefreshNow to skip re-rendering while it's up, same as it already does for an open
+// modal, so the periodic/SSE auto-refresh doesn't replace the DOM (restarting its fade-in
+// animation, and mid-read) every few seconds while the player is reading it.
+function shouldShowGameWelcome(){
+  if (nav.screen !== "table") return false;
+  const g = getGame(nav.gameId);
+  if (!g || !isSeatedInGame(g)) return false;
+  const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+  return !!(myPlayerId && !hasWelcomedGame(g.id));
 }
 function showBuyinConfirmCard(buyinId, playerName, amount, isEntry){
   if (buyinId) rememberAnnouncedBuyin(buyinId);
@@ -3416,6 +3428,7 @@ function renderGameWelcomeOverlay(gameId, playerId){
         <h2 class="serif" style="color:var(--gold);margin:0 0 14px;font-size:21px;">שלום ${esc(name)}!</h2>
         <p style="color:var(--text);font-size:15px;line-height:1.7;margin:0 0 16px;">
           נכנסת למשחק חדש עם <b style="color:var(--gold);">₪${buyinTotal}</b> בזיטונים.<br>
+          כל ריביי (קנייה נוספת) במהלך הערב הוא באחריותך לדווח עליו באפליקציה.<br>
           כדי ש-Poker Manager ימשיך לעבוד כמו שצריך, ${careVerb} להישאר בתוך האפליקציה במהלך הערב ולשמור שהטלפון יהיה בהישג יד.
         </p>
         <p style="color:var(--muted);font-size:13px;margin:0 0 20px;">שיהיה לך ערב מוצלח!</p>
