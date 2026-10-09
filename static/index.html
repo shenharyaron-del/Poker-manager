@@ -3600,7 +3600,9 @@ function renderPlayerScreen(gameId){
           <div style="font-weight:700;color:#fda4af;">${t.amount} שח מעביר ל-${esc(t.toName)}</div>
           <div style="display:flex;gap:8px;margin-top:8px;">
             <button class="btn flex1" data-open-bit-generic style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} ביט</button>
-            ${activePayboxLink ? `<a href="${esc(activePayboxLink)}" class="btn flex1" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</a>` : ""}
+            ${activePayboxLink
+              ? `<a href="${esc(activePayboxLink)}" class="btn flex1" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</a>`
+              : `<button class="btn flex1" data-open-paybox-settings="${c.id}" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> הגדר פייבוקס</button>`}
           </div>
         </div>
       ` : `<div style="margin-top:10px;font-weight:700;color:#6ee7b7;">מקבל מ-${esc(t.fromName)} ${t.amount} שח</div>`).join("");
@@ -4856,7 +4858,9 @@ function renderModal(m){
       ${isForSelf ? `
       <div style="display:flex;gap:8px;margin-bottom:14px;">
         <button class="btn flex1" data-open-bit-generic style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} ביט</button>
-        ${activePayboxLink ? `<a href="${esc(activePayboxLink)}" class="btn flex1" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</a>` : ""}
+        ${activePayboxLink
+          ? `<a href="${esc(activePayboxLink)}" class="btn flex1" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</a>`
+          : `<button class="btn flex1" data-open-paybox-settings="${c.id}" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> הגדר פייבוקס</button>`}
       </div>` : ""}
       <button class="btn btn-primary btn-block" data-confirm-direct-pay>${isForSelf ? "העברתי כסף - סיים ערב" : `סיים ערב ל${esc(fromP ? fromP.name : "")}`}</button>
       <button class="btn btn-ghost btn-block" style="margin-top:8px;" data-end-night-from-direct-pay="${m.gameId}">הערב הסתיים לכולם, למי להעביר את הכסף?</button>
