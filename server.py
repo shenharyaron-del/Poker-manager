@@ -158,21 +158,41 @@ _INIT_STATEMENTS = (
 )
 
 
+# Arbitrary constant, just needs to be unique within this DB - identifies the advisory
+# lock _ensure_schema takes below (see its own comment).
+_SCHEMA_INIT_LOCK_ID = 727310981
+
+
 def _ensure_schema(conn):
     with conn.cursor() as cur:
-        # CREATE TABLE IF NOT EXISTS isn't fully race-safe in Postgres - two connections
-        # can both see "doesn't exist yet" and both try to create it (only happens once,
-        # the first time a table is ever needed, under concurrent requests), and the
-        # loser gets a duplicate-key error on the system catalog instead of silently
-        # doing nothing. That's harmless (the table exists either way) but would
-        # otherwise surface as a real 500 to whoever's request lost the race.
-        for statement in _INIT_STATEMENTS:
-            try:
-                cur.execute(statement)
-            except psycopg2.errors.DuplicateTable:
-                conn.rollback()
-            except psycopg2.errors.UniqueViolation:
-                conn.rollback()
+        # Session-level advisory lock serializes this whole function across concurrent
+        # connections - without it, two processes racing to run this same multi-statement
+        # DDL sequence at once (e.g. the old and new instance briefly overlapping during a
+        # Render deploy, since _get_pool() runs this eagerly at startup - see its own
+        # comment) can deadlock against each other, not just the simpler "both try to
+        # CREATE the same table" race the except clauses below already handled - that
+        # deadlock crashed the whole deploy (DeadlockDetected, reported live). Held only
+        # for the duration of this function; a connection that loses the race just blocks
+        # here until the winner finishes and unlocks, then finds everything already
+        # created and no-ops through the loop below.
+        cur.execute("SELECT pg_advisory_lock(%s)", (_SCHEMA_INIT_LOCK_ID,))
+        try:
+            # CREATE TABLE IF NOT EXISTS isn't fully race-safe in Postgres on its own - two
+            # connections can both see "doesn't exist yet" and both try to create it, and
+            # the loser gets a duplicate-key error on the system catalog instead of
+            # silently doing nothing. That's harmless (the table exists either way) but
+            # would otherwise surface as a real 500 to whoever's request lost the race -
+            # kept as a second layer of defense even with the advisory lock above, in case
+            # some other connection ever touches these tables outside this function.
+            for statement in _INIT_STATEMENTS:
+                try:
+                    cur.execute(statement)
+                except psycopg2.errors.DuplicateTable:
+                    conn.rollback()
+                except psycopg2.errors.UniqueViolation:
+                    conn.rollback()
+        finally:
+            cur.execute("SELECT pg_advisory_unlock(%s)", (_SCHEMA_INIT_LOCK_ID,))
     conn.commit()
 
 
