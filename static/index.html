@@ -4816,25 +4816,41 @@ function renderModal(m){
     // Opened automatically (see attachHandlers/autoOpenedDirectPay) the moment a player
     // cashes out at a loss mid-game, in a direct-settlement community - the full group
     // netting (settleTransactions) can't run yet since not everyone's done, so this lets
-    // them record who they actually handed cash to right now instead of waiting.
+    // them record who they actually handed cash to right now instead of waiting. Also
+    // opens this way when an admin cashes someone else out from the admin screen (see
+    // maybeOpenDirectPayAfterCashout) - isForSelf below tells the two cases apart, since
+    // only the player's own device should be offered a payment app to open (an admin
+    // acting on someone else's behalf isn't the one paying).
     const g = getGame(m.gameId);
+    const c = getCommunity(g.communityId);
     const fromP = g.players.find(pl => pl.id === m.fromPlayerId);
     const otherPlayers = g.players.filter(p => p.id !== m.fromPlayerId);
+    const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+    const isForSelf = myPlayerId === m.fromPlayerId;
+    // Falls back to the first candidate so there's always a valid selection even before
+    // the viewer taps a row, same as a native <select> always having SOME option active -
+    // data-confirm-direct-pay's handler reads the exact same fallback.
+    const selectedToPlayerId = m.toPlayerId || (otherPlayers[0] && otherPlayers[0].id);
     title = `${esc(fromP ? fromP.name : "")} מעביר כסף`;
+    const activePayboxLink = getActivePayboxLink(c);
     body = `
-      <p style="color:var(--muted);font-size:12px;margin-top:0;">בחרו למי העברתם את הכסף ביד, או פתחו ביט/פייבוקס.</p>
+      <p style="color:var(--muted);font-size:12px;margin-top:0;">בחרו למי העברתם את הכסף ביד${isForSelf ? ', או פתחו ביט/פייבוקס' : ''}.</p>
       <div class="field"><label>למי?</label>
-        <select id="direct-pay-to" class="select-input">
-          ${otherPlayers.map(p=>`<option value="${p.id}" ${m.toPlayerId===p.id?"selected":""}>${esc(p.name)}</option>`).join("")}
-        </select>
+        <div class="scroll-list" style="max-height:200px;">
+          ${otherPlayers.map(p => `<div class="checkbox-row" data-select-direct-pay-to="${p.id}" style="cursor:pointer;">
+            <input type="radio" name="direct-pay-to" ${selectedToPlayerId===p.id?"checked":""} style="pointer-events:none;">
+            <span class="flex1">${esc(p.name)}</span>
+          </div>`).join("")}
+        </div>
       </div>
       <div class="field"><label>סכום בשקלים</label><input type="number" inputmode="decimal" id="direct-pay-amount" value="${m.amount||''}" placeholder="0" autofocus></div>
+      ${isForSelf ? `
       <div style="display:flex;gap:8px;margin-bottom:14px;">
         <button class="btn flex1" data-open-bit-generic style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} ביט</button>
-        ${getActivePayboxLink(getCommunity(g.communityId)) ? `<a href="${esc(getActivePayboxLink(getCommunity(g.communityId)))}" class="btn flex1" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</a>` : ""}
-      </div>
-      <button class="btn btn-primary btn-block" data-confirm-direct-pay>שמור</button>
-      <button class="btn btn-ghost btn-block" style="margin-top:8px;" data-end-night-from-direct-pay="${m.gameId}">הערב נגמר</button>
+        ${activePayboxLink ? `<a href="${esc(activePayboxLink)}" class="btn flex1" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</a>` : ""}
+      </div>` : ""}
+      <button class="btn btn-primary btn-block" data-confirm-direct-pay>${isForSelf ? "העברתי כסף - סיים ערב" : `סיים ערב ל${esc(fromP ? fromP.name : "")}`}</button>
+      <button class="btn btn-ghost btn-block" style="margin-top:8px;" data-end-night-from-direct-pay="${m.gameId}">הערב הסתיים לכולם, למי להעביר את הכסף?</button>
     `;
   } else if (m.type === "payboxSettings") {
     const c = getCommunity(m.communityId);
@@ -5022,7 +5038,7 @@ function renderModal(m){
       // own top margin (not just align-items:center on the row) so they line up with the
       // INPUT boxes specifically, not the vertical center of label+input together - without
       // it they read as centered against the label too and sit visibly too high.
-      modeBody = ratio ? `
+      modeBody = (ratio && ratio !== 1) ? `
         <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">הקלידו כמה ז'יטונים נשאר לכם ביציאה, או ישר את הסכום בשקלים - השדה השני יתמלא אוטומטית (1 ש"ח שווה ${ratio} ז'יטונים).</p>
         <div style="display:flex;align-items:flex-start;gap:8px;justify-content:center;margin-bottom:6px;">
           <div class="field" style="margin:0;width:110px;text-align:center;">
@@ -5041,6 +5057,7 @@ function renderModal(m){
           </div>
         </div>
       ` : `
+        ${ratio === 1 ? `<p style="color:var(--muted);font-size:12px;margin:0 0 10px;">הקלידו כמה ז'יטונים נשאר לכם ביציאה.</p>` : ""}
         <div class="field" style="text-align:center;">
           <label style="text-align:center;">סכום ז'יטונים בש"ח</label>
           <div style="display:flex;align-items:center;justify-content:center;gap:4px;border-radius:12px;background:var(--input);border:1px solid var(--input-b);padding:0 10px;max-width:120px;margin:0 auto;">
@@ -7243,10 +7260,15 @@ function attachHandlers(){
   }
 
   if (modal && modal.type === "directPay") {
+    const g = getGame(modal.gameId);
+    const otherPlayers = g.players.filter(p => p.id !== modal.fromPlayerId);
+    app.querySelectorAll("[data-select-direct-pay-to]").forEach(el => el.onclick = () => {
+      updateModal({toPlayerId: el.dataset.selectDirectPayTo});
+    });
     const confirmDirectPay = app.querySelector("[data-confirm-direct-pay]");
     if (confirmDirectPay) confirmDirectPay.onclick = async () => {
       const amt = parseFloat(document.getElementById("direct-pay-amount").value);
-      const toPlayerId = document.getElementById("direct-pay-to").value;
+      const toPlayerId = modal.toPlayerId || (otherPlayers[0] && otherPlayers[0].id);
       if (!amt || amt <= 0 || !toPlayerId) return;
       confirmDirectPay.disabled = true;
       showButtonLoading(confirmDirectPay);
