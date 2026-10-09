@@ -3,3 +3,7 @@ data/*.db
 __pycache__/
 *.pyc
 .venv/
+nir_globalplayer.json
+nir_search.json
+state_check.json
+*.debug.json
