@@ -4488,6 +4488,7 @@ function renderModal(m){
     if (!m.imageSrc) {
       body = `
         ${setupTabsHtml(m.communityId, "chips")}
+        <p style="color:var(--muted);font-size:12px;margin:0 0 14px;">ערכי הז'יטונים ויחס ההמרה (אופציונלי) - כלי עזר לספירת הז'יטונים בסוף הערב.</p>
         <div class="section-title" style="padding:0;margin:0 0 6px;">יחס ז'יטונים</div>
         <div class="field">
           <label>1 שקל עבור <input type="number" inputmode="decimal" id="chip-ratio-input" value="${c.chipRatio ? esc(String(c.chipRatio)) : ''}" placeholder="לדוגמה: 4" style="width:70px;display:inline-block;text-align:center;"> ז'יטונים</label>
@@ -4513,6 +4514,7 @@ function renderModal(m){
       }).join("") : "";
       body = `
         ${setupTabsHtml(m.communityId, "chips")}
+        <p style="color:var(--muted);font-size:12px;margin:0 0 14px;">ערכי הז'יטונים ויחס ההמרה (אופציונלי) - כלי עזר לספירת הז'יטונים בסוף הערב.</p>
         <div style="width:100%;margin-bottom:10px;position:relative;">
           <img src="${m.imageSrc}" data-chip-photo draggable="false" oncontextmenu="return false" style="width:100%;border-radius:12px;display:block;cursor:crosshair;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;${m.analyzingChips?'opacity:.5;':''}">
           ${markers}
@@ -4791,6 +4793,7 @@ function renderModal(m){
     const settlementDefault = c.settlementDefault || "direct";
     body = `
       ${setupTabsHtml(m.communityId, "payments")}
+      <p style="color:var(--muted);font-size:12px;margin:0 0 14px;">פתיחה מהירה לקבוצת הפייבוקס לטובת הסדר התשלומים - אם אין, Poker Manager יציע העברות ישירות בין השחקנים.</p>
       <div class="section-title" style="padding:0;margin:0 0 8px;">קבוצת פייבוקס</div>
       ${link ? `
         <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:10px;margin-bottom:18px;">
@@ -4820,6 +4823,7 @@ function renderModal(m){
     title = "הגדרת פרופיל קבוצה";
     body = `
       ${setupTabsHtml(m.communityId, "buyins")}
+      <p style="color:var(--muted);font-size:12px;margin:0 0 14px;">הגדרת סכומי הריביי וסכום הכניסה לשולחן.</p>
       <div class="section-title" style="padding:0;margin:0 0 6px;">ריביי</div>
       <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">3 הסכומים שיוצגו בכל כפתורי הריביי באפליקציה - כל אחד חייב להיות גדול מהקודם לו.</p>
       <div style="display:flex;gap:8px;margin-bottom:6px;">
