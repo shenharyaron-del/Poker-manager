@@ -3265,8 +3265,17 @@ function render(){
   // to the top - reported live as "now it jumps to the top every few seconds instead".
   const prevHistoryScrollTop = (() => { const el = app.querySelector("[data-player-history]"); return el ? el.scrollTop : null; })();
   const prevFeedScrollTop = (() => { const el = app.querySelector("[data-player-feed]"); return el ? el.scrollTop : null; })();
+  // Same reasoning as the history/feed frames above, for the admin screen's own scrollable
+  // body - nothing here has "scroll to the newest item" chat semantics, so it's a plain
+  // restore with no latest-key tracking needed (reported live as "scrolling the admin
+  // screen jumps back to the top every few seconds").
+  const prevAdminScrollTop = (() => { const el = app.querySelector("[data-admin-scroll]"); return el ? el.scrollTop : null; })();
   app.innerHTML = html;
   attachHandlers();
+  if (prevAdminScrollTop !== null) {
+    const adminEl = app.querySelector("[data-admin-scroll]");
+    if (adminEl) adminEl.scrollTop = prevAdminScrollTop;
+  }
   // Runs whenever .poker-table-wrap exists at all now, not just when it's the visible
   // face - with both panes always mounted while seated, the circles view's own DOM (and
   // its sizing) exists even while the player screen is the one on screen.
@@ -3955,7 +3964,7 @@ function renderAdminScreen(gameId){
       </div>
       <button class="icon-btn gold" data-invite-game="${g.id}" title="הזמנת שחקן" style="flex-shrink:0;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;white-space:nowrap;padding:5px 7px;">${icon('share')}הזמנת שחקן</button>
     </div>
-    <div style="flex:1;min-height:0;overflow-y:auto;padding:0 20px 20px;touch-action:pan-y;">
+    <div data-admin-scroll style="flex:1;min-height:0;overflow-y:auto;padding:0 20px 20px;touch-action:pan-y;">
       ${c.settlementDefault === 'paybox' ? "" : `
       <div class="checkbox-row" style="cursor:pointer;margin-bottom:16px;" data-toggle-end-night="${g.id}">
         <input type="checkbox" ${g.closed?'checked':''} onclick="return false;">
