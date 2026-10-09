@@ -5286,7 +5286,7 @@ function renderModal(m){
   // never by dismissing - someone who left owing money shouldn't be able to just back
   // out of saying who they paid.
   const dismissable = m.type !== "loginRequired" && !(m.type === "identityName" && m.forced) && m.type !== "directPay";
-  const topAnchored = m.type === "seatChips" || m.type === "loginRequired";
+  const topAnchored = m.type === "seatChips" || m.type === "loginRequired" || m.type === "newCommunity";
   const isSetupFlow = m.type === "chipSetup" || m.type === "payboxSettings" || m.type === "buyinSetup";
   return `
     <div class="overlay${topAnchored ? ' overlay-top' : ''}${isSetupFlow ? ' overlay-fullscreen' : ''}">
