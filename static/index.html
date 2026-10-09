@@ -3600,9 +3600,7 @@ function renderPlayerScreen(gameId){
           <div style="font-weight:700;color:#fda4af;">${t.amount} שח מעביר ל-${esc(t.toName)}</div>
           <div style="display:flex;gap:8px;margin-top:8px;">
             <button class="btn flex1" data-open-bit-generic style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} ביט</button>
-            ${activePayboxLink
-              ? `<a href="${esc(activePayboxLink)}" class="btn flex1" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</a>`
-              : `<button class="btn flex1" data-open-paybox-settings="${c.id}" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> הגדר פייבוקס</button>`}
+            <a href="https://links.payboxapp.com" class="btn flex1" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</a>
           </div>
         </div>
       ` : `<div style="margin-top:10px;font-weight:700;color:#6ee7b7;">מקבל מ-${esc(t.fromName)} ${t.amount} שח</div>`).join("");
@@ -4833,7 +4831,6 @@ function renderModal(m){
     // only the player's own device should be offered a payment app to open (an admin
     // acting on someone else's behalf isn't the one paying).
     const g = getGame(m.gameId);
-    const c = getCommunity(g.communityId);
     const fromP = g.players.find(pl => pl.id === m.fromPlayerId);
     const otherPlayers = g.players.filter(p => p.id !== m.fromPlayerId);
     const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
@@ -4843,7 +4840,6 @@ function renderModal(m){
     // data-confirm-direct-pay's handler reads the exact same fallback.
     const selectedToPlayerId = m.toPlayerId || (otherPlayers[0] && otherPlayers[0].id);
     title = `${esc(fromP ? fromP.name : "")} מעביר כסף`;
-    const activePayboxLink = getActivePayboxLink(c);
     body = `
       <p style="color:var(--muted);font-size:12px;margin-top:0;">בחרו למי העברתם את הכסף ביד${isForSelf ? ', או פתחו ביט/פייבוקס' : ''}.</p>
       <div class="field"><label>למי?</label>
@@ -4858,9 +4854,7 @@ function renderModal(m){
       ${isForSelf ? `
       <div style="display:flex;gap:8px;margin-bottom:14px;">
         <button class="btn flex1" data-open-bit-generic style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} ביט</button>
-        ${activePayboxLink
-          ? `<a href="${esc(activePayboxLink)}" class="btn flex1" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</a>`
-          : `<button class="btn flex1" data-open-paybox-settings="${c.id}" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> הגדר פייבוקס</button>`}
+        <a href="https://links.payboxapp.com" class="btn flex1" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</a>
       </div>` : ""}
       <button class="btn btn-primary btn-block" data-confirm-direct-pay>${isForSelf ? "העברתי כסף - סיים ערב" : `סיים ערב ל${esc(fromP ? fromP.name : "")}`}</button>
       <button class="btn btn-ghost btn-block" style="margin-top:8px;" data-end-night-from-direct-pay="${m.gameId}">הערב הסתיים לכולם, למי להעביר את הכסף?</button>
