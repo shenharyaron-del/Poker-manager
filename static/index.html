@@ -191,9 +191,9 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
 .player-history-feed{display:flex;flex-direction:column;flex:1;min-height:0;margin-bottom:14px;}
 .player-history-feed-tabs{display:flex;flex-shrink:0;}
 .player-history-feed-tab{flex:1;padding:10px 4px;text-align:center;font-size:12px;font-weight:700;letter-spacing:.04em;background:none;border:none;color:rgba(255,255,255,.45);cursor:pointer;font-family:inherit;}
-.player-history-feed-tab.active{border-radius:10px 10px 0 0;color:var(--gold);}
-.player-history-feed.mode-history .player-history-feed-tab.active{background:rgba(10,25,55,.85);}
-.player-history-feed.mode-feed .player-history-feed-tab.active{background:rgba(20,20,24,.85);}
+.player-history-feed-tab.active{border-radius:10px 10px 0 0;color:var(--gold);background-repeat:repeat;background-size:auto,220px;}
+.player-history-feed.mode-history .player-history-feed-tab.active{background-image:linear-gradient(rgba(10,25,55,.85),rgba(10,25,55,.85)),url('/static/chat-bg.png');}
+.player-history-feed.mode-feed .player-history-feed-tab.active{background-image:linear-gradient(rgba(20,20,24,.85),rgba(20,20,24,.85)),url('/static/chat-bg.png');}
 .player-history-feed-body{flex:1;min-height:0;overflow-y:auto;padding:10px;touch-action:pan-y;border-radius:0 0 12px 12px;background-repeat:repeat;background-size:auto,220px;}
 .player-history-feed-body.mode-history{background-image:linear-gradient(rgba(10,25,55,.85),rgba(10,25,55,.85)),url('/static/chat-bg.png');}
 .player-history-feed-body.mode-feed{background-image:linear-gradient(rgba(20,20,24,.85),rgba(20,20,24,.85)),url('/static/chat-bg.png');}
