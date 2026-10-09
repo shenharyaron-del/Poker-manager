@@ -181,6 +181,18 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
    border box rather than a dark fill, so the gold buttons inside stay the brightest thing
    in it instead of competing with a tinted background. */
 .buyin-frame{border:1px solid var(--card-b);border-radius:12px;padding:10px;}
+/* History/table-activity used to be two always-visible stacked panels (a short fixed-height
+   one plus a flex:1 one); now they share one tab-switched panel instead, so whichever is
+   selected gets ALL the space both used to split between them. The tab row shares the
+   panel's own background (navy for history, charcoal for feed) so the two read as one
+   solid block instead of a separate header sitting on top of it. */
+.player-history-feed{border-radius:12px;overflow:hidden;display:flex;flex-direction:column;flex:1;min-height:0;margin-bottom:14px;background-repeat:repeat;background-size:auto,220px;}
+.player-history-feed.mode-history{background-image:linear-gradient(rgba(10,25,55,.85),rgba(10,25,55,.85)),url('/static/chat-bg.png');}
+.player-history-feed.mode-feed{background-image:linear-gradient(rgba(20,20,24,.85),rgba(20,20,24,.85)),url('/static/chat-bg.png');}
+.player-history-feed-tabs{display:flex;flex-shrink:0;}
+.player-history-feed-tab{flex:1;padding:10px 4px;text-align:center;font-size:12px;font-weight:700;letter-spacing:.04em;background:none;border:none;border-bottom:2px solid transparent;color:rgba(255,255,255,.45);cursor:pointer;font-family:inherit;}
+.player-history-feed-tab.active{color:var(--gold);border-bottom-color:var(--gold);}
+.player-history-feed-body{flex:1;min-height:0;overflow-y:auto;padding:10px;touch-action:pan-y;}
 /* Time sits tucked in the bubble's own bottom-left corner instead of a separate full-width
    row underneath - floating it lets the message text wrap around it exactly like a real
    chat bubble, landing beside the last line when there's room and below it otherwise. */
@@ -1692,6 +1704,9 @@ let openHistorySeatPlayerId = null;
 let tableSubView = "player";
 // Inline "custom amount" toggle for the player screen's one-tap buy-in row.
 let playerScreenCustomOpen = false;
+// Which of the player screen's two tabs (own purchase history vs the table's whole
+// activity feed) is currently showing in the shared panel - see .player-history-feed.
+let playerHistoryTab = "history";
 // Admin screen's own inline ריביי row per active-player card (replaces the old "buyin"
 // modal) - not persisted/per-device like getAdminCollapsed, just ephemeral UI state reset
 // on nav like playerScreenCustomOpen above. Keyed by playerId: "presets" shows the amount
@@ -3650,11 +3665,11 @@ function renderPlayerScreen(gameId){
       <button class="chip-btn" data-player-buyin-other ${buyinPending?'disabled':''} style="flex:1;padding:14px 2px;font-size:18px;">אחר</button>
     </div>
   `;
-  // Order (top to bottom): name/total, ריביי buttons, purchase history (fixed size, ~3
-  // rows), table activity feed (flex:1 - the one section whose size actually adapts, so
-  // the leave button after it always stays on screen instead of getting pushed off by a
-  // long feed), leave button. Nothing on this screen scrolls as a page (see
-  // .player-screen-scroll) - only the two .chat-frame panes scroll internally.
+  // Order (top to bottom): name/total, ריביי buttons, the shared history/feed panel
+  // (.player-history-feed, flex:1 - the one section whose size actually adapts, toggled
+  // between the two tabs via playerHistoryTab so the leave-table box after it always stays
+  // on screen), leave-table box. Nothing on this screen scrolls as a page (see
+  // .player-screen-scroll) - only the active .player-history-feed-body pane scrolls internally.
   return `
     <div class="top row" style="padding-top:14px;padding-bottom:16px;flex-shrink:0;">
       <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
@@ -3680,15 +3695,21 @@ function renderPlayerScreen(gameId){
       ${cashedOut ? "" : `<div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">ריביי</div>`}
       ${cashedOut ? "" : buyinButtonsHtml}
       ${cashedOut ? "" : `
-      <div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">היסטוריית הקניות שלי</div>
-      <div class="chat-frame" data-player-history data-latest-buyin="${latestHistoryKey}" style="height:110px;margin-bottom:14px;flex-shrink:0;">${historyRows}</div>
-      <div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">פעילות בשולחן</div>
-      <div class="chat-frame" data-player-feed data-latest-event="${latestFeedEventKey}" style="flex:1;height:auto;min-height:54px;margin-bottom:14px;">${feedRows}</div>
+      <div class="player-history-feed mode-${playerHistoryTab}">
+        <div class="player-history-feed-tabs">
+          <button class="player-history-feed-tab${playerHistoryTab==='history'?' active':''}" data-player-tab="history">היסטוריית הקניות שלי</button>
+          <button class="player-history-feed-tab${playerHistoryTab==='feed'?' active':''}" data-player-tab="feed">פעילות בשולחן</button>
+        </div>
+        ${playerHistoryTab === 'history'
+          ? `<div class="player-history-feed-body" data-player-history data-latest-buyin="${latestHistoryKey}">${historyRows}</div>`
+          : `<div class="player-history-feed-body" data-player-feed data-latest-event="${latestFeedEventKey}">${feedRows}</div>`}
+      </div>
       `}
       ${cashedOut ? "" : `
-      <div style="display:flex;gap:6px;flex-shrink:0;">
-        <button class="btn flex1" style="background:#B8862B;color:#1a1a1a;display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 4px;font-size:13px;white-space:nowrap;" data-player-leave-table>${icon('out')}יציאה עם ז'יטונים</button>
-        <button class="btn flex1" style="background:#B23A3A;color:#fff;display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 4px;font-size:13px;white-space:nowrap;" data-player-leave-no-chips>${icon('out')}יציאה ללא ז'יטונים</button>
+      <div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">סיום ערב (יציאה מהשולחן)</div>
+      <div class="buyin-frame" style="display:flex;gap:6px;flex-shrink:0;">
+        <button class="btn flex1" style="background:#B8862B;color:#1a1a1a;display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 4px;font-size:13px;white-space:nowrap;" data-player-leave-table>${icon('out')}ספירת ז'יטונים</button>
+        <button class="btn flex1" style="background:#B23A3A;color:#fff;display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 4px;font-size:13px;white-space:nowrap;" data-player-leave-no-chips>${icon('out')}נשארתי בלי ז'יטונים 😞</button>
       </div>`}
     </div>
   `;
@@ -5523,6 +5544,7 @@ function attachHandlers(){
     playerScreenCustomOpen = false;
     await performBuyin(gameId, pid, amt, {fromEl});
   };
+  app.querySelectorAll("[data-player-tab]").forEach(el => el.onclick = () => { playerHistoryTab = el.dataset.playerTab; render(); });
   app.querySelectorAll("[data-player-instant-buyin]").forEach(el => el.onclick = () => doPlayerBuyin(parseFloat(el.dataset.playerInstantBuyin), el));
   const playerBuyinOtherBtn = app.querySelector("[data-player-buyin-other]");
   if (playerBuyinOtherBtn) playerBuyinOtherBtn.onclick = () => { playerScreenCustomOpen = true; render(); };
