@@ -5325,9 +5325,14 @@ function renderModal(m){
         <div class="scroll-list" style="margin-bottom:14px;">
           ${chipValues.map((cv) => `
             <div class="roster-row">
-              <div class="row" style="gap:10px;">
-                ${cv.image ? `<img src="${cv.image}" style="width:28px;height:28px;object-fit:cover;border-radius:6px;border:1px solid rgba(255,255,255,.3);flex-shrink:0;">` : ""}
-                <input type="number" inputmode="numeric" data-color-count="${cv.id}" data-color-value="${cv.value}" placeholder="0" style="width:56px;height:34px;font-size:15px;text-align:center;">
+              <div class="row" style="gap:4px;">
+                ${cv.image ? `<img src="${cv.image}" style="width:28px;height:28px;object-fit:cover;border-radius:6px;border:1px solid rgba(255,255,255,.3);flex-shrink:0;margin-left:6px;">` : ""}
+                <span style="direction:ltr;display:inline-flex;align-items:center;gap:4px;">
+                  <span style="color:var(--muted);">(</span>
+                  <input type="number" data-color-correction="${cv.id}" placeholder="±0" title="תיקון ידני (חיובי או שלילי) מעל/מתחת למה שנספר בתמונה" style="width:52px;height:34px;font-size:13px;text-align:center;">
+                  <span data-color-count="${cv.id}" data-color-value="${cv.value}" style="min-width:20px;text-align:center;font-weight:700;">+0</span>
+                  <span style="color:var(--muted);">)</span>
+                </span>
                 <span>ז'יטונים × ₪${cv.value}</span>
               </div>
               <span class="badge badge-ok" style="display:flex;flex-direction:column;align-items:center;line-height:1.25;flex-shrink:0;">
@@ -7985,7 +7990,14 @@ function attachHandlers(){
     // left is about to silently vanish, so warn first rather than losing it with no
     // chance to notice (e.g. a half-typed per-color count).
     const hasEnteredData = () => {
-      if (mode === "byColor") return Array.from(app.querySelectorAll("[data-color-count]")).some(el => el.value.trim() !== "");
+      // data-color-count is a plain text span now (the photo-detected count), not an
+      // input - it holds real data worth warning about the moment it's non-zero, same as
+      // a typed correction value does.
+      if (mode === "byColor") {
+        const correctionHasValue = Array.from(app.querySelectorAll("[data-color-correction]")).some(el => el.value.trim() !== "");
+        const countHasValue = Array.from(app.querySelectorAll("[data-color-count]")).some(el => (parseFloat(el.textContent)||0) !== 0);
+        return correctionHasValue || countHasValue;
+      }
       if (mode === "profit") return (document.getElementById("seat-chips-profit")||{}).value?.trim() !== "";
       const qtyEl = document.getElementById("total-chip-qty");
       if (qtyEl && qtyEl.value.trim() !== "") return true;
@@ -8028,9 +8040,19 @@ function attachHandlers(){
       if (mode === "byColor") {
         let total = 0;
         app.querySelectorAll("[data-color-count]").forEach(el => {
-          const cnt = parseFloat(el.value);
+          // Plain text now, not an editable input (the photo-detected count is meant to
+          // stay a compact read-only record of what was actually seen - corrections go
+          // in the separate field next to it instead) - read textContent, not .value.
+          const cnt = parseFloat(el.textContent);
           const val = parseFloat(el.dataset.colorValue);
-          const sub = (!isNaN(cnt) && !isNaN(val)) ? cnt * val : 0;
+          // The manual "(correction  count)" field pair - correction is a +/- adjustment
+          // on top of whatever count is showing (typically the AI photo-count, left
+          // untouched as a visible record of what was actually detected) rather than the
+          // user having to overwrite that number directly to fix it.
+          const correctionEl = app.querySelector(`[data-color-correction="${el.dataset.colorCount}"]`);
+          const correction = correctionEl ? (parseFloat(correctionEl.value) || 0) : 0;
+          const effectiveCount = (isNaN(cnt) ? 0 : cnt) + correction;
+          const sub = isNaN(val) ? 0 : effectiveCount * val;
           total += sub;
           const rowValueEl = app.querySelector(`[data-color-count-value="${el.dataset.colorCount}"]`);
           if (rowValueEl) rowValueEl.textContent = `= ₪${Math.round(sub*100)/100}`;
@@ -8096,8 +8118,8 @@ function attachHandlers(){
           totalsByValueId[st.chipValueId] = (totalsByValueId[st.chipValueId]||0) + st.count;
         }));
         chipValues.forEach(cv => {
-          const input = app.querySelector(`[data-color-count="${cv.id}"]`);
-          if (input) input.value = totalsByValueId[cv.id] || "";
+          const span = app.querySelector(`[data-color-count="${cv.id}"]`);
+          if (span) span.textContent = "+" + (totalsByValueId[cv.id] || 0);
         });
         refreshHeader();
       };
@@ -8163,8 +8185,8 @@ function attachHandlers(){
       if (retakeChipCountBtn) retakeChipCountBtn.onclick = () => {
         updateModal({chipPhotos: []});
         chipValues.forEach(cv => {
-          const input = app.querySelector(`[data-color-count="${cv.id}"]`);
-          if (input) input.value = "";
+          const span = app.querySelector(`[data-color-count="${cv.id}"]`);
+          if (span) span.textContent = "+0";
         });
         refreshHeader();
       };
