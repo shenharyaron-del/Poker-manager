@@ -539,6 +539,14 @@ def v2_list_games(community_id):
 
 @app.route("/api/v2/games/<game_id>", methods=["GET"])
 def v2_get_game(game_id):
+    # 7 separate queries (one per child table) - loadStateV2() client-side calls this for
+    # EVERY game on EVERY refresh tick by default, which doesn't scale (reported live as
+    # general sluggishness + the connection pool contention already found for avatar
+    # uploads). The fix is client-side: skip re-fetching a game whose updatedAt (already
+    # returned cheaply by v2_list_games, no joins) hasn't moved since the last fetch. That
+    # only works if EVERY write below that changes what this endpoint returns also bumps
+    # games.updated_at - each one does, even ones (buyins, cashouts, payments, events)
+    # that don't otherwise touch the games row at all, specifically to uphold that.
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -616,6 +624,77 @@ def v2_get_game(game_id):
     })
 
 
+@app.route("/api/v2/games/<game_id>/summary", methods=["GET"])
+def v2_get_game_summary(game_id):
+    # Cheap counterpart to v2_get_game above, for a closed-and-settled game (see the
+    # client's shouldShowGameResults) - a results screen only ever needs each player's
+    # TOTAL buy-in (not every individual buy-in row with its own timestamp - the detailed
+    # history view is already hidden once cashed out anyway), the cashouts themselves, and
+    # the payment records that back the "mark as paid" checkboxes. Skips the buyins table's
+    # per-row detail (aggregated server-side instead) and game_events entirely - the two
+    # most unbounded parts of v2_get_game's payload, the ones that would otherwise keep
+    # growing with every rebuy a community has ever logged.
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, community_id, name, date, created_by_name, closed, updated_at "
+                "FROM games WHERE id = %s",
+                (game_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return jsonify({"error": "not found"}), 404
+            gid, community_id, name, date, created_by_name, closed, updated_at = row
+
+            cur.execute("SELECT player_id, name FROM game_players WHERE game_id = %s", (gid,))
+            players = [{"id": r[0], "name": r[1]} for r in cur.fetchall()]
+
+            cur.execute(
+                "SELECT player_id, SUM(amount) FROM buyins WHERE game_id = %s GROUP BY player_id", (gid,)
+            )
+            buyin_totals = [{"playerId": r[0], "amount": _num(r[1])} for r in cur.fetchall()]
+
+            cur.execute("SELECT player_id, amount, ts, arranged_with FROM cashouts WHERE game_id = %s", (gid,))
+            cashouts = {}
+            for player_id, amount, ts, arranged_with in cur.fetchall():
+                cashouts[player_id] = {
+                    "amount": _num(amount),
+                    "ts": int(ts.timestamp() * 1000) if ts else None,
+                    "arrangedWith": arranged_with or [],
+                }
+
+            cur.execute(
+                "SELECT id, player_id, amount, ts FROM paybox_payments WHERE game_id = %s ORDER BY ts", (gid,)
+            )
+            paybox_payments = [
+                {"id": r[0], "playerId": r[1], "amount": _num(r[2]), "ts": int(r[3].timestamp() * 1000) if r[3] else None}
+                for r in cur.fetchall()
+            ]
+
+            cur.execute(
+                "SELECT id, from_player_id, to_player_id, amount, ts FROM player_payments "
+                "WHERE game_id = %s ORDER BY ts",
+                (gid,),
+            )
+            player_payments = [
+                {
+                    "id": r[0], "fromPlayerId": r[1], "toPlayerId": r[2], "amount": _num(r[3]),
+                    "ts": int(r[4].timestamp() * 1000) if r[4] else None,
+                }
+                for r in cur.fetchall()
+            ]
+        conn.commit()
+
+    return jsonify({
+        "id": gid, "communityId": community_id, "name": name,
+        "date": date.isoformat() if date else None,
+        "createdByName": created_by_name, "closed": closed,
+        "updatedAt": updated_at.isoformat() if updated_at else None,
+        "players": players, "buyinTotals": buyin_totals, "cashouts": cashouts,
+        "payboxPayments": paybox_payments, "playerPayments": player_payments,
+    })
+
+
 @app.route("/api/v2/games/<game_id>/events", methods=["POST"])
 def v2_add_game_event(game_id):
     # Only for the action types that leave no other trace - see game_events' own comment
@@ -633,6 +712,10 @@ def v2_add_game_event(game_id):
                 "VALUES (%s,%s,%s,%s,%s,%s)",
                 (event_id, game_id, event_type, body.get("playerId"), body.get("actorName"), body.get("amount")),
             )
+            # Bumped on every write that changes what v2_get_game returns for this game -
+            # see that endpoint's own comment on why this matters (the client skips
+            # re-fetching a game's full detail when this hasn't moved since it last asked).
+            cur.execute("UPDATE games SET updated_at = now() WHERE id = %s", (game_id,))
         conn.commit()
     return jsonify({"ok": True}), 201
 
@@ -1203,6 +1286,7 @@ def v2_add_game_player(game_id):
                 "ON CONFLICT (game_id, player_id) DO NOTHING",
                 (game_id, player_id, name),
             )
+            cur.execute("UPDATE games SET updated_at = now() WHERE id = %s", (game_id,))
         conn.commit()
     return jsonify({"ok": True}), 201
 
@@ -1329,8 +1413,10 @@ def v2_remove_game_player(game_id, player_id):
                 # stray duplicate behind.
                 new_seats = [None if s == player_id else s for s in seats]
                 cur.execute("UPDATE games SET seats = %s WHERE id = %s", (Json(new_seats), game_id))
-            if closed:
-                cur.execute("UPDATE games SET closed = false, updated_at = now() WHERE id = %s", (game_id,))
+            cur.execute(
+                "UPDATE games SET closed = %s, updated_at = now() WHERE id = %s",
+                (False if closed else closed, game_id),
+            )
         conn.commit()
     return jsonify({"ok": True})
 
@@ -1348,6 +1434,7 @@ def v2_add_buyin(game_id):
                 "INSERT INTO buyins (id, game_id, player_id, amount, ts, actor_name) VALUES (%s,%s,%s,%s,now(),%s)",
                 (buyin_id, game_id, player_id, amount, actor_name),
             )
+            cur.execute("UPDATE games SET updated_at = now() WHERE id = %s", (game_id,))
         conn.commit()
     return jsonify({"id": buyin_id}), 201
 
@@ -1365,6 +1452,7 @@ def v2_add_buyins_bulk(game_id):
                     "INSERT INTO buyins (id, game_id, player_id, amount, ts) VALUES (%s,%s,%s,%s,now())",
                     (b["id"], game_id, b["playerId"], b["amount"]),
                 )
+            cur.execute("UPDATE games SET updated_at = now() WHERE id = %s", (game_id,))
         conn.commit()
     return jsonify({"ok": True, "count": len(buyins)}), 201
 
@@ -1378,6 +1466,8 @@ def v2_delete_buyin(game_id, buyin_id):
         with conn.cursor() as cur:
             cur.execute("DELETE FROM buyins WHERE id = %s AND game_id = %s", (buyin_id, game_id))
             deleted = cur.rowcount
+            if deleted:
+                cur.execute("UPDATE games SET updated_at = now() WHERE id = %s", (game_id,))
         conn.commit()
     if not deleted:
         return jsonify({"error": "not found"}), 404
@@ -1405,9 +1495,11 @@ def v2_set_cashout(game_id, player_id):
             )
             if chips is not None:
                 cur.execute(
-                    "UPDATE games SET live_chips = live_chips || %s::jsonb WHERE id = %s",
+                    "UPDATE games SET live_chips = live_chips || %s::jsonb, updated_at = now() WHERE id = %s",
                     (json.dumps({player_id: chips}), game_id),
                 )
+            else:
+                cur.execute("UPDATE games SET updated_at = now() WHERE id = %s", (game_id,))
         conn.commit()
     return jsonify({"ok": True})
 
@@ -1418,6 +1510,8 @@ def v2_delete_cashout(game_id, player_id):
         with conn.cursor() as cur:
             cur.execute("DELETE FROM cashouts WHERE game_id = %s AND player_id = %s", (game_id, player_id))
             deleted = cur.rowcount
+            if deleted:
+                cur.execute("UPDATE games SET updated_at = now() WHERE id = %s", (game_id,))
         conn.commit()
     if not deleted:
         return jsonify({"error": "not found"}), 404
@@ -1433,7 +1527,7 @@ def v2_update_live_chips(game_id):
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "UPDATE games SET live_chips = live_chips || %s::jsonb WHERE id = %s",
+                "UPDATE games SET live_chips = live_chips || %s::jsonb, updated_at = now() WHERE id = %s",
                 (json.dumps({player_id: chips}), game_id),
             )
             updated = cur.rowcount
@@ -1470,6 +1564,7 @@ def v2_add_paybox_payment(game_id):
                 "INSERT INTO paybox_payments (id, game_id, player_id, amount, ts) VALUES (%s,%s,%s,%s,now())",
                 (payment_id, game_id, player_id, amount),
             )
+            cur.execute("UPDATE games SET updated_at = now() WHERE id = %s", (game_id,))
         conn.commit()
     return jsonify({"id": payment_id}), 201
 
@@ -1482,6 +1577,8 @@ def v2_delete_paybox_payment(game_id, payment_id):
                 "DELETE FROM paybox_payments WHERE id = %s AND game_id = %s", (payment_id, game_id)
             )
             deleted = cur.rowcount
+            if deleted:
+                cur.execute("UPDATE games SET updated_at = now() WHERE id = %s", (game_id,))
         conn.commit()
     if not deleted:
         return jsonify({"error": "not found"}), 404
@@ -1502,6 +1599,7 @@ def v2_add_player_payment(game_id):
                 "VALUES (%s,%s,%s,%s,%s,now())",
                 (payment_id, game_id, from_player_id, to_player_id, amount),
             )
+            cur.execute("UPDATE games SET updated_at = now() WHERE id = %s", (game_id,))
         conn.commit()
     return jsonify({"id": payment_id}), 201
 
@@ -1514,6 +1612,8 @@ def v2_delete_player_payment(game_id, payment_id):
                 "DELETE FROM player_payments WHERE id = %s AND game_id = %s", (payment_id, game_id)
             )
             deleted = cur.rowcount
+            if deleted:
+                cur.execute("UPDATE games SET updated_at = now() WHERE id = %s", (game_id,))
         conn.commit()
     if not deleted:
         return jsonify({"error": "not found"}), 404
@@ -1538,6 +1638,8 @@ def v2_reset_player_payments(game_id, player_id):
                 (game_id, player_id, player_id),
             )
             player_deleted = cur.rowcount
+            if paybox_deleted or player_deleted:
+                cur.execute("UPDATE games SET updated_at = now() WHERE id = %s", (game_id,))
         conn.commit()
     return jsonify({"ok": True, "payboxDeleted": paybox_deleted, "playerPaymentsDeleted": player_deleted})
 

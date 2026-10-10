@@ -1152,6 +1152,48 @@ async function v2LoadGameFull(gameId){
   if (idx === -1) state.games.push(g); else state.games[idx] = g;
   return g;
 }
+// Cheap counterpart for a closed-and-settled game (see shouldShowGameResults/
+// renderGameResultsScreen) - buyinTotals (one aggregated row per player, not every
+// individual buy-in) instead of the full buyins/events v2LoadGameFull pulls, which stay
+// unbounded as a community logs more rebuys over its lifetime. Stored on the SAME game
+// object under a different field name (buyinTotals, not buyins) so code that expects full
+// detail can't accidentally treat this partial load as if it were one.
+async function v2LoadGameSummary(gameId){
+  const g = await v2Fetch("GET", `/games/${gameId}/summary`);
+  const idx = state.games.findIndex(x => x.id === gameId);
+  if (idx === -1) state.games.push(g); else Object.assign(state.games[idx], g);
+  return g;
+}
+// True once everyone's seated player has cashed out AND the declared chips roughly match
+// what was bought in (same ±₪5 rounding tolerance the admin screen's own potUnbalanced
+// check uses) - only then is a game truly final (see renderGameResultsScreen's own
+// comment on why "closed" alone isn't enough: maybeAutoCloseNight sets g.closed the moment
+// everyone's cashed out, even if the numbers don't actually add up yet, and that case still
+// needs the full admin screen's pot-fix tools, not the simple read-only results screen).
+function isGameSettled(g){
+  if (!g.closed) return false;
+  const buyinTotal = g.buyinTotals
+    ? g.buyinTotals.reduce((s,bt)=>s+bt.amount, 0)
+    : (g.buyins||[]).reduce((s,b)=>s+b.amount, 0);
+  const cashedOutTotal = Object.values(g.cashouts||{}).reduce((s,co)=>s+(co.amount||0), 0);
+  return Math.abs(cashedOutTotal - buyinTotal) <= 5;
+}
+// Loads whatever this game needs for the screen it's about to show, if it isn't already
+// loaded - the cheap summary for a closed game (upgrading to full detail only if that
+// turns out to be unbalanced and needs the admin screen's pot-fix tools after all), or full
+// detail directly for a still-open one, which needs live interactivity either way.
+async function ensureGameLoadedForView(gameId){
+  let g = getGame(gameId);
+  if (!g) return null;
+  if (!g.closed) {
+    if (!g.buyins) await v2LoadGameFull(gameId);
+    return getGame(gameId);
+  }
+  if (!g.buyinTotals && !g.buyins) await v2LoadGameSummary(gameId);
+  g = getGame(gameId);
+  if (!isGameSettled(g) && !g.buyins) await v2LoadGameFull(gameId);
+  return getGame(gameId);
+}
 
 async function v2CreateGame(id, communityId, name, date, createdByName, creatorPlayerId, creatorPlayerName){
   await v2Fetch("POST", "/games", {id, communityId, name, date, createdByName, creatorPlayerId, creatorPlayerName});
@@ -3191,6 +3233,8 @@ const ICONS = {
   download: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>',
   upload: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>',
   shield: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>',
+  // Winner-of-the-night badge next to the top result on the game-results screen.
+  crown: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18h20M4 10l4 3 4-7 4 7 4-3-2 8H6l-2-8z"/></svg>',
 };
 function icon(name){ return ICONS[name] || ""; }
 
@@ -3220,12 +3264,20 @@ function render(){
   document.body.classList.toggle("table-screen", nav.screen === "table");
   let html = "";
   let seated = false;
+  let resultsScreen = false;
   let welcomeGameId = null, welcomePlayerId = null;
   if (nav.screen === "home") html = renderHome();
   else if (nav.screen === "community") html = renderCommunity(nav.communityId);
   else if (nav.screen === "table") {
     const g = getGame(nav.gameId);
     const c = g && getCommunity(g.communityId);
+    // A closed-and-balanced game is final - nothing left to edit, only transfers left to
+    // mark as paid - so it gets its own read-only screen instead of the player/table/admin
+    // carousel (see isGameSettled's own comment for why g.closed alone isn't enough here).
+    if (g && isGameSettled(g)) {
+      resultsScreen = true;
+      html = `<div class="table-swipe-root">${renderGameResultsScreen(nav.gameId)}</div>`;
+    } else {
     seated = isSeatedInGame(g);
     if (seated) {
       const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
@@ -3284,9 +3336,10 @@ function render(){
       // so skip the carousel machinery entirely and keep the plain single-face structure.
       html = `<div class="table-swipe-root">${renderTable(nav.gameId)}</div>`;
     }
+    }
   }
   const SUB_VIEW_LABELS = { player: "מסך שחקן", table: "מסך השולחן", admin: "מסך ניהול שחקנים" };
-  const screenLabel = (seated && SUB_VIEW_LABELS[tableSubView]) || (SCREEN_NAMES[nav.screen] || nav.screen);
+  const screenLabel = resultsScreen ? "תוצאות משחק" : ((seated && SUB_VIEW_LABELS[tableSubView]) || (SCREEN_NAMES[nav.screen] || nav.screen));
   const screenTag = `<div class="screen-tag">${esc(screenLabel)}</div>`;
   html = screenTag + html;
   if (modal) html += renderModal(modal);
@@ -3817,6 +3870,129 @@ function renderPlayerScreen(gameId){
         <button class="btn flex1" style="background:#B8862B;color:#1a1a1a;display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 4px;font-size:13px;white-space:nowrap;" data-player-leave-table>${icon('out')}ספירת ז'יטונים</button>
         <button class="btn flex1" style="background:#B23A3A;color:#fff;display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 4px;font-size:13px;white-space:nowrap;" data-player-leave-no-chips>${icon('out')}נשארתי בלי ז'יטונים 😞</button>
       </div>`}
+    </div>
+  `;
+}
+
+// Final, read-only screen for a game that's closed AND balanced (see isGameSettled) -
+// takes over the "table" nav screen entirely instead of the player/table/admin carousel,
+// since there's nothing left to edit once the pot itself is settled, only money left to
+// actually hand over. Consolidates what used to be scattered across the player screen's
+// cashed-out recap and the admin screen's own "מי מעביר למי" into one screen, and is also
+// the destination ensureGameLoadedForView was built for - this is the one place a closed
+// game's cheap v2LoadGameSummary payload (buyinTotals/cashouts/payments, no per-buyin
+// rows or seats) is actually enough to render from, full v2LoadGameFull data never needed.
+//
+// Two layouts depending on the community's settlementDefault (confirmed with the user via
+// mockups, see PR/commit history for the back-and-forth): 'direct' shows the player
+// results list, then a SEPARATE "who pays whom" section grouped by payer with a checkbox
+// per recipient (backed by player_payments); 'paybox'/'bit' shows a single group-payment
+// button up top, then the same player list but with a checkbox on EVERY row (backed by
+// paybox_payments) and no separate transfers section, since every payment routes through
+// that one shared group link instead of player-to-player.
+function renderGameResultsScreen(gameId){
+  const g = getGame(gameId);
+  if (!g) return `<div class="empty">משחק לא נמצא</div>`;
+  const c = getCommunity(g.communityId) || {name:"קבוצה", roster:[]};
+  // Works whether g came from v2LoadGameFull (g.buyins, individual rows) or
+  // v2LoadGameSummary (g.buyinTotals, one aggregated row per player already) -
+  // computeBalances/settleTransactions/computeFinalBalances only ever sum buyins per
+  // player, never care which shape they started as.
+  const synthGame = {
+    players: g.players,
+    buyins: g.buyins || (g.buyinTotals||[]).map(bt => ({playerId: bt.playerId, amount: bt.amount})),
+    cashouts: g.cashouts || {},
+  };
+  const balances = computeBalances(synthGame);
+  const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+  const results = g.players
+    .filter(p => p.id in balances)
+    .map(p => ({ id: p.id, name: p.name, profit: Math.round(balances[p.id].profit * 100) / 100 }))
+    .sort((a,b) => b.profit - a.profit);
+  const topProfit = results.length ? results[0].profit : 0;
+  const isGroupPay = c.settlementDefault === 'paybox' || c.settlementDefault === 'bit';
+
+  const payboxPayments = g.payboxPayments || [];
+  const playerPayments = g.playerPayments || [];
+  const payboxPaymentIdByPlayer = {};
+  payboxPayments.forEach(pp => { payboxPaymentIdByPlayer[pp.playerId] = pp.id; });
+
+  const playerRowsHtml = results.map(r => {
+    const isMe = r.id === myPlayerId;
+    const isWinner = r.profit > 0.005 && r.profit >= topProfit - 0.005;
+    const crownHtml = isWinner ? `<span style="color:var(--gold);display:inline-flex;flex-shrink:0;margin-left:6px;">${icon('crown')}</span>` : "";
+    const paymentId = payboxPaymentIdByPlayer[r.id];
+    const checked = isGroupPay && !!paymentId;
+    const checkboxHtml = isGroupPay
+      ? `<input type="checkbox" data-result-paybox-toggle="${r.id}" data-amount="${r.profit}" data-payment-id="${paymentId||''}" ${checked?'checked':''} style="width:18px;height:18px;accent-color:var(--gold);margin-right:10px;flex-shrink:0;">`
+      : "";
+    return `
+      <div class="card" style="cursor:default;${isMe ? 'border:1.5px solid var(--gold);' : ''}">
+        <div class="flex1" style="display:flex;align-items:center;min-width:0;">
+          ${crownHtml}
+          <span style="font-weight:700;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.name)}${isMe ? ' <span style="color:var(--muted);font-weight:400;font-size:13px;">(את/ה)</span>' : ''}</span>
+        </div>
+        <div style="display:flex;align-items:center;flex-shrink:0;">
+          ${checkboxHtml}
+          <span style="font-weight:800;font-size:17px;color:${profitColor(r.profit)};${checked?'text-decoration:line-through;opacity:.5;':''}">${r.profit>=0?'+':''}₪${Math.abs(r.profit)}</span>
+        </div>
+      </div>`;
+  }).join("");
+
+  let topButtonHtml = "";
+  let transfersHtml = "";
+  if (isGroupPay) {
+    if (c.settlementDefault === 'paybox') {
+      const activeLink = getActivePayboxLink(c);
+      topButtonHtml = activeLink
+        ? `<a href="${esc(activeLink)}" class="btn btn-primary btn-block" style="margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;">פתיחת פייבוקס קבוצתי</a>`
+        : `<div style="font-size:12px;color:var(--muted);margin-bottom:16px;text-align:center;">לא הוגדרה קבוצת פייבוקס</div>`;
+    } else {
+      topButtonHtml = `<button class="btn btn-primary btn-block" data-open-bit-generic style="margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;">פתיחת ביט קבוצתי</button>`;
+    }
+  } else {
+    const txns = settleTransactions(computeFinalBalances(synthGame), g.players);
+    const byPayer = {};
+    txns.forEach(t => { (byPayer[t.from] = byPayer[t.from] || {name:t.fromName, items:[]}).items.push(t); });
+    const payerCardsHtml = Object.keys(byPayer).map(fromId => {
+      const payer = byPayer[fromId];
+      const rowsHtml = payer.items.map(t => {
+        const existing = playerPayments.find(pp => pp.fromPlayerId === fromId && pp.toPlayerId === t.to);
+        const paidStyle = existing ? 'text-decoration:line-through;opacity:.5;' : '';
+        return `
+          <div class="row-between" style="padding:6px 0;">
+            <span style="${paidStyle}">${esc(t.toName)}</span>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-weight:700;color:var(--gold);${paidStyle}">₪${t.amount}</span>
+              <input type="checkbox" data-result-player-payment-toggle data-from="${fromId}" data-to="${t.to}" data-amount="${t.amount}" data-payment-id="${existing?existing.id:''}" ${existing?'checked':''} style="width:18px;height:18px;accent-color:var(--gold);">
+            </div>
+          </div>`;
+      }).join("");
+      return `
+        <div class="roster-row" style="flex-direction:column;align-items:stretch;">
+          <div style="font-weight:700;color:var(--text);margin-bottom:4px;">${esc(payer.name)} מעביר ל:</div>
+          ${rowsHtml}
+        </div>`;
+    }).join("");
+    transfersHtml = `
+      <div class="section-title" style="padding:0;margin:20px 0 8px;">מי מעביר למי</div>
+      ${payerCardsHtml || `<div class="empty" style="padding:10px 0;font-size:13px;">אין תשלומים נדרשים</div>`}
+    `;
+  }
+
+  return `
+    <div class="top row" style="padding-top:14px;padding-bottom:16px;flex-shrink:0;">
+      <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
+      <div class="flex1" style="min-width:0;">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;">המשחק הסתיים</div>
+        <h1 class="serif sm" style="color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g.name || c.name)}</h1>
+        <div class="meta" style="color:#6ee7b7;font-size:11px;display:flex;align-items:center;gap:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${icon('cal')}${esc(g.date)} · ${g.players.length} שחקנים</div>
+      </div>
+    </div>
+    <div style="flex:1;min-height:0;overflow-y:auto;padding:0 20px 20px;touch-action:pan-y;">
+      ${topButtonHtml}
+      ${playerRowsHtml}
+      ${transfersHtml}
     </div>
   `;
 }
@@ -5594,7 +5770,46 @@ function attachHandlers(){
   }
   const newCommunityBtn = app.querySelector("[data-new-community]");
   if (newCommunityBtn) newCommunityBtn.onclick = () => openModal({type:"newCommunity"});
-  app.querySelectorAll("[data-open-game]").forEach(el => el.onclick = () => go("table", {gameId: el.dataset.openGame, communityId: getGame(el.dataset.openGame).communityId}));
+  app.querySelectorAll("[data-open-game]").forEach(el => el.onclick = async () => {
+    const gameId = el.dataset.openGame;
+    const communityId = getGame(gameId).communityId;
+    go("table", {gameId, communityId});
+    if (USE_RELATIONAL_API) { await ensureGameLoadedForView(gameId); render(); }
+  });
+  // Game-results screen "paid" checkboxes - toggling one records/deletes the matching
+  // paybox_payments or player_payments row (see renderGameResultsScreen's own comment for
+  // which one applies to which settlement mode); nothing here recomputes the transfer list
+  // itself, it's purely a mark-as-done layered on top of the fixed amounts already shown.
+  app.querySelectorAll("[data-result-paybox-toggle]").forEach(el => el.onclick = async () => {
+    const gameId = nav.gameId, playerId = el.dataset.resultPayboxToggle, paymentId = el.dataset.paymentId;
+    const amount = parseFloat(el.dataset.amount);
+    el.disabled = true;
+    try {
+      if (paymentId) {
+        if (USE_RELATIONAL_API) await v2DeletePayboxPayment(gameId, paymentId);
+        else await mutateAndSave(() => { const g = getGame(gameId); g.payboxPayments = (g.payboxPayments||[]).filter(pp => pp.id !== paymentId); });
+      } else {
+        if (USE_RELATIONAL_API) await v2AddPayboxPayment(gameId, uid(), playerId, amount);
+        else await mutateAndSave(() => { const g = getGame(gameId); if (!g.payboxPayments) g.payboxPayments = []; g.payboxPayments.push({id:uid(), playerId, amount, ts: Date.now()}); });
+      }
+    } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+    render();
+  });
+  app.querySelectorAll("[data-result-player-payment-toggle]").forEach(el => el.onclick = async () => {
+    const gameId = nav.gameId, fromId = el.dataset.from, toId = el.dataset.to, paymentId = el.dataset.paymentId;
+    const amount = parseFloat(el.dataset.amount);
+    el.disabled = true;
+    try {
+      if (paymentId) {
+        if (USE_RELATIONAL_API) await v2DeletePlayerPayment(gameId, paymentId);
+        else await mutateAndSave(() => { const g = getGame(gameId); g.playerPayments = (g.playerPayments||[]).filter(pp => pp.id !== paymentId); });
+      } else {
+        if (USE_RELATIONAL_API) await v2AddPlayerPayment(gameId, uid(), fromId, toId, amount);
+        else await mutateAndSave(() => { const g = getGame(gameId); if (!g.playerPayments) g.playerPayments = []; g.playerPayments.push({id:uid(), fromPlayerId: fromId, toPlayerId: toId, amount, ts: Date.now()}); });
+      }
+    } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+    render();
+  });
   app.querySelectorAll("[data-delete-game]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type:"deleteGame", gameId: el.dataset.deleteGame}); });
   app.querySelectorAll("[data-invite-game]").forEach(el => el.onclick = async (e) => {
     e.stopPropagation();
