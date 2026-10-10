@@ -5305,9 +5305,26 @@ function renderModal(m){
             ${isAnalyzing ? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;"><span class="poker-loading-spin">${icon('chip')}</span></div>` : ""}
           </div>`;
       };
+      // Which stack sizes actually exist tonight - told to the AI as a hard constraint
+      // instead of letting it guess/default. Guessing was the root of a real, persistent
+      // failure mode: when only two of the four possible sizes are physically present (say
+      // 5 and 1, no 10 anywhere), the model has no absolute reference to tell "this is the
+      // tallest pile because it's a 10" apart from "this is the tallest pile because it's
+      // the tallest of only two sizes actually here" - four different prompt rewordings
+      // all failed to fix this through reasoning alone. Asking the user (who already knows)
+      // removes the ambiguity entirely instead of hoping the model infers it.
+      const ALL_CHIP_SIZES = [10,5,3,1];
+      const selectedSizes = (m.chipStackSizes && m.chipStackSizes.length) ? m.chipStackSizes : [10,5,1];
+      const sizeTogglesHtml = `
+        <div style="display:flex;gap:6px;margin-bottom:6px;">
+          ${ALL_CHIP_SIZES.map(sz => `<button type="button" class="btn ${selectedSizes.includes(sz)?'btn-primary':'btn-ghost'} flex1" data-chip-size-toggle="${sz}" style="padding:8px 4px;font-size:14px;font-weight:700;">${sz}</button>`).join("")}
+        </div>
+        <p style="color:var(--muted);font-size:11px;margin:0 0 12px;">סמנו אילו גדלי ערימות קיימים הערב - זה מונע מה-AI לנחש גדלים שלא קיימים.</p>
+      `;
       const photoAreaHtml = chipPhotos.length ? `
         ${chipPhotos.map((photo,i) => renderPhotoBlock(photo, m.analyzingChipCount && i === chipPhotos.length-1)).join("")}
         <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">${m.analyzingChipCount ? "סופר ז'יטונים אוטומטית..." : "הספירה מולאה בטבלה למטה - אפשר לתקן ידנית כל מספר שלא נראה נכון."}</p>
+        ${sizeTogglesHtml}
         ${chipPhotos.length < 2 ? `
         <div style="position:relative;margin-bottom:8px;">
           <button type="button" class="btn btn-ghost btn-block" style="pointer-events:none;display:flex;align-items:center;justify-content:center;gap:6px;" ${m.analyzingChipCount?"disabled":""}>${icon('plus')} עוד תמונה (ערמות שלא נכנסו לפריים)</button>
@@ -5315,11 +5332,12 @@ function renderModal(m){
         </div>` : ""}
         <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-retake-chip-count-photo ${m.analyzingChipCount?"disabled":""}>${icon('plus')} התחל מחדש</button>
       ` : `
+        ${sizeTogglesHtml}
         <div style="position:relative;margin-bottom:10px;">
-          <button type="button" class="btn btn-ghost btn-block" style="pointer-events:none;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('plus')} ספירה אוטומטית מצילום</button>
-          <input type="file" accept="image/*" capture="environment" id="chip-count-camera-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
+          <button type="button" class="btn btn-ghost btn-block" style="pointer-events:none;display:flex;align-items:center;justify-content:center;gap:6px;" ${selectedSizes.length?"":"disabled"}>${icon('plus')} ספירה אוטומטית מצילום</button>
+          <input type="file" accept="image/*" capture="environment" id="chip-count-camera-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;" ${selectedSizes.length?"":"disabled"}>
         </div>
-        <p style="color:var(--muted);font-size:12px;margin:-4px 0 14px;">לדיוק הכי טוב, סדרו את הערמות בשורות לפי מרחק מהמצלמה: הכי רחוק = ערמות של 10 ז'יטונים, באמצע = ערמות של 5, הכי קרוב = ז'יטונים בודדים. כל ערמה מז'יטונים מאותו הסוג בלבד. אם לא כל הערמות נכנסות לפריים אחד, אפשר להוסיף עוד תמונה אחר כך. נזהה את הסוג והכמות של כל ערמה ונמלא את הטבלה למטה.</p>
+        <p style="color:var(--muted);font-size:12px;margin:-4px 0 14px;">לדיוק הכי טוב, סדרו את הערמות בשורות לפי מרחק מהמצלמה: הכי רחוק = הגודל הכי גדול שסימנתם, הכי קרוב = הגודל הכי קטן. כל ערמה מז'יטונים מאותו הסוג בלבד. אם לא כל הערמות נכנסות לפריים אחד, אפשר להוסיף עוד תמונה אחר כך. נזהה את הסוג והכמות של כל ערמה ונמלא את הטבלה למטה.</p>
       `;
       modeBody = `
         ${photoAreaHtml}
@@ -8102,6 +8120,12 @@ function attachHandlers(){
     }
     refreshHeader();
     if (mode === "byColor") {
+      const selectedSizes = (modal.chipStackSizes && modal.chipStackSizes.length) ? modal.chipStackSizes : [10,5,1];
+      app.querySelectorAll("[data-chip-size-toggle]").forEach(el => el.onclick = () => {
+        const sz = parseInt(el.dataset.chipSizeToggle, 10);
+        const next = selectedSizes.includes(sz) ? selectedSizes.filter(s => s !== sz) : selectedSizes.concat([sz]);
+        updateModal({chipStackSizes: next});
+      });
       // Sends the fresh stack photo PLUS each known chip's own reference photo from
       // chipSetup (converted to a data URL - see urlToDataUrl's own comment on why that
       // conversion only happens here, at use-time) so the model can match a detected
@@ -8150,18 +8174,28 @@ function attachHandlers(){
           // real photo arranged this way): judging a single stack's absolute/relative
           // height was never reliable (confirmed across many re-tests - 5-vs-10 and 1-vs-5
           // kept drifting). Telling the model to read the SIZE off which depth-row a stack
-          // sits in instead - farthest=10, middle=5, nearest=1 - got 13/13 stacks correct
-          // on two separate runs, a clean jump from the height-judgment approach. The
-          // capture instructions (pickButtons' own help text) now ask the user to actually
-          // arrange piles this way for best results.
+          // sits in instead got 13/13 stacks correct on two separate runs. But that alone
+          // still broke when only 2 of the 4 possible sizes are physically present and the
+          // model has to GUESS which two (confirmed live: a genuine 5-pile and 1-pile, no
+          // 10 anywhere, kept getting read as 10-and-1) - four different rewordings asking
+          // it to reason about absolute/relative ratios all failed to fix that by
+          // inference alone. selectedSizes (the toggles above the camera button) sidesteps
+          // it entirely: the user states which sizes exist tonight, so the model is given a
+          // closed set instead of having to infer it.
+          const sizes = selectedSizes.slice().sort((a,b) => b-a); // descending, farthest row first
+          const sizeList = sizes.map((sz,i) => {
+            if (sizes.length === 1) return `כל הערמות בתמונה הן בגודל ${sz} בלבד.`;
+            const place = i === 0 ? "השורה הרחוקה ביותר מהמצלמה" : i === sizes.length-1 ? "השורה הקרובה ביותר למצלמה" : "השורה הבאה (קרובה יותר מהקודמת)";
+            return `${place} = ערמות בגודל ${sz}${sz===1?' (ז\'יטונים בודדים)':''}.`;
+          }).join(" ");
           const prompt = `תמונה 1 מציגה ערימות של ז'יטוני פוקר על שולחן, צולמו בזווית. ${refList}
 שלב ראשון: עבור כל תמונת ייחוס (2 עד ${validChipValues.length+1}), תארו במילה או שתיים את הצבע/עיצוב המרכזי שלה - התבוננו בכל תמונה בנפרד.
-שלב שני: הערמות מאורגנות בשורות לפי מרחק מהמצלמה - השתמשו בזה כדי לקבוע את הגודל של כל ערמה, במקום לנחש לפי גובה מוחלט: השורה הרחוקה ביותר מהמצלמה = ערמות של 10 ז'יטונים. השורה שלפניה (קרובה יותר למצלמה) = ערמות של 5 ז'יטונים. השורה הקרובה ביותר למצלמה = ז'יטונים בודדים, 1 כל אחד. יכולות להיות כמה ערמות באותה שורה (אותו מרחק בערך מהמצלמה) - לכולן אותו גודל. אם אין סידור ברור בשורות, קבעו גודל לפי גובה: ערמה גבוהה וברורה = 10, ערמה שגובהה בערך חצי מזה = 5, אחרת ז'יטון בודד = 1. עבור כל ערימה/ז'יטון בתמונה 1, זהו לאיזו תמונת-ייחוס היא הכי דומה בצבע/עיצוב (לפי התיאורים משלב ראשון), ותנו תיבה תוחמת (bounding box) בפיקסלים מוחלטים יחסית לתמונה 1 (רוחב ${width}, גובה ${height}) בפורמט [x1,y1,x2,y2].
+שלב שני: הגדלים האפשריים היחידים הערב הם ${sizes.join('/')} - אין ערמות בגדלים אחרים, גם אם נראה לכם שערמה גבוהה מהאחרות. הערמות מאורגנות בשורות לפי מרחק מהמצלמה, מהגדול לקטן: ${sizeList} יכולות להיות כמה ערמות באותה שורה (אותו מרחק בערך מהמצלמה) - לכולן אותו גודל. עבור כל ערימה/ז'יטון בתמונה 1, זהו לאיזו תמונת-ייחוס היא הכי דומה בצבע/עיצוב (לפי התיאורים משלב ראשון), ותנו תיבה תוחמת (bounding box) בפיקסלים מוחלטים יחסית לתמונה 1 (רוחב ${width}, גובה ${height}) בפורמט [x1,y1,x2,y2].
 החזירו תשובה בפורמט JSON בלבד, בלי טקסט נוסף ובלי markdown, במבנה הזה בדיוק: {"refColors":[{"refImage":2,"color":"..."}],"stacks":[{"box":[x1,y1,x2,y2],"refImage":N,"count":10}]}`;
           const result = await callClaudeVisionMulti(images, prompt);
           const rawStacks = (result && Array.isArray(result.stacks)) ? result.stacks : [];
           const stacks = rawStacks.filter(r =>
-            r && Array.isArray(r.box) && r.box.length === 4 && [10,5,1].includes(r.count) && typeof r.refImage === "number"
+            r && Array.isArray(r.box) && r.box.length === 4 && sizes.includes(r.count) && typeof r.refImage === "number"
           );
           // refImage is 1-based over `images` (stack photo = 1, first reference = 2, ...) -
           // refImage - 2 is then a 0-based index into the references actually sent, in the
