@@ -8135,12 +8135,23 @@ function attachHandlers(){
           const validRefs = refs.filter(Boolean);
           const refList = validChipValues.map((cv, i) => `תמונה ${i+2} = ז'יטון בערך ₪${cv.value}.`).join(" ");
           const images = [dataUrl, ...validRefs];
+          // Asking the model to first describe each reference photo's own color/design in
+          // its OWN output, before matching stacks against them, turned out to matter a
+          // lot - without it, matching against the 4th/5th/6th reference image in a 6-image
+          // request consistently cycled to the wrong one (confirmed live: a user's 5
+          // denominations with very distinct colors still got a clean 3-way swap among the
+          // later images every time), as if the model were going by rough list position
+          // rather than actually re-examining each photo. Forcing it to name each color
+          // first - still one API call - fixed it in repeated re-tests against the same
+          // real photo (ref-image indexing itself was already correct; see refImage - 2
+          // below, unchanged).
           const prompt = `תמונה 1 מציגה ערימות של ז'יטוני פוקר על שולחן, צולמו ממבט על. ${refList}
-כל ערימה מכילה ז'יטונים מסוג אחד בלבד, ובגודל של בדיוק 10, 5, או ז'יטון בודד (1) בלבד - אין ערמות בגודל אחר. ערמה גבוהה וברורה = 10. ערמה שגובהה בערך חצי מזה = 5. כל ערמה אחרת שאינה בבירור 10 או 5 - כולל כל ערמה קצרה, חלקית, או לא ברורה - אל תנסו לנחש את גובהה המדויק: ספרו אותה כאוסף של ז'יטונים בודדים נפרדים, כל אחד בתיבה תוחמת נפרדת משלו עם גודל 1 (גם אם שני ז'יטונים בודדים נוגעים זה בזה בתמונה).
-עבור כל ערימה/ז'יטון בתמונה 1, זהו לאיזו תמונת-ייחוס (2 ואילך) היא הכי דומה בצבע ובעיצוב, ותנו: תיבה תוחמת (bounding box) בפיקסלים מוחלטים יחסית לתמונה 1 (רוחב ${width}, גובה ${height}) בפורמט [x1,y1,x2,y2], מספר תמונת הייחוס שהיא תואמת, והגודל (10/5/1 בלבד).
-החזירו תשובה בפורמט JSON בלבד, בלי טקסט נוסף ובלי markdown, במבנה הזה בדיוק: [{"box":[x1,y1,x2,y2],"refImage":N,"count":10}]`;
+שלב ראשון: עבור כל תמונת ייחוס (2 עד ${validChipValues.length+1}), תארו במילה או שתיים את הצבע/עיצוב המרכזי שלה - התבוננו בכל תמונה בנפרד.
+שלב שני: כל ערימה בתמונה 1 מכילה ז'יטונים מסוג אחד בלבד, ובגודל של בדיוק 10, 5, או ז'יטון בודד (1) בלבד - אין ערמות בגודל אחר. ערמה גבוהה וברורה = 10. ערמה שגובהה בערך חצי מזה = 5. כל ערמה אחרת שאינה בבירור 10 או 5 - כולל כל ערמה קצרה, חלקית, או לא ברורה - אל תנסו לנחש את גובהה המדויק: ספרו אותה כאוסף של ז'יטונים בודדים נפרדים, כל אחד בתיבה תוחמת נפרדת משלו עם גודל 1 (גם אם שני ז'יטונים בודדים נוגעים זה בזה בתמונה). עבור כל ערימה/ז'יטון בתמונה 1, זהו לאיזו תמונת-ייחוס היא הכי דומה בצבע/עיצוב (לפי התיאורים משלב ראשון), ותנו תיבה תוחמת (bounding box) בפיקסלים מוחלטים יחסית לתמונה 1 (רוחב ${width}, גובה ${height}) בפורמט [x1,y1,x2,y2].
+החזירו תשובה בפורמט JSON בלבד, בלי טקסט נוסף ובלי markdown, במבנה הזה בדיוק: {"refColors":[{"refImage":2,"color":"..."}],"stacks":[{"box":[x1,y1,x2,y2],"refImage":N,"count":10}]}`;
           const result = await callClaudeVisionMulti(images, prompt);
-          const stacks = (Array.isArray(result) ? result : []).filter(r =>
+          const rawStacks = (result && Array.isArray(result.stacks)) ? result.stacks : [];
+          const stacks = rawStacks.filter(r =>
             r && Array.isArray(r.box) && r.box.length === 4 && [10,5,1].includes(r.count) && typeof r.refImage === "number"
           );
           // refImage is 1-based over `images` (stack photo = 1, first reference = 2, ...) -
