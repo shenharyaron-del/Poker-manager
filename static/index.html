@@ -4616,7 +4616,7 @@ function renderModal(m){
     body = `
       <div style="margin-bottom:12px;">
         <label style="display:block;color:#059669;font-size:11px;margin-bottom:4px;">שם הקבוצה</label>
-        <input type="text" id="new-community-name" placeholder="לדוגמה: טקסס בישראל" style="width:100%;" autofocus>
+        <input type="text" id="new-community-name" style="width:100%;" autofocus>
       </div>
       <button class="btn btn-primary btn-block" data-confirm-new-community>צור קבוצה</button>
     `;
@@ -4902,7 +4902,7 @@ function renderModal(m){
           <input type="text" value="${esc(link.link)}" data-paybox-link-input="${link.id}" placeholder="קישור" dir="ltr">
         </div>
       ` : `
-        <div class="field"><label>שם</label><input type="text" id="new-paybox-name" placeholder="פייבוקס ראשי"></div>
+        <div class="field"><label>שם</label><input type="text" id="new-paybox-name" placeholder="שם הקבוצה בפייבוקס"></div>
         <div class="field"><label>קישור</label><input type="text" id="new-paybox-link" placeholder="https://links.payboxapp.com/..." dir="ltr"></div>
         <button class="btn btn-primary btn-block" style="margin-bottom:18px;" data-add-paybox-entry>${icon('plus')} הוסף</button>
       `}
@@ -4913,7 +4913,7 @@ function renderModal(m){
           <input type="text" value="${esc(bitLink.link)}" data-bit-link-input="${bitLink.id}" placeholder="קישור" dir="ltr">
         </div>
       ` : `
-        <div class="field"><label>שם</label><input type="text" id="new-bit-name" placeholder="ביט ראשי"></div>
+        <div class="field"><label>שם</label><input type="text" id="new-bit-name" placeholder="שם הקבוצה בביט"></div>
         <div class="field"><label>קישור</label><input type="text" id="new-bit-link" placeholder="https://www.bitpay.co.il/..." dir="ltr"></div>
         <button class="btn btn-primary btn-block" style="margin-bottom:18px;" data-add-bit-entry>${icon('plus')} הוסף</button>
       `}
