@@ -5218,7 +5218,7 @@ function renderModal(m){
     const availableModes = [
       {key:"chips", label:"סכום ז'יטונים"},
       {key:"profit", label:"רווח/הפסד"},
-      chipValues.length ? {key:"byColor", label:"לפי צבע"} : null,
+      chipValues.length ? {key:"byColor", label:"לפי צבע/תמונה"} : null,
     ].filter(Boolean);
     const mode = (m.chipsMode && availableModes.some(am => am.key === m.chipsMode)) ? m.chipsMode : availableModes[0].key;
     const modeTabs = `
@@ -5281,37 +5281,85 @@ function renderModal(m){
       const chipPhotos = m.chipPhotos || [];
       // {photoId, stackId} of the pile whose value-picker is currently open, or null.
       const pickerFor = m.chipValuePickerFor || null;
+      // {photoId, rowId} of the row whose size-picker is currently open, or null.
+      const rowPickerFor = m.chipRowPickerFor || null;
       // Piles are labeled in game-chip units, not raw ₪ - a physical chip worth ₪{value}
       // represents {value * ratio} game chips (ratio = "1 ₪ = ratio chips", same number
       // the "chips" mode above uses), so e.g. a ₪1.25 chip at ratio 4 reads "5" on the
       // photo. The per-color table below stays in raw ₪ terms (see its own row markup) -
       // only the photo labels and the value-picker need the converted number.
       const chipDisplayLabel = (v) => (ratio && ratio !== 1) ? String(Math.round(v.value*ratio*100)/100) : ("₪"+v.value);
+      const SIZE_OPTIONS = [10,5,3,1];
+      // How a pile's value-label frame sits against its own box, based on its row's DEPTH
+      // RANK in this photo (0 = farthest/topmost row, N-1 = nearest/bottommost) - fans the
+      // labels outward from the middle rows instead of letting a row's labels collide with
+      // the chips of the row right above or below it: the farthest row's labels pop out
+      // ABOVE their boxes, the nearest row's pop out BELOW, and any row in between sits
+      // flush against whichever of its own edges faces away from the middle (touching, no
+      // overlap, no further protrusion) - see frameStyleFor below for exactly which edge.
+      const FRAME_STYLES = {
+        above:       {top:'0%',   ty:'-25%'},  // 25% of the frame pokes out above the box
+        below:       {top:'100%', ty:'-75%'},  // 25% of the frame pokes out below the box
+        flushTop:    {top:'0%',   ty:'-100%'}, // frame sits fully above the box, touching it
+        flushBottom: {top:'100%', ty:'0%'},    // frame sits fully below the box, touching it
+      };
+      const frameStyleFor = (rank, n) => {
+        if (n <= 1 || rank === n-1) return FRAME_STYLES.below;
+        if (rank === 0) return FRAME_STYLES.above;
+        if (rank === 1 && n === 4) return FRAME_STYLES.flushTop;
+        return FRAME_STYLES.flushBottom;
+      };
       const renderPhotoBlock = (photo, isAnalyzing) => {
         const stacks = photo.stacks || [];
-        // One badge per rowId group (frozen at detection time - see detectChipStacks'
-        // own comment on why grouping/positioning off the live, editable `count` instead
-        // made badges jump to a newly-averaged spot, sometimes landing on top of another
-        // badge, every time the user corrected one). Position is a pure function of box
+        // One group per rowId (frozen at detection time - see detectChipStacks' own
+        // comment on why grouping/positioning off the live, editable `count` instead made
+        // badges jump to a newly-averaged spot, sometimes landing on top of another badge,
+        // every time the user corrected one). Position is a pure function of box
         // coordinates that never change, so it never moves after the fact.
         const rowGroups = {};
         stacks.forEach(st => {
           if (!rowGroups[st.rowId]) rowGroups[st.rowId] = [];
           rowGroups[st.rowId].push(st);
         });
+        // Ranked by depth in THIS photo (box-center Y, ascending = farthest-first) so both
+        // the row badge and frameStyleFor agree on which row is "farthest"/"nearest" -
+        // purely a function of this photo's own stacks, never other photos.
+        const rankedRowIds = Object.keys(rowGroups).sort((a,b) => {
+          const avgOf = id => rowGroups[id].reduce((s,st) => s+(st.box[1]+st.box[3])/2, 0) / rowGroups[id].length;
+          return avgOf(a) - avgOf(b);
+        });
+        const rankByRowId = {};
+        rankedRowIds.forEach((rowId,i) => { rankByRowId[rowId] = i; });
+        const N = rankedRowIds.length;
         // Pushed mostly OUTSIDE the photo's own right edge (the wrapper has no
         // overflow:hidden, so this stays visible in the surrounding padding instead of
         // getting clipped) rather than sitting just inside it - at right:4px this still
         // covered whatever chip happened to be at that row's height near the right side.
-        // Lined up with the row's own value labels (anchored at each box's BOTTOM edge,
-        // see stackMarkers below) rather than the boxes' vertical centers, so the badge
-        // sits level with the ₪ values it's correcting instead of floating mid-chip.
-        const rowBadgesHtml = (photo.w && photo.h) ? Object.keys(rowGroups).map(rowId => {
+        // Lined up with whichever edge that row's OWN value labels sit against (see
+        // frameStyleFor) rather than always the box center, so the badge sits level with
+        // the ₪ values it's correcting instead of floating mid-chip.
+        const rowBadgesHtml = (photo.w && photo.h) ? rankedRowIds.map(rowId => {
           const group = rowGroups[rowId];
-          const avgY = group.reduce((s,st) => s + st.box[3], 0) / group.length;
-          const topPct = (avgY/photo.h)*100;
+          const style = frameStyleFor(rankByRowId[rowId], N);
+          const usesTopEdge = style === FRAME_STYLES.above || style === FRAME_STYLES.flushTop;
+          const edgeY = group.reduce((s,st) => s + (usesTopEdge ? st.box[1] : st.box[3]), 0) / group.length;
+          const topPct = (edgeY/photo.h)*100;
+          const isPickingRow = rowPickerFor && rowPickerFor.photoId === photo.id && String(rowPickerFor.rowId) === rowId;
+          // Tapping the badge opens a dropdown of the 4 possible pile sizes (same pattern
+          // as the per-pile value picker below) instead of cycling on every tap - picking
+          // the right size directly is one tap either way, but doesn't require remembering
+          // (or re-tapping through) the cycle order to undo an overshoot.
+          const rowPickerHtml = isPickingRow ? `
+            <div style="position:absolute;right:100%;top:50%;transform:translateY(-50%);margin-right:4px;background:var(--card);border:1px solid var(--gold);border-radius:10px;padding:6px;display:flex;flex-direction:column;gap:4px;z-index:10;box-shadow:0 4px 14px rgba(0,0,0,.5);">
+              ${SIZE_OPTIONS.map(sz => `
+                <button type="button" data-pick-chip-row-size="${sz}" data-photo-id="${photo.id}" data-row-id="${rowId}" style="background:${sz===group[0].count?'var(--gold)':'none'};color:${sz===group[0].count?'var(--gold-text)':'var(--text)'};border:1px solid var(--gold);border-radius:8px;padding:4px 10px;font-weight:700;font-size:13px;cursor:pointer;min-width:40px;">${sz}</button>
+              `).join("")}
+            </div>` : "";
           return `
-            <button type="button" data-chip-row-cycle="${rowId}" data-photo-id="${photo.id}" title="הקישו להחלפת הכמות לכל הערמות בשורה הזו" style="position:absolute;right:-16px;top:${topPct}%;transform:translateY(-50%);background:var(--gold);color:var(--gold-text);border:none;border-radius:50%;width:30px;height:30px;font-weight:800;font-size:14px;box-shadow:0 2px 6px rgba(0,0,0,.5);cursor:pointer;z-index:5;">${group[0].count}</button>`;
+            <div style="position:absolute;right:-16px;top:${topPct}%;transform:translateY(-50%);z-index:5;">
+              <button type="button" data-chip-row-pick data-photo-id="${photo.id}" data-row-id="${rowId}" title="הקישו לבחירת הכמות לכל הערמות בשורה הזו" style="background:var(--gold);color:var(--gold-text);border:none;border-radius:50%;width:30px;height:30px;font-weight:800;font-size:14px;box-shadow:0 2px 6px rgba(0,0,0,.5);cursor:pointer;">${group[0].count}</button>
+              ${rowPickerHtml}
+            </div>`;
         }).join("") : "";
         const stackMarkers = (photo.w && photo.h) ? stacks.map(st => {
           const [x1,y1,x2,y2] = st.box;
@@ -5335,13 +5383,12 @@ function renderModal(m){
             </div>` : "";
           // Only the label itself is framed (one thin border, transparent fill) - this
           // used to also draw a second border+tint around the whole detected box, which
-          // read as two overlapping squares. Anchored to the box's BOTTOM edge with only
-          // ~25% of its own height actually poking out past it (75% overlapping back up
-          // into the lower part of the pile) - sitting right at the top used to read as
-          // floating disconnected from the chip it's labeling, especially on a short pile.
+          // read as two overlapping squares. Which edge it anchors to, and by how much,
+          // comes from frameStyleFor - see its own comment for why that varies by row.
+          const style = frameStyleFor(rankByRowId[st.rowId], N);
           return `
             <div style="position:absolute;left:${leftPct}%;top:${topPct}%;width:${wPct}%;height:${hPct}%;${isPicking?'z-index:10;':''}">
-              <button type="button" data-chip-pile-value data-photo-id="${photo.id}" data-stack-id="${st.id}" style="position:absolute;top:100%;left:50%;transform:translate(-50%,-75%);background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:6px;padding:2px 6px;font-weight:800;font-size:12px;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,.9),0 0 4px rgba(0,0,0,.9);cursor:pointer;">${cv ? chipDisplayLabel(cv) : '?'}</button>
+              <button type="button" data-chip-pile-value data-photo-id="${photo.id}" data-stack-id="${st.id}" style="position:absolute;top:${style.top};left:50%;transform:translate(-50%,${style.ty});background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:6px;padding:2px 6px;font-weight:800;font-size:12px;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,.9),0 0 4px rgba(0,0,0,.9);cursor:pointer;">${cv ? chipDisplayLabel(cv) : '?'}</button>
               ${pickerHtml}
             </div>`;
         }).join("") : "";
@@ -5367,7 +5414,15 @@ function renderModal(m){
           <button type="button" class="btn btn-ghost btn-block" style="pointer-events:none;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('plus')} ספירה אוטומטית מצילום</button>
           <input type="file" accept="image/*" capture="environment" id="chip-count-camera-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
         </div>
-        <p style="color:var(--muted);font-size:12px;margin:-4px 0 14px;">לדיוק הכי טוב, סדרו את הערמות בשורות לפי מרחק מהמצלמה: הכי רחוק = הגודל הכי גדול, הכי קרוב = הגודל הכי קטן. כל ערמה מז'יטונים מאותו הסוג בלבד. אם לא כל הערמות נכנסות לפריים אחד, אפשר להוסיף עוד תמונה אחר כך.</p>
+        <ul style="color:var(--muted);font-size:12px;margin:-4px 0 14px;padding:0 18px 0 0;line-height:1.7;">
+          <li>סדרו את הערמות בשורות לפי מרחק מהמצלמה: הכי רחוק = הגודל הכי גדול, הכי קרוב = הגודל הכי קטן.</li>
+          <li>כל ערמה מז'יטונים מאותו הסוג בלבד.</li>
+          <li>בכל שורה הערמות קבועות בגודל 10, 5, 3 או 1 ז'יטונים.</li>
+          <li>אותה שורה יכולה לכלול כמה סוגי ז'יטונים שונים, כל עוד הערמות באותו גודל.</li>
+          <li>אם לא כל הערמות נכנסות לפריים אחד, אפשר להוסיף עוד תמונה אחר כך.</li>
+          <li><a href="/static/chip_count_example.webp" target="_blank" rel="noopener" style="color:var(--gold);">לדוגמה לתמונה מומלצת לחצו כאן</a></li>
+          <li>מומלץ לצלם את התמונה לרוחב.</li>
+        </ul>
       `;
       modeBody = `
         ${photoAreaHtml}
@@ -5376,8 +5431,8 @@ function renderModal(m){
             <div class="roster-row">
               <div class="row" style="gap:4px;">
                 ${cv.image ? `<img src="${cv.image}" style="width:28px;height:28px;object-fit:cover;border-radius:6px;border:1px solid rgba(255,255,255,.3);flex-shrink:0;margin-left:6px;">` : ""}
-                <span data-color-count="${cv.id}" data-color-value="${cv.value}" style="min-width:20px;text-align:center;font-weight:700;">0</span>
-                <span>× ₪${cv.value}</span>
+                <input type="number" data-color-count="${cv.id}" data-color-value="${cv.value}" value="0" onfocus="this.select()" style="width:52px;height:34px;font-size:13px;text-align:center;">
+                <span>ז'יטונים × ₪${cv.value}</span>
               </div>
               <span class="badge badge-ok" style="display:flex;flex-direction:column;align-items:center;line-height:1.25;flex-shrink:0;">
                 <span data-color-count-value="${cv.id}">= ₪0</span>
@@ -5661,7 +5716,12 @@ function renderModal(m){
   // out of saying who they paid.
   const dismissable = m.type !== "loginRequired" && !(m.type === "identityName" && m.forced) && m.type !== "directPay";
   const topAnchored = m.type === "seatChips" || m.type === "loginRequired" || m.type === "newCommunity";
-  const isSetupFlow = m.type === "chipSetup" || m.type === "payboxSettings" || m.type === "buyinSetup";
+  // The photo-count tab needs real room - a full-width photo plus the per-color table
+  // below it never fit in the normal 480px/85vh modal without heavy scrolling, reported
+  // live as not being able to see the whole photo and table at once - full-screen like
+  // the setup flows gives it the same room they get.
+  const isSetupFlow = m.type === "chipSetup" || m.type === "payboxSettings" || m.type === "buyinSetup"
+    || (m.type === "seatChips" && m.chipsMode === "byColor");
   return `
     <div class="overlay${topAnchored ? ' overlay-top' : ''}${isSetupFlow ? ' overlay-fullscreen' : ''}">
       <div class="modal" onclick="event.stopPropagation()">
@@ -8033,11 +8093,8 @@ function attachHandlers(){
     // left is about to silently vanish, so warn first rather than losing it with no
     // chance to notice (e.g. a half-typed per-color count).
     const hasEnteredData = () => {
-      // data-color-count is a plain text span now (the photo-detected count), not an
-      // input - it holds real data worth warning about the moment it's non-zero, same as
-      // a typed correction value does.
       if (mode === "byColor") {
-        return Array.from(app.querySelectorAll("[data-color-count]")).some(el => (parseFloat(el.textContent)||0) !== 0);
+        return Array.from(app.querySelectorAll("[data-color-count]")).some(el => (parseFloat(el.value)||0) !== 0);
       }
       if (mode === "profit") return (document.getElementById("seat-chips-profit")||{}).value?.trim() !== "";
       const qtyEl = document.getElementById("total-chip-qty");
@@ -8080,12 +8137,11 @@ function attachHandlers(){
       }
       if (mode === "byColor") {
         let total = 0;
-        // Plain text now, not an editable input - this is a read-only tally of what the
-        // photo(s) found, corrected on the photo itself (pile value picker / row-cycle
-        // badge) rather than by typing into this table, so there's nothing to merge in
-        // here beyond what's already in the span.
+        // Editable input, pre-filled from the photo(s) (see refillCountsFromPhotos) but
+        // left open to a manual override - e.g. a pile the photo missed entirely, or a
+        // community with no reference photos set up at all yet.
         app.querySelectorAll("[data-color-count]").forEach(el => {
-          const cnt = parseFloat(el.textContent);
+          const cnt = parseFloat(el.value);
           const val = parseFloat(el.dataset.colorValue);
           const sub = (isNaN(cnt) ? 0 : cnt) * (isNaN(val) ? 0 : val);
           total += sub;
@@ -8153,31 +8209,32 @@ function attachHandlers(){
           totalsByValueId[st.chipValueId] = (totalsByValueId[st.chipValueId]||0) + st.count;
         }));
         chipValues.forEach(cv => {
-          const span = app.querySelector(`[data-color-count="${cv.id}"]`);
-          if (span) span.textContent = String(totalsByValueId[cv.id] || 0);
+          const input = app.querySelector(`[data-color-count="${cv.id}"]`);
+          if (input) input.value = String(totalsByValueId[cv.id] || 0);
         });
         refreshHeader();
       };
       // The on-photo badge is the correction path for a wrong row-level size guess -
-      // cycles that whole row (every pile that shares its rowId, in that one photo)
-      // through the 4 possible sizes in one tap. Matches by rowId (frozen at detection
-      // time), never by the live `count` - matching by count used to re-merge a row into
-      // whatever OTHER row already had the new count, jumping both badges to a newly
-      // averaged position and landing one on top of the other every time this fired.
-      const sizeCycle = [10,5,3,1];
-      app.querySelectorAll("[data-chip-row-cycle]").forEach(el => el.onclick = () => {
-        const rowId = el.dataset.chipRowCycle;
-        const photoId = el.dataset.photoId;
-        const photo = (modal.chipPhotos||[]).find(p => p.id === photoId);
-        const current = photo && (photo.stacks||[]).find(st => String(st.rowId) === rowId);
-        if (!current) return;
-        const idx = sizeCycle.indexOf(current.count);
-        const newCount = sizeCycle[(idx === -1 ? 0 : idx+1) % sizeCycle.length];
-        if (newCount === current.count) return;
+      // opens a dropdown of the 4 possible sizes (same pattern as the pile value picker
+      // just below), picking one sets that whole row (every pile that shares its rowId, in
+      // that one photo) directly. Matches by rowId (frozen at detection time), never by the
+      // live `count` - matching by count used to re-merge a row into whatever OTHER row
+      // already had the new count, jumping both badges to a newly averaged position and
+      // landing one on top of the other every time this fired.
+      app.querySelectorAll("[data-chip-row-pick]").forEach(el => el.onclick = (e) => {
+        e.stopPropagation();
+        const photoId = el.dataset.photoId, rowId = el.dataset.rowId;
+        const isOpen = modal.chipRowPickerFor && modal.chipRowPickerFor.photoId === photoId && String(modal.chipRowPickerFor.rowId) === rowId;
+        updateModal({chipRowPickerFor: isOpen ? null : {photoId, rowId}});
+      });
+      app.querySelectorAll("[data-pick-chip-row-size]").forEach(el => el.onclick = (e) => {
+        e.stopPropagation();
+        const newCount = parseInt(el.dataset.pickChipRowSize, 10);
+        const photoId = el.dataset.photoId, rowId = el.dataset.rowId;
         const photos = (modal.chipPhotos||[]).map(p => p.id !== photoId ? p : {
           ...p, stacks: (p.stacks||[]).map(st => String(st.rowId) === rowId ? {...st, count: newCount} : st)
         });
-        updateModal({chipPhotos: photos});
+        updateModal({chipPhotos: photos, chipRowPickerFor: null});
         refillCountsFromPhotos(photos);
       });
       // Tapping a pile's own value label opens/closes a dropdown of every known chip
@@ -8289,8 +8346,8 @@ function attachHandlers(){
       if (retakeChipCountBtn) retakeChipCountBtn.onclick = () => {
         updateModal({chipPhotos: []});
         chipValues.forEach(cv => {
-          const span = app.querySelector(`[data-color-count="${cv.id}"]`);
-          if (span) span.textContent = "0";
+          const input = app.querySelector(`[data-color-count="${cv.id}"]`);
+          if (input) input.value = "0";
         });
         refreshHeader();
       };
