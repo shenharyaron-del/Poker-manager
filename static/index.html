@@ -5061,7 +5061,7 @@ function renderModal(m){
     const selectedToPlayerId = m.toPlayerId || (otherPlayers[0] && otherPlayers[0].id);
     title = `${esc(fromP ? fromP.name : "")} מעביר כסף`;
     body = `
-      <p style="color:var(--muted);font-size:12px;margin-top:0;">בחרו למי העברתם את הכסף ביד${isForSelf ? ', או פתחו ביט/פייבוקס' : ''}.</p>
+      <p style="color:var(--muted);font-size:12px;margin-top:0;">בחרו למי את/ה מעביר את הכסף במזומן${isForSelf ? ', או פתחו ביט/פייבוקס לתשלום' : ''}.</p>
       <div class="field"><label>למי?</label>
         <div class="scroll-list" style="max-height:200px;">
           ${otherPlayers.map(p => `<div class="checkbox-row" data-select-direct-pay-to="${p.id}" style="cursor:pointer;">
@@ -5070,7 +5070,7 @@ function renderModal(m){
           </div>`).join("")}
         </div>
       </div>
-      <div class="field"><label>סכום בשקלים</label><input type="number" inputmode="decimal" id="direct-pay-amount" value="${m.amount||''}" placeholder="0" autofocus></div>
+      <p style="font-weight:700;margin:0 0 14px;">סכום העברה: ${m.amount||0} שח</p>
       ${isForSelf ? `
       <div style="display:flex;gap:8px;margin-bottom:14px;">
         <button class="btn flex1" data-open-bit-generic style="background:#0070E0;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;"> ביט</button>
@@ -7573,7 +7573,7 @@ function attachHandlers(){
     });
     const confirmDirectPay = app.querySelector("[data-confirm-direct-pay]");
     if (confirmDirectPay) confirmDirectPay.onclick = async () => {
-      const amt = parseFloat(document.getElementById("direct-pay-amount").value);
+      const amt = parseFloat(modal.amount);
       const toPlayerId = modal.toPlayerId || (otherPlayers[0] && otherPlayers[0].id);
       if (!amt || amt <= 0 || !toPlayerId) return;
       confirmDirectPay.disabled = true;
