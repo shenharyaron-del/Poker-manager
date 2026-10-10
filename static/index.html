@@ -5279,48 +5279,70 @@ function renderModal(m){
       // get counted too; the table below sums across whichever photos exist (see
       // refillCountsFromPhotos in attachHandlers).
       const chipPhotos = m.chipPhotos || [];
-      // ALL_CHIP_SIZES stays fixed (the full vocabulary); selectedSizes is what the AI
-      // actually FOUND in the most recent analysis (or the default [10,5,1] before any
-      // photo exists) - the toggle row below reflects that as a default, not a pre-filter,
-      // or defaults to [10,5,1] before any photo exists. The user can still correct it by
-      // tapping a size on/off, which also narrows what each row badge below cycles through.
-      const ALL_CHIP_SIZES = [10,5,3,1];
-      const selectedSizes = (m.chipStackSizes && m.chipStackSizes.length) ? m.chipStackSizes : [10,5,1];
+      // {photoId, stackId} of the pile whose value-picker is currently open, or null.
+      const pickerFor = m.chipValuePickerFor || null;
+      // Piles are labeled in game-chip units, not raw ₪ - a physical chip worth ₪{value}
+      // represents {value * ratio} game chips (ratio = "1 ₪ = ratio chips", same number
+      // the "chips" mode above uses), so e.g. a ₪1.25 chip at ratio 4 reads "5" on the
+      // photo. The per-color table below stays in raw ₪ terms (see its own row markup) -
+      // only the photo labels and the value-picker need the converted number.
+      const chipDisplayLabel = (v) => (ratio && ratio !== 1) ? String(Math.round(v.value*ratio*100)/100) : ("₪"+v.value);
       const renderPhotoBlock = (photo, isAnalyzing) => {
         const stacks = photo.stacks || [];
-        // One badge per distinct count VALUE present in this photo (not per pile) - placed
-        // at the left edge, vertically centered on that group's own average height in the
-        // photo, same idea as "the quantities sit at the height of their row". Tapping it
-        // cycles through whichever sizes are currently checked below, reassigning every
-        // pile that shared its old count to the new one in one tap - this is the actual
-        // correction mechanism now, not re-estimating per chip-value row by hand.
-        const countGroups = {};
+        // One badge per rowId group (frozen at detection time - see detectChipStacks'
+        // own comment on why grouping/positioning off the live, editable `count` instead
+        // made badges jump to a newly-averaged spot, sometimes landing on top of another
+        // badge, every time the user corrected one). Position is a pure function of box
+        // coordinates that never change, so it never moves after the fact.
+        const rowGroups = {};
         stacks.forEach(st => {
-          if (!countGroups[st.count]) countGroups[st.count] = [];
-          countGroups[st.count].push(st);
+          if (!rowGroups[st.rowId]) rowGroups[st.rowId] = [];
+          rowGroups[st.rowId].push(st);
         });
-        const rowBadgesHtml = (photo.w && photo.h) ? Object.keys(countGroups).map(cnt => {
-          const group = countGroups[cnt];
-          const avgY = group.reduce((s,st) => s + (st.box[1]+st.box[3])/2, 0) / group.length;
+        // Pushed mostly OUTSIDE the photo's own right edge (the wrapper has no
+        // overflow:hidden, so this stays visible in the surrounding padding instead of
+        // getting clipped) rather than sitting just inside it - at right:4px this still
+        // covered whatever chip happened to be at that row's height near the right side.
+        // Lined up with the row's own value labels (anchored at each box's BOTTOM edge,
+        // see stackMarkers below) rather than the boxes' vertical centers, so the badge
+        // sits level with the ₪ values it's correcting instead of floating mid-chip.
+        const rowBadgesHtml = (photo.w && photo.h) ? Object.keys(rowGroups).map(rowId => {
+          const group = rowGroups[rowId];
+          const avgY = group.reduce((s,st) => s + st.box[3], 0) / group.length;
           const topPct = (avgY/photo.h)*100;
           return `
-            <button type="button" data-chip-row-cycle="${cnt}" data-photo-id="${photo.id}" style="position:absolute;right:4px;top:${topPct}%;transform:translateY(-50%);background:var(--gold);color:var(--gold-text);border:none;border-radius:50%;width:30px;height:30px;font-weight:800;font-size:14px;box-shadow:0 2px 6px rgba(0,0,0,.5);cursor:pointer;">${cnt}</button>`;
+            <button type="button" data-chip-row-cycle="${rowId}" data-photo-id="${photo.id}" title="הקישו להחלפת הכמות לכל הערמות בשורה הזו" style="position:absolute;right:-16px;top:${topPct}%;transform:translateY(-50%);background:var(--gold);color:var(--gold-text);border:none;border-radius:50%;width:30px;height:30px;font-weight:800;font-size:14px;box-shadow:0 2px 6px rgba(0,0,0,.5);cursor:pointer;z-index:5;">${group[0].count}</button>`;
         }).join("") : "";
         const stackMarkers = (photo.w && photo.h) ? stacks.map(st => {
           const [x1,y1,x2,y2] = st.box;
           const leftPct = (x1/photo.w)*100, topPct = (y1/photo.h)*100;
           const wPct = ((x2-x1)/photo.w)*100, hPct = ((y2-y1)/photo.h)*100;
           const cv = chipValues.find(v => v.id === st.chipValueId);
+          const isPicking = pickerFor && pickerFor.photoId === photo.id && pickerFor.stackId === st.id;
+          // Tapping the value label opens an inline picker (every known chip's own photo +
+          // value) right under it, to reassign this ONE pile to a different denomination -
+          // the actual fix for a wrong color/value match, which the per-chip-value
+          // correction field never really addressed (it could only nudge a total, not say
+          // WHICH pile was misread).
+          const pickerHtml = isPicking ? `
+            <div style="position:absolute;top:100%;${leftPct>50?'right':'left'}:50%;transform:translateX(${leftPct>50?'calc(-50% + 0px)':'calc(-50% + 0px)'});margin-top:4px;background:var(--card);border:1px solid var(--gold);border-radius:10px;padding:6px;display:flex;gap:6px;flex-wrap:wrap;max-width:220px;z-index:10;box-shadow:0 4px 14px rgba(0,0,0,.5);pointer-events:auto;">
+              ${chipValues.map(v => `
+                <button type="button" data-pick-chip-value="${v.id}" data-photo-id="${photo.id}" data-stack-id="${st.id}" style="background:none;border:${v.id===st.chipValueId?'2px solid var(--gold)':'1px solid rgba(255,255,255,.3)'};border-radius:8px;padding:3px;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;width:46px;">
+                  ${v.image ? `<img src="${v.image}" style="width:28px;height:28px;object-fit:cover;border-radius:50%;">` : `<span style="width:28px;height:28px;border-radius:50%;background:var(--card-b);"></span>`}
+                  <span style="font-size:10px;color:var(--text);">${chipDisplayLabel(v)}</span>
+                </button>
+              `).join("")}
+            </div>` : "";
           // Only the label itself is framed (one thin border, transparent fill) - this
           // used to also draw a second border+tint around the whole detected box, which
-          // read as two overlapping squares. Positioned INSIDE the detected area, anchored
-          // to its top edge (not floating above it) so a stack near the top of the photo
-          // doesn't push the label above the image entirely, clipped and invisible. Shows
-          // only the ₪ value now - the count moved to the one shared badge per row instead
-          // of repeating identically on every pile in that row.
+          // read as two overlapping squares. Anchored to the box's BOTTOM edge with only
+          // ~25% of its own height actually poking out past it (75% overlapping back up
+          // into the lower part of the pile) - sitting right at the top used to read as
+          // floating disconnected from the chip it's labeling, especially on a short pile.
           return `
-            <div style="position:absolute;left:${leftPct}%;top:${topPct}%;width:${wPct}%;height:${hPct}%;pointer-events:none;">
-              <div style="position:absolute;top:2px;left:50%;transform:translateX(-50%);background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:6px;padding:2px 6px;font-weight:800;font-size:12px;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,.9),0 0 4px rgba(0,0,0,.9);">₪${cv ? cv.value : '?'}</div>
+            <div style="position:absolute;left:${leftPct}%;top:${topPct}%;width:${wPct}%;height:${hPct}%;${isPicking?'z-index:10;':''}">
+              <button type="button" data-chip-pile-value data-photo-id="${photo.id}" data-stack-id="${st.id}" style="position:absolute;top:100%;left:50%;transform:translate(-50%,-75%);background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:6px;padding:2px 6px;font-weight:800;font-size:12px;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,.9),0 0 4px rgba(0,0,0,.9);cursor:pointer;">${cv ? chipDisplayLabel(cv) : '?'}</button>
+              ${pickerHtml}
             </div>`;
         }).join("") : "";
         return `
@@ -5331,20 +5353,9 @@ function renderModal(m){
             ${isAnalyzing ? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;"><span class="poker-loading-spin">${icon('chip')}</span></div>` : ""}
           </div>`;
       };
-      // Before any photo exists there's nothing real to highlight yet - a default
-      // [10,5,1] pre-selection (gold) looked like a leftover requirement to fill in, when
-      // it's really just the available vocabulary now. Plain/uniform (ghost, green card
-      // color) until an actual AI result exists to reflect.
-      const sizeTogglesHtml = `
-        <div style="display:flex;gap:6px;margin-bottom:6px;">
-          ${ALL_CHIP_SIZES.map(sz => `<button type="button" class="btn ${(chipPhotos.length && selectedSizes.includes(sz))?'btn-primary':'btn-ghost'} flex1" data-chip-size-toggle="${sz}" style="padding:8px 4px;font-size:14px;font-weight:700;">${sz}</button>`).join("")}
-        </div>
-        <p style="color:var(--muted);font-size:11px;margin:0 0 12px;">${chipPhotos.length ? "אלו הגדלים שה-AI זיהה - אפשר לתקן אם משהו לא נכון (זה גם קובע בין אילו גדלים אפשר להחליף בעיגול שעל כל שורה)." : "אלו הגדלים האפשריים - ה-AI ינחש מה קיים הערב, ואפשר יהיה לתקן אחרי הצילום."}</p>
-      `;
       const photoAreaHtml = chipPhotos.length ? `
         ${chipPhotos.map((photo,i) => renderPhotoBlock(photo, m.analyzingChipCount && i === chipPhotos.length-1)).join("")}
-        <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">${m.analyzingChipCount ? "סופר ז'יטונים אוטומטית..." : "הספירה מולאה בטבלה למטה - אפשר לתקן ידנית כל מספר שלא נראה נכון."}</p>
-        ${sizeTogglesHtml}
+        <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">${m.analyzingChipCount ? "סופר ז'יטונים אוטומטית..." : "הקישו על הערך של ערמה כדי לשנות את הסוג שלה, או על העיגול שבצד כדי לשנות את הכמות של כל השורה."}</p>
         ${chipPhotos.length < 2 ? `
         <div style="position:relative;margin-bottom:8px;">
           <button type="button" class="btn btn-ghost btn-block" style="pointer-events:none;display:flex;align-items:center;justify-content:center;gap:6px;" ${m.analyzingChipCount?"disabled":""}>${icon('plus')} עוד תמונה (ערמות שלא נכנסו לפריים)</button>
@@ -5352,12 +5363,11 @@ function renderModal(m){
         </div>` : ""}
         <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-retake-chip-count-photo ${m.analyzingChipCount?"disabled":""}>${icon('plus')} התחל מחדש</button>
       ` : `
-        ${sizeTogglesHtml}
         <div style="position:relative;margin-bottom:10px;">
           <button type="button" class="btn btn-ghost btn-block" style="pointer-events:none;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('plus')} ספירה אוטומטית מצילום</button>
           <input type="file" accept="image/*" capture="environment" id="chip-count-camera-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
         </div>
-        <p style="color:var(--muted);font-size:12px;margin:-4px 0 14px;">לדיוק הכי טוב, סדרו את הערמות בשורות לפי מרחק מהמצלמה: הכי רחוק = הגודל הכי גדול, הכי קרוב = הגודל הכי קטן. כל ערמה מז'יטונים מאותו הסוג בלבד. אם לא כל הערמות נכנסות לפריים אחד, אפשר להוסיף עוד תמונה אחר כך. נזהה את הסוג והכמות של כל ערמה - סימון העיגול שעל כל שורה בתמונה מאפשר לתקן אם נראה לא נכון.</p>
+        <p style="color:var(--muted);font-size:12px;margin:-4px 0 14px;">לדיוק הכי טוב, סדרו את הערמות בשורות לפי מרחק מהמצלמה: הכי רחוק = הגודל הכי גדול, הכי קרוב = הגודל הכי קטן. כל ערמה מז'יטונים מאותו הסוג בלבד. אם לא כל הערמות נכנסות לפריים אחד, אפשר להוסיף עוד תמונה אחר כך.</p>
       `;
       modeBody = `
         ${photoAreaHtml}
@@ -5366,12 +5376,7 @@ function renderModal(m){
             <div class="roster-row">
               <div class="row" style="gap:4px;">
                 ${cv.image ? `<img src="${cv.image}" style="width:28px;height:28px;object-fit:cover;border-radius:6px;border:1px solid rgba(255,255,255,.3);flex-shrink:0;margin-left:6px;">` : ""}
-                <span style="direction:ltr;display:inline-flex;align-items:center;gap:4px;">
-                  <span style="color:var(--muted);">(</span>
-                  <input type="number" data-color-correction="${cv.id}" placeholder="±0" title="תיקון ידני (חיובי או שלילי) מעל/מתחת למה שנספר בתמונה" style="width:52px;height:34px;font-size:13px;text-align:center;">
-                  <span data-color-count="${cv.id}" data-color-value="${cv.value}" style="min-width:20px;text-align:center;font-weight:700;">+0</span>
-                  <span style="color:var(--muted);">)</span>
-                </span>
+                <span data-color-count="${cv.id}" data-color-value="${cv.value}" style="min-width:20px;text-align:center;font-weight:700;">0</span>
                 <span>× ₪${cv.value}</span>
               </div>
               <span class="badge badge-ok" style="display:flex;flex-direction:column;align-items:center;line-height:1.25;flex-shrink:0;">
@@ -8032,9 +8037,7 @@ function attachHandlers(){
       // input - it holds real data worth warning about the moment it's non-zero, same as
       // a typed correction value does.
       if (mode === "byColor") {
-        const correctionHasValue = Array.from(app.querySelectorAll("[data-color-correction]")).some(el => el.value.trim() !== "");
-        const countHasValue = Array.from(app.querySelectorAll("[data-color-count]")).some(el => (parseFloat(el.textContent)||0) !== 0);
-        return correctionHasValue || countHasValue;
+        return Array.from(app.querySelectorAll("[data-color-count]")).some(el => (parseFloat(el.textContent)||0) !== 0);
       }
       if (mode === "profit") return (document.getElementById("seat-chips-profit")||{}).value?.trim() !== "";
       const qtyEl = document.getElementById("total-chip-qty");
@@ -8077,20 +8080,14 @@ function attachHandlers(){
       }
       if (mode === "byColor") {
         let total = 0;
+        // Plain text now, not an editable input - this is a read-only tally of what the
+        // photo(s) found, corrected on the photo itself (pile value picker / row-cycle
+        // badge) rather than by typing into this table, so there's nothing to merge in
+        // here beyond what's already in the span.
         app.querySelectorAll("[data-color-count]").forEach(el => {
-          // Plain text now, not an editable input (the photo-detected count is meant to
-          // stay a compact read-only record of what was actually seen - corrections go
-          // in the separate field next to it instead) - read textContent, not .value.
           const cnt = parseFloat(el.textContent);
           const val = parseFloat(el.dataset.colorValue);
-          // The manual "(correction  count)" field pair - correction is a +/- adjustment
-          // on top of whatever count is showing (typically the AI photo-count, left
-          // untouched as a visible record of what was actually detected) rather than the
-          // user having to overwrite that number directly to fix it.
-          const correctionEl = app.querySelector(`[data-color-correction="${el.dataset.colorCount}"]`);
-          const correction = correctionEl ? (parseFloat(correctionEl.value) || 0) : 0;
-          const effectiveCount = (isNaN(cnt) ? 0 : cnt) + correction;
-          const sub = isNaN(val) ? 0 : effectiveCount * val;
+          const sub = (isNaN(cnt) ? 0 : cnt) * (isNaN(val) ? 0 : val);
           total += sub;
           const rowValueEl = app.querySelector(`[data-color-count-value="${el.dataset.colorCount}"]`);
           if (rowValueEl) rowValueEl.textContent = `= ₪${Math.round(sub*100)/100}`;
@@ -8140,12 +8137,6 @@ function attachHandlers(){
     }
     refreshHeader();
     if (mode === "byColor") {
-      const selectedSizes = (modal.chipStackSizes && modal.chipStackSizes.length) ? modal.chipStackSizes : [10,5,1];
-      app.querySelectorAll("[data-chip-size-toggle]").forEach(el => el.onclick = () => {
-        const sz = parseInt(el.dataset.chipSizeToggle, 10);
-        const next = selectedSizes.includes(sz) ? selectedSizes.filter(s => s !== sz) : selectedSizes.concat([sz]);
-        updateModal({chipStackSizes: next});
-      });
       // Sends the fresh stack photo PLUS each known chip's own reference photo from
       // chipSetup (converted to a data URL - see urlToDataUrl's own comment on why that
       // conversion only happens here, at use-time) so the model can match a detected
@@ -8163,25 +8154,50 @@ function attachHandlers(){
         }));
         chipValues.forEach(cv => {
           const span = app.querySelector(`[data-color-count="${cv.id}"]`);
-          if (span) span.textContent = "+" + (totalsByValueId[cv.id] || 0);
+          if (span) span.textContent = String(totalsByValueId[cv.id] || 0);
         });
         refreshHeader();
       };
-      // The on-photo badge is the actual correction path for a wrong row-level guess
-      // (per the user's request) - cycles that WHOLE row (every pile that shared its old
-      // count, in that one photo) through whichever sizes are currently checked above, in
-      // one tap, instead of fixing each affected chip-value row's count by hand.
+      // The on-photo badge is the correction path for a wrong row-level size guess -
+      // cycles that whole row (every pile that shares its rowId, in that one photo)
+      // through the 4 possible sizes in one tap. Matches by rowId (frozen at detection
+      // time), never by the live `count` - matching by count used to re-merge a row into
+      // whatever OTHER row already had the new count, jumping both badges to a newly
+      // averaged position and landing one on top of the other every time this fired.
+      const sizeCycle = [10,5,3,1];
       app.querySelectorAll("[data-chip-row-cycle]").forEach(el => el.onclick = () => {
-        const oldCount = parseInt(el.dataset.chipRowCycle, 10);
+        const rowId = el.dataset.chipRowCycle;
         const photoId = el.dataset.photoId;
-        const cycle = selectedSizes.slice().sort((a,b) => b-a);
-        const idx = cycle.indexOf(oldCount);
-        const newCount = cycle[(idx === -1 ? 0 : idx+1) % cycle.length];
-        if (newCount === oldCount) return;
+        const photo = (modal.chipPhotos||[]).find(p => p.id === photoId);
+        const current = photo && (photo.stacks||[]).find(st => String(st.rowId) === rowId);
+        if (!current) return;
+        const idx = sizeCycle.indexOf(current.count);
+        const newCount = sizeCycle[(idx === -1 ? 0 : idx+1) % sizeCycle.length];
+        if (newCount === current.count) return;
         const photos = (modal.chipPhotos||[]).map(p => p.id !== photoId ? p : {
-          ...p, stacks: (p.stacks||[]).map(st => st.count === oldCount ? {...st, count: newCount} : st)
+          ...p, stacks: (p.stacks||[]).map(st => String(st.rowId) === rowId ? {...st, count: newCount} : st)
         });
         updateModal({chipPhotos: photos});
+        refillCountsFromPhotos(photos);
+      });
+      // Tapping a pile's own value label opens/closes a dropdown of every known chip
+      // (photo + converted value) right under it; picking one reassigns just that pile to
+      // a different denomination - the actual fix for a wrong color match, which only this
+      // one pile's chipValueId needs to change for (box/rowId/count are untouched).
+      app.querySelectorAll("[data-chip-pile-value]").forEach(el => el.onclick = (e) => {
+        e.stopPropagation();
+        const photoId = el.dataset.photoId, stackId = el.dataset.stackId;
+        const isOpen = modal.chipValuePickerFor && modal.chipValuePickerFor.photoId === photoId && modal.chipValuePickerFor.stackId === stackId;
+        updateModal({chipValuePickerFor: isOpen ? null : {photoId, stackId}});
+      });
+      app.querySelectorAll("[data-pick-chip-value]").forEach(el => el.onclick = (e) => {
+        e.stopPropagation();
+        const newValueId = el.dataset.pickChipValue;
+        const photoId = el.dataset.photoId, stackId = el.dataset.stackId;
+        const photos = (modal.chipPhotos||[]).map(p => p.id !== photoId ? p : {
+          ...p, stacks: (p.stacks||[]).map(st => st.id === stackId ? {...st, chipValueId: newValueId} : st)
+        });
+        updateModal({chipPhotos: photos, chipValuePickerFor: null});
         refillCountsFromPhotos(photos);
       });
       const detectChipStacks = async (photoId, dataUrl, width, height) => {
@@ -8215,9 +8231,8 @@ function attachHandlers(){
           // user-declared size list fixed the remaining ambiguity (2-of-4 sizes present,
           // no absolute reference) but added real friction before every photo - now the
           // model just makes its best-effort guess across all 4 possible sizes per row,
-          // and the per-row cycle badges on the photo (plus the toggle row, which now
-          // reflects what it found instead of pre-constraining it) are the correction
-          // path when it guesses a row wrong, instead of needing it right the first time.
+          // and the per-row cycle badge on the photo is the correction path when it
+          // guesses a row wrong, instead of needing it right the first time.
           const prompt = `תמונה 1 מציגה ערימות של ז'יטוני פוקר על שולחן, צולמו בזווית. ${refList}
 שלב ראשון: עבור כל תמונת ייחוס (2 עד ${validChipValues.length+1}), תארו במילה או שתיים את הצבע/עיצוב המרכזי שלה - התבוננו בכל תמונה בנפרד.
 שלב שני: הגדלים האפשריים היחידים הם 10, 5, 3, או ז'יטון בודד (1) - אין ערמות בגדלים אחרים. הערמות מאורגנות לרוב בשורות לפי מרחק מהמצלמה, מהגדולה ביותר (הרחוקה) לקטנה ביותר (הקרובה) - נסו לזהות כמה שורות/רמות גובה שונות יש בתמונה (יכול להיות 1 עד 4), ושייכו לכל שורה את הגודל המתאים לפי הסדר הזה, ביחס לשאר השורות שבתמונה (לא לפי מראה מוחלט). עשו הערכה מושכלת - כל ערמה/ז'יטון בתמונה חייב לקבל גודל, גם אם לא ברור ב-100%. עבור כל ערימה/ז'יטון בתמונה 1, זהו גם לאיזו תמונת-ייחוס היא הכי דומה בצבע/עיצוב (לפי התיאורים משלב ראשון), ותנו תיבה תוחמת (bounding box) בפיקסלים מוחלטים יחסית לתמונה 1 (רוחב ${width}, גובה ${height}) בפורמט [x1,y1,x2,y2].
@@ -8230,17 +8245,20 @@ function attachHandlers(){
           // refImage is 1-based over `images` (stack photo = 1, first reference = 2, ...) -
           // refImage - 2 is then a 0-based index into the references actually sent, in the
           // same order as chipValues filtered down to ones that had a usable photo.
+          // rowId is a frozen copy of the count AT DETECTION TIME, used only to group
+          // stacks into stable row badges (see renderPhotoBlock) - `count` itself changes
+          // when the user cycles a row's badge, but rowId never does, so a row's on-photo
+          // badge always stays at the same position instead of jumping to a new averaged
+          // spot (and potentially overlapping another badge) every time its own value
+          // changes, which is what grouping by the live `count` used to do.
           const finalStacks = stacks.map(s => {
             const cv = validChipValues[s.refImage - 2];
             if (!cv) return null;
-            return {id: uid(), box: s.box, chipValueId: cv.id, count: s.count};
+            return {id: uid(), box: s.box, chipValueId: cv.id, count: s.count, rowId: s.count};
           }).filter(Boolean);
           if (modal && modal.type === "seatChips") {
             const photos = (modal.chipPhotos||[]).map(p => p.id === photoId ? {...p, stacks: finalStacks} : p);
-            // Toggle row now reflects what this analysis actually found, across ALL
-            // photos so far - not a pre-filter anymore, see the prompt's own comment.
-            const foundSizes = [...new Set(photos.flatMap(p => (p.stacks||[]).map(st => st.count)))];
-            updateModal({chipPhotos: photos, analyzingChipCount: false, chipStackSizes: foundSizes.length ? foundSizes : modal.chipStackSizes});
+            updateModal({chipPhotos: photos, analyzingChipCount: false});
             refillCountsFromPhotos(photos);
           }
         } catch(e) {
@@ -8272,7 +8290,7 @@ function attachHandlers(){
         updateModal({chipPhotos: []});
         chipValues.forEach(cv => {
           const span = app.querySelector(`[data-color-count="${cv.id}"]`);
-          if (span) span.textContent = "+0";
+          if (span) span.textContent = "0";
         });
         refreshHeader();
       };
