@@ -6,6 +6,7 @@ import queue
 import re
 import secrets
 import threading
+import time
 import urllib.error
 import urllib.request
 from contextlib import contextmanager
@@ -181,11 +182,26 @@ def _ensure_schema(conn):
         # Render deploy, since _get_pool() runs this eagerly at startup - see its own
         # comment) can deadlock against each other, not just the simpler "both try to
         # CREATE the same table" race the except clauses below already handled - that
-        # deadlock crashed the whole deploy (DeadlockDetected, reported live). Held only
-        # for the duration of this function; a connection that loses the race just blocks
-        # here until the winner finishes and unlocks, then finds everything already
-        # created and no-ops through the loop below.
-        cur.execute("SELECT pg_advisory_lock(%s)", (_SCHEMA_INIT_LOCK_ID,))
+        # deadlock crashed the whole deploy (DeadlockDetected, reported live).
+        #
+        # Non-blocking pg_try_advisory_lock in a short bounded retry loop, NOT the plain
+        # blocking pg_advisory_lock this used to call directly - a stale/slow lock-holder
+        # (confirmed live: almost certainly a local dev session whose connection didn't
+        # clean up after itself) left that blocking call hanging until the connection's
+        # own statement_timeout killed it with QueryCanceled, which had no handler and
+        # crashed the ENTIRE production deploy over a lock meant to prevent a much smaller
+        # problem. If every attempt here still fails, proceed WITHOUT the lock rather than
+        # crash - the DuplicateTable/UniqueViolation handling below already covers the
+        # actual race this lock guards against, just without the extra protection against
+        # the rarer deadlock case, which is a far better trade than taking the whole
+        # server down.
+        got_lock = False
+        for _ in range(10):
+            cur.execute("SELECT pg_try_advisory_lock(%s)", (_SCHEMA_INIT_LOCK_ID,))
+            got_lock = cur.fetchone()[0]
+            if got_lock:
+                break
+            time.sleep(1)
         try:
             # CREATE TABLE IF NOT EXISTS isn't fully race-safe in Postgres on its own - two
             # connections can both see "doesn't exist yet" and both try to create it, and
@@ -202,7 +218,8 @@ def _ensure_schema(conn):
                 except psycopg2.errors.UniqueViolation:
                     conn.rollback()
         finally:
-            cur.execute("SELECT pg_advisory_unlock(%s)", (_SCHEMA_INIT_LOCK_ID,))
+            if got_lock:
+                cur.execute("SELECT pg_advisory_unlock(%s)", (_SCHEMA_INIT_LOCK_ID,))
     conn.commit()
 
 
