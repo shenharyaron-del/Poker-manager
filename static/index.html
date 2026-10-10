@@ -5331,11 +5331,15 @@ function renderModal(m){
             ${isAnalyzing ? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;"><span class="poker-loading-spin">${icon('chip')}</span></div>` : ""}
           </div>`;
       };
+      // Before any photo exists there's nothing real to highlight yet - a default
+      // [10,5,1] pre-selection (gold) looked like a leftover requirement to fill in, when
+      // it's really just the available vocabulary now. Plain/uniform (ghost, green card
+      // color) until an actual AI result exists to reflect.
       const sizeTogglesHtml = `
         <div style="display:flex;gap:6px;margin-bottom:6px;">
-          ${ALL_CHIP_SIZES.map(sz => `<button type="button" class="btn ${selectedSizes.includes(sz)?'btn-primary':'btn-ghost'} flex1" data-chip-size-toggle="${sz}" style="padding:8px 4px;font-size:14px;font-weight:700;">${sz}</button>`).join("")}
+          ${ALL_CHIP_SIZES.map(sz => `<button type="button" class="btn ${(chipPhotos.length && selectedSizes.includes(sz))?'btn-primary':'btn-ghost'} flex1" data-chip-size-toggle="${sz}" style="padding:8px 4px;font-size:14px;font-weight:700;">${sz}</button>`).join("")}
         </div>
-        <p style="color:var(--muted);font-size:11px;margin:0 0 12px;">${chipPhotos.length ? "אלו הגדלים שה-AI זיהה - אפשר לתקן אם משהו לא נכון (זה גם קובע בין אילו גדלים אפשר להחליף בעיגול שעל כל שורה)." : "אפשר לסמן מראש אילו גדלים קיימים הערב, או להשאיר ול-AI לנחש."}</p>
+        <p style="color:var(--muted);font-size:11px;margin:0 0 12px;">${chipPhotos.length ? "אלו הגדלים שה-AI זיהה - אפשר לתקן אם משהו לא נכון (זה גם קובע בין אילו גדלים אפשר להחליף בעיגול שעל כל שורה)." : "אלו הגדלים האפשריים - ה-AI ינחש מה קיים הערב, ואפשר יהיה לתקן אחרי הצילום."}</p>
       `;
       const photoAreaHtml = chipPhotos.length ? `
         ${chipPhotos.map((photo,i) => renderPhotoBlock(photo, m.analyzingChipCount && i === chipPhotos.length-1)).join("")}
