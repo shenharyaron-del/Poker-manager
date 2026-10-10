@@ -5276,9 +5276,18 @@ function renderModal(m){
       // markers are, just read-only (no drag/resize - correcting a miscount is done in
       // the table below, not on the photo). Up to 2 photos (m.chipPhotos) - a single shot
       // covers most tables, but a second one lets stacks that didn't fit the first frame
-      // get counted too; the table below sums across whichever photos exist (see
-      // refillCountsFromPhotos in attachHandlers).
+      // get counted too; the table below sums across whichever photos exist (colorTotals,
+      // computed fresh on every render - see its own comment just below).
       const chipPhotos = m.chipPhotos || [];
+      // Derived straight from modal state on every render (not just imperatively patched
+      // in after specific actions in attachHandlers) - opening/closing a picker is itself
+      // just an updateModal() call, which re-renders this whole table from scratch, and a
+      // literal value="0" in the template briefly reset every count to 0 the instant any
+      // picker was tapped open, wiping out whatever the photo (or a manual edit) had there.
+      const colorTotals = {};
+      chipPhotos.forEach(photo => (photo.stacks||[]).forEach(st => {
+        colorTotals[st.chipValueId] = (colorTotals[st.chipValueId]||0) + st.count;
+      }));
       // {photoId, stackId} of the pile whose value-picker is currently open, or null.
       const pickerFor = m.chipValuePickerFor || null;
       // {photoId, rowId} of the row whose size-picker is currently open, or null.
@@ -5389,9 +5398,14 @@ function renderModal(m){
           // value) right under it, to reassign this ONE pile to a different denomination -
           // the actual fix for a wrong color/value match, which the per-chip-value
           // correction field never really addressed (it could only nudge a total, not say
-          // WHICH pile was misread).
+          // WHICH pile was misread). Anchored to the LABEL's own wrapper (top:100% of it),
+          // never the detected box - the label itself can sit anywhere from 80% above the
+          // box to 80% below it (see frameStyleFor), and anchoring this to the box's own
+          // bottom edge instead, as it used to, left the picker popping up far from
+          // wherever the label it belongs to actually ended up for every row except the
+          // one style that happened to match the old fixed assumption.
           const pickerHtml = isPicking ? `
-            <div style="position:absolute;top:100%;${leftPct>50?'right':'left'}:50%;transform:translateX(${leftPct>50?'calc(-50% + 0px)':'calc(-50% + 0px)'});margin-top:4px;background:var(--card);border:1px solid var(--gold);border-radius:10px;padding:6px;display:flex;gap:6px;flex-wrap:wrap;max-width:220px;z-index:10;box-shadow:0 4px 14px rgba(0,0,0,.5);pointer-events:auto;">
+            <div style="position:absolute;top:100%;${leftPct>50?'right':'left'}:0;margin-top:4px;background:var(--card);border:1px solid var(--gold);border-radius:10px;padding:6px;display:flex;gap:6px;flex-wrap:wrap;max-width:220px;z-index:10;box-shadow:0 4px 14px rgba(0,0,0,.5);pointer-events:auto;">
               ${chipValues.map(v => `
                 <button type="button" data-pick-chip-value="${v.id}" data-photo-id="${photo.id}" data-stack-id="${st.id}" style="background:none;border:${v.id===st.chipValueId?'2px solid var(--gold)':'1px solid rgba(255,255,255,.3)'};border-radius:8px;padding:3px;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;width:46px;">
                   ${v.image ? `<img src="${v.image}" style="width:28px;height:28px;object-fit:cover;border-radius:50%;">` : `<span style="width:28px;height:28px;border-radius:50%;background:var(--card-b);"></span>`}
@@ -5402,12 +5416,17 @@ function renderModal(m){
           // Only the label itself is framed (one thin border, transparent fill) - this
           // used to also draw a second border+tint around the whole detected box, which
           // read as two overlapping squares. Which edge it anchors to, and by how much,
-          // comes from frameStyleFor - see its own comment for why that varies by row.
+          // comes from frameStyleFor - see its own comment for why that varies by row. The
+          // button sits in its OWN small wrapper (positioned per style.top/ty) rather than
+          // being positioned directly, so the picker above can anchor to that same wrapper
+          // (top:100% of IT) and always end up right under the label, wherever it is.
           const style = frameStyleFor(rankByRowId[st.rowId], N);
           return `
             <div style="position:absolute;left:${leftPct}%;top:${topPct}%;width:${wPct}%;height:${hPct}%;${isPicking?'z-index:10;':''}">
-              <button type="button" data-chip-pile-value data-photo-id="${photo.id}" data-stack-id="${st.id}" style="position:absolute;top:${style.top};left:50%;transform:translate(-50%,${style.ty});background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:6px;padding:2px 6px;font-weight:800;font-size:12px;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,.9),0 0 4px rgba(0,0,0,.9);cursor:pointer;">${cv ? chipDisplayLabel(cv) : '?'}</button>
-              ${pickerHtml}
+              <div style="position:absolute;top:${style.top};left:50%;transform:translate(-50%,${style.ty});">
+                <button type="button" data-chip-pile-value data-photo-id="${photo.id}" data-stack-id="${st.id}" style="display:block;background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:6px;padding:2px 6px;font-weight:800;font-size:12px;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,.9),0 0 4px rgba(0,0,0,.9);cursor:pointer;">${cv ? chipDisplayLabel(cv) : '?'}</button>
+                ${pickerHtml}
+              </div>
             </div>`;
         }).join("") : "";
         return `
@@ -5445,18 +5464,18 @@ function renderModal(m){
       modeBody = `
         ${photoAreaHtml}
         <div class="scroll-list" style="margin-bottom:14px;">
-          ${chipValues.map((cv) => `
+          ${chipValues.map((cv) => { const cnt = colorTotals[cv.id] || 0; return `
             <div class="roster-row">
               <div class="row" style="gap:4px;">
                 ${cv.image ? `<img src="${cv.image}" style="width:28px;height:28px;object-fit:cover;border-radius:6px;border:1px solid rgba(255,255,255,.3);flex-shrink:0;margin-left:6px;">` : ""}
-                <input type="number" data-color-count="${cv.id}" data-color-value="${cv.value}" value="0" onfocus="this.select()" style="width:52px;height:34px;font-size:13px;text-align:center;">
+                <input type="number" data-color-count="${cv.id}" data-color-value="${cv.value}" value="${cnt}" onfocus="this.select()" style="width:52px;height:34px;font-size:13px;text-align:center;">
                 <span>ז'יטונים × ₪${cv.value}</span>
               </div>
               <span class="badge badge-ok" style="display:flex;flex-direction:column;align-items:center;line-height:1.25;flex-shrink:0;">
-                <span data-color-count-value="${cv.id}">= ₪0</span>
+                <span data-color-count-value="${cv.id}">= ₪${Math.round(cnt*cv.value*100)/100}</span>
               </span>
             </div>
-          `).join("")}
+          `; }).join("")}
         </div>
       `;
     } else if (mode === "chips") {
@@ -8164,9 +8183,9 @@ function attachHandlers(){
       }
       if (mode === "byColor") {
         let total = 0;
-        // Editable input, pre-filled from the photo(s) (see refillCountsFromPhotos) but
-        // left open to a manual override - e.g. a pile the photo missed entirely, or a
-        // community with no reference photos set up at all yet.
+        // Editable input, pre-filled from the photo(s) on every render (see colorTotals
+        // in renderModal) but left open to a manual override - e.g. a pile the photo
+        // missed entirely, or a community with no reference photos set up at all yet.
         app.querySelectorAll("[data-color-count]").forEach(el => {
           const cnt = parseFloat(el.value);
           const val = parseFloat(el.dataset.colorValue);
@@ -8227,20 +8246,6 @@ function attachHandlers(){
       // two custom-marked chips can look close in a phone photo otherwise. Reference
       // photos are sent in the same order as chipValues so refIndex (1-based, after the
       // stack photo itself) maps straight back to chipValues[refIndex-1].
-      // Recomputes every chip-value row's total from scratch across ALL photos taken so
-      // far (not just the one just analyzed) - simpler and less error-prone than trying
-      // to incrementally add/subtract as photos come and go (e.g. "התחל מחדש").
-      const refillCountsFromPhotos = (photos) => {
-        const totalsByValueId = {};
-        photos.forEach(photo => (photo.stacks||[]).forEach(st => {
-          totalsByValueId[st.chipValueId] = (totalsByValueId[st.chipValueId]||0) + st.count;
-        }));
-        chipValues.forEach(cv => {
-          const input = app.querySelector(`[data-color-count="${cv.id}"]`);
-          if (input) input.value = String(totalsByValueId[cv.id] || 0);
-        });
-        refreshHeader();
-      };
       // The on-photo badge is the correction path for a wrong row-level size guess -
       // opens a dropdown of the 4 possible sizes (same pattern as the pile value picker
       // just below), picking one sets that whole row (every pile that shares its rowId, in
@@ -8262,7 +8267,7 @@ function attachHandlers(){
           ...p, stacks: (p.stacks||[]).map(st => String(st.rowId) === rowId ? {...st, count: newCount} : st)
         });
         updateModal({chipPhotos: photos, chipRowPickerFor: null});
-        refillCountsFromPhotos(photos);
+        refreshHeader();
       });
       // Tapping a pile's own value label opens/closes a dropdown of every known chip
       // (photo + converted value) right under it; picking one reassigns just that pile to
@@ -8282,7 +8287,7 @@ function attachHandlers(){
           ...p, stacks: (p.stacks||[]).map(st => st.id === stackId ? {...st, chipValueId: newValueId} : st)
         });
         updateModal({chipPhotos: photos, chipValuePickerFor: null});
-        refillCountsFromPhotos(photos);
+        refreshHeader();
       });
       const detectChipStacks = async (photoId, dataUrl, width, height) => {
         try {
@@ -8343,7 +8348,7 @@ function attachHandlers(){
           if (modal && modal.type === "seatChips") {
             const photos = (modal.chipPhotos||[]).map(p => p.id === photoId ? {...p, stacks: finalStacks} : p);
             updateModal({chipPhotos: photos, analyzingChipCount: false});
-            refillCountsFromPhotos(photos);
+            refreshHeader();
           }
         } catch(e) {
           console.error("chip stack detection failed", e);
@@ -8372,10 +8377,6 @@ function attachHandlers(){
       const retakeChipCountBtn = app.querySelector("[data-retake-chip-count-photo]");
       if (retakeChipCountBtn) retakeChipCountBtn.onclick = () => {
         updateModal({chipPhotos: []});
-        chipValues.forEach(cv => {
-          const input = app.querySelector(`[data-color-count="${cv.id}"]`);
-          if (input) input.value = "0";
-        });
         refreshHeader();
       };
     }
