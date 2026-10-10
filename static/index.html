@@ -8103,9 +8103,17 @@ function attachHandlers(){
       };
       const detectChipStacks = async (photoId, dataUrl, width, height) => {
         try {
+          // validChipValues/validRefs are kept in lockstep (same filter, same order) so
+          // validChipValues[i] always corresponds to validRefs[i], i.e. to images[i+1] -
+          // building refList off the UNFILTERED chipValues index (as this used to) drifted
+          // out of sync with the actual (gap-free) images array the moment any chip value
+          // had no reference photo, silently mislabeling every reference after that gap
+          // and reported live as two denominations' totals swapping with each other.
           const refs = await Promise.all(chipValues.map(cv => cv.image ? urlToDataUrl(cv.image).catch(()=>null) : null));
-          const refList = chipValues.map((cv, i) => refs[i] ? `תמונה ${i+2} = ז'יטון בערך ₪${cv.value}.` : null).filter(Boolean).join(" ");
-          const images = [dataUrl, ...refs.filter(Boolean)];
+          const validChipValues = chipValues.filter((cv,i) => refs[i]);
+          const validRefs = refs.filter(Boolean);
+          const refList = validChipValues.map((cv, i) => `תמונה ${i+2} = ז'יטון בערך ₪${cv.value}.`).join(" ");
+          const images = [dataUrl, ...validRefs];
           const prompt = `תמונה 1 מציגה ערימות של ז'יטוני פוקר על שולחן, צולמו ממבט על. ${refList}
 כל ערימה מכילה ז'יטונים מסוג אחד בלבד, ובגודל של בדיוק 10, 5, או ז'יטון בודד (1) בלבד - אין ערמות בגודל אחר. ערמה גבוהה וברורה = 10. ערמה שגובהה בערך חצי מזה = 5. כל ערמה אחרת שאינה בבירור 10 או 5 - כולל כל ערמה קצרה, חלקית, או לא ברורה - אל תנסו לנחש את גובהה המדויק: ספרו אותה כאוסף של ז'יטונים בודדים נפרדים, כל אחד בתיבה תוחמת נפרדת משלו עם גודל 1 (גם אם שני ז'יטונים בודדים נוגעים זה בזה בתמונה).
 עבור כל ערימה/ז'יטון בתמונה 1, זהו לאיזו תמונת-ייחוס (2 ואילך) היא הכי דומה בצבע ובעיצוב, ותנו: תיבה תוחמת (bounding box) בפיקסלים מוחלטים יחסית לתמונה 1 (רוחב ${width}, גובה ${height}) בפורמט [x1,y1,x2,y2], מספר תמונת הייחוס שהיא תואמת, והגודל (10/5/1 בלבד).
@@ -8117,7 +8125,6 @@ function attachHandlers(){
           // refImage is 1-based over `images` (stack photo = 1, first reference = 2, ...) -
           // refImage - 2 is then a 0-based index into the references actually sent, in the
           // same order as chipValues filtered down to ones that had a usable photo.
-          const validChipValues = chipValues.filter((cv,i) => refs[i]);
           const finalStacks = stacks.map(s => {
             const cv = validChipValues[s.refImage - 2];
             if (!cv) return null;
