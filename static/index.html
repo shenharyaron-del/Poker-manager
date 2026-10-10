@@ -5294,20 +5294,20 @@ function renderModal(m){
       // RANK in this photo (0 = farthest/topmost row, N-1 = nearest/bottommost) - fans the
       // labels outward from the middle rows instead of letting a row's labels collide with
       // the chips of the row right above or below it: the farthest row's labels pop out
-      // ABOVE their boxes, the nearest row's pop out BELOW, and any row in between sits
-      // flush against whichever of its own edges faces away from the middle (touching, no
-      // overlap, no further protrusion) - see frameStyleFor below for exactly which edge.
+      // (mostly) ABOVE their boxes, the nearest row's pop out (mostly) BELOW, and any row(s)
+      // in between pop out a little less, toward whichever of their own edges faces away
+      // from the middle - see frameStyleFor below for exactly which edge and how much.
       const FRAME_STYLES = {
-        above:       {top:'0%',   ty:'-25%'},  // 25% of the frame pokes out above the box
-        below:       {top:'100%', ty:'-75%'},  // 25% of the frame pokes out below the box
-        flushTop:    {top:'0%',   ty:'-100%'}, // frame sits fully above the box, touching it
-        flushBottom: {top:'100%', ty:'0%'},    // frame sits fully below the box, touching it
+        above:            {top:'0%',   ty:'-80%'}, // topmost row: 80% of the frame pokes out above the box
+        below:            {top:'100%', ty:'-20%'}, // bottommost row: 80% pokes out below the box
+        secondFromTop:    {top:'0%',   ty:'-20%'}, // 2nd-from-top (only when there are 4 rows): 20% pokes out above
+        secondFromBottom: {top:'100%', ty:'-80%'}, // 2nd-from-bottom row: 20% pokes out below the box
       };
       const frameStyleFor = (rank, n) => {
         if (n <= 1 || rank === n-1) return FRAME_STYLES.below;
         if (rank === 0) return FRAME_STYLES.above;
-        if (rank === 1 && n === 4) return FRAME_STYLES.flushTop;
-        return FRAME_STYLES.flushBottom;
+        if (rank === 1 && n === 4) return FRAME_STYLES.secondFromTop;
+        return FRAME_STYLES.secondFromBottom;
       };
       const renderPhotoBlock = (photo, isAnalyzing) => {
         const stacks = photo.stacks || [];
@@ -5331,6 +5331,19 @@ function renderModal(m){
         const rankByRowId = {};
         rankedRowIds.forEach((rowId,i) => { rankByRowId[rowId] = i; });
         const N = rankedRowIds.length;
+        // frameStyleFor only has distinct positions for up to 4 depth rows - beyond that,
+        // rows would start sharing a style and visually collide instead of fanning out.
+        // Piles are still auto-filled into the table below even when this fires (the photo
+        // just can't be marked up on top of), so nothing already counted is lost.
+        if (N > 4) {
+          return `
+            <div style="width:100%;margin-bottom:8px;position:relative;">
+              <img src="${photo.src}" draggable="false" style="width:100%;border-radius:12px;display:block;opacity:.4;">
+              <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;">
+                <p style="background:rgba(0,0,0,.8);color:#fda4af;font-size:13px;text-align:center;padding:12px 14px;border-radius:10px;margin:0;">זוהו ${N} שורות עומק בתמונה הזו - נתמכות עד 4 שורות בתמונה אחת. צלמו את הערמות בשתי תמונות נפרדות במקום אחת.</p>
+              </div>
+            </div>`;
+        }
         // Pushed mostly OUTSIDE the photo's own right edge (the wrapper has no
         // overflow:hidden, so this stays visible in the surrounding padding instead of
         // getting clipped) rather than sitting just inside it - at right:4px this still
@@ -5341,7 +5354,7 @@ function renderModal(m){
         const rowBadgesHtml = (photo.w && photo.h) ? rankedRowIds.map(rowId => {
           const group = rowGroups[rowId];
           const style = frameStyleFor(rankByRowId[rowId], N);
-          const usesTopEdge = style === FRAME_STYLES.above || style === FRAME_STYLES.flushTop;
+          const usesTopEdge = style === FRAME_STYLES.above || style === FRAME_STYLES.secondFromTop;
           const edgeY = group.reduce((s,st) => s + (usesTopEdge ? st.box[1] : st.box[3]), 0) / group.length;
           const topPct = (edgeY/photo.h)*100;
           const isPickingRow = rowPickerFor && rowPickerFor.photoId === photo.id && String(rowPickerFor.rowId) === rowId;
@@ -5349,10 +5362,15 @@ function renderModal(m){
           // as the per-pile value picker below) instead of cycling on every tap - picking
           // the right size directly is one tap either way, but doesn't require remembering
           // (or re-tapping through) the cycle order to undo an overshoot.
+          // A horizontal strip (not a stacked column) specifically so its own height stays
+          // close to the badge's 30px - a tall stacked dropdown, even though centered on
+          // its own badge, visually spanned well into the row above/below's own badge
+          // (reported live as looking misaligned with "the sums on the right"), since rows
+          // can sit as little as ~40px apart.
           const rowPickerHtml = isPickingRow ? `
-            <div style="position:absolute;right:100%;top:50%;transform:translateY(-50%);margin-right:4px;background:var(--card);border:1px solid var(--gold);border-radius:10px;padding:6px;display:flex;flex-direction:column;gap:4px;z-index:10;box-shadow:0 4px 14px rgba(0,0,0,.5);">
+            <div style="position:absolute;right:100%;top:50%;transform:translateY(-50%);margin-right:4px;background:var(--card);border:1px solid var(--gold);border-radius:10px;padding:5px;display:flex;flex-direction:row;gap:4px;z-index:10;box-shadow:0 4px 14px rgba(0,0,0,.5);">
               ${SIZE_OPTIONS.map(sz => `
-                <button type="button" data-pick-chip-row-size="${sz}" data-photo-id="${photo.id}" data-row-id="${rowId}" style="background:${sz===group[0].count?'var(--gold)':'none'};color:${sz===group[0].count?'var(--gold-text)':'var(--text)'};border:1px solid var(--gold);border-radius:8px;padding:4px 10px;font-weight:700;font-size:13px;cursor:pointer;min-width:40px;">${sz}</button>
+                <button type="button" data-pick-chip-row-size="${sz}" data-photo-id="${photo.id}" data-row-id="${rowId}" style="background:${sz===group[0].count?'var(--gold)':'none'};color:${sz===group[0].count?'var(--gold-text)':'var(--text)'};border:1px solid var(--gold);border-radius:8px;padding:5px 9px;font-weight:700;font-size:13px;cursor:pointer;min-width:30px;">${sz}</button>
               `).join("")}
             </div>` : "";
           return `
@@ -8104,16 +8122,25 @@ function attachHandlers(){
     };
     // Jumps straight to typing after picking a mode - one less tap before the keyboard
     // is actually up. updateModal() renders synchronously, so the new mode's input
-    // already exists in the DOM by the time this runs.
+    // already exists in the DOM by the time this runs. byColor has no single field to
+    // land on (the per-color counts are secondary to the photo/pickers) - auto-focusing
+    // the first one just popped the keyboard open over the photo every time this tab
+    // opened, so it's skipped here.
     const focusModeInput = (forMode) => {
       const idByMode = {chips:"seat-chips-direct", profit:"seat-chips-profit"};
-      const el = idByMode[forMode] ? document.getElementById(idByMode[forMode]) : app.querySelector("[data-color-count]");
+      const el = idByMode[forMode] ? document.getElementById(idByMode[forMode]) : null;
       if (el) el.focus();
     };
     app.querySelectorAll("[data-chips-mode]").forEach(el => el.onclick = async () => {
       if (hasEnteredData() && !(await showConfirm("יש נתונים שהוקלדו במצב הנוכחי - מעבר למצב אחר ימחק אותם. להמשיך?"))) return;
       const newMode = el.dataset.chipsMode;
-      updateModal({chipsMode: newMode});
+      // The confirm above already told the user leaving byColor deletes its data - that
+      // has to include the photo(s) themselves, not just the per-color table (which reset
+      // to 0 on its own just by re-rendering with no live population). Leaving the photo
+      // in modal state meant coming back to byColor later showed a stale photo sitting
+      // above an already-zeroed table, out of sync with each other.
+      const leavingByColor = mode === "byColor" ? {chipPhotos: [], chipValuePickerFor: null, chipRowPickerFor: null} : {};
+      updateModal({chipsMode: newMode, ...leavingByColor});
       focusModeInput(newMode);
     });
     app.querySelectorAll("[data-profit-sign]").forEach(el => el.onclick = () => {
