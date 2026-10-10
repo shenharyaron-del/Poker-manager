@@ -5076,8 +5076,9 @@ function renderModal(m){
         <button class="btn flex1" data-open-bit-generic style="background:#003339;color:#37E6EE;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;"> ביט</button>
         <a href="https://links.payboxapp.com" class="btn flex1" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</a>
       </div>` : ""}
-      <button class="btn btn-primary btn-block" data-confirm-direct-pay>${isForSelf ? "העברתי כסף - סיים ערב" : `סיים ערב ל${esc(fromP ? fromP.name : "")}`}</button>
-      <button class="btn btn-ghost btn-block" style="margin-top:8px;" data-end-night-from-direct-pay="${m.gameId}">הערב הסתיים לכולם, למי להעביר את הכסף?</button>
+      <button class="btn btn-primary btn-block" data-confirm-direct-pay>${isForSelf ? "שילמתי - סיימתי את הערב" : `סיים ערב ל${esc(fromP ? fromP.name : "")}`}</button>
+      <button class="btn btn-ghost btn-block" style="margin-top:8px;" data-end-night-from-direct-pay="${m.gameId}">סגירת הערב לכולם</button>
+      <p style="color:var(--muted);font-size:11px;margin:6px 2px 0;text-align:center;">לחיצה כאן תסגור את הערב לכולם, והאפליקציה תחשב בעצמה מי מעביר למי</p>
     `;
   } else if (m.type === "payboxSettings") {
     const c = getCommunity(m.communityId);
