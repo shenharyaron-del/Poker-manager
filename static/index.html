@@ -684,7 +684,20 @@ async function loadStateV2(){
   const gameSummaries = (await Promise.all(
     communities.map(c => v2Fetch("GET", `/communities/${c.id}/games`))
   )).flat();
-  const games = await Promise.all(gameSummaries.map(g => v2Fetch("GET", `/games/${g.id}`)));
+  // Skip re-fetching a game's full detail (7 joined queries server-side - see
+  // v2_get_game's own comment) when its updatedAt, already given for free by the cheap
+  // summary list above, hasn't moved since we last had it in memory - this function runs
+  // on EVERY periodic refresh tick (every 6s) for EVERY game in EVERY community, so
+  // re-running all 7 queries for games nothing happened to tonight (every past night, and
+  // most ticks of the one actually being played) was pure waste - this was the real
+  // source of the DB connection-pool contention found during the avatar-upload
+  // investigation. Keeps the cached object as-is (full buyins/seats/etc, whatever shape
+  // it already had) rather than touching it, so nothing downstream needs to change.
+  const games = await Promise.all(gameSummaries.map(gs => {
+    const cached = getGame(gs.id);
+    if (cached && cached.updatedAt && gs.updatedAt && cached.updatedAt === gs.updatedAt) return cached;
+    return v2Fetch("GET", `/games/${gs.id}`);
+  }));
   return { communities, games };
 }
 
