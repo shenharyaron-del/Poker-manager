@@ -155,6 +155,16 @@ _INIT_STATEMENTS = (
     "  amount NUMERIC"
     ")",
     "CREATE INDEX IF NOT EXISTS game_events_game_id_idx ON game_events(game_id)",
+    # Group Bit links - same shape and same reasoning as paybox_links above, added later
+    # so a community can offer either (or both) as its shared group-payment option.
+    "CREATE TABLE IF NOT EXISTS bit_links ("
+    "  id TEXT PRIMARY KEY,"
+    "  community_id TEXT REFERENCES communities(id) ON DELETE CASCADE,"
+    "  name TEXT,"
+    "  link TEXT"
+    ")",
+    "CREATE INDEX IF NOT EXISTS bit_links_community_id_idx ON bit_links(community_id)",
+    "ALTER TABLE communities ADD COLUMN IF NOT EXISTS active_bit_link_id TEXT",
 )
 
 
@@ -435,10 +445,11 @@ def _num(x):
 
 def _row_to_community(row):
     (cid, name, created_by, created_by_name, chip_ratio, active_paybox_link_id,
-     settlement_default, updated_at, last_participants, buyin_amounts) = row
+     settlement_default, updated_at, last_participants, buyin_amounts, active_bit_link_id) = row
     return {
         "id": cid, "name": name, "createdBy": created_by, "createdByName": created_by_name,
         "chipRatio": _num(chip_ratio), "activePayboxLinkId": active_paybox_link_id,
+        "activeBitLinkId": active_bit_link_id,
         "settlementDefault": settlement_default,
         "updatedAt": updated_at.isoformat() if updated_at else None,
         "lastParticipants": last_participants,
@@ -459,7 +470,7 @@ def v2_list_communities():
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT id, name, created_by, created_by_name, chip_ratio, active_paybox_link_id, "
-                "settlement_default, updated_at, last_participants, buyin_amounts "
+                "settlement_default, updated_at, last_participants, buyin_amounts, active_bit_link_id "
                 "FROM communities ORDER BY name"
             )
             communities = [_row_to_community(r) for r in cur.fetchall()]
@@ -467,6 +478,7 @@ def v2_list_communities():
             for c in communities:
                 c["chipValues"] = []
                 c["payboxLinks"] = []
+                c["bitLinks"] = []
                 c["roster"] = []
 
             if ids:
@@ -486,6 +498,13 @@ def v2_list_communities():
                 )
                 for community_id, link_id, name, link in cur.fetchall():
                     by_id[community_id]["payboxLinks"].append({"id": link_id, "name": name, "link": link})
+
+                cur.execute(
+                    "SELECT community_id, id, name, link FROM bit_links WHERE community_id = ANY(%s)",
+                    (ids,),
+                )
+                for community_id, link_id, name, link in cur.fetchall():
+                    by_id[community_id]["bitLinks"].append({"id": link_id, "name": name, "link": link})
 
                 cur.execute(
                     "SELECT community_id, id, name, client_id, is_admin, gender FROM roster_players WHERE community_id = ANY(%s)",
@@ -697,6 +716,8 @@ def v2_update_community(community_id):
         fields.append("chip_ratio = %s"); params.append(body["chipRatio"])
     if "activePayboxLinkId" in body:
         fields.append("active_paybox_link_id = %s"); params.append(body["activePayboxLinkId"])
+    if "activeBitLinkId" in body:
+        fields.append("active_bit_link_id = %s"); params.append(body["activeBitLinkId"])
     if "settlementDefault" in body:
         fields.append("settlement_default = %s"); params.append(body["settlementDefault"])
     if "lastParticipants" in body:
@@ -783,6 +804,24 @@ def v2_duplicate_community(community_id):
                 cur.execute(
                     "UPDATE communities SET active_paybox_link_id = %s WHERE id = %s",
                     (paybox_id_map[old_active], new_id),
+                )
+
+            cur.execute("SELECT id, name, link FROM bit_links WHERE community_id = %s", (community_id,))
+            bit_id_map = {}
+            for bl_id, bl_name, link in cur.fetchall():
+                new_bl_id = secrets.token_hex(4)
+                bit_id_map[bl_id] = new_bl_id
+                cur.execute(
+                    "INSERT INTO bit_links (id, community_id, name, link) VALUES (%s,%s,%s,%s)",
+                    (new_bl_id, new_id, bl_name, link),
+                )
+
+            cur.execute("SELECT active_bit_link_id FROM communities WHERE id = %s", (community_id,))
+            old_bit_active = cur.fetchone()[0]
+            if old_bit_active and old_bit_active in bit_id_map:
+                cur.execute(
+                    "UPDATE communities SET active_bit_link_id = %s WHERE id = %s",
+                    (bit_id_map[old_bit_active], new_id),
                 )
 
             cur.execute("SELECT id, name, client_id FROM roster_players WHERE community_id = %s", (community_id,))
@@ -984,6 +1023,69 @@ def v2_delete_paybox_link(community_id, link_id):
                 fallback = cur.fetchone()
                 cur.execute(
                     "UPDATE communities SET active_paybox_link_id = %s WHERE id = %s",
+                    (fallback[0] if fallback else None, community_id),
+                )
+        conn.commit()
+    if not deleted:
+        return jsonify({"error": "not found"}), 404
+    return jsonify({"ok": True})
+
+
+# Group Bit links - same shape and endpoints as paybox-links above, added later so a
+# community can offer either (or both) as its shared group-payment option.
+@app.route("/api/v2/communities/<community_id>/bit-links", methods=["POST"])
+def v2_add_bit_link(community_id):
+    body = request.get_json(silent=True) or {}
+    link_id, name, link = body.get("id"), body.get("name"), body.get("link")
+    if not link_id or not link:
+        return jsonify({"error": "id and link required"}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO bit_links (id, community_id, name, link) VALUES (%s,%s,%s,%s)",
+                (link_id, community_id, name, link),
+            )
+            # First link added becomes the active one automatically, same as the client.
+            cur.execute(
+                "UPDATE communities SET active_bit_link_id = %s "
+                "WHERE id = %s AND active_bit_link_id IS NULL",
+                (link_id, community_id),
+            )
+        conn.commit()
+    return jsonify({"id": link_id}), 201
+
+
+@app.route("/api/v2/communities/<community_id>/bit-links", methods=["PUT"])
+def v2_edit_bit_links(community_id):
+    # Bulk in-place edit of name/link on existing entries - matches data-save-bit-entries.
+    body = request.get_json(silent=True) or {}
+    links = body.get("links")
+    if links is None:
+        return jsonify({"error": "links required"}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            for bl in links:
+                cur.execute(
+                    "UPDATE bit_links SET name = %s, link = %s WHERE id = %s AND community_id = %s",
+                    (bl.get("name"), bl.get("link"), bl["id"], community_id),
+                )
+        conn.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/v2/communities/<community_id>/bit-links/<link_id>", methods=["DELETE"])
+def v2_delete_bit_link(community_id, link_id):
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM bit_links WHERE id = %s AND community_id = %s", (link_id, community_id))
+            deleted = cur.rowcount
+            cur.execute("SELECT active_bit_link_id FROM communities WHERE id = %s", (community_id,))
+            row = cur.fetchone()
+            if row and row[0] == link_id:
+                cur.execute("SELECT id FROM bit_links WHERE community_id = %s LIMIT 1", (community_id,))
+                fallback = cur.fetchone()
+                cur.execute(
+                    "UPDATE communities SET active_bit_link_id = %s WHERE id = %s",
                     (fallback[0] if fallback else None, community_id),
                 )
         conn.commit()

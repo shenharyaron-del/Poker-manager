@@ -13,6 +13,9 @@ CREATE TABLE communities (
   created_by_name TEXT,
   chip_ratio NUMERIC,
   active_paybox_link_id TEXT,
+  -- Same idea as active_paybox_link_id, for the group's Bit link instead - added via an
+  -- idempotent ALTER TABLE in server.py's own startup init, not by re-running this file.
+  active_bit_link_id TEXT,
   -- Which settlement method a cashed-out player's panel defaults to on the table screen -
   -- 'direct' (player-to-player transfer) or 'paybox' (the community's shared PayBox link,
   -- only actually offered when active_paybox_link_id is set - see renderActionPanel).
@@ -37,6 +40,15 @@ CREATE TABLE chip_values (
 );
 
 CREATE TABLE paybox_links (
+  id TEXT PRIMARY KEY,
+  community_id TEXT REFERENCES communities(id) ON DELETE CASCADE,
+  name TEXT,
+  link TEXT
+);
+
+-- Same shape as paybox_links - a community's group Bit link(s). Added post-Phase-7 via
+-- server.py's own idempotent startup init, not by re-running this file against the live DB.
+CREATE TABLE bit_links (
   id TEXT PRIMARY KEY,
   community_id TEXT REFERENCES communities(id) ON DELETE CASCADE,
   name TEXT,
