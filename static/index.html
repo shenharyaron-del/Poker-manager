@@ -3682,14 +3682,14 @@ function renderPlayerScreen(gameId){
       statusHtml = profitForInfo >= 0
         ? `<div style="font-size:13px;color:var(--muted);margin-top:10px;">הרווח יחולק אחרי שכולם ישלמו לקבוצה</div>`
         : (activeBitLink
-            ? `<a href="${esc(activeBitLink)}" class="btn btn-block" style="margin-top:10px;background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;"> העברה לביט הקבוצתי</a>`
+            ? `<a href="${esc(activeBitLink)}" class="btn btn-block" style="margin-top:10px;background:#003339;color:#37E6EE;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;"> העברה לביט הקבוצתי</a>`
             : `<div style="font-size:12px;color:var(--muted);margin-top:10px;">לא הוגדרה קבוצת ביט</div>`);
     } else if (allCashedOutForSettlement && potBalancedForSettlement) {
       statusHtml = mySettlementTxns.map(t => t.from === pid ? `
         <div style="margin-top:10px;">
           <div style="font-weight:700;color:#fda4af;">${t.amount} שח מעביר ל-${esc(t.toName)}</div>
           <div style="display:flex;gap:8px;margin-top:8px;">
-            <button class="btn flex1" data-open-bit-generic style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;"> ביט</button>
+            <button class="btn flex1" data-open-bit-generic style="background:#003339;color:#37E6EE;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;"> ביט</button>
             <a href="https://links.payboxapp.com" class="btn flex1" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</a>
           </div>
         </div>
@@ -3968,7 +3968,7 @@ function renderGameResultsScreen(gameId){
         ? `<a href="${esc(activeLink)}" class="btn btn-primary btn-block" style="margin-top:8px;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;">פתיחת פייבוקס קבוצתי</a>`
         : `<div style="font-size:12px;color:var(--muted);margin-top:8px;margin-bottom:16px;text-align:center;">לא הוגדרה קבוצת פייבוקס</div>`;
     } else {
-      topButtonHtml = `<button class="btn btn-primary btn-block" data-open-bit-generic style="margin-top:8px;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:6px;background:#37E6EE;color:#003339;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;">פתיחת ביט קבוצתי</button>`;
+      topButtonHtml = `<button class="btn btn-primary btn-block" data-open-bit-generic style="margin-top:8px;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:6px;background:#003339;color:#37E6EE;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;">פתיחת ביט קבוצתי</button>`;
     }
   } else {
     const txns = settleTransactions(computeFinalBalances(synthGame), g.players);
@@ -5073,7 +5073,7 @@ function renderModal(m){
       <div class="field"><label>סכום בשקלים</label><input type="number" inputmode="decimal" id="direct-pay-amount" value="${m.amount||''}" placeholder="0" autofocus></div>
       ${isForSelf ? `
       <div style="display:flex;gap:8px;margin-bottom:14px;">
-        <button class="btn flex1" data-open-bit-generic style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;"> ביט</button>
+        <button class="btn flex1" data-open-bit-generic style="background:#003339;color:#37E6EE;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;"> ביט</button>
         <a href="https://links.payboxapp.com" class="btn flex1" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</a>
       </div>` : ""}
       <button class="btn btn-primary btn-block" data-confirm-direct-pay>${isForSelf ? "העברתי כסף - סיים ערב" : `סיים ערב ל${esc(fromP ? fromP.name : "")}`}</button>
@@ -5848,10 +5848,21 @@ function attachHandlers(){
     }
   });
   const shareAppBtn = app.querySelector("[data-share-app]");
-  if (shareAppBtn) shareAppBtn.onclick = () => {
+  if (shareAppBtn) shareAppBtn.onclick = async () => {
     const url = location.origin + location.pathname;
     const text = `בואו תנסו את Poker Manager - אפליקציה לניהול ערבי פוקר, ז'יטונים ומאזנים בין חברים - ${url}`;
-    window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank", "noopener");
+    // Same approach data-invite-game already uses (the table screen's "הזמנת שחקן") - the
+    // native share sheet hands off straight into the WhatsApp app's own chat picker. The
+    // old wa.me link this used to always open instead goes through WhatsApp's web
+    // redirector, which - unlike this plain wa.me/?text= link - lands on a QR-code login
+    // screen rather than the app on a device not already linked to WhatsApp Web, which is
+    // exactly the "different behavior" reported. Falls back to wa.me only on a
+    // browser/device with no Web Share API at all.
+    if (navigator.share) {
+      try { await navigator.share({title: "Poker Manager", text, url}); } catch(err) { /* user cancelled the share sheet */ }
+    } else {
+      window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank", "noopener");
+    }
   };
   const backHome = app.querySelector("[data-back-home]"); if (backHome) backHome.onclick = () => go("home");
   // querySelectorAll, not querySelector - the table screen's carousel mounts every page
