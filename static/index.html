@@ -253,24 +253,33 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
   box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -2px 0 rgba(0,0,0,.35),0 4px 8px rgba(0,0,0,.45);
   text-shadow:0 1px 1px rgba(0,0,0,.5);}
 .player-page .buyin-frame .chip-btn:active{transform:translateY(2px) scale(.97);box-shadow:inset 0 1px 0 rgba(255,255,255,.15),0 1px 3px rgba(0,0,0,.5);}
-.player-page .player-history-feed-tabs{overflow:visible;align-items:flex-end;gap:0;}
-.player-page .player-history-feed-tab{border-radius:14px 14px 0 0;padding:11px 4px;font-size:14px;letter-spacing:0;position:relative;
-  background:linear-gradient(180deg,#5b5fae,#3c3f80);color:rgba(230,232,255,.8);box-shadow:inset 0 1px 0 rgba(255,255,255,.18);}
-.player-page .player-history-feed-tab.active,
-.player-page .player-history-feed.mode-history .player-history-feed-tab.active,
-.player-page .player-history-feed.mode-feed .player-history-feed-tab.active{
-  background:linear-gradient(180deg,#fde9a8 0%,#e9c46a 45%,#c99a3a 100%);color:#2a1d05;padding:13px 4px;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 -2px 10px rgba(251,191,36,.25);}
+.player-page .player-history-feed-tabs{overflow:visible;align-items:flex-end;gap:6px;position:relative;z-index:1;}
+/* Each tab owns a fixed color (history = gold, feed = indigo) and the panel's whole frame
+   takes the ACTIVE tab's color - all four sides, including the strip under the inactive
+   tab. The active tab overlaps the frame's top edge by its width so the two read as one
+   shape; the inactive tab sits dimmed on top of the frame line. */
+.player-page{--pp-tab-gold:linear-gradient(180deg,#fde9a8 0%,#e9c46a 45%,#c99a3a 100%);--pp-tab-indigo:linear-gradient(180deg,#6e72c8 0%,#5155a3 50%,#3c3f80 100%);}
+.player-page .player-history-feed-tab{border-radius:14px 14px 0 0;padding:11px 4px;font-size:14px;letter-spacing:0;position:relative;opacity:.7;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.3);}
+.player-page .player-history-feed .player-history-feed-tab[data-player-tab="history"]{background:var(--pp-tab-gold);color:#2a1d05;}
+.player-page .player-history-feed .player-history-feed-tab[data-player-tab="feed"]{background:var(--pp-tab-indigo);color:#eef0ff;}
+.player-page .player-history-feed-tab.active{opacity:1;padding:13px 4px 15px;margin-bottom:-2px;}
+.player-page .player-history-feed-tab.active[data-player-tab="history"]{box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 -2px 12px rgba(251,191,36,.3);}
+.player-page .player-history-feed-tab.active[data-player-tab="feed"]{box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 -2px 12px rgba(110,114,200,.4);}
 .player-page .player-history-feed-body,
 .player-page .player-history-feed-body.mode-history,
 .player-page .player-history-feed-body.mode-feed{
-  border-radius:0 0 16px 16px;border:1px solid rgba(233,196,106,.35);border-top:none;
+  border:2px solid #d9ae55;
   background:radial-gradient(130% 90% at 50% 50%,transparent 50%,rgba(0,0,0,.45)),var(--pp-leather),linear-gradient(#0c3727,#082a1d);
   background-size:auto,180px 180px,auto;
-  padding-top:12px;box-shadow:inset 0 0 22px rgba(0,0,0,.55),0 0 18px rgba(110,231,183,.12),0 6px 14px rgba(0,0,0,.4);}
+  padding-top:12px;box-shadow:inset 0 0 22px rgba(0,0,0,.55),0 0 16px rgba(251,191,36,.18),0 6px 14px rgba(0,0,0,.4);}
+/* History is the right-hand tab (first in RTL), feed the left-hand one - the corner under
+   the active tab stays square so the tab flows straight into the frame. */
+.player-page .player-history-feed-body.mode-history{border-radius:16px 0 16px 16px;}
+.player-page .player-history-feed-body.mode-feed{border-radius:0 16px 16px 16px;border-color:#5b5fb5;box-shadow:inset 0 0 22px rgba(0,0,0,.55),0 0 16px rgba(110,114,200,.25),0 6px 14px rgba(0,0,0,.4);}
 .player-page .player-history-feed-body .chat-bubble{background:linear-gradient(90deg,rgba(14,58,40,.92),rgba(6,36,24,.92));border:1px solid rgba(233,196,106,.45);border-radius:999px;padding:8px 14px;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 2px 6px rgba(0,0,0,.35);}
-.player-page .player-history-feed-body.mode-feed .chat-bubble{border-color:rgba(233,196,106,.22);border-radius:14px;}
+.player-page .player-history-feed-body.mode-feed .chat-bubble{border-color:rgba(130,134,220,.45);border-radius:14px;}
 .player-page .pp-leave-gold,.player-page .pp-leave-red{border-radius:14px;font-weight:700;border:1px solid rgba(0,0,0,.25);transition:transform .08s ease;}
 .player-page .pp-leave-gold{background:linear-gradient(180deg,#fde68a 0%,#f2c14e 45%,#c8922a 100%)!important;color:#2a1d05!important;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.7),inset 0 -3px 0 rgba(120,70,0,.45),0 5px 10px rgba(0,0,0,.45);}
