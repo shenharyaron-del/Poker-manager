@@ -202,8 +202,15 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
 .player-history-feed.mode-history .player-history-feed-tab.active{background-image:linear-gradient(rgba(10,25,55,.85),rgba(10,25,55,.85)),url('/static/chat-bg.png');}
 .player-history-feed.mode-feed .player-history-feed-tab.active{background-image:linear-gradient(rgba(20,20,24,.85),rgba(20,20,24,.85)),url('/static/chat-bg.png');}
 .player-history-feed-body{flex:1;min-height:0;overflow-y:auto;padding:10px;touch-action:pan-y;border-radius:0 0 12px 12px;background-repeat:repeat;background-size:auto,220px;}
-.player-history-feed-body.mode-history{background-image:linear-gradient(rgba(10,25,55,.85),rgba(10,25,55,.85)),url('/static/chat-bg.png');}
-.player-history-feed-body.mode-feed{background-image:linear-gradient(rgba(20,20,24,.85),rgba(20,20,24,.85)),url('/static/chat-bg.png');}
+/* The body's THIRD corner - whichever top corner sits under the INACTIVE tab, not the
+   active one. The active tab is a raised pill in the SAME color as the panel directly
+   below it (see this block's own opening comment) and the two need to read as one
+   continuous shape, so that top corner stays square; the other top corner isn't merging
+   with anything above it, so it rounds like the rest of the panel's outer edge. History
+   is the right-hand tab (first in RTL) and feed the left-hand one, so it's top-left for
+   history active, top-right for feed active. */
+.player-history-feed-body.mode-history{border-radius:12px 0 12px 12px;background-image:linear-gradient(rgba(10,25,55,.85),rgba(10,25,55,.85)),url('/static/chat-bg.png');}
+.player-history-feed-body.mode-feed{border-radius:0 12px 12px 12px;background-image:linear-gradient(rgba(20,20,24,.85),rgba(20,20,24,.85)),url('/static/chat-bg.png');}
 /* Time sits tucked in the bubble's own bottom-left corner instead of a separate full-width
    row underneath - floating it lets the message text wrap around it exactly like a real
    chat bubble, landing beside the last line when there's room and below it otherwise. */
