@@ -5372,8 +5372,10 @@ function renderModal(m){
     const availableModes = [
       {key:"chips", label:"סכום ז'יטונים", icon:"coins"},
       {key:"profit", label:"רווח/הפסד", icon:"trend"},
-      chipValues.length ? {key:"byColor", label:"לפי צבע/תמונה", icon:"camera"} : null,
-    ].filter(Boolean);
+      // Always shown, even before the group has any chip values set up - the tab then
+      // explains where to set them up instead of silently not existing (see modeBody).
+      {key:"byColor", label:"לפי צבע/תמונה", icon:"camera"},
+    ];
     const mode = (m.chipsMode && availableModes.some(am => am.key === m.chipsMode)) ? m.chipsMode : availableModes[0].key;
     // Same tab-over-panel shape as the player screen's history/feed tabs: each mode owns a
     // fixed color (chips = gold, profit = teal, by-photo = violet), the active tab merges
@@ -5429,7 +5431,16 @@ function renderModal(m){
       directPaymentsNoteHtml = `<p style="color:var(--text);font-size:12px;margin:-14px 0 16px;text-align:center;">קיבלת ₪${Math.round(total)} מ-${names.map(esc).join(', ')}</p>`;
     }
     let modeBody;
-    if (mode === "byColor") {
+    const byColorUnavailable = mode === "byColor" && !chipValues.length;
+    if (byColorUnavailable) {
+      modeBody = `
+        <div style="text-align:center;padding:10px 6px 16px;">
+          <div style="color:#c4a8ee;margin-bottom:8px;display:flex;justify-content:center;">${icon('camera')}</div>
+          <div style="font-size:14px;font-weight:700;margin-bottom:6px;">ספירה לפי צבע/תמונה עדיין לא זמינה</div>
+          <div style="font-size:13px;color:var(--muted);line-height:1.5;">כדי שהצילום יעבוד, צריך להגדיר את הז'יטונים של הקבוצה ב"הגדרת פרופיל קבוצה" ← לשונית "ז'יטונים".<br>בינתיים אפשר לספור בלשונית "סכום ז'יטונים" או "רווח/הפסד".</div>
+        </div>
+      `;
+    } else if (mode === "byColor") {
       // Photo-count sub-feature: reuses the exact same AI-vision plumbing chipSetup
       // already uses (callClaudeVisionMulti/resizeImageDataUrl/urlToDataUrl) - the
       // reference photo per chip type captured there is exactly what lets this tell two
@@ -5717,7 +5728,7 @@ function renderModal(m){
         <p style="color:var(--muted);font-size:12px;">השחקן כבר יצא מהמשחק.</p>
         <button class="btn btn-ghost btn-block" data-return-to-game="${m.playerId}" style="margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('undo')} החזר למשחק</button>
       ` : `
-        <button class="btn btn-block" style="background:#57534e;color:#f5f5f4;display:flex;align-items:center;justify-content:center;gap:6px;" data-quick-end="${m.playerId}">${icon('out')} סיים ערב</button>
+        <button class="btn btn-block" style="background:#57534e;color:#f5f5f4;display:flex;align-items:center;justify-content:center;gap:6px;" data-quick-end="${m.playerId}" ${byColorUnavailable?'disabled':''}>${icon('out')} סיים ערב</button>
       `}
     `;
   } else if (m.type === "removeSeat") {
@@ -5921,7 +5932,7 @@ function renderModal(m){
   // live as not being able to see the whole photo and table at once - full-screen like
   // the setup flows gives it the same room they get.
   const isSetupFlow = m.type === "chipSetup" || m.type === "payboxSettings" || m.type === "buyinSetup"
-    || (m.type === "seatChips" && m.chipsMode === "byColor");
+    || (m.type === "seatChips" && m.chipsMode === "byColor" && (((getCommunity((getGame(m.gameId)||{}).communityId)||{}).chipValues)||[]).length > 0);
   return `
     <div class="overlay${topAnchored ? ' overlay-top' : ''}${isSetupFlow ? ' overlay-fullscreen' : ''}">
       <div class="modal" onclick="event.stopPropagation()">
@@ -8304,7 +8315,7 @@ function attachHandlers(){
     const ratio = c.chipRatio;
     const chipValues = c.chipValues || [];
     const currentChips = (g.liveChips||{})[modal.playerId] || 0;
-    const availableModes = ["chips", "profit", chipValues.length&&"byColor"].filter(Boolean);
+    const availableModes = ["chips", "profit", "byColor"];
     const mode = (modal.chipsMode && availableModes.includes(modal.chipsMode)) ? modal.chipsMode : availableModes[0];
     const profitSign = modal.profitSign === "loss" ? "loss" : "profit";
     // Switching modes swaps out the input(s) entirely - anything typed in the mode being
