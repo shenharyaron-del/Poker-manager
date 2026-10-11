@@ -225,6 +225,64 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
 .chat-bubble.with-icon{display:flex;gap:6px;align-items:flex-start;}
 .chat-bubble.with-icon>svg{flex-shrink:0;margin-top:2px;opacity:.85;}
 .empty{text-align:center;padding:50px 20px;color:#059669;font-size:14px;}
+/* ---------- Player screen "premium table" look ----------
+   Scoped to the carousel's player page (.player-page, set in render()) so the table and
+   admin pages keep their own look. A procedural leather grain (SVG fractal noise, no image
+   download) over a deep green, a soft top light and a dark vignette; glossy 3D buy-in
+   tiles in a recessed tray; a gold/indigo tab pair over a leather panel; and raised gold /
+   red leave buttons. All colors stay within the app's existing gold/green/red palette. */
+.player-page{
+  --pp-leather:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.5' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -1.3 .9'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background:
+    radial-gradient(120% 55% at 50% 0%,rgba(110,231,183,.10),transparent 70%),
+    radial-gradient(150% 110% at 50% 45%,transparent 55%,rgba(0,0,0,.55) 100%),
+    var(--pp-leather),
+    linear-gradient(#0d3b2b,#0a3124 60%,#082419);
+  background-size:auto,auto,180px 180px,auto;
+}
+.player-page .pp-total-wrap{position:relative;display:flex;flex-direction:column;align-items:center;margin-top:2px;}
+.player-page .pp-total{position:relative;z-index:1;font-size:54px;font-weight:800;line-height:1;letter-spacing:-.01em;
+  background:linear-gradient(180deg,#fff3c4 0%,#fcd34d 35%,#d99a1e 62%,#fbbf24 80%,#fde68a 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 2px 0 rgba(90,50,0,.55)) drop-shadow(0 0 14px rgba(251,191,36,.45));}
+.player-page .pp-chips{display:block;height:74px;width:auto;margin-top:-8px;filter:drop-shadow(0 8px 10px rgba(0,0,0,.55));pointer-events:none;user-select:none;-webkit-user-drag:none;}
+.player-page .buyin-frame{background:linear-gradient(180deg,rgba(0,0,0,.38),rgba(0,0,0,.22));border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:10px;
+  box-shadow:inset 0 2px 8px rgba(0,0,0,.6),0 1px 0 rgba(255,255,255,.06);}
+.player-page .buyin-frame .chip-btn{border-radius:12px;border:1px solid rgba(110,231,183,.22);color:#f5f5f4;font-weight:600;
+  background:linear-gradient(180deg,#2f7a58 0%,#1c5a40 48%,#134832 52%,#0f3d2b 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -2px 0 rgba(0,0,0,.35),0 4px 8px rgba(0,0,0,.45);
+  text-shadow:0 1px 1px rgba(0,0,0,.5);}
+.player-page .buyin-frame .chip-btn:active{transform:translateY(2px) scale(.97);box-shadow:inset 0 1px 0 rgba(255,255,255,.15),0 1px 3px rgba(0,0,0,.5);}
+.player-page .player-history-feed-tabs{overflow:visible;align-items:flex-end;gap:0;}
+.player-page .player-history-feed-tab{border-radius:14px 14px 0 0;padding:11px 4px;font-size:14px;letter-spacing:0;position:relative;
+  background:linear-gradient(180deg,#5b5fae,#3c3f80);color:rgba(230,232,255,.8);box-shadow:inset 0 1px 0 rgba(255,255,255,.18);}
+.player-page .player-history-feed-tab.active,
+.player-page .player-history-feed.mode-history .player-history-feed-tab.active,
+.player-page .player-history-feed.mode-feed .player-history-feed-tab.active{
+  background:linear-gradient(180deg,#fde9a8 0%,#e9c46a 45%,#c99a3a 100%);color:#2a1d05;padding:13px 4px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 -2px 10px rgba(251,191,36,.25);}
+.player-page .player-history-feed-body,
+.player-page .player-history-feed-body.mode-history,
+.player-page .player-history-feed-body.mode-feed{
+  border-radius:0 0 16px 16px;border:1px solid rgba(233,196,106,.35);border-top:none;
+  background:radial-gradient(130% 90% at 50% 50%,transparent 50%,rgba(0,0,0,.45)),var(--pp-leather),linear-gradient(#0c3727,#082a1d);
+  background-size:auto,180px 180px,auto;
+  padding-top:12px;box-shadow:inset 0 0 22px rgba(0,0,0,.55),0 0 18px rgba(110,231,183,.12),0 6px 14px rgba(0,0,0,.4);}
+.player-page .player-history-feed-body .chat-bubble{background:linear-gradient(90deg,rgba(14,58,40,.92),rgba(6,36,24,.92));border:1px solid rgba(233,196,106,.45);border-radius:999px;padding:8px 14px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 2px 6px rgba(0,0,0,.35);}
+.player-page .player-history-feed-body.mode-feed .chat-bubble{border-color:rgba(233,196,106,.22);border-radius:14px;}
+.player-page .pp-leave-gold,.player-page .pp-leave-red{border-radius:14px;font-weight:700;border:1px solid rgba(0,0,0,.25);transition:transform .08s ease;}
+.player-page .pp-leave-gold{background:linear-gradient(180deg,#fde68a 0%,#f2c14e 45%,#c8922a 100%)!important;color:#2a1d05!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.7),inset 0 -3px 0 rgba(120,70,0,.45),0 5px 10px rgba(0,0,0,.45);}
+.player-page .pp-leave-red{background:linear-gradient(180deg,#e0605a 0%,#c13a35 50%,#94221f 100%)!important;color:#fff!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.35),inset 0 -3px 0 rgba(70,0,0,.45),0 5px 10px rgba(0,0,0,.45);text-shadow:0 1px 1px rgba(0,0,0,.4);}
+.player-page .pp-leave-gold:active,.player-page .pp-leave-red:active{transform:translateY(2px);}
+/* Short phones: the history/feed panel is the one flexible section, so give it back the
+   room the big total + chip art take up. */
+@media (max-height:720px){
+  .player-page .pp-total{font-size:42px;}
+  .player-page .pp-chips{height:50px;margin-top:-6px;}
+}
 .section-title{color:var(--gold);font-size:11px;font-weight:700;letter-spacing:.05em;margin:0 0 8px;padding:0 20px;}
 .field{display:block;margin-bottom:14px;}
 .field label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;}
@@ -3333,7 +3391,7 @@ function render(){
       // covers both drag directions correctly every render, no reordering ever needed.
       const domOrder = N === 3 ? [cyclicPage(pageOrder, tableSubView, -1), tableSubView, cyclicPage(pageOrder, tableSubView, 1)] : pageOrder;
       const restOffset = N === 3 ? "-100%" : (domOrder[0] === tableSubView ? "0" : "-100%");
-      const pagesHtml = domOrder.map(key => `<div class="swipe-page">${RENDERERS[key]()}</div>`).join("");
+      const pagesHtml = domOrder.map(key => `<div class="swipe-page${key==='player'?' player-page':''}">${RENDERERS[key]()}</div>`).join("");
       const DOT_LABELS = { admin: "ניהול שחקנים", player: "השחקן שלי", table: "שולחן" };
       const dotsRow = `
         <div style="display:flex;justify-content:center;gap:6px;">
@@ -3870,7 +3928,7 @@ function renderPlayerScreen(gameId){
     <div class="player-screen-scroll">
       <div style="text-align:center;padding:6px 0 16px;flex-shrink:0;">
         <div style="font-size:26px;font-weight:700;color:var(--text);">${esc(p?p.name:"")}</div>
-        ${cashedOut ? "" : `<div data-player-total style="font-size:40px;font-weight:800;color:var(--gold);margin-top:4px;">₪${buyinTotal}</div>`}
+        ${cashedOut ? "" : `<div class="pp-total-wrap"><div class="pp-total" data-player-total>₪${buyinTotal}</div><img class="pp-chips" src="/static/player-chips.webp" alt="" draggable="false"></div>`}
         ${(() => {
           // Direct-settlement arrangement(s) involving this player (either side - see
           // getArrangementNotes), same note shown on the admin screen's rows.
@@ -3896,8 +3954,8 @@ function renderPlayerScreen(gameId){
       ${cashedOut ? "" : `
       <div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">סיום ערב (יציאה מהשולחן)</div>
       <div class="buyin-frame" style="display:flex;gap:6px;flex-shrink:0;">
-        <button class="btn flex1" style="background:#B8862B;color:#1a1a1a;display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 4px;font-size:13px;white-space:nowrap;" data-player-leave-table>${icon('out')}ספירת ז'יטונים</button>
-        <button class="btn flex1" style="background:#B23A3A;color:#fff;display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 4px;font-size:13px;white-space:nowrap;" data-player-leave-no-chips>${icon('out')}נשארתי בלי ז'יטונים 😞</button>
+        <button class="btn flex1 pp-leave-gold" style="background:#B8862B;color:#1a1a1a;display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 4px;font-size:13px;white-space:nowrap;" data-player-leave-table>${icon('out')}ספירת ז'יטונים</button>
+        <button class="btn flex1 pp-leave-red" style="background:#B23A3A;color:#fff;display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 4px;font-size:13px;white-space:nowrap;" data-player-leave-no-chips>${icon('out')}נשארתי בלי ז'יטונים 😞</button>
       </div>`}
     </div>
   `;
