@@ -846,11 +846,17 @@ async function loadState(){
 // different moment. Same eager-fetch-every-game shape init() already uses (see its own
 // comment on why that's a shortcut, not the final lazy-load design) - consistent with
 // what's actually deployed today rather than half-fixing only the refresh path.
+// All game summaries in one request (GET /game-summaries) instead of one request per
+// community on every refresh tick; only games of communities we actually loaded are kept,
+// same as the old per-community fetch produced.
+async function fetchGameSummaries(communities){
+  const ids = new Set(communities.map(c => c.id));
+  return (await v2Fetch("GET", "/game-summaries")).filter(gs => ids.has(gs.communityId));
+}
 async function loadStateV2(){
-  const communities = await v2Fetch("GET", "/communities");
-  const gameSummaries = (await Promise.all(
-    communities.map(c => v2Fetch("GET", `/communities/${c.id}/games`))
-  )).flat();
+  const [communities, allSummaries] = await Promise.all([v2Fetch("GET", "/communities"), v2Fetch("GET", "/game-summaries")]);
+  const communityIds = new Set(communities.map(c => c.id));
+  const gameSummaries = allSummaries.filter(gs => communityIds.has(gs.communityId));
   // Skip re-fetching a game's full detail (7 joined queries server-side - see
   // v2_get_game's own comment) when its updatedAt, already given for free by the cheap
   // summary list above, hasn't moved since we last had it in memory - this function runs
@@ -912,9 +918,18 @@ function detectAndAnnounceNewBuyins(oldGames, newGames){
     });
   });
 }
+// Fingerprint of the last v2 data applied - doRefreshNow skips the full-app re-render (a
+// complete innerHTML rebuild, every 6 seconds, on every phone) when a refresh brought back
+// exactly what's already on screen, which is nearly every tick. Communities/games are only
+// ever replaced wholesale by applyFreshState, so comparing serialized snapshots is safe.
+let lastAppliedV2Signature = null;
+function v2Signature(fresh){
+  try { return JSON.stringify([fresh.communities, fresh.games]); } catch(e) { return null; }
+}
 function applyFreshState(fresh){
   if (fresh === null) return;
   if (USE_RELATIONAL_API) {
+    lastAppliedV2Signature = v2Signature(fresh);
     if (hasAppliedFreshStateOnce) detectAndAnnounceNewBuyins(state.games, fresh.games);
     hasAppliedFreshStateOnce = true;
     state.communities = fresh.communities;
@@ -1121,6 +1136,27 @@ function v2ActionFinish(){
 // refresh right along with it, not just this one call. AbortController turns that into an
 // ordinary failure after a bounded wait instead.
 const V2_FETCH_TIMEOUT_MS = 20000;
+// Safe automatic retries for writes that are idempotent on the server (a client-generated
+// id with ON CONFLICT DO NOTHING, or a PUT/DELETE of a fixed target). A timeout or dropped
+// connection doesn't tell us whether the first attempt landed - retrying with the SAME id
+// either inserts it or is a harmless no-op, whereas giving up made the user tap again,
+// which created a second buy-in/payment with a NEW id (a real double charge). Only network
+// failures and 5xx/503 are retried - a 4xx is a real answer. A DELETE whose earlier
+// attempt already landed comes back 404 on retry, which counts as done.
+async function v2FetchWithRetry(method, path, body, retries = 2){
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await v2Fetch(method, path, body);
+    } catch(e) {
+      const status = e && e.status;
+      if (method === "DELETE" && attempt > 0 && status === 404) return {ok: true};
+      const retryable = !status || status >= 500;
+      if (!retryable || attempt >= retries) throw e;
+      logSync(`retrying ${method} ${path} after: ${e.message}`);
+      await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+    }
+  }
+}
 async function v2Fetch(method, path, body){
   v2ActionBegin();
   const controller = new AbortController();
@@ -1135,7 +1171,9 @@ async function v2Fetch(method, path, body){
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       if (res.status === 409) return {conflict: true};
-      throw new Error(data.error || `${method} ${path} failed (${res.status})`);
+      const err = new Error(data.error || `${method} ${path} failed (${res.status})`);
+      err.status = res.status;
+      throw err;
     }
     return data;
   } catch(e) {
@@ -1502,25 +1540,25 @@ async function v2RemoveGamePlayer(gameId, playerId){
 }
 
 async function v2AddBuyin(gameId, id, playerId, amount, actorName){
-  await v2Fetch("POST", `/games/${gameId}/buyins`, {id, playerId, amount, actorName});
+  await v2FetchWithRetry("POST", `/games/${gameId}/buyins`, {id, playerId, amount, actorName});
   getGame(gameId).buyins.push({id, playerId, amount, ts: Date.now(), actorName});
 }
 
 async function v2AddBuyinsBulk(gameId, buyins){
-  await v2Fetch("POST", `/games/${gameId}/buyins/bulk`, {buyins});
+  await v2FetchWithRetry("POST", `/games/${gameId}/buyins/bulk`, {buyins});
   const g = getGame(gameId);
   const ts = Date.now();
   buyins.forEach(b => g.buyins.push({...b, ts}));
 }
 
 async function v2DeleteBuyin(gameId, buyinId){
-  await v2Fetch("DELETE", `/games/${gameId}/buyins/${buyinId}`);
+  await v2FetchWithRetry("DELETE", `/games/${gameId}/buyins/${buyinId}`);
   const g = getGame(gameId);
   g.buyins = g.buyins.filter(b => b.id !== buyinId);
 }
 
 async function v2SetCashout(gameId, playerId, amount, arrangedWith, chips){
-  await v2Fetch("PUT", `/games/${gameId}/cashouts/${playerId}`, {amount, arrangedWith, chips});
+  await v2FetchWithRetry("PUT", `/games/${gameId}/cashouts/${playerId}`, {amount, arrangedWith, chips});
   const g = getGame(gameId);
   g.cashouts[playerId] = {amount, ts: Date.now(), arrangedWith: arrangedWith || []};
   if (chips !== undefined) g.liveChips[playerId] = chips;
@@ -1558,27 +1596,27 @@ async function v2UpdateLiveChips(gameId, playerId, chips){
 }
 
 async function v2AddPayboxPayment(gameId, id, playerId, amount){
-  await v2Fetch("POST", `/games/${gameId}/paybox-payments`, {id, playerId, amount});
+  await v2FetchWithRetry("POST", `/games/${gameId}/paybox-payments`, {id, playerId, amount});
   const g = getGame(gameId);
   if (!g.payboxPayments) g.payboxPayments = [];
   g.payboxPayments.push({id, playerId, amount, ts: Date.now()});
 }
 
 async function v2DeletePayboxPayment(gameId, paymentId){
-  await v2Fetch("DELETE", `/games/${gameId}/paybox-payments/${paymentId}`);
+  await v2FetchWithRetry("DELETE", `/games/${gameId}/paybox-payments/${paymentId}`);
   const g = getGame(gameId);
   g.payboxPayments = (g.payboxPayments||[]).filter(pp => pp.id !== paymentId);
 }
 
 async function v2AddPlayerPayment(gameId, id, fromPlayerId, toPlayerId, amount){
-  await v2Fetch("POST", `/games/${gameId}/player-payments`, {id, fromPlayerId, toPlayerId, amount});
+  await v2FetchWithRetry("POST", `/games/${gameId}/player-payments`, {id, fromPlayerId, toPlayerId, amount});
   const g = getGame(gameId);
   if (!g.playerPayments) g.playerPayments = [];
   g.playerPayments.push({id, fromPlayerId, toPlayerId, amount, ts: Date.now()});
 }
 
 async function v2DeletePlayerPayment(gameId, paymentId){
-  await v2Fetch("DELETE", `/games/${gameId}/player-payments/${paymentId}`);
+  await v2FetchWithRetry("DELETE", `/games/${gameId}/player-payments/${paymentId}`);
   const g = getGame(gameId);
   g.playerPayments = (g.playerPayments||[]).filter(pp => pp.id !== paymentId);
 }
@@ -1698,8 +1736,9 @@ async function doRefreshNow(source){
         refreshQueued = true;
         continue;
       }
-      if (fresh === null) {
-        logSync(`refresh[${callId}] 304 not-modified, nothing to apply`);
+      const unchanged = USE_RELATIONAL_API && fresh !== null && lastAppliedV2Signature !== null && v2Signature(fresh) === lastAppliedV2Signature;
+      if (fresh === null || unchanged) {
+        logSync(`refresh[${callId}] nothing new, skipping apply/render`);
       } else {
         logSync(`refresh[${callId}] GET done, buyins=${(fresh.games||[]).map(g=>g.buyins.length).join(',')}, applying (modal now=${!!modal})`);
         applyFreshState(fresh);
@@ -2271,7 +2310,14 @@ let buyinConfirmShowing = false;
 let announcedBuyinIds;
 try { announcedBuyinIds = new Set(JSON.parse(localStorage.getItem("poker-announced-buyins")) || []); }
 catch(e) { announcedBuyinIds = new Set(); }
+// Only the newest ids matter (a buy-in older than 2 minutes is never announced anyway - see
+// detectAndAnnounceNewBuyins), so keep the persisted list bounded instead of growing with
+// every buy-in this device has ever seen (re-serialized in full on every add).
+const MAX_ANNOUNCED_BUYIN_IDS = 2000;
 function persistAnnouncedBuyinIds(){
+  if (announcedBuyinIds.size > MAX_ANNOUNCED_BUYIN_IDS) {
+    announcedBuyinIds = new Set(Array.from(announcedBuyinIds).slice(-MAX_ANNOUNCED_BUYIN_IDS));
+  }
   try { localStorage.setItem("poker-announced-buyins", JSON.stringify(Array.from(announcedBuyinIds))); } catch(e) { /* storage full/blocked - still works in-memory for this page load */ }
 }
 function rememberAnnouncedBuyin(id){
@@ -8680,6 +8726,14 @@ function attachHandlers(){
     const quickEndBtn = app.querySelector("[data-quick-end]");
     if (quickEndBtn) quickEndBtn.onclick = async () => {
       const v = Math.round(computeCounted() * 100) / 100;
+      // Never silently save a different number than the one on screen: a loss bigger than
+      // the total buy-in used to fall back to the last live-chips value without a word, and
+      // an untouched form ended the night at ₪0 on one tap.
+      if (isNaN(v) || v < 0) { showAlert("הסכום לא תקין - ההפסד לא יכול להיות גדול מסך הקנייה."); return; }
+      if (!modal.chipsHeaderTouched && mode !== "profit") {
+        const sure = await showConfirm(`לא הוזן סכום ז'יטונים. לסיים את הערב עם ₪${v}?`);
+        if (!sure) return;
+      }
       quickEndBtn.disabled = true;
       showButtonLoading(quickEndBtn);
       const gameId = modal.gameId, playerId = modal.playerId;
@@ -8930,12 +8984,19 @@ window.addEventListener("popstate", async () => {
     // migration plan) - fine for testing, not how the final cutover should load games at
     // scale. Never runs with the flag off (the default, real production).
     if (USE_RELATIONAL_API) {
+      // Retried, and never silently skipped: on failure the code used to fall through with
+      // state.communities/games still holding the LEGACY blob's copy - data frozen since the
+      // relational migration - and the app ran on it as if it were live (stale buy-ins and
+      // seats, and settlement math built on them). Now a load that still fails after a few
+      // attempts stops on an error screen with a retry button instead.
+      let v2Loaded = false;
+      for (let attempt = 0; attempt < 3 && !v2Loaded; attempt++) {
+      if (attempt > 0) await new Promise(r => setTimeout(r, 1500 * attempt));
       try {
         state.communities = await v2Fetch("GET", "/communities");
-        const gameSummaries = (await Promise.all(
-          state.communities.map(c => v2Fetch("GET", `/communities/${c.id}/games`))
-        )).flat();
+        const gameSummaries = await fetchGameSummaries(state.communities);
         state.games = await Promise.all(gameSummaries.map(g => v2Fetch("GET", `/games/${g.id}`)));
+        v2Loaded = true;
         // Every buy-in that already existed the moment the app opened counts as "already
         // seen" from the start - an independent backstop alongside hasAppliedFreshStateOnce
         // (see announcedBuyinIds's own comment) for the exact same failure mode, in case
@@ -8944,6 +9005,13 @@ window.addEventListener("popstate", async () => {
         // startup sequence finishes).
         rememberAnnouncedBuyinsBulk(state.games.flatMap(g => (g.buyins||[]).map(b => b.id)));
       } catch(e) { logSync("v2 community/game load failed: " + e); }
+      }
+      if (!v2Loaded) {
+        document.getElementById("app").innerHTML =
+          '<div style="padding:60px 20px;text-align:center;color:#f5f5f4;font-size:15px;line-height:1.6;">לא הצלחנו לטעון את הנתונים מהשרת.<br>בדקו את החיבור לאינטרנט ונסו שוב.<br><br>' +
+          '<button class="btn btn-primary" onclick="location.reload()">נסה שוב</button></div>';
+        return;
+      }
     }
     if (authSettingsResult.status === "fulfilled" && authSettingsResult.value) authSettings = authSettingsResult.value;
     // This device already verified a login code before (see checkLoginSession) - recover

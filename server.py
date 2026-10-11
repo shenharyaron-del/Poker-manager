@@ -9,6 +9,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from collections import OrderedDict
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -235,6 +236,13 @@ _MIN_POOL_CONNS = 3
 _MAX_POOL_CONNS = 10
 _db_pool = None
 _db_pool_lock = threading.Lock()
+# psycopg2's ThreadedConnectionPool doesn't queue: the 11th concurrent getconn() raises
+# PoolError immediately, which surfaced as a 500 on whichever request was unlucky during a
+# burst (every phone at the table refreshing at once after an SSE "changed" event). This
+# semaphore makes callers wait briefly for a free connection instead, and only fail after
+# a real timeout.
+_pool_slots = threading.BoundedSemaphore(_MAX_POOL_CONNS)
+_POOL_WAIT_SECONDS = 15
 
 
 def _get_pool():
@@ -252,21 +260,81 @@ def _get_pool():
     return _db_pool
 
 
+class DbBusyError(Exception):
+    pass
+
+
 @contextmanager
 def get_db():
     pool = _get_pool()
-    conn = pool.getconn()
+    if not _pool_slots.acquire(timeout=_POOL_WAIT_SECONDS):
+        raise DbBusyError("database connection pool exhausted")
+    try:
+        conn = pool.getconn()
+    except Exception:
+        _pool_slots.release()
+        raise
     close_bad = False
     try:
         yield conn
-    except psycopg2.Error:
-        # This connection is in a bad/unknown state (e.g. an idle timeout on Supabase's
-        # side) - close it instead of returning it to the pool, so the pool opens a
-        # fresh one next time it's needed. Only this one request degrades, not the app.
-        close_bad = True
+    except psycopg2.Error as e:
+        # A data error (bad value, constraint violation) leaves the connection itself
+        # healthy - just roll back and return it. Anything else means the connection is in
+        # a bad/unknown state (e.g. an idle timeout on Supabase's side): close it instead
+        # of returning it to the pool, so the pool opens a fresh one next time.
+        if isinstance(e, (psycopg2.DataError, psycopg2.IntegrityError)) and not conn.closed:
+            conn.rollback()
+        else:
+            close_bad = True
         raise
     finally:
         pool.putconn(conn, close=close_bad)
+        _pool_slots.release()
+
+
+# Every unhandled error comes back as JSON instead of Flask's HTML error page, so the
+# client's v2Fetch can show/log a real message. Bad input that slipped past validation
+# (a value Postgres rejects) is the caller's fault - 400, not 500.
+@app.errorhandler(DbBusyError)
+def _handle_db_busy(e):
+    return jsonify({"error": "server busy, try again"}), 503
+
+
+@app.errorhandler(psycopg2.DataError)
+def _handle_db_data_error(e):
+    return jsonify({"error": "invalid data"}), 400
+
+
+@app.errorhandler(psycopg2.IntegrityError)
+def _handle_db_integrity_error(e):
+    # e.g. a foreign key to a game/community that no longer exists
+    return jsonify({"error": "referenced record not found or duplicate"}), 409
+
+
+@app.errorhandler(500)
+def _handle_internal_error(e):
+    return jsonify({"error": "internal server error"}), 500
+
+
+# ---------- Input validation helpers ----------
+# Money/chip values arrive as JSON from the client; anything that isn't a finite number in
+# range is rejected up front instead of being stored (or blowing up as a DB error).
+_MAX_AMOUNT = 1_000_000
+
+
+def _valid_amount(value, allow_zero=False):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    if value != value or value in (float("inf"), float("-inf")):
+        return False
+    return (value >= 0 if allow_zero else value > 0) and value <= _MAX_AMOUNT
+
+
+def _valid_id(value):
+    return isinstance(value, str) and 0 < len(value) <= 64
+
+
+_MAX_SEATS = 10
 
 
 # In-memory mirror of the `shared_state` row plus its hash. GET /api/state and GET
@@ -304,6 +372,10 @@ def _get_cached_state():
     data = _load_state_from_db()
     state_hash = hashlib.md5(data.encode("utf-8")).hexdigest()
     with _state_cache_lock:
+        # A save may have filled the cache while we were reading - its value is newer
+        # than ours, so keep it instead of overwriting it with what we just read.
+        if _state_cache is not None:
+            return _state_cache, _state_hash_cache
         _state_cache = data
         _state_hash_cache = state_hash
     return data, state_hash
@@ -371,10 +443,27 @@ def get_state_hash():
     return jsonify({"hash": state_hash})
 
 
+# Serializes "write the row, then update the in-memory cache" so two concurrent saves can't
+# commit in one order and update the cache in the other - that left the cache (and the hash
+# every client builds its next save on) permanently out of step with the DB, so every later
+# baseHash save 409'd until the process restarted.
+_state_write_lock = threading.Lock()
+
+
 @app.route("/api/state", methods=["POST"])
 def save_state():
     data = request.get_data(as_text=True)
-    json.loads(data)  # reject anything that isn't valid JSON before storing it
+    try:
+        parsed = json.loads(data)  # reject anything that isn't valid JSON before storing it
+    except ValueError:
+        return jsonify({"error": "invalid JSON"}), 400
+    if not isinstance(parsed, dict):
+        return jsonify({"error": "state must be a JSON object"}), 400
+    with _state_write_lock:
+        return _save_state_locked(data)
+
+
+def _save_state_locked(data):
     # Optional optimistic-concurrency check: the client sends the hash of the state it
     # built this save on top of. If the shared state has moved on since then (another
     # device saved first), reject instead of silently overwriting whatever they just
@@ -536,6 +625,22 @@ def v2_list_communities():
                     by_id[community_id]["roster"].append(entry)
         conn.commit()
     return jsonify(communities)
+
+
+@app.route("/api/v2/game-summaries", methods=["GET"])
+def v2_list_all_game_summaries():
+    # Every game's summary row in ONE query - the periodic refresh used to call the
+    # per-community endpoint below once per community, every 6 seconds, on every phone
+    # (N+1 requests per tick). Same row shape as that endpoint.
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, community_id, name, date, created_by_name, closed, updated_at "
+                "FROM games ORDER BY date DESC"
+            )
+            games = [_row_to_game_summary(r) for r in cur.fetchall()]
+        conn.commit()
+    return jsonify(games)
 
 
 @app.route("/api/v2/communities/<community_id>/games", methods=["GET"])
@@ -726,7 +831,7 @@ def v2_add_game_event(game_id):
         with conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO game_events (id, game_id, type, player_id, actor_name, amount) "
-                "VALUES (%s,%s,%s,%s,%s,%s)",
+                "VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
                 (event_id, game_id, event_type, body.get("playerId"), body.get("actorName"), body.get("amount")),
             )
             # Bumped on every write that changes what v2_get_game returns for this game -
@@ -791,12 +896,14 @@ def v2_create_community():
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO communities (id, name, created_by, created_by_name) VALUES (%s,%s,%s,%s)",
+                "INSERT INTO communities (id, name, created_by, created_by_name) VALUES (%s,%s,%s,%s) "
+                "ON CONFLICT (id) DO NOTHING",
                 (cid, name, created_by, created_by_name),
             )
             if creator_player_id:
                 cur.execute(
-                    "INSERT INTO roster_players (id, community_id, name, client_id) VALUES (%s,%s,%s,%s)",
+                    "INSERT INTO roster_players (id, community_id, name, client_id) VALUES (%s,%s,%s,%s) "
+                    "ON CONFLICT (id) DO NOTHING",
                     (creator_player_id, cid, creator_player_name, created_by),
                 )
         conn.commit()
@@ -809,6 +916,18 @@ def v2_update_community(community_id):
     updated_at = body.get("updatedAt")
     if not updated_at:
         return jsonify({"error": "updatedAt required"}), 400
+    if "name" in body and (not isinstance(body["name"], str) or not body["name"].strip()):
+        return jsonify({"error": "name must be a non-empty string"}), 400
+    if "chipRatio" in body and body["chipRatio"] is not None and not _valid_amount(body["chipRatio"]):
+        return jsonify({"error": "chipRatio must be a positive number"}), 400
+    if "settlementDefault" in body and body["settlementDefault"] not in ("direct", "paybox", "bit"):
+        return jsonify({"error": "invalid settlementDefault"}), 400
+    if "buyinAmounts" in body and body["buyinAmounts"] is not None:
+        amounts = body["buyinAmounts"]
+        if (not isinstance(amounts, list) or not amounts or len(amounts) > 10
+                or not all(_valid_amount(a) for a in amounts)
+                or any(amounts[i] <= amounts[i - 1] for i in range(1, len(amounts)))):
+            return jsonify({"error": "buyinAmounts must be ascending positive numbers"}), 400
     fields, params = [], []
     if "name" in body:
         fields.append("name = %s"); params.append(body["name"])
@@ -945,7 +1064,8 @@ def v2_add_roster_player(community_id):
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO roster_players (id, community_id, name) VALUES (%s,%s,%s)",
+                "INSERT INTO roster_players (id, community_id, name) VALUES (%s,%s,%s) "
+                "ON CONFLICT (id) DO NOTHING",
                 (player_id, community_id, name),
             )
         conn.commit()
@@ -1049,6 +1169,13 @@ def v2_set_chip_values(community_id):
     values, chip_ratio, updated_at = body.get("chipValues"), body.get("chipRatio"), body.get("updatedAt")
     if values is None or not updated_at:
         return jsonify({"error": "chipValues and updatedAt required"}), 400
+    if not isinstance(values, list) or len(values) > 50:
+        return jsonify({"error": "chipValues must be a list"}), 400
+    for cv in values:
+        if not isinstance(cv, dict) or not _valid_id(cv.get("id")) or not _valid_amount(cv.get("value"), allow_zero=True):
+            return jsonify({"error": "each chip value needs an id and a number >= 0"}), 400
+    if chip_ratio is not None and not _valid_amount(chip_ratio):
+        return jsonify({"error": "chipRatio must be a positive number"}), 400
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -1079,7 +1206,8 @@ def v2_add_paybox_link(community_id):
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO paybox_links (id, community_id, name, link) VALUES (%s,%s,%s,%s)",
+                "INSERT INTO paybox_links (id, community_id, name, link) VALUES (%s,%s,%s,%s) "
+                "ON CONFLICT (id) DO NOTHING",
                 (link_id, community_id, name, link),
             )
             # First link added becomes the active one automatically, same as the client.
@@ -1142,7 +1270,8 @@ def v2_add_bit_link(community_id):
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO bit_links (id, community_id, name, link) VALUES (%s,%s,%s,%s)",
+                "INSERT INTO bit_links (id, community_id, name, link) VALUES (%s,%s,%s,%s) "
+                "ON CONFLICT (id) DO NOTHING",
                 (link_id, community_id, name, link),
             )
             # First link added becomes the active one automatically, same as the client.
@@ -1233,7 +1362,7 @@ def v2_create_game():
                 seats[0] = creator_player_id
             cur.execute(
                 "INSERT INTO games (id, community_id, name, date, created_by_name, seats, live_chips) "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s)",
+                "VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
                 (gid, community_id, name, date, created_by_name, Json(seats),
                  Json({creator_player_id: 0} if creator_player_id else {})),
             )
@@ -1315,8 +1444,10 @@ def v2_claim_seat(game_id, seat_index):
     # transaction, matching seatPlayerIfRoom's bundled side effects client-side.
     body = request.get_json(silent=True) or {}
     player_id, name = body.get("playerId"), body.get("name")
-    if not player_id:
+    if not _valid_id(player_id):
         return jsonify({"error": "playerId required"}), 400
+    if not 0 <= seat_index < _MAX_SEATS:
+        return jsonify({"error": "seat index out of range"}), 400
     with get_db() as conn:
         with conn.cursor() as cur:
             # `seats -> i` returns SQL NULL (not JSON null) for an out-of-range index, so
@@ -1361,7 +1492,11 @@ def v2_clear_seat(game_id, seat_index):
             # Read the OLD occupant before clearing - RETURNING on the same UPDATE would
             # read the value after it's already been set to null (confirmed by testing:
             # the cleared player's buy-ins and live_chips entry silently survived).
-            cur.execute("SELECT seats -> %s FROM games WHERE id = %s", (seat_index, game_id))
+            # FOR UPDATE: lock the game row between reading the occupant and clearing the
+            # seat - otherwise a concurrent seat swap could move a DIFFERENT player into
+            # this seat in between, and we'd null them out of the table while deleting
+            # the buy-ins of the player who had just moved away.
+            cur.execute("SELECT seats -> %s FROM games WHERE id = %s FOR UPDATE", (seat_index, game_id))
             row = cur.fetchone()
             if not row:
                 return jsonify({"error": "not found"}), 404
@@ -1389,6 +1524,8 @@ def v2_swap_seats(game_id):
     from_index, to_index = body.get("fromIndex"), body.get("toIndex")
     if from_index is None or to_index is None:
         return jsonify({"error": "fromIndex and toIndex required"}), 400
+    if not all(isinstance(i, int) and not isinstance(i, bool) and 0 <= i < _MAX_SEATS for i in (from_index, to_index)):
+        return jsonify({"error": "seat index out of range"}), 400
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -1411,7 +1548,9 @@ def v2_remove_game_player(game_id, player_id):
     # cashed out - matches maybeAutoCloseNight's inverse.
     with get_db() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT seats, closed FROM games WHERE id = %s", (game_id,))
+            # FOR UPDATE: this rewrites the whole seats array from the value read here, so
+            # a seat claimed by someone else in between would otherwise be silently lost.
+            cur.execute("SELECT seats, closed FROM games WHERE id = %s FOR UPDATE", (game_id,))
             row = cur.fetchone()
             if not row:
                 return jsonify({"error": "not found"}), 404
@@ -1443,15 +1582,25 @@ def v2_add_buyin(game_id):
     body = request.get_json(silent=True) or {}
     buyin_id, player_id, amount = body.get("id"), body.get("playerId"), body.get("amount")
     actor_name = body.get("actorName")
-    if not buyin_id or not player_id or amount is None:
+    if not _valid_id(buyin_id) or not _valid_id(player_id) or amount is None:
         return jsonify({"error": "id, playerId and amount required"}), 400
+    if not _valid_amount(amount):
+        return jsonify({"error": "amount must be a positive number"}), 400
     with get_db() as conn:
         with conn.cursor() as cur:
+            # ON CONFLICT DO NOTHING: the id is generated client-side, so a request retried
+            # after a timeout (the first attempt actually landed) is a no-op instead of a
+            # 500 - and the client never has to fall back to a second buy-in with a NEW id,
+            # which is how a flaky connection used to double-charge a player.
             cur.execute(
-                "INSERT INTO buyins (id, game_id, player_id, amount, ts, actor_name) VALUES (%s,%s,%s,%s,now(),%s)",
+                "INSERT INTO buyins (id, game_id, player_id, amount, ts, actor_name) VALUES (%s,%s,%s,%s,now(),%s) "
+                "ON CONFLICT (id) DO NOTHING",
                 (buyin_id, game_id, player_id, amount, actor_name),
             )
             cur.execute("UPDATE games SET updated_at = now() WHERE id = %s", (game_id,))
+            if cur.rowcount == 0:
+                conn.rollback()
+                return jsonify({"error": "game not found"}), 404
         conn.commit()
     return jsonify({"id": buyin_id}), 201
 
@@ -1460,13 +1609,18 @@ def v2_add_buyin(game_id):
 def v2_add_buyins_bulk(game_id):
     body = request.get_json(silent=True) or {}
     buyins = body.get("buyins")
-    if not buyins:
+    if not buyins or not isinstance(buyins, list):
         return jsonify({"error": "buyins required"}), 400
+    for b in buyins:
+        if not isinstance(b, dict) or not _valid_id(b.get("id")) or not _valid_id(b.get("playerId")) or not _valid_amount(b.get("amount")):
+            return jsonify({"error": "each buy-in needs id, playerId and a positive amount"}), 400
     with get_db() as conn:
         with conn.cursor() as cur:
+            # All-or-nothing: one transaction, committed once below.
             for b in buyins:
                 cur.execute(
-                    "INSERT INTO buyins (id, game_id, player_id, amount, ts) VALUES (%s,%s,%s,%s,now())",
+                    "INSERT INTO buyins (id, game_id, player_id, amount, ts) VALUES (%s,%s,%s,%s,now()) "
+                    "ON CONFLICT (id) DO NOTHING",
                     (b["id"], game_id, b["playerId"], b["amount"]),
                 )
             cur.execute("UPDATE games SET updated_at = now() WHERE id = %s", (game_id,))
@@ -1501,6 +1655,12 @@ def v2_set_cashout(game_id, player_id):
     amount, arranged_with, chips = body.get("amount"), body.get("arrangedWith"), body.get("chips")
     if amount is None:
         return jsonify({"error": "amount required"}), 400
+    if not _valid_amount(amount, allow_zero=True):
+        return jsonify({"error": "amount must be a number >= 0"}), 400
+    if chips is not None and not _valid_amount(chips, allow_zero=True):
+        return jsonify({"error": "chips must be a number >= 0"}), 400
+    if arranged_with is not None and (not isinstance(arranged_with, list) or not all(_valid_id(x) for x in arranged_with)):
+        return jsonify({"error": "arrangedWith must be a list of player ids"}), 400
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -1539,8 +1699,10 @@ def v2_delete_cashout(game_id, player_id):
 def v2_update_live_chips(game_id):
     body = request.get_json(silent=True) or {}
     player_id, chips = body.get("playerId"), body.get("chips")
-    if not player_id or chips is None:
+    if not _valid_id(player_id) or chips is None:
         return jsonify({"error": "playerId and chips required"}), 400
+    if not _valid_amount(chips, allow_zero=True):
+        return jsonify({"error": "chips must be a number >= 0"}), 400
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -1575,10 +1737,13 @@ def v2_add_paybox_payment(game_id):
     payment_id, player_id, amount = body.get("id"), body.get("playerId"), body.get("amount")
     if not payment_id or not player_id or amount is None:
         return jsonify({"error": "id, playerId and amount required"}), 400
+    if not _valid_amount(amount):
+        return jsonify({"error": "amount must be a positive number"}), 400
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO paybox_payments (id, game_id, player_id, amount, ts) VALUES (%s,%s,%s,%s,now())",
+                "INSERT INTO paybox_payments (id, game_id, player_id, amount, ts) VALUES (%s,%s,%s,%s,now()) "
+                "ON CONFLICT (id) DO NOTHING",
                 (payment_id, game_id, player_id, amount),
             )
             cur.execute("UPDATE games SET updated_at = now() WHERE id = %s", (game_id,))
@@ -1609,11 +1774,13 @@ def v2_add_player_payment(game_id):
     from_player_id, to_player_id, amount = body.get("fromPlayerId"), body.get("toPlayerId"), body.get("amount")
     if not payment_id or not from_player_id or not to_player_id or amount is None:
         return jsonify({"error": "id, fromPlayerId, toPlayerId and amount required"}), 400
+    if not _valid_amount(amount):
+        return jsonify({"error": "amount must be a positive number"}), 400
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO player_payments (id, game_id, from_player_id, to_player_id, amount, ts) "
-                "VALUES (%s,%s,%s,%s,%s,now())",
+                "VALUES (%s,%s,%s,%s,%s,now()) ON CONFLICT (id) DO NOTHING",
                 (payment_id, game_id, from_player_id, to_player_id, amount),
             )
             cur.execute("UPDATE games SET updated_at = now() WHERE id = %s", (game_id,))
@@ -1716,8 +1883,35 @@ def upload_photo():
     return jsonify({"id": photo_id})
 
 
-_photo_cache = {}
+# Bounded LRU (by total bytes) - the old plain dict kept every photo ever served in memory
+# forever, which on a 512MB instance is a slow memory leak that ends in an OOM restart.
+_photo_cache = OrderedDict()
+_photo_cache_bytes = 0
+_PHOTO_CACHE_MAX_BYTES = 64 * 1024 * 1024
 _photo_cache_lock = threading.Lock()
+
+
+def _photo_cache_get(photo_id):
+    with _photo_cache_lock:
+        item = _photo_cache.get(photo_id)
+        if item is not None:
+            _photo_cache.move_to_end(photo_id)
+        return item
+
+
+def _photo_cache_put(photo_id, item):
+    global _photo_cache_bytes
+    size = len(item[1])
+    if size > _PHOTO_CACHE_MAX_BYTES // 4:
+        return  # one huge photo shouldn't evict everything else
+    with _photo_cache_lock:
+        if photo_id in _photo_cache:
+            return
+        _photo_cache[photo_id] = item
+        _photo_cache_bytes += size
+        while _photo_cache_bytes > _PHOTO_CACHE_MAX_BYTES and _photo_cache:
+            _, (_, raw) = _photo_cache.popitem(last=False)
+            _photo_cache_bytes -= len(raw)
 
 
 @app.route("/api/photos/<photo_id>")
@@ -1730,7 +1924,7 @@ def get_photo(photo_id):
     # (see index.html's prefetchAvatars) fires all of them together, and the connection
     # pool (10 max) queues the rest, reported live as slow avatar loading. This cache means
     # only the very FIRST request for a given photo, from anyone, ever hits the DB again.
-    cached = _photo_cache.get(photo_id)
+    cached = _photo_cache_get(photo_id)
     if cached is None:
         with get_db() as conn:
             with conn.cursor() as cur:
@@ -1744,8 +1938,7 @@ def get_photo(photo_id):
             return jsonify({"error": "corrupt photo data"}), 500
         media_type, b64data = match.group(1), match.group(2)
         cached = (media_type, base64.b64decode(b64data))
-        with _photo_cache_lock:
-            _photo_cache[photo_id] = cached
+        _photo_cache_put(photo_id, cached)
     media_type, raw = cached
     response = Response(raw, mimetype=media_type)
     # id is a content hash (see upload_photo) - the same id always means the same bytes,
@@ -1968,11 +2161,14 @@ def quick_login():
     replace_existing = bool(body.get("replace"))
     if not EMAIL_RE.match(email) or not client_id:
         return jsonify({"error": "invalid email/clientId"}), 400
+    # Read before taking our own connection - _get_setting opens its own, and holding one
+    # while waiting for a second can deadlock the pool under load.
+    require_verify = _get_setting("require_verify_existing_email", True)
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT 1 FROM trusted_devices WHERE email = %s LIMIT 1", (email,))
             already_registered = cur.fetchone() is not None
-            if already_registered and _get_setting("require_verify_existing_email", True):
+            if already_registered and require_verify:
                 conn.commit()
                 return jsonify({"error": "already registered"}), 409
             if replace_existing:
