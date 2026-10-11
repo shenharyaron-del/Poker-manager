@@ -225,6 +225,19 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
 .chat-bubble.with-icon{display:flex;gap:6px;align-items:flex-start;}
 .chat-bubble.with-icon>svg{flex-shrink:0;margin-top:2px;opacity:.85;}
 .empty{text-align:center;padding:50px 20px;color:#059669;font-size:14px;}
+/* Table carousel's bottom switcher (see dotsHtml in render()). */
+.nav-bar{position:relative;flex-shrink:0;display:flex;align-items:center;justify-content:center;min-height:72px;padding:8px 12px calc(8px + env(safe-area-inset-bottom,0px));
+  background:radial-gradient(120% 140% at 50% 0%,#14513a 0%,#0b3426 55%,#07251b 100%);border-top:1px solid rgba(233,196,106,.55);box-shadow:0 -1px 0 rgba(0,0,0,.6),0 -6px 16px rgba(0,0,0,.35);}
+.nav-center{display:flex;flex-direction:column;align-items:center;gap:6px;}
+.nav-center .nav-art{width:34px;height:34px;filter:drop-shadow(0 0 8px rgba(251,191,36,.45));}
+.nav-dots{display:flex;justify-content:center;gap:8px;}
+.nav-dots span{width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,.28);}
+.nav-dots span.on{background:radial-gradient(circle at 35% 35%,#fff1c1,#f2c45a 55%,#b9832a);box-shadow:0 0 6px rgba(251,191,36,.6);}
+.nav-side{position:absolute;top:50%;transform:translateY(-50%);background:none;border:none;color:rgba(255,255,255,.75);font-family:inherit;font-size:14px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;padding:4px 6px;}
+.nav-side.left{left:10px;} .nav-side.right{right:10px;}
+.nav-side .nav-art{width:30px;height:30px;opacity:.9;filter:drop-shadow(0 2px 3px rgba(0,0,0,.5));}
+.nav-side-label{display:flex;align-items:center;gap:3px;white-space:nowrap;}
+.nav-side:active{transform:translateY(-50%) scale(.95);}
 /* ---------- Player screen "premium table" look ----------
    Scoped to the carousel's player page (.player-page, set in render()) so the table and
    admin pages keep their own look. A procedural leather grain (SVG fractal noise, no image
@@ -245,7 +258,7 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
   background:linear-gradient(180deg,#fff3c4 0%,#fcd34d 35%,#d99a1e 62%,#fbbf24 80%,#fde68a 100%);
   -webkit-background-clip:text;background-clip:text;color:transparent;
   filter:drop-shadow(0 2px 0 rgba(90,50,0,.55)) drop-shadow(0 0 14px rgba(251,191,36,.45));}
-.player-page .pp-chips{display:block;height:74px;width:auto;margin-top:-8px;filter:drop-shadow(0 8px 10px rgba(0,0,0,.55));pointer-events:none;user-select:none;-webkit-user-drag:none;}
+.player-page .pp-chips{display:block;height:22px;width:auto;margin-top:2px;filter:drop-shadow(0 8px 10px rgba(0,0,0,.55));pointer-events:none;user-select:none;-webkit-user-drag:none;}
 .player-page .buyin-frame{background:linear-gradient(180deg,rgba(0,0,0,.38),rgba(0,0,0,.22));border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:10px;
   box-shadow:inset 0 2px 8px rgba(0,0,0,.6),0 1px 0 rgba(255,255,255,.06);}
 .player-page .buyin-frame .chip-btn{border-radius:12px;border:1px solid rgba(110,231,183,.22);color:#f5f5f4;font-weight:600;
@@ -290,7 +303,7 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
    room the big total + chip art take up. */
 @media (max-height:720px){
   .player-page .pp-total{font-size:42px;}
-  .player-page .pp-chips{height:50px;margin-top:-6px;}
+  .player-page .pp-chips{height:16px;}
 }
 .section-title{color:var(--gold);font-size:11px;font-weight:700;letter-spacing:.05em;margin:0 0 8px;padding:0 20px;}
 .field{display:block;margin-bottom:14px;}
@@ -3333,6 +3346,15 @@ const ICONS = {
   crown: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18h20M4 10l4 3 4-7 4 7 4-3-2 8H6l-2-8z"/></svg>',
 };
 function icon(name){ return ICONS[name] || ""; }
+// Illustrations for the table carousel's bottom switcher (see dotsHtml in render()) -
+// small multi-color pictures rather than the plain line ICONS above. Gradient ids are
+// shared between copies; every copy defines the same gradient, so whichever one the
+// browser resolves to looks identical.
+const NAV_ART = {
+  player: `<svg class="nav-art" viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="navGold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff1c1"/><stop offset=".5" stop-color="#f2c45a"/><stop offset="1" stop-color="#b9832a"/></linearGradient></defs><circle cx="24" cy="15" r="9" fill="url(#navGold)"/><path d="M7 43c0-10 7.6-16 17-16s17 6 17 16z" fill="url(#navGold)"/><ellipse cx="21" cy="11" rx="3.5" ry="2.2" fill="#fff" opacity=".45"/></svg>`,
+  table: `<svg class="nav-art" viewBox="0 0 48 48" aria-hidden="true"><defs><radialGradient id="navFelt" cx=".5" cy=".4" r=".6"><stop offset="0" stop-color="#2fa36b"/><stop offset="1" stop-color="#0f5a37"/></radialGradient><linearGradient id="navWood" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a86a35"/><stop offset="1" stop-color="#5a3216"/></linearGradient></defs><g transform="translate(24 25) scale(1.04 1.35) translate(-24 -25)"><ellipse cx="24" cy="25" rx="22" ry="15" fill="url(#navWood)"/><ellipse cx="24" cy="24.5" rx="18" ry="11.5" fill="url(#navFelt)"/><ellipse cx="24" cy="24.5" rx="12.5" ry="7" fill="none" stroke="#f2c45a" stroke-width=".8" opacity=".55"/><rect x="18.5" y="19.5" width="5" height="7" rx="1" fill="#fff" transform="rotate(-10 21 23)"/><rect x="24.5" y="19.5" width="5" height="7" rx="1" fill="#fff" transform="rotate(10 27 23)"/><path d="M27 21.6l1 1.5-1 1.5-1-1.5z" fill="#d33"/><circle cx="14" cy="27" r="2.6" fill="#d33" stroke="#fff" stroke-width="1" stroke-dasharray="1.4 1.2"/><circle cx="34" cy="27.5" r="2.6" fill="#2b6fd6" stroke="#fff" stroke-width="1" stroke-dasharray="1.4 1.2"/><circle cx="24" cy="31" r="2.6" fill="#222" stroke="#f2c45a" stroke-width="1" stroke-dasharray="1.4 1.2"/></g></svg>`,
+  admin: `<svg class="nav-art" viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="navGold2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff1c1"/><stop offset=".5" stop-color="#f2c45a"/><stop offset="1" stop-color="#b9832a"/></linearGradient></defs><circle cx="14" cy="17" r="5.5" fill="#6ee7b7" opacity=".85"/><path d="M3 38c0-7 5-11 11-11s11 4 11 11z" fill="#6ee7b7" opacity=".85"/><circle cx="34" cy="17" r="5.5" fill="#6ee7b7" opacity=".85"/><path d="M23 38c0-7 5-11 11-11s11 4 11 11z" fill="#6ee7b7" opacity=".85"/><circle cx="24" cy="14" r="7" fill="url(#navGold2)"/><path d="M11 42c0-8.5 5.8-13 13-13s13 4.5 13 13z" fill="url(#navGold2)"/></svg>`,
+};
 
 // ---------- Rendering ----------
 function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
@@ -3403,22 +3425,23 @@ function render(){
       const pagesHtml = domOrder.map(key => `<div class="swipe-page${key==='player'?' player-page':''}">${RENDERERS[key]()}</div>`).join("");
       const DOT_LABELS = { admin: "ניהול שחקנים", player: "השחקן שלי", table: "שולחן" };
       const dotsRow = `
-        <div style="display:flex;justify-content:center;gap:6px;">
-          ${pageOrder.map(key => `<span style="width:7px;height:7px;border-radius:50%;background:${tableSubView===key?'var(--gold)':'rgba(255,255,255,.25)'};" title="${DOT_LABELS[key]}"></span>`).join("")}
+        <div class="nav-dots">
+          ${pageOrder.map(key => `<span class="${tableSubView===key?'on':''}" title="${DOT_LABELS[key]}"></span>`).join("")}
         </div>
       `;
-      // With all 3 faces in the carousel, a plain row of dots doesn't say WHICH screen is
-      // in which direction - these two corner labels name the adjacent screen a swipe (or
-      // a tap right here) leads to, with a chevron pointing toward it. Only shown with 3
-      // pages: with just 2 (player/table) there's only one "other" screen either way, not
-      // worth labeling twice.
-      const dotsHtml = N === 3 ? `
-        <div style="position:relative;padding:8px 0;flex-shrink:0;">
-          <button data-swipe-to="${cyclicPage(pageOrder, tableSubView, -1)}" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:rgba(255,255,255,.55);font-size:11px;display:flex;align-items:center;gap:3px;cursor:pointer;padding:4px;">${esc(DOT_LABELS[cyclicPage(pageOrder, tableSubView, -1)])}${icon('left')}</button>
-          ${dotsRow}
-          <button data-swipe-to="${cyclicPage(pageOrder, tableSubView, 1)}" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:rgba(255,255,255,.55);font-size:11px;display:flex;align-items:center;gap:3px;cursor:pointer;padding:4px;">${icon('right')}${esc(DOT_LABELS[cyclicPage(pageOrder, tableSubView, 1)])}</button>
+      // Bottom switcher: the current screen's illustration (gold, glowing) above the dots in
+      // the middle, and - with all 3 faces in the carousel - each side names the adjacent
+      // screen a swipe (or a tap right there) leads to, with its own illustration and a
+      // chevron pointing toward it. With just 2 pages (player/table) there's only one
+      // "other" screen either way, not worth labeling twice.
+      const navSide = (key, side) => `<button class="nav-side ${side}" data-swipe-to="${key}">${NAV_ART[key]}<span class="nav-side-label">${side==='left'?'':icon('right')}${esc(DOT_LABELS[key])}${side==='left'?icon('left'):''}</span></button>`;
+      const dotsHtml = `
+        <div class="nav-bar">
+          ${N === 3 ? navSide(cyclicPage(pageOrder, tableSubView, -1), 'left') : ''}
+          <div class="nav-center">${NAV_ART[tableSubView] || ''}${dotsRow}</div>
+          ${N === 3 ? navSide(cyclicPage(pageOrder, tableSubView, 1), 'right') : ''}
         </div>
-      ` : `<div style="padding:8px 0;flex-shrink:0;">${dotsRow}</div>`;
+      `;
       html = `<div class="table-swipe-root">
         <div class="swipe-track-viewport">
           <div class="swipe-track" data-swipe-track style="transform:translateX(${restOffset});">
@@ -3935,7 +3958,7 @@ function renderPlayerScreen(gameId){
       <button class="icon-btn gold" data-invite-game="${g.id}" title="הזמנת שחקן" style="flex-shrink:0;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;white-space:nowrap;padding:5px 7px;">${icon('share')}הזמנת שחקן</button>
     </div>
     <div class="player-screen-scroll">
-      <div style="text-align:center;padding:6px 0 16px;flex-shrink:0;">
+      <div style="text-align:center;padding:6px 0 ${cashedOut?16:4}px;flex-shrink:0;">
         <div style="font-size:26px;font-weight:700;color:var(--text);">${esc(p?p.name:"")}</div>
         ${cashedOut ? "" : `<div class="pp-total-wrap"><div class="pp-total" data-player-total>₪${buyinTotal}</div><img class="pp-chips" src="/static/player-chips.webp" alt="" draggable="false"></div>`}
         ${(() => {
