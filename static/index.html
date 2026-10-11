@@ -340,6 +340,15 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
   box-shadow:inset 0 0 18px rgba(0,0,0,.4),0 0 14px rgba(251,191,36,.15);}
 .mode-panel.mode-panel-profit{border-color:#2a9d8f;box-shadow:inset 0 0 18px rgba(0,0,0,.4),0 0 14px rgba(42,157,143,.2);}
 .mode-panel.mode-panel-byColor{border-color:#8659c2;box-shadow:inset 0 0 18px rgba(0,0,0,.4),0 0 14px rgba(134,89,194,.25);}
+.mode-tab-setup-chips{background:var(--mt-gold);color:#2a1d05;}
+.mode-tab-setup-payments{background:linear-gradient(180deg,#5fd0e6 0%,#1f9bb8 50%,#126b82 100%);color:#03222b;}
+.mode-tab-setup-buyins{background:linear-gradient(180deg,#7fe0a0 0%,#2fae5f 50%,#1d7a41 100%);color:#04230f;}
+.mode-tab-setup-chips.active{box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 -2px 12px rgba(251,191,36,.3);}
+.mode-tab-setup-payments.active{box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 -2px 12px rgba(31,155,184,.4);}
+.mode-tab-setup-buyins.active{box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 -2px 12px rgba(47,174,95,.4);}
+.mode-panel.mode-panel-setup-payments{border-color:#1f9bb8;box-shadow:inset 0 0 18px rgba(0,0,0,.4),0 0 14px rgba(31,155,184,.2);}
+.mode-panel.mode-panel-setup-buyins{border-color:#2fae5f;box-shadow:inset 0 0 18px rgba(0,0,0,.4),0 0 14px rgba(47,174,95,.2);}
+.mode-panel.setup-panel{padding:14px 12px 12px;}
 /* Square the panel corner directly under the active tab when that tab is at an edge (first
    = right in RTL, last = left), so the tab flows straight into the frame. */
 .mode-panel.first{border-top-right-radius:0;}
@@ -2763,22 +2772,23 @@ async function tryCloseSetupModal(){
 // missing-setup warning banner.
 function setupTabsHtml(communityId, activeTab){
   const c = getCommunity(communityId);
-  // Each tab's own accent color while active (gold/cyan/green), muted/transparent
-  // otherwise - same look the chips/payments pair already had, just generalized to a
-  // 3rd tab (ריביי, promoted out of the payments tab into its own, see buyinSetup).
-  const tab = (key, label, iconHtml, color) => {
-    const active = activeTab === key;
-    return `<button data-setup-tab="${key}" data-setup-community="${communityId}" style="flex:1;padding:9px;border-radius:10px;border:1px solid ${active?color:'var(--card-b)'};background:${active?color+'22':'transparent'};color:${active?color:'var(--muted)'};font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;">${iconHtml} ${label}</button>`;
-  };
+  // Same tab-over-panel look as the player screen's history/feed tabs and the
+  // end-of-evening mode tabs: each tab owns a color (chips = gold, payments = cyan,
+  // ריביי = green), the active one merges into a panel framed in its color, and the rest
+  // of the modal body renders inside that panel. This only OPENS the panel's div - the
+  // modal shell (renderModal) closes it after the body when it sees SETUP_PANEL_MARK.
+  const TABS = [["chips", "ז'יטונים", 'chip'], ["payments", "תשלומים", 'payment'], ["buyins", "ריביי", 'coinsPlus']];
+  const idx = TABS.findIndex(t => t[0] === activeTab);
   return `
     <div style="text-align:center;color:var(--text);font-size:18px;margin-bottom:14px;">${esc(c ? c.name : "")}</div>
-    <div style="display:flex;gap:8px;margin-bottom:16px;">
-      ${tab("chips", "ז'יטונים", icon('chip'), '#fbbf24')}
-      ${tab("payments", "תשלומים", icon('payment'), '#0891b2')}
-      ${tab("buyins", "ריביי", icon('coinsPlus'), '#22c55e')}
-    </div>
+    <div class="mode-panel-wrap">
+      <div class="mode-tabs">
+        ${TABS.map(([key,label,ic]) => `<button class="mode-tab mode-tab-setup-${key}${activeTab===key?' active':''}" data-setup-tab="${key}" data-setup-community="${communityId}">${icon(ic)}<span>${label}</span></button>`).join("")}
+      </div>
+      <div class="mode-panel ${SETUP_PANEL_MARK} mode-panel-setup-${activeTab}${idx===0?' first':''}${idx===TABS.length-1?' last':''}">
   `;
 }
+const SETUP_PANEL_MARK = "setup-panel";
 function openPayboxSettingsModal(communityId){
   const c = getCommunity(communityId);
   // First time opening settings for a community still on the old single-link field -
@@ -5936,7 +5946,7 @@ function renderModal(m){
     <div class="overlay${topAnchored ? ' overlay-top' : ''}${isSetupFlow ? ' overlay-fullscreen' : ''}">
       <div class="modal" onclick="event.stopPropagation()">
         <div class="modal-head"><h3 class="serif">${title}</h3>${dismissable ? `<button class="close-x" data-close-modal>${icon('x')}</button>` : ""}</div>
-        ${body}
+        ${body}${body.includes('class="mode-panel ' + SETUP_PANEL_MARK) ? '</div></div>' : ''}
       </div>
     </div>
   `;
