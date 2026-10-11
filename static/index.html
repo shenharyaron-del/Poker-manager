@@ -5620,8 +5620,8 @@ function renderModal(m){
         </div>` : ""}
         <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-retake-chip-count-photo ${m.analyzingChipCount?"disabled":""}>${icon('plus')} התחל מחדש</button>
       ` : `
-        <div style="position:relative;margin-bottom:10px;">
-          <button type="button" class="btn btn-ghost btn-block" style="pointer-events:none;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('plus')} ספירה אוטומטית מצילום</button>
+        <div style="position:relative;width:78%;margin:0 auto 10px;">
+          <button type="button" class="btn btn-ghost btn-block" style="pointer-events:none;display:flex;align-items:center;justify-content:center;gap:8px;">${icon('camera')} פתח מצלמה לספירה</button>
           <input type="file" accept="image/*" capture="environment" id="chip-count-camera-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
         </div>
         <ul style="color:var(--muted);font-size:12px;margin:-4px 0 14px;padding:0 18px 0 0;line-height:1.7;">
