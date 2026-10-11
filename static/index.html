@@ -225,17 +225,17 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
 .chat-bubble.with-icon{display:flex;gap:6px;align-items:flex-start;}
 .chat-bubble.with-icon>svg{flex-shrink:0;margin-top:2px;opacity:.85;}
 .empty{text-align:center;padding:50px 20px;color:#059669;font-size:14px;}
-/* Table carousel's bottom switcher (see dotsHtml in render()). */
+/* Table carousel's bottom switcher (see navBarFor in render()). */
 .nav-bar{position:relative;flex-shrink:0;display:flex;align-items:center;justify-content:center;min-height:72px;padding:8px 12px calc(8px + env(safe-area-inset-bottom,0px));
   background:radial-gradient(120% 140% at 50% 0%,#14513a 0%,#0b3426 55%,#07251b 100%);border-top:1px solid rgba(233,196,106,.55);box-shadow:0 -1px 0 rgba(0,0,0,.6),0 -6px 16px rgba(0,0,0,.35);}
 .nav-center{display:flex;flex-direction:column;align-items:center;gap:6px;}
-.nav-center .nav-art{width:34px;height:34px;filter:drop-shadow(0 0 8px rgba(251,191,36,.45));}
+.nav-center .nav-art{width:20px;height:20px;filter:drop-shadow(0 0 8px rgba(251,191,36,.45));}
 .nav-dots{display:flex;justify-content:center;gap:8px;}
 .nav-dots span{width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,.28);}
 .nav-dots span.on{background:radial-gradient(circle at 35% 35%,#fff1c1,#f2c45a 55%,#b9832a);box-shadow:0 0 6px rgba(251,191,36,.6);}
 .nav-side{position:absolute;top:50%;transform:translateY(-50%);background:none;border:none;color:rgba(255,255,255,.75);font-family:inherit;font-size:14px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;padding:4px 6px;}
 .nav-side.left{left:10px;} .nav-side.right{right:10px;}
-.nav-side .nav-art{width:30px;height:30px;opacity:.9;filter:drop-shadow(0 2px 3px rgba(0,0,0,.5));}
+.nav-side .nav-art{width:18px;height:18px;opacity:.9;filter:drop-shadow(0 2px 3px rgba(0,0,0,.5));}
 .nav-side-label{display:flex;align-items:center;gap:3px;white-space:nowrap;}
 .nav-side:active{transform:translateY(-50%) scale(.95);}
 /* ---------- Player screen "premium table" look ----------
@@ -258,7 +258,7 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
   background:linear-gradient(180deg,#fff3c4 0%,#fcd34d 35%,#d99a1e 62%,#fbbf24 80%,#fde68a 100%);
   -webkit-background-clip:text;background-clip:text;color:transparent;
   filter:drop-shadow(0 2px 0 rgba(90,50,0,.55)) drop-shadow(0 0 14px rgba(251,191,36,.45));}
-.player-page .pp-chips{display:block;height:52px;width:auto;margin-top:-4px;filter:drop-shadow(0 8px 10px rgba(0,0,0,.55));pointer-events:none;user-select:none;-webkit-user-drag:none;}
+.player-page .pp-chips{position:relative;z-index:0;display:block;height:52px;width:auto;margin-top:-14px;filter:drop-shadow(0 8px 10px rgba(0,0,0,.55));pointer-events:none;user-select:none;-webkit-user-drag:none;}
 .player-page .buyin-frame{background:linear-gradient(180deg,rgba(0,0,0,.38),rgba(0,0,0,.22));border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:10px;
   box-shadow:inset 0 2px 8px rgba(0,0,0,.6),0 1px 0 rgba(255,255,255,.06);}
 .player-page .buyin-frame .chip-btn{border-radius:12px;border:1px solid rgba(110,231,183,.22);color:#f5f5f4;font-weight:600;
@@ -303,7 +303,7 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
    room the big total + chip art take up. */
 @media (max-height:720px){
   .player-page .pp-total{font-size:42px;}
-  .player-page .pp-chips{height:35px;}
+  .player-page .pp-chips{height:35px;margin-top:-10px;}
 }
 .section-title{color:var(--gold);font-size:11px;font-weight:700;letter-spacing:.05em;margin:0 0 8px;padding:0 20px;}
 .field{display:block;margin-bottom:14px;}
@@ -3346,7 +3346,7 @@ const ICONS = {
   crown: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18h20M4 10l4 3 4-7 4 7 4-3-2 8H6l-2-8z"/></svg>',
 };
 function icon(name){ return ICONS[name] || ""; }
-// Illustrations for the table carousel's bottom switcher (see dotsHtml in render()) -
+// Illustrations for the table carousel's bottom switcher (see navBarFor in render()) -
 // small multi-color pictures rather than the plain line ICONS above. Gradient ids are
 // shared between copies; every copy defines the same gradient, so whichever one the
 // browser resolves to looks identical.
@@ -3422,33 +3422,32 @@ function render(){
       // covers both drag directions correctly every render, no reordering ever needed.
       const domOrder = N === 3 ? [cyclicPage(pageOrder, tableSubView, -1), tableSubView, cyclicPage(pageOrder, tableSubView, 1)] : pageOrder;
       const restOffset = N === 3 ? "-100%" : (domOrder[0] === tableSubView ? "0" : "-100%");
-      const pagesHtml = domOrder.map(key => `<div class="swipe-page${key==='player'?' player-page':''}">${RENDERERS[key]()}</div>`).join("");
       const DOT_LABELS = { admin: "ניהול שחקנים", player: "השחקן שלי", table: "שולחן" };
-      const dotsRow = `
-        <div class="nav-dots">
-          ${pageOrder.map(key => `<span class="${tableSubView===key?'on':''}" title="${DOT_LABELS[key]}"></span>`).join("")}
-        </div>
-      `;
-      // Bottom switcher: the current screen's illustration (gold, glowing) above the dots in
-      // the middle, and - with all 3 faces in the carousel - each side names the adjacent
-      // screen a swipe (or a tap right there) leads to, with its own illustration and a
-      // chevron pointing toward it. With just 2 pages (player/table) there's only one
-      // "other" screen either way, not worth labeling twice.
-      const navSide = (key, side) => `<button class="nav-side ${side}" data-swipe-to="${key}">${NAV_ART[key]}<span class="nav-side-label">${side==='left'?'':icon('right')}${esc(DOT_LABELS[key])}${side==='left'?icon('left'):''}</span></button>`;
-      const dotsHtml = `
-        <div class="nav-bar">
-          ${N === 3 ? navSide(cyclicPage(pageOrder, tableSubView, -1), 'left') : ''}
-          <div class="nav-center">${NAV_ART[tableSubView] || ''}${dotsRow}</div>
-          ${N === 3 ? navSide(cyclicPage(pageOrder, tableSubView, 1), 'right') : ''}
-        </div>
-      `;
+      // Bottom switcher, rendered INSIDE each page (as if that page were the current one)
+      // rather than once under the whole track, so it slides along with its page during a
+      // swipe drag like the rest of the screen. Each copy: that page's illustration (gold,
+      // glowing) above the dots in the middle, and - with all 3 faces in the carousel -
+      // each side names the adjacent screen a swipe (or a tap right there) leads to, with
+      // its own illustration and a chevron pointing toward it. With just 2 pages
+      // (player/table) there's only one "other" screen either way, not worth labeling twice.
+      const navBarFor = (cur) => {
+        const dotsRow = `<div class="nav-dots">${pageOrder.map(key => `<span class="${cur===key?'on':''}" title="${DOT_LABELS[key]}"></span>`).join("")}</div>`;
+        const navSide = (key, side) => `<button class="nav-side ${side}" data-swipe-to="${key}">${NAV_ART[key]}<span class="nav-side-label">${side==='left'?'':icon('right')}${esc(DOT_LABELS[key])}${side==='left'?icon('left'):''}</span></button>`;
+        return `
+          <div class="nav-bar">
+            ${N === 3 ? navSide(cyclicPage(pageOrder, cur, -1), 'left') : ''}
+            <div class="nav-center">${NAV_ART[cur] || ''}${dotsRow}</div>
+            ${N === 3 ? navSide(cyclicPage(pageOrder, cur, 1), 'right') : ''}
+          </div>
+        `;
+      };
+      const pagesHtml = domOrder.map(key => `<div class="swipe-page${key==='player'?' player-page':''}">${RENDERERS[key]()}${navBarFor(key)}</div>`).join("");
       html = `<div class="table-swipe-root">
         <div class="swipe-track-viewport">
           <div class="swipe-track" data-swipe-track style="transform:translateX(${restOffset});">
             ${pagesHtml}
           </div>
         </div>
-        ${dotsHtml}
       </div>`;
     } else {
       // Not seated (spectator/admin) - only the circles view exists, nothing to swipe to,
