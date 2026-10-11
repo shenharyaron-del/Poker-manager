@@ -2712,60 +2712,206 @@ async function autoJoinViaCommunityInvite(communityId){
   });
   render();
 }
-function openModal(m){ modal = m; render(); }
-function closeModal(){ modal = null; render(); }
-// Tracks unsaved edits within the community-setup flow (chipSetup/payboxSettings) only -
-// checked before switching tabs or closing, so in-progress edits never silently vanish.
-// Reset to false each time either tab is freshly (re)opened, and never consulted for any
-// other modal type.
-let setupDirty = false;
+function openModal(m){ if (!isSetupModal(m)) setupDraft = null; modal = m; render(); }
+function closeModal(){ setupDraft = null; modal = null; render(); }
+// The community-setup flow (chips / payments / ריביי tabs) keeps unsaved edits from ALL
+// three tabs in one draft while the user switches between them, so the single
+// "שמור שינויים" under the tabs saves everything at once (see saveAllSetup). The draft
+// lives only as long as the setup modal is open - any other modal, or closing it, drops it.
+//   setupDraft = {communityId, dirty:Set<"chips"|"payments"|"buyins">,
+//     chips?:{points, ratio}, payments?:{paybox:{id:{name,link}}, bit:{id:{name,link}}},
+//     buyins?:[string,...]}
+let setupDraft = null;
+const SETUP_MODAL_TYPES = ["chipSetup", "payboxSettings", "buyinSetup"];
+const isSetupModal = (m) => !!m && SETUP_MODAL_TYPES.includes(m.type);
+function setupTabOf(type){ return type === "chipSetup" ? "chips" : type === "buyinSetup" ? "buyins" : "payments"; }
+function ensureSetupDraft(communityId){
+  if (!setupDraft || setupDraft.communityId !== communityId) setupDraft = {communityId, dirty: new Set()};
+  return setupDraft;
+}
+function markSetupDirty(){ if (isSetupModal(modal) && setupDraft) setupDraft.dirty.add(setupTabOf(modal.type)); }
 // Shared by the community-setup entry points (the home card's gear button, the
 // missing-setup warning banner, and the tab strip inside the modals themselves) so all of
-// them initialize the same way instead of duplicating this state-loading logic.
+// them initialize the same way instead of duplicating this state-loading logic. A tab
+// with a pending draft reopens with the draft's values instead of the saved ones.
 function openChipSetupModal(communityId){
   const c = getCommunity(communityId);
-  const existing = (c.chipValues||[]).map(cv => ({id: cv.id || uid(), image: cv.image || null, value: String(cv.value)}));
-  setupDirty = false;
+  const d = ensureSetupDraft(communityId);
+  const existing = d.chips ? d.chips.points.map(pt => Object.assign({}, pt))
+    : (c.chipValues||[]).map(cv => ({id: cv.id || uid(), image: cv.image || null, value: String(cv.value)}));
   openModal({type:"chipSetup", communityId, imageSrc: null, points: existing});
 }
 function openBuyinSetupModal(communityId){
-  setupDirty = false;
+  ensureSetupDraft(communityId);
   openModal({type:"buyinSetup", communityId});
 }
-// One save-button selector per setup-flow modal type - each tab still owns its own save
-// button/handler, this just lets trySwitchSetupTab/tryCloseSetupModal find whichever one
-// is on screen right now without duplicating the 3-way mapping in both places.
-function setupSaveButtonSelector(){
-  if (modal.type === "chipSetup") return "[data-save-chip-values]";
-  if (modal.type === "buyinSetup") return "[data-save-buyin-amounts]";
-  return "[data-save-paybox-entries]";
-}
-// Both called before leaving the setup flow (switching tabs or closing) - if something
-// was edited but not saved, ask first instead of silently discarding it. "Save" reuses
-// the same save button each tab already has, so it stays the one place that logic lives.
-async function trySwitchSetupTab(targetTab, communityId){
-  if (setupDirty) {
-    const shouldSave = await showConfirm("הנתונים שהזנת לא נשמרו. לשמור לפני שממשיכים?");
-    if (shouldSave) {
-      const saveBtn = document.querySelector(setupSaveButtonSelector());
-      if (saveBtn) await saveBtn.onclick();
-    }
+// Copies whatever the CURRENT tab shows into setupDraft (only if that tab was edited) -
+// called before switching tabs and before saving, since the inputs themselves vanish on
+// the next render.
+function captureSetupDraft(){
+  if (!isSetupModal(modal) || !setupDraft) return;
+  const tab = setupTabOf(modal.type);
+  if (!setupDraft.dirty.has(tab)) return;
+  const q = (sel) => document.querySelector(sel);
+  if (tab === "chips") {
+    const points = (modal.points||[]).map(pt => {
+      const inp = q(`[data-chip-value-input="${pt.id}"]`);
+      return Object.assign({}, pt, {value: inp ? inp.value : pt.value});
+    });
+    const r = q("#chip-ratio-input");
+    setupDraft.chips = {points, ratio: r ? r.value : (setupDraft.chips ? setupDraft.chips.ratio : undefined)};
+  } else if (tab === "buyins") {
+    setupDraft.buyins = Array.from(document.querySelectorAll("[data-buyin-amount-input]"))
+      .sort((a,b) => parseInt(a.dataset.buyinAmountInput) - parseInt(b.dataset.buyinAmountInput)).map(el => el.value);
+  } else {
+    const grab = (nameAttr, linkAttr) => {
+      const out = {};
+      document.querySelectorAll(`[${nameAttr}]`).forEach(el => {
+        const id = el.getAttribute(nameAttr);
+        const linkEl = q(`[${linkAttr}="${id}"]`);
+        out[id] = {name: el.value, link: linkEl ? linkEl.value : ""};
+      });
+      return out;
+    };
+    setupDraft.payments = {paybox: grab("data-paybox-name-input", "data-paybox-link-input"), bit: grab("data-bit-name-input", "data-bit-link-input")};
   }
+}
+// Switching tabs never prompts anymore - the current tab's edits are kept in the draft
+// and saved together with the others.
+function trySwitchSetupTab(targetTab, communityId){
+  captureSetupDraft();
   if (targetTab === "chips") openChipSetupModal(communityId);
   else if (targetTab === "buyins") openBuyinSetupModal(communityId);
   else openPayboxSettingsModal(communityId);
 }
 async function tryCloseSetupModal(){
-  if (setupDirty) {
+  captureSetupDraft();
+  if (setupDraft && setupDraft.dirty.size) {
     const shouldSave = await showConfirm("הנתונים שהזנת לא נשמרו. לשמור לפני שסוגרים?");
-    if (shouldSave) {
-      const saveBtn = document.querySelector(setupSaveButtonSelector());
-      // Every save handler already closeModal()s itself on success, and leaves the
-      // modal open (with its own alert) on failure - either way, nothing left to do here.
-      if (saveBtn) { await saveBtn.onclick(); return; }
-    }
+    if (shouldSave) { await saveAllSetup(true); return; }
   }
   closeModal();
+}
+// Each section's save, given already-captured draft values. Return false (after showing
+// their own alert) on failure, so saveAllSetup can stop there.
+function validateSetupChips(chips){
+  const values = chips.points.filter(pt => { const v = parseFloat(pt.value); return !isNaN(v) && v >= 0; });
+  const ratio = parseFloat(chips.ratio);
+  if (!values.length && !(ratio > 0)) return "צריך להזין ערך לפחות לז'יטון אחד, או יחס ז'יטונים.";
+  return null;
+}
+async function saveSetupChips(communityId, chips){
+  const values = [];
+  chips.points.forEach(pt => {
+    const v = parseFloat(pt.value);
+    if (!isNaN(v) && v >= 0) values.push({id: pt.id, image: pt.image, value: v});
+  });
+  const ratio = parseFloat(chips.ratio);
+  const validRatio = !isNaN(ratio) && ratio > 0;
+  // A point's image is only a fresh data: URL if it was just captured/cropped this
+  // session - one carried over unchanged from the saved values is already an uploaded
+  // /api/photos/... URL, so only the new ones need uploading.
+  try {
+    await Promise.all(values.map(async (v) => {
+      if (v.image && v.image.startsWith("data:")) v.image = await uploadPhoto(v.image);
+    }));
+  } catch(e) { showAlert("העלאת תמונות הז'יטונים נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return false; }
+  if (USE_RELATIONAL_API) {
+    const c = getCommunity(communityId);
+    try {
+      const ok = await v2SetChipValues(communityId, values.length ? values : c.chipValues, validRatio ? ratio : c.chipRatio);
+      if (!ok) { showAlert("לא הצלחנו לשמור בגלל התנגשות עם שמירה אחרת - נסו את הפעולה שוב."); return false; }
+    } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return false; }
+  } else {
+    await mutateAndSave(() => {
+      const c = getCommunity(communityId);
+      if (values.length) c.chipValues = values;
+      if (validRatio) c.chipRatio = ratio;
+    });
+  }
+  return true;
+}
+async function saveSetupPayments(communityId, payments){
+  const c = getCommunity(communityId);
+  const merge = (list, edits) => (list||[]).map(pl => {
+    const e = edits[pl.id] || {};
+    return {id: pl.id, name: (e.name && e.name.trim()) || pl.name, link: (e.link && e.link.trim()) || pl.link};
+  });
+  const edited = merge(c.payboxLinks, payments.paybox || {});
+  const editedBit = merge(c.bitLinks, payments.bit || {});
+  if (USE_RELATIONAL_API) {
+    try {
+      await v2EditPayboxLinks(communityId, edited);
+      if (editedBit.length) await v2EditBitLinks(communityId, editedBit);
+    } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return false; }
+  } else {
+    edited.forEach(({id, name, link}) => { const pl = c.payboxLinks.find(x => x.id === id); if (pl) { pl.name = name; pl.link = link; } });
+    editedBit.forEach(({id, name, link}) => { const bl = c.bitLinks.find(x => x.id === id); if (bl) { bl.name = name; bl.link = link; } });
+    saveState();
+  }
+  return true;
+}
+function validateSetupBuyins(buyins){
+  const amounts = buyins.map(v => parseFloat(v));
+  if (amounts.some(v => isNaN(v) || v <= 0)) return "סכומי הריביי חייבים להיות מספרים חיוביים.";
+  // Each amount must be strictly bigger than the one before it - the UI always shows
+  // them left-to-right as "smallest first" (see the "סכום הכניסה..." hint), so out-of-
+  // order values would make that hint and the actual buy-in buttons disagree.
+  if (!amounts.every((v, i) => i === 0 || v > amounts[i-1])) return "כל סכום חייב להיות גדול מהסכום שלפניו (לדוגמה: 50, 80, 100).";
+  return null;
+}
+async function saveSetupBuyins(communityId, buyins){
+  const buyinAmounts = buyins.map(v => parseFloat(v));
+  if (USE_RELATIONAL_API) {
+    try { await v2UpdateCommunity(communityId, {buyinAmounts}); }
+    catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return false; }
+  } else {
+    getCommunity(communityId).buyinAmounts = buyinAmounts;
+    saveState();
+  }
+  return true;
+}
+// The one save for all three tabs. Validates every edited tab first (jumping to the
+// offending tab on a problem, so nothing is half-saved), then saves each edited section.
+// Stays open afterwards (re-showing the current tab from the freshly saved data) unless
+// andClose - the "שמור וחזור לרשימת הקבוצות" button - in which case it closes and lands
+// back on the groups list.
+async function saveAllSetup(andClose){
+  if (!isSetupModal(modal)) return;
+  if (modal.type === "chipSetup" && modal.analyzingChips) { showAlert("רגע, עדיין מזהים את הז'יטונים בתמונה..."); return; }
+  captureSetupDraft();
+  const d = ensureSetupDraft(modal.communityId);
+  const cid = d.communityId;
+  const checks = [["chips", d.chips && validateSetupChips(d.chips)], ["buyins", d.buyins && validateSetupBuyins(d.buyins)]];
+  for (const [tab, err] of checks) {
+    if (d.dirty.has(tab) && err) {
+      if (setupTabOf(modal.type) !== tab) trySwitchSetupTab(tab, cid);
+      showAlert(err);
+      return;
+    }
+  }
+  const btns = Array.from(document.querySelectorAll("[data-setup-save],[data-setup-save-back]"));
+  btns.forEach(b => b.disabled = true);
+  const pressed = document.querySelector(andClose ? "[data-setup-save-back]" : "[data-setup-save]");
+  if (pressed) showButtonLoading(pressed);
+  const steps = [["chips", () => saveSetupChips(cid, d.chips)], ["payments", () => saveSetupPayments(cid, d.payments)], ["buyins", () => saveSetupBuyins(cid, d.buyins)]];
+  for (const [tab, run] of steps) {
+    if (!d.dirty.has(tab) || !d[tab]) { d.dirty.delete(tab); continue; }
+    let ok = false;
+    try { ok = await run(); }
+    catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+    if (!ok) { render(); return; }
+    d.dirty.delete(tab);
+    delete d[tab];
+  }
+  if (andClose) {
+    closeModal();
+    if (nav.screen !== "home") go("home");
+    return;
+  }
+  const tab = setupTabOf(modal.type);
+  trySwitchSetupTab(tab, cid);
+  showAlert("השינויים נשמרו");
 }
 // Lets either setup modal jump straight to the other one - two "folders" of the same
 // community-setup flow, opened together from the home card's gear button or the
@@ -2789,6 +2935,13 @@ function setupTabsHtml(communityId, activeTab){
   `;
 }
 const SETUP_PANEL_MARK = "setup-panel";
+// Under the tabs' panel, shared by all three: saves every tab's edits (see saveAllSetup).
+const SETUP_FOOTER_HTML = `
+  <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px;">
+    <button class="btn btn-primary btn-block" data-setup-save>שמור שינויים</button>
+    <button class="btn btn-ghost btn-block" data-setup-save-back>שמור וחזור לרשימת הקבוצות</button>
+  </div>
+`;
 function openPayboxSettingsModal(communityId){
   const c = getCommunity(communityId);
   // First time opening settings for a community still on the old single-link field -
@@ -2800,7 +2953,7 @@ function openPayboxSettingsModal(communityId){
     delete c.payboxLink;
     saveState();
   }
-  setupDirty = false;
+  ensureSetupDraft(communityId);
   openModal({type:"payboxSettings", communityId});
 }
 // Drop-in replacement for the browser's native alert() - every existing call site
@@ -2849,7 +3002,7 @@ function updateModal(partial){
   const listEl = document.querySelector(".scroll-list");
   const modalScroll = modalEl ? modalEl.scrollTop : null;
   const listScroll = listEl ? listEl.scrollTop : null;
-  if (modal && (modal.type === "chipSetup" || modal.type === "payboxSettings" || modal.type === "buyinSetup")) setupDirty = true;
+  markSetupDirty();
   modal = Object.assign({}, modal, partial);
   render();
   const modalEl2 = document.querySelector(".modal");
@@ -3652,13 +3805,13 @@ function renderHome(){
     c.createdBy === myIdentity.id || c.roster.some(p => p.clientId === myIdentity.id)
   );
   let cards = myCommunities.map(c => `
-    <div class="card" data-open-community="${c.id}">
-      <div class="flex1">
-        <div class="name serif">${esc(c.name)}</div>
-        <div class="meta">${icon('users')} נוצרה ע"י ${esc(c.createdByName || "לא ידוע")}</div>
+    <div class="card" data-open-community="${c.id}" style="gap:6px;">
+      <div class="flex1" style="min-width:0;">
+        <div class="name serif" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c.name)}</div>
+        <div class="meta" style="display:flex;align-items:center;gap:4px;min-width:0;"><span style="flex-shrink:0;line-height:0;">${icon('users')}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">נוצרה ע"י ${esc(c.createdByName || "לא ידוע")}</span></div>
       </div>
-      ${(isSuperAdmin() || (c.createdByName && myIdentity.name && c.createdByName === myIdentity.name)) ? `<button class="icon-btn" data-delete-community="${c.id}" style="align-items:center;gap:4px;font-size:12px;font-weight:700;padding:7px 10px;background:rgba(240,168,168,.08);color:#f0b4b4;border:1px solid rgba(240,168,168,.35);">${icon('trash')}מחיקה</button>` : ""}
-      ${(isSuperAdmin() || (c.createdByName && myIdentity.name && c.createdByName === myIdentity.name)) ? `<button class="icon-btn" data-open-chip-setup="${c.id}" title="הגדרות קבוצה" style="align-items:center;gap:4px;font-size:12px;font-weight:700;padding:7px 10px;">${icon('gear')}Setup</button>` : ""}
+      ${(isSuperAdmin() || (c.createdByName && myIdentity.name && c.createdByName === myIdentity.name)) ? `<button class="icon-btn" data-delete-community="${c.id}" style="flex-shrink:0;align-items:center;gap:3px;font-size:11px;font-weight:700;padding:6px 7px;background:rgba(240,168,168,.08);color:#f0b4b4;border:1px solid rgba(240,168,168,.35);">${icon('trash')}מחיקה</button>` : ""}
+      ${(isSuperAdmin() || (c.createdByName && myIdentity.name && c.createdByName === myIdentity.name)) ? `<button class="icon-btn" data-open-chip-setup="${c.id}" title="הגדרות קבוצה" style="flex-shrink:0;align-items:center;gap:3px;font-size:11px;font-weight:700;padding:6px 7px;">${icon('gear')}Setup</button>` : ""}
       <div class="chev">${icon('chev')}</div>
     </div>`).join("");
   const newCommunityCard = `
@@ -4929,20 +5082,23 @@ function renderModal(m){
         <input type="file" accept="image/*" capture="environment" id="chip-camera-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
       </div>
     `;
+    // A ratio typed earlier and then left for another tab (see captureSetupDraft) comes
+    // back as typed; otherwise the saved one.
+    const draftRatio = setupDraft && setupDraft.communityId === m.communityId && setupDraft.chips ? setupDraft.chips.ratio : undefined;
+    const shownRatio = draftRatio !== undefined ? draftRatio : (c.chipRatio || 1);
     if (!m.imageSrc) {
       body = `
         ${setupTabsHtml(m.communityId, "chips")}
         <p style="color:var(--muted);font-size:12px;margin:0 0 14px;">ערכי הז'יטונים ויחס ההמרה (אופציונלי) - כלי עזר לספירת הז'יטונים בסוף הערב.</p>
         <div class="section-title" style="padding:0;margin:0 0 6px;">יחס ז'יטונים</div>
         <div class="field">
-          <label>1 שקל עבור <input type="number" inputmode="decimal" id="chip-ratio-input" value="${c.chipRatio ? esc(String(c.chipRatio)) : '1'}" style="width:70px;display:inline-block;text-align:center;"> ז'יטונים</label>
+          <label>1 שקל עבור <input type="number" inputmode="decimal" id="chip-ratio-input" value="${esc(String(shownRatio))}" style="width:70px;display:inline-block;text-align:center;"> ז'יטונים</label>
         </div>
-        <p style="color:var(--muted);font-size:12px;margin-top:-8px;">משמש לספירת ז'יטונים כוללת בסיום ערב.<br>יחס של 1 ל-<span id="chip-ratio-example-x">${esc(String(c.chipRatio || 1))}</span> אומר שעבור 50 ש"ח תקבל <span id="chip-ratio-example-y">${esc(String(Math.round((c.chipRatio || 1) * 50 * 100) / 100))}</span> ז'יטונים.</p>
+        <p style="color:var(--muted);font-size:12px;margin-top:-8px;">משמש לספירת ז'יטונים כוללת בסיום ערב.<br>יחס של 1 ל-<span id="chip-ratio-example-x">${esc(String(shownRatio))}</span> אומר שעבור 50 ש"ח תקבל <span id="chip-ratio-example-y">${isNaN(parseFloat(shownRatio)) ? 'Y' : esc(String(Math.round(parseFloat(shownRatio) * 50 * 100) / 100))}</span> ז'יטונים.</p>
         <div class="section-title" style="padding:0;margin:0 0 6px;">הוספת ויזואליות של הז'יטונים</div>
         <p style="color:var(--muted);font-size:13px;margin-top:0;">צלמו תמונה עם כל הז'יטונים פרוסים בנפרד על משטח, ממבט על (מלמעלה).<br>באמצעות הגדרה זו נוכל לספור ז'יטונים בסיום ערב.</p>
         ${editableList}
         ${pickButtons}
-        <button class="btn btn-primary btn-block" data-save-chip-values>שמור שינויים</button>
       `;
     } else {
       const markers = (m.imageW && m.imageH) ? m.points.filter(pt => pt.x != null).map(pt => {
@@ -4967,7 +5123,6 @@ function renderModal(m){
         <p style="color:var(--muted);font-size:12px;margin-top:0;">${m.analyzingChips ? "מזהה ז'יטונים אוטומטית..." : "הקישו על ז'יטון בתמונה כדי להוסיף מסגרת דוגמה - אפשר לגרור אותה למיקום מדויק, ולגרור את הנקודה הלבנה כדי לשנות את הגודל שיקיף בדיוק את הז'יטון. התמונה בטבלה מתעדכנת תוך כדי הגרירה."}</p>
         ${editableList}
         <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-retake-photo>${icon('plus')} תמונה אחרת</button>
-        <button class="btn btn-primary btn-block" data-save-chip-values ${(m.points.length===0||m.analyzingChips)?"disabled":""}>שמור הגדרות ז'יטונים</button>
       `;
     }
   } else if (m.type === "newCommunity") {
@@ -5262,14 +5417,15 @@ function renderModal(m){
     const link = (c.payboxLinks || [])[0] || null;
     const bitLink = (c.bitLinks || [])[0] || null;
     const settlementDefault = c.settlementDefault || "direct";
+    const payDraft = (setupDraft && setupDraft.communityId === m.communityId && setupDraft.payments) || {paybox:{}, bit:{}};
     body = `
       ${setupTabsHtml(m.communityId, "payments")}
       <p style="color:var(--muted);font-size:12px;margin:0 0 14px;">פתיחה מהירה לקבוצת הפייבוקס או הביט לטובת הסדר התשלומים.<br>אם אין, Poker Manager יציע העברות ישירות בין השחקנים.</p>
       <div class="section-title" style="padding:0;margin:0 0 8px;display:flex;align-items:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:16px;width:auto;display:block;">קבוצת פייבוקס</div>
       ${link ? `
         <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:10px;margin-bottom:18px;">
-          <input type="text" data-paybox-name-input="${link.id}" placeholder="${esc(link.name) || 'שם'}" style="margin-bottom:6px;font-weight:700;">
-          <input type="text" value="${esc(link.link)}" data-paybox-link-input="${link.id}" placeholder="קישור" dir="ltr">
+          <input type="text" data-paybox-name-input="${link.id}" value="${esc(payDraft.paybox[link.id] ? payDraft.paybox[link.id].name : '')}" placeholder="${esc(link.name) || 'שם'}" style="margin-bottom:6px;font-weight:700;">
+          <input type="text" value="${esc(payDraft.paybox[link.id] ? payDraft.paybox[link.id].link : link.link)}" data-paybox-link-input="${link.id}" placeholder="קישור" dir="ltr">
         </div>
       ` : `
         <div class="field"><label>שם</label><input type="text" id="new-paybox-name" placeholder="שם הקבוצה בפייבוקס"></div>
@@ -5279,8 +5435,8 @@ function renderModal(m){
       <div class="section-title" style="padding:0;margin:0 0 8px;display:flex;align-items:center;gap:6px;"><img src="/static/bit-icon.png" style="height:16px;width:auto;display:block;">קבוצת ביט</div>
       ${bitLink ? `
         <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:10px;margin-bottom:18px;">
-          <input type="text" data-bit-name-input="${bitLink.id}" placeholder="${esc(bitLink.name) || 'שם'}" style="margin-bottom:6px;font-weight:700;">
-          <input type="text" value="${esc(bitLink.link)}" data-bit-link-input="${bitLink.id}" placeholder="קישור" dir="ltr">
+          <input type="text" data-bit-name-input="${bitLink.id}" value="${esc(payDraft.bit[bitLink.id] ? payDraft.bit[bitLink.id].name : '')}" placeholder="${esc(bitLink.name) || 'שם'}" style="margin-bottom:6px;font-weight:700;">
+          <input type="text" value="${esc(payDraft.bit[bitLink.id] ? payDraft.bit[bitLink.id].link : bitLink.link)}" data-bit-link-input="${bitLink.id}" placeholder="קישור" dir="ltr">
         </div>
       ` : `
         <div class="field"><label>שם</label><input type="text" id="new-bit-name" placeholder="שם הקבוצה בביט"></div>
@@ -5303,7 +5459,6 @@ function renderModal(m){
         <input type="radio" name="settlement-default" ${settlementDefault==='direct'?'checked':''}>
         <span class="flex1">העברה ישירות בין שחקנים</span>
       </div>
-      <button class="btn btn-primary btn-block" data-save-paybox-entries>שמור שינויים</button>
     `;
   } else if (m.type === "buyinSetup") {
     const c = getCommunity(m.communityId);
@@ -5314,10 +5469,9 @@ function renderModal(m){
       <div class="section-title" style="padding:0;margin:0 0 6px;">ריביי</div>
       <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">3 הסכומים שיוצגו בכל כפתורי הריביי באפליקציה - כל אחד חייב להיות גדול מהקודם לו.</p>
       <div style="display:flex;gap:8px;margin-bottom:6px;">
-        ${getBuyinAmounts(c).map((v,i) => `<input type="number" inputmode="numeric" data-buyin-amount-input="${i}" value="${v}" style="flex:1;text-align:center;">`).join("")}
+        ${getBuyinAmounts(c).map((v,i) => `<input type="number" inputmode="numeric" data-buyin-amount-input="${i}" value="${esc(String(setupDraft && setupDraft.communityId === m.communityId && setupDraft.buyins && setupDraft.buyins[i] !== undefined ? setupDraft.buyins[i] : v))}" style="flex:1;text-align:center;">`).join("")}
       </div>
       <p style="color:var(--muted);font-size:11px;margin:0 0 18px;">סכום הכניסה לשולחן הוא הסכום הימני (הראשון).</p>
-      <button class="btn btn-primary btn-block" data-save-buyin-amounts>שמור שינויים</button>
     `;
   } else if (m.type === "pickSeat") {
     const g = getGame(m.gameId);
@@ -5946,7 +6100,7 @@ function renderModal(m){
     <div class="overlay${topAnchored ? ' overlay-top' : ''}${isSetupFlow ? ' overlay-fullscreen' : ''}">
       <div class="modal" onclick="event.stopPropagation()">
         <div class="modal-head"><h3 class="serif">${title}</h3>${dismissable ? `<button class="close-x" data-close-modal>${icon('x')}</button>` : ""}</div>
-        ${body}${body.includes('class="mode-panel ' + SETUP_PANEL_MARK) ? '</div></div>' : ''}
+        ${body}${body.includes('class="mode-panel ' + SETUP_PANEL_MARK) ? '</div></div>' + SETUP_FOOTER_HTML : ''}
       </div>
     </div>
   `;
@@ -6166,6 +6320,10 @@ function attachHandlers(){
     e.stopPropagation();
     openPayboxSettingsModal(el.dataset.openPayboxSettings);
   });
+  const setupSaveBtn = app.querySelector("[data-setup-save]");
+  if (setupSaveBtn) setupSaveBtn.onclick = () => saveAllSetup(false);
+  const setupSaveBackBtn = app.querySelector("[data-setup-save-back]");
+  if (setupSaveBackBtn) setupSaveBackBtn.onclick = () => saveAllSetup(true);
   app.querySelectorAll("[data-setup-tab]").forEach(el => el.onclick = () => {
     trySwitchSetupTab(el.dataset.setupTab, el.dataset.setupCommunity);
   });
@@ -6176,8 +6334,8 @@ function attachHandlers(){
   if (modal && (modal.type === "chipSetup" || modal.type === "payboxSettings" || modal.type === "buyinSetup")) {
     const setupModalEl = app.querySelector(".modal");
     if (setupModalEl) {
-      setupModalEl.addEventListener("input", () => { setupDirty = true; });
-      setupModalEl.addEventListener("change", () => { setupDirty = true; });
+      setupModalEl.addEventListener("input", markSetupDirty);
+      setupModalEl.addEventListener("change", markSetupDirty);
     }
   }
   const newCommunityBtn = app.querySelector("[data-new-community]");
@@ -7524,46 +7682,6 @@ function attachHandlers(){
     });
     const retakeBtn = app.querySelector("[data-retake-photo]");
     if (retakeBtn) retakeBtn.onclick = () => updateModal({imageSrc: null});
-    const saveBtn = app.querySelector("[data-save-chip-values]");
-    if (saveBtn) saveBtn.onclick = async () => {
-      const values = [];
-      modal.points.forEach(pt => {
-        const valInp = document.querySelector(`[data-chip-value-input="${pt.id}"]`);
-        const v = valInp ? parseFloat(valInp.value) : NaN;
-        if (!isNaN(v) && v >= 0) values.push({id: pt.id, image: pt.image, value: v});
-      });
-      const ratioInp = document.getElementById("chip-ratio-input");
-      const ratio = ratioInp ? parseFloat(ratioInp.value) : NaN;
-      const validRatio = !isNaN(ratio) && ratio > 0;
-      if (!values.length && !validRatio) { showAlert("צריך להזין ערך לפחות לז'יטון אחד, או יחס ז'יטונים."); return; }
-      const communityId = modal.communityId;
-      saveBtn.disabled = true;
-      showButtonLoading(saveBtn);
-      // A point's image is only a fresh data: URL if it was just captured/cropped this
-      // session - one carried over unchanged from `existing` (see data-open-chip-setup)
-      // is already an uploaded /api/photos/... URL, so only the new ones need uploading.
-      try {
-        await Promise.all(values.map(async (v) => {
-          if (v.image && v.image.startsWith("data:")) v.image = await uploadPhoto(v.image);
-        }));
-      } catch(e) { showAlert("העלאת תמונות הז'יטונים נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); render(); return; }
-      if (USE_RELATIONAL_API) {
-        const c = getCommunity(communityId);
-        const finalValues = values.length ? values : c.chipValues;
-        const finalRatio = validRatio ? ratio : c.chipRatio;
-        try {
-          const ok = await v2SetChipValues(communityId, finalValues, finalRatio);
-          if (!ok) { showAlert("לא הצלחנו לשמור בגלל התנגשות עם שמירה אחרת - נסו את הפעולה שוב."); saveBtn.disabled = false; return; }
-        } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); saveBtn.disabled = false; return; }
-      } else {
-        await mutateAndSave(() => {
-          const c = getCommunity(communityId);
-          if (values.length) c.chipValues = values;
-          if (validRatio) c.chipRatio = ratio;
-        });
-      }
-      closeModal();
-    };
   }
 
   if (modal && modal.type === "avatarCreator") {
@@ -8017,42 +8135,6 @@ function attachHandlers(){
       }
       render();
     });
-    const saveEntriesBtn = app.querySelector("[data-save-paybox-entries]");
-    if (saveEntriesBtn) saveEntriesBtn.onclick = async () => {
-      const c = getCommunity(modal.communityId);
-      const edited = (c.payboxLinks||[]).map(pl => {
-        const nameInp = document.querySelector(`[data-paybox-name-input="${pl.id}"]`);
-        const linkInp = document.querySelector(`[data-paybox-link-input="${pl.id}"]`);
-        return {id: pl.id, name: (nameInp && nameInp.value.trim()) || pl.name, link: (linkInp && linkInp.value.trim()) || pl.link};
-      });
-      const editedBit = (c.bitLinks||[]).map(bl => {
-        const nameInp = document.querySelector(`[data-bit-name-input="${bl.id}"]`);
-        const linkInp = document.querySelector(`[data-bit-link-input="${bl.id}"]`);
-        return {id: bl.id, name: (nameInp && nameInp.value.trim()) || bl.name, link: (linkInp && linkInp.value.trim()) || bl.link};
-      });
-      if (USE_RELATIONAL_API) {
-        try {
-          await v2EditPayboxLinks(modal.communityId, edited);
-          if (editedBit.length) await v2EditBitLinks(modal.communityId, editedBit);
-        }
-        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
-      } else {
-        edited.forEach(({id, name, link}) => {
-          const pl = c.payboxLinks.find(p => p.id === id);
-          if (pl) { pl.name = name; pl.link = link; }
-        });
-        editedBit.forEach(({id, name, link}) => {
-          const bl = c.bitLinks.find(p => p.id === id);
-          if (bl) { bl.name = name; bl.link = link; }
-        });
-        saveState();
-      }
-      // "שמור שינויים" is the single save action for this whole screen (the settlement-
-      // default radios above already persist themselves the moment they're tapped) - once
-      // the paybox/bit link edits land, there's nothing left open on this screen to keep
-      // looking at, so close it instead of just re-rendering in place.
-      closeModal();
-    };
     const addEntryBtn = app.querySelector("[data-add-paybox-entry]");
     if (addEntryBtn) addEntryBtn.onclick = async () => {
       const name = document.getElementById("new-paybox-name").value.trim();
@@ -8088,32 +8170,6 @@ function attachHandlers(){
         saveState();
       }
       render();
-    };
-  }
-
-  if (modal && modal.type === "buyinSetup") {
-    const saveBuyinBtn = app.querySelector("[data-save-buyin-amounts]");
-    if (saveBuyinBtn) saveBuyinBtn.onclick = async () => {
-      const c = getCommunity(modal.communityId);
-      const buyinAmountInputs = Array.from(app.querySelectorAll("[data-buyin-amount-input]"))
-        .sort((a,b) => parseInt(a.dataset.buyinAmountInput) - parseInt(b.dataset.buyinAmountInput));
-      const buyinAmounts = buyinAmountInputs.map(el => parseFloat(el.value));
-      if (buyinAmounts.some(v => isNaN(v) || v <= 0)) { showAlert("סכומי הריביי חייבים להיות מספרים חיוביים."); return; }
-      // Each amount must be strictly bigger than the one before it - the UI always shows
-      // them left-to-right as "smallest first" (see the "סכום הכניסה..." hint), so out-of-
-      // order values would make that hint and the actual buy-in buttons disagree.
-      const isAscending = buyinAmounts.every((v, i) => i === 0 || v > buyinAmounts[i-1]);
-      if (!isAscending) { showAlert("כל סכום חייב להיות גדול מהסכום שלפניו (לדוגמה: 50, 80, 100)."); return; }
-      saveBuyinBtn.disabled = true;
-      showButtonLoading(saveBuyinBtn);
-      if (USE_RELATIONAL_API) {
-        try { await v2UpdateCommunity(modal.communityId, {buyinAmounts}); }
-        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); saveBuyinBtn.disabled = false; return; }
-      } else {
-        c.buyinAmounts = buyinAmounts;
-        saveState();
-      }
-      closeModal();
     };
   }
 
