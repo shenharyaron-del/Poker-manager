@@ -4808,7 +4808,7 @@ function renderModal(m){
         const hPct = (size / m.imageH) * 100;
         return `
           <div data-color-marker="${pt.id}" style="position:absolute;left:${leftPct}%;top:${topPct}%;width:${wPct}%;height:${hPct}%;transform:translate(-50%,-50%);border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.6);cursor:grab;touch-action:none;">
-            <div data-color-marker-resize="${pt.id}" style="position:absolute;right:-9px;bottom:-9px;width:18px;height:18px;cursor:nwse-resize;touch-action:none;display:flex;align-items:center;justify-content:center;"><div style="width:6px;height:6px;border-radius:50%;background:#fff;border:1px solid rgba(0,0,0,.6);"></div></div>
+            ${[["tl","left","top","nwse"],["tr","right","top","nesw"],["bl","left","bottom","nesw"],["br","right","bottom","nwse"]].map(([corner,h,v,cur]) => `<div data-color-marker-resize="${pt.id}" data-corner="${corner}" style="position:absolute;${h}:-9px;${v}:-9px;width:18px;height:18px;cursor:${cur}-resize;touch-action:none;display:flex;align-items:center;justify-content:center;"><div style="width:6px;height:6px;border-radius:50%;background:#fff;border:1px solid rgba(0,0,0,.6);"></div></div>`).join("")}
           </div>`;
       }).join("") : "";
       body = `
@@ -7292,12 +7292,16 @@ function attachHandlers(){
       });
       markerEl.addEventListener("pointerup", () => { if (drag) { drag = null; updateModal({}); } });
       markerEl.addEventListener("pointercancel", () => { drag = null; });
-      const resizeEl = markerEl.querySelector("[data-color-marker-resize]");
-      if (resizeEl) {
+      // One handle per corner: dragging a corner resizes the (square) frame while the opposite corner stays put.
+      markerEl.querySelectorAll("[data-color-marker-resize]").forEach(resizeEl => {
+        const corner = resizeEl.dataset.corner || "br";
+        const sx = corner.includes("r") ? 1 : -1;
+        const sy = corner.includes("b") ? 1 : -1;
         let rdrag = null;
         resizeEl.addEventListener("pointerdown", (e) => {
           e.stopPropagation();
-          rdrag = {canvas: buildSourceCanvas()};
+          const half = (pt.size || 20) / 2;
+          rdrag = {canvas: buildSourceCanvas(), ax: pt.x - sx*half, ay: pt.y - sy*half};
           resizeEl.setPointerCapture(e.pointerId);
         });
         resizeEl.addEventListener("pointermove", (e) => {
@@ -7305,17 +7309,23 @@ function attachHandlers(){
           e.stopPropagation();
           const rect = photoEl.getBoundingClientRect();
           const scaleX = photoEl.naturalWidth / rect.width;
+          const scaleY = photoEl.naturalHeight / rect.height;
           const px = Math.round((e.clientX - rect.left) * scaleX);
-          const newSize = Math.max(8, Math.round((px - pt.x) * 2));
+          const py = Math.round((e.clientY - rect.top) * scaleY);
+          const newSize = Math.max(8, Math.round(Math.max(sx*(px - rdrag.ax), sy*(py - rdrag.ay))));
           pt.size = newSize;
+          pt.x = Math.round(rdrag.ax + sx*newSize/2);
+          pt.y = Math.round(rdrag.ay + sy*newSize/2);
           pt.image = cropChipImage(rdrag.canvas, pt.x, pt.y, pt.size);
+          markerEl.style.left = (pt.x/photoEl.naturalWidth*100) + "%";
+          markerEl.style.top = (pt.y/photoEl.naturalHeight*100) + "%";
           markerEl.style.width = (newSize/photoEl.naturalWidth*100) + "%";
           markerEl.style.height = (newSize/photoEl.naturalHeight*100) + "%";
           updatePointDisplay(pt);
         });
         resizeEl.addEventListener("pointerup", () => { if (rdrag) { rdrag = null; updateModal({}); } });
         resizeEl.addEventListener("pointercancel", () => { rdrag = null; });
-      }
+      });
     });
     const syncChipPointValues = () => {
       modal.points.forEach(pt => {
