@@ -4758,7 +4758,7 @@ function renderModal(m){
     const c = getCommunity(m.communityId);
     title = "הגדרת פרופיל קבוצה";
     const editableList = m.points.length ? `
-      <div class="section-title" style="padding:0;margin:0 0 6px;">ז'יטונים וערכים</div>
+      <div class="section-title" style="padding:0;margin:0 0 6px;">ז'יטונים וערכם בש"ח</div>
       <div class="scroll-list" style="margin-bottom:14px;">
         ${m.points.map((pt,i) => `
           <div class="roster-row">
@@ -4769,7 +4769,10 @@ function renderModal(m){
             ${pt.image
               ? `<img data-point-image="${pt.id}" src="${pt.image}" style="width:40px;height:40px;object-fit:cover;border-radius:8px;flex-shrink:0;border:1px solid rgba(255,255,255,.2);">`
               : `<div data-point-image="${pt.id}" style="width:40px;height:40px;border-radius:8px;flex-shrink:0;border:1px dashed var(--muted);"></div>`}
-            <input type="number" inputmode="decimal" placeholder="ערך (למשל 10)" value="${esc(pt.value||'')}" data-chip-value-input="${pt.id}" style="flex:1;">
+            <div style="flex:1;position:relative;min-width:0;">
+              <input type="number" inputmode="decimal" placeholder="ערך (למשל 10)" value="${esc(pt.value||'')}" data-chip-value-input="${pt.id}" style="width:100%;padding-left:32px;box-sizing:border-box;">
+              <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none;">₪</span>
+            </div>
             <button class="icon-btn danger" data-remove-chip-point="${pt.id}">${icon('trash')}</button>
           </div>
         `).join("")}
