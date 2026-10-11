@@ -189,9 +189,16 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
    "raised" pill matching the panel's own color (navy for history, charcoal for feed)
    directly below it, same idea as a browser tab merging into its own page. */
 .player-history-feed{display:flex;flex-direction:column;flex:1;min-height:0;margin-bottom:14px;}
-.player-history-feed-tabs{display:flex;flex-shrink:0;}
+/* Rounded on the CONTAINER's own outer top corners (clipped via overflow:hidden), not on
+   whichever tab happens to be .active - rounding it per-tab instead (as this used to) gave
+   the active tab BOTH its top corners rounded, including the inner one touching the other
+   tab, while the inactive tab (no radius at all) left the true outer corner on ITS side
+   square - reported live as "the corner isn't rounded," worse on whichever side the
+   currently-active tab ISN'T. This way both outer corners stay rounded no matter which
+   tab is active, and the shared inner seam between the two tabs stays flat either way. */
+.player-history-feed-tabs{display:flex;flex-shrink:0;border-radius:10px 10px 0 0;overflow:hidden;}
 .player-history-feed-tab{flex:1;padding:10px 4px;text-align:center;font-size:12px;font-weight:700;letter-spacing:.04em;background:none;border:none;color:rgba(255,255,255,.45);cursor:pointer;font-family:inherit;}
-.player-history-feed-tab.active{border-radius:10px 10px 0 0;color:var(--gold);background-repeat:repeat;background-size:auto,220px;}
+.player-history-feed-tab.active{color:var(--gold);background-repeat:repeat;background-size:auto,220px;}
 .player-history-feed.mode-history .player-history-feed-tab.active{background-image:linear-gradient(rgba(10,25,55,.85),rgba(10,25,55,.85)),url('/static/chat-bg.png');}
 .player-history-feed.mode-feed .player-history-feed-tab.active{background-image:linear-gradient(rgba(20,20,24,.85),rgba(20,20,24,.85)),url('/static/chat-bg.png');}
 .player-history-feed-body{flex:1;min-height:0;overflow-y:auto;padding:10px;touch-action:pan-y;border-radius:0 0 12px 12px;background-repeat:repeat;background-size:auto,220px;}
@@ -3869,7 +3876,7 @@ function renderPlayerScreen(gameId){
       ${cashedOut ? "" : `
       <div class="player-history-feed mode-${playerHistoryTab}">
         <div class="player-history-feed-tabs">
-          <button class="player-history-feed-tab${playerHistoryTab==='history'?' active':''}" data-player-tab="history">היסטוריית הקניות שלי</button>
+          <button class="player-history-feed-tab${playerHistoryTab==='history'?' active':''}" data-player-tab="history">הקניות שלי</button>
           <button class="player-history-feed-tab${playerHistoryTab==='feed'?' active':''}" data-player-tab="feed">פעילות בשולחן</button>
         </div>
         ${playerHistoryTab === 'history'
