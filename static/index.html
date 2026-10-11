@@ -3647,9 +3647,8 @@ function renderHome(){
         <div class="name serif">${esc(c.name)}</div>
         <div class="meta">${icon('users')} נוצרה ע"י ${esc(c.createdByName || "לא ידוע")}</div>
       </div>
-      ${(isSuperAdmin() || (c.createdByName && myIdentity.name && c.createdByName === myIdentity.name)) ? `<button class="icon-btn danger" data-delete-community="${c.id}">${icon('trash')}</button>` : ""}
-      ${(isSuperAdmin() || (c.createdByName && myIdentity.name && c.createdByName === myIdentity.name)) ? `<button class="icon-btn" data-open-chip-setup="${c.id}" title="הגדרות קבוצה">${icon('gear')}</button>` : ""}
-      <button class="icon-btn" data-duplicate-community="${c.id}" title="שכפל קבוצה">${icon('copy')}</button>
+      ${(isSuperAdmin() || (c.createdByName && myIdentity.name && c.createdByName === myIdentity.name)) ? `<button class="icon-btn" data-delete-community="${c.id}" style="align-items:center;gap:4px;font-size:12px;font-weight:700;padding:7px 10px;background:rgba(240,168,168,.08);color:#f0b4b4;border:1px solid rgba(240,168,168,.35);">${icon('trash')}מחיקה</button>` : ""}
+      ${(isSuperAdmin() || (c.createdByName && myIdentity.name && c.createdByName === myIdentity.name)) ? `<button class="icon-btn" data-open-chip-setup="${c.id}" title="הגדרות קבוצה" style="align-items:center;gap:4px;font-size:12px;font-weight:700;padding:7px 10px;">${icon('gear')}Setup</button>` : ""}
       <div class="chev">${icon('chev')}</div>
     </div>`).join("");
   const newCommunityCard = `
