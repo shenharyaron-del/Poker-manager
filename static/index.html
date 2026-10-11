@@ -189,16 +189,18 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
    "raised" pill matching the panel's own color (navy for history, charcoal for feed)
    directly below it, same idea as a browser tab merging into its own page. */
 .player-history-feed{display:flex;flex-direction:column;flex:1;min-height:0;margin-bottom:14px;}
-/* Rounded on the CONTAINER's own outer top corners (clipped via overflow:hidden), not on
-   whichever tab happens to be .active - rounding it per-tab instead (as this used to) gave
-   the active tab BOTH its top corners rounded, including the inner one touching the other
-   tab, while the inactive tab (no radius at all) left the true outer corner on ITS side
-   square - reported live as "the corner isn't rounded," worse on whichever side the
-   currently-active tab ISN'T. This way both outer corners stay rounded no matter which
-   tab is active, and the shared inner seam between the two tabs stays flat either way. */
+/* Two layers of rounding, for two different corners:
+   - The CONTAINER's own outer top corners (clipped via overflow:hidden) - stay rounded no
+     matter which tab is active, since rounding only the active tab (and leaving the
+     inactive one at 0) used to leave the true outer corner square on whichever side
+     ISN'T active.
+   - The ACTIVE tab's own radius (both its top corners) - its OUTER corner duplicates the
+     container's (harmless), but its INNER corner, touching the other tab, is what makes
+     it actually read as a raised pill sitting on top of the flat inactive strip rather
+     than a flush rectangle - without it, that inner corner stayed square too. */
 .player-history-feed-tabs{display:flex;flex-shrink:0;border-radius:10px 10px 0 0;overflow:hidden;}
 .player-history-feed-tab{flex:1;padding:10px 4px;text-align:center;font-size:12px;font-weight:700;letter-spacing:.04em;background:none;border:none;color:rgba(255,255,255,.45);cursor:pointer;font-family:inherit;}
-.player-history-feed-tab.active{color:var(--gold);background-repeat:repeat;background-size:auto,220px;}
+.player-history-feed-tab.active{border-radius:10px 10px 0 0;color:var(--gold);background-repeat:repeat;background-size:auto,220px;}
 .player-history-feed.mode-history .player-history-feed-tab.active{background-image:linear-gradient(rgba(10,25,55,.85),rgba(10,25,55,.85)),url('/static/chat-bg.png');}
 .player-history-feed.mode-feed .player-history-feed-tab.active{background-image:linear-gradient(rgba(20,20,24,.85),rgba(20,20,24,.85)),url('/static/chat-bg.png');}
 .player-history-feed-body{flex:1;min-height:0;overflow-y:auto;padding:10px;touch-action:pan-y;border-radius:0 0 12px 12px;background-repeat:repeat;background-size:auto,220px;}
@@ -5241,13 +5243,18 @@ function renderModal(m){
       </div>
     `;
     // Fixed, non-editable recap at the top - same three numbers regardless of which mode
-    // is active below, live-updated on every keystroke in that mode's own input(s).
+    // is active below, live-updated on every keystroke in that mode's own input(s). The
+    // counted/profit cells stay blank (not "₪0") until m.chipsHeaderTouched - set once the
+    // player (or their photo) actually produces a real count - attachHandlers' own
+    // refreshHeader() overwrites these immediately after mount either way, this is just
+    // what briefly shows before that runs.
+    const touched = !!m.chipsHeaderTouched;
     const initProfit = Math.round((chips-buyinTotal)*100)/100;
     const headerHtml = `
       <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:12px 4px;margin-bottom:22px;display:grid;grid-template-columns:1fr 1fr 1fr;text-align:center;">
         <div><div style="font-size:11px;color:var(--muted);">סה"כ קנייה</div><div style="font-weight:700;">₪${buyinTotal}</div></div>
-        <div><div style="font-size:11px;color:var(--muted);">ז'יטונים שספרנו</div><div id="chips-header-counted" style="font-weight:700;">₪${chips}</div></div>
-        <div><div style="font-size:11px;color:var(--muted);">רווח/הפסד</div><div id="chips-header-profit" style="font-weight:700;color:${profitColor(initProfit)};">${initProfit>0?'+':''}₪${initProfit}</div></div>
+        <div><div style="font-size:11px;color:var(--muted);">ז'יטונים שספרנו</div><div id="chips-header-counted" style="font-weight:700;">${touched ? `₪${chips}` : ""}</div></div>
+        <div><div style="font-size:11px;color:var(--muted);">רווח/הפסד</div><div id="chips-header-profit" style="font-weight:700;color:${profitColor(initProfit)};">${touched ? `${initProfit>0?'+':''}₪${initProfit}` : ""}</div></div>
       </div>
     `;
     // If any already-departed player arranged payment directly through THIS player (see
@@ -8172,7 +8179,11 @@ function attachHandlers(){
       // in modal state meant coming back to byColor later showed a stale photo sitting
       // above an already-zeroed table, out of sync with each other.
       const leavingByColor = mode === "byColor" ? {chipPhotos: [], chipValuePickerFor: null, chipRowPickerFor: null} : {};
-      updateModal({chipsMode: newMode, ...leavingByColor});
+      // The header recap goes blank again on every mode switch, matching the data it's
+      // summarizing having just been discarded (see leavingByColor above, and byColor's
+      // table resetting to 0 on its own just by losing its photos) - showing the OLD mode's
+      // last count would otherwise linger over the new, still-empty mode's inputs.
+      updateModal({chipsMode: newMode, chipsHeaderTouched: false, ...leavingByColor});
       focusModeInput(newMode);
     });
     app.querySelectorAll("[data-profit-sign]").forEach(el => el.onclick = () => {
@@ -8213,15 +8224,31 @@ function attachHandlers(){
       const v = el ? parseFloat(el.value) : NaN;
       return isNaN(v) ? 0 : v;
     };
+    // Mutated directly on the live modal object (no updateModal/render - this runs on
+    // every keystroke, and re-rendering the whole modal on each one would both be overkill
+    // and fight the input's own cursor/focus) rather than through updateModal, but still
+    // survives the NEXT real re-render (e.g. a photo finishing analysis) since updateModal
+    // spreads the old modal object's own properties - including ones set this way - onto
+    // the new one.
+    const markHeaderTouched = () => { modal.chipsHeaderTouched = true; };
     const refreshHeader = () => {
-      const counted = Math.round(computeCounted() * 100) / 100;
-      const profit = Math.round((counted - buyinTotal) * 100) / 100;
       const countedEl = document.getElementById("chips-header-counted");
       const profitEl = document.getElementById("chips-header-profit");
+      // Blank rather than "₪0" until the player (or their photo) has actually produced a
+      // real count this time around - showing ₪0 before anything was entered read as "you
+      // have zero chips," not "nothing counted yet," and reportedly outlived a mode switch
+      // too (the old count visually lingering after its own input had been swapped out).
+      if (!modal.chipsHeaderTouched) {
+        if (countedEl) countedEl.textContent = "";
+        if (profitEl) profitEl.textContent = "";
+        return;
+      }
+      const counted = Math.round(computeCounted() * 100) / 100;
+      const profit = Math.round((counted - buyinTotal) * 100) / 100;
       if (countedEl) countedEl.textContent = `₪${counted}`;
       if (profitEl) { profitEl.textContent = `${profit>0?'+':''}₪${profit}`; profitEl.style.color = profitColor(profit); }
     };
-    app.querySelectorAll("input[type=number]").forEach(el => el.oninput = refreshHeader);
+    app.querySelectorAll("input[type=number]").forEach(el => el.oninput = () => { markHeaderTouched(); refreshHeader(); });
     // profit mode's big amount field also shrinks/grows to hug its own digits (in "ch"
     // units, ~1 digit wide each) so the number stays visually centered with the sign snug
     // against it, instead of sitting in a wide fixed box - overrides the generic
@@ -8229,6 +8256,7 @@ function attachHandlers(){
     const profitAmountInput = document.getElementById("seat-chips-profit");
     if (profitAmountInput) profitAmountInput.oninput = () => {
       profitAmountInput.style.width = Math.max(profitAmountInput.value.length, 1) + "ch";
+      markHeaderTouched();
       refreshHeader();
     };
     // "chips" mode's two fields (shekels / chip count) mirror each other live via the
@@ -8241,11 +8269,13 @@ function attachHandlers(){
         directInput.oninput = () => {
           const v = parseFloat(directInput.value);
           qtyInput.value = isNaN(v) ? "" : Math.round(v * ratio);
+          markHeaderTouched();
           refreshHeader();
         };
         qtyInput.oninput = () => {
           const v = parseFloat(qtyInput.value);
           directInput.value = isNaN(v) ? "" : Math.round((v / ratio) * 100) / 100;
+          markHeaderTouched();
           refreshHeader();
         };
       }
@@ -8360,7 +8390,7 @@ function attachHandlers(){
           }).filter(Boolean);
           if (modal && modal.type === "seatChips") {
             const photos = (modal.chipPhotos||[]).map(p => p.id === photoId ? {...p, stacks: finalStacks} : p);
-            updateModal({chipPhotos: photos, analyzingChipCount: false});
+            updateModal({chipPhotos: photos, analyzingChipCount: false, chipsHeaderTouched: true});
             refreshHeader();
           }
         } catch(e) {
@@ -8389,7 +8419,7 @@ function attachHandlers(){
       captureChipCountPhoto(app.querySelector("#chip-count-camera-input-add"));
       const retakeChipCountBtn = app.querySelector("[data-retake-chip-count-photo]");
       if (retakeChipCountBtn) retakeChipCountBtn.onclick = () => {
-        updateModal({chipPhotos: []});
+        updateModal({chipPhotos: [], chipsHeaderTouched: false});
         refreshHeader();
       };
     }
