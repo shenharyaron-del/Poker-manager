@@ -3699,18 +3699,19 @@ function render(){
       // Bottom switcher, rendered INSIDE each page (as if that page were the current one)
       // rather than once under the whole track, so it slides along with its page during a
       // swipe drag like the rest of the screen. Each copy: that page's illustration (gold,
-      // glowing) above the dots in the middle, and - with all 3 faces in the carousel -
-      // each side names the adjacent screen a swipe (or a tap right there) leads to, with
-      // its own illustration and a chevron pointing toward it. With just 2 pages
-      // (player/table) there's only one "other" screen either way, not worth labeling twice.
+      // glowing) above the dots in the middle, and each side names the adjacent screen a
+      // swipe (or a tap right there) leads to, with its own illustration and a chevron
+      // pointing toward it. With just 2 pages (player/table) both sides point to that same
+      // lone "other" screen - cyclicPage already wraps correctly either direction for N=2,
+      // so showing both is just two ways to reach the one place, not a dead button.
       const navBarFor = (cur) => {
         const dotsRow = `<div class="nav-dots">${pageOrder.map(key => `<span class="${cur===key?'on':''}" title="${DOT_LABELS[key]}"></span>`).join("")}</div>`;
         const navSide = (key, side) => `<button class="nav-side ${side}" data-swipe-to="${key}">${NAV_ART[key]}<span class="nav-side-label">${side==='left'?'':icon('right')}${esc(DOT_LABELS[key])}${side==='left'?icon('left'):''}</span></button>`;
         return `
           <div class="nav-bar">
-            ${N === 3 ? navSide(cyclicPage(pageOrder, cur, -1), 'left') : ''}
+            ${navSide(cyclicPage(pageOrder, cur, -1), 'left')}
             <div class="nav-center">${NAV_ART[cur] || ''}${dotsRow}</div>
-            ${N === 3 ? navSide(cyclicPage(pageOrder, cur, 1), 'right') : ''}
+            ${navSide(cyclicPage(pageOrder, cur, 1), 'right')}
           </div>
         `;
       };
