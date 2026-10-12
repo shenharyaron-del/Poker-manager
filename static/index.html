@@ -4876,6 +4876,28 @@ function renderModal(m){
     `).join("");
   } else if (m.type === "adminSettings") {
     title = "הגדרות מערכת";
+    // Read-only reference list, not a CRUD screen - no add/edit/delete, see its own
+    // comment below for why. Fixed-length mask regardless of the real password's own
+    // length (never hints at how long it actually is) - first and last character only.
+    const maskPassword = (pwd) => !pwd ? "" : (pwd.length <= 2 ? "*".repeat(pwd.length) : pwd[0] + "****" + pwd[pwd.length-1]);
+    // Labeled "URL: / משתמש: / סיסמה:" rows under one "Name (Category)" line per service -
+    // no separate heading-per-category grouping, just the category in parens next to the
+    // name it belongs to.
+    const thirdPartyField = (label, valueHtml, copyValue) => !copyValue ? "" : `
+      <div class="row" style="gap:6px;align-items:center;">
+        <span style="color:var(--muted);font-size:12px;flex-shrink:0;">${label}:</span>
+        ${valueHtml}
+        <button class="icon-btn" data-copy-value="${esc(copyValue)}" title="העתק">${icon('copy')}</button>
+      </div>`;
+    const thirdPartyRow = (s) => `
+      <div class="roster-row" style="flex-direction:column;align-items:stretch;gap:6px;padding:12px;">
+        <span style="font-weight:700;color:var(--gold);">${esc(s.name)}${s.category ? ` (${esc(s.category)})` : ""}</span>
+        ${thirdPartyField("URL", `<a href="${esc(s.url||'')}" target="_blank" rel="noopener" dir="ltr" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gold);font-size:12px;">${esc(s.url||'')}</a>`, s.url)}
+        ${thirdPartyField("משתמש", `<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;" dir="ltr">${esc(s.username||'')}</span>`, s.username)}
+        ${thirdPartyField("סיסמה", `<span style="flex:1;min-width:0;font-size:12px;" dir="ltr">${esc(maskPassword(s.password))}</span>`, s.password)}
+      </div>
+    `;
+    const thirdPartyServicesHtml = (m.thirdPartyServices || []).map(thirdPartyRow).join("");
     body = `
       <div class="section-title" style="padding:0;margin:0 0 8px;">כניסה ואבטחה</div>
       <label class="checkbox-row" style="cursor:pointer;">
@@ -4895,10 +4917,6 @@ function renderModal(m){
       <div style="margin-bottom:18px;">
         <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-open-global-players>${icon('users')} רשימת שחקנים</button>
       </div>
-      <div class="section-title" style="padding:0;margin:0 0 8px;">שירותי צד שלישי</div>
-      <div style="margin-bottom:18px;">
-        <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-open-third-party-services>${icon('gear')} קישורים ופרטי התחברות</button>
-      </div>
       <div class="section-title" style="padding:0;margin:0 0 8px;">גיבוי ושחזור</div>
       <div style="margin-bottom:8px;">
         <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-download-backup>${icon('download')} הורד גיבוי JSON</button>
@@ -4906,6 +4924,10 @@ function renderModal(m){
       <div style="margin-bottom:18px;position:relative;">
         <button type="button" class="btn btn-ghost btn-block" style="pointer-events:none;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('upload')} שחזר מקובץ גיבוי JSON</button>
         <input type="file" accept="application/json,.json" id="restore-file-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
+      </div>
+      <div class="section-title" style="padding:0;margin:0 0 8px;">שירותי צד שלישי</div>
+      <div class="scroll-list" style="margin-bottom:18px;">
+        ${m.thirdPartyServices === undefined ? `<p style="color:var(--muted);font-size:13px;">טוען...</p>` : (thirdPartyServicesHtml || `<p style="color:var(--muted);font-size:13px;">אין שירותים ברשימה.</p>`)}
       </div>
       <a href="https://console.anthropic.com" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:18px;color:var(--muted);font-size:12px;text-decoration:underline;">console.anthropic.com</a>
       <div style="text-align:center;margin-top:8px;color:var(--muted);font-size:11px;">גרסה: ${esc(appVersion || "לא ידוע")}</div>
@@ -4959,69 +4981,6 @@ function renderModal(m){
         ` : `<p style="color:var(--muted);font-size:13px;">${(m.accounts||[]).length ? "אין משתמשים בסינון הזה." : "עדיין אין משתמשים שהתחברו."}</p>`}
       `;
     }
-  } else if (m.type === "thirdPartyServices") {
-    title = "שירותי צד שלישי";
-    if (m.services === null) {
-      body = `<p style="color:var(--muted);font-size:13px;">טוען...</p>`;
-    } else {
-      const services = m.services || [];
-      // Fixed-length mask regardless of the real password's own length (never hints at
-      // how long it actually is) - first and last character only, exactly as asked for.
-      const maskPassword = (pwd) => !pwd ? "" : (pwd.length <= 2 ? "*".repeat(pwd.length) : pwd[0] + "****" + pwd[pwd.length-1]);
-      const serviceRow = (s) => `
-        <div class="roster-row" style="flex-direction:column;align-items:stretch;gap:8px;padding:12px;">
-          <div class="row" style="justify-content:space-between;align-items:center;">
-            <span style="font-weight:700;">${esc(s.name)}</span>
-            <div class="row" style="gap:4px;flex-shrink:0;">
-              <button class="icon-btn" data-edit-service="${s.id}" title="ערוך">${icon('pencil')}</button>
-              <button class="icon-btn danger" data-delete-service="${s.id}" title="מחק">${icon('trash')}</button>
-            </div>
-          </div>
-          ${s.url ? `
-          <div class="row" style="gap:6px;align-items:center;">
-            <a href="${esc(s.url)}" target="_blank" rel="noopener" dir="ltr" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gold);font-size:12px;">${esc(s.url)}</a>
-            <button class="icon-btn" data-copy-value="${esc(s.url)}" title="העתק קישור">${icon('copy')}</button>
-          </div>` : ""}
-          ${s.username ? `
-          <div class="row" style="gap:6px;align-items:center;">
-            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:12px;" dir="ltr">${esc(s.username)}</span>
-            <button class="icon-btn" data-copy-value="${esc(s.username)}" title="העתק שם משתמש">${icon('copy')}</button>
-          </div>` : ""}
-          ${s.password ? `
-          <div class="row" style="gap:6px;align-items:center;">
-            <span style="flex:1;min-width:0;color:var(--muted);font-size:12px;" dir="ltr">${esc(maskPassword(s.password))}</span>
-            <button class="icon-btn" data-copy-value="${esc(s.password)}" title="העתק סיסמה">${icon('copy')}</button>
-          </div>` : ""}
-        </div>
-      `;
-      // A heading only where the category actually CHANGES from the row before it (the
-      // server already sorts by category, NULLS LAST) - an uncategorized service gets no
-      // heading above it at all, rather than a synthetic "other" bucket.
-      let lastCategory;
-      const servicesHtml = services.map(s => {
-        const heading = s.category !== lastCategory
-          ? `<div class="section-title" style="padding:0;margin:${lastCategory===undefined?'0':'14px'} 0 8px;">${esc(s.category||'')}</div>`
-          : "";
-        lastCategory = s.category;
-        return (s.category ? heading : "") + serviceRow(s);
-      }).join("");
-      body = `
-        <div class="scroll-list" style="margin-bottom:14px;">
-          ${services.length ? servicesHtml : `<p style="color:var(--muted);font-size:13px;">עדיין אין שירותים ברשימה.</p>`}
-        </div>
-        <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-add-service>${icon('plus')} הוסף שירות</button>
-      `;
-    }
-  } else if (m.type === "thirdPartyServiceEdit") {
-    title = m.id ? "עריכת שירות" : "שירות חדש";
-    body = `
-      <div class="field"><label>שם</label><input type="text" id="service-name-input" value="${esc(m.name||'')}" placeholder="למשל Supabase" autofocus></div>
-      <div class="field"><label>קטגוריה</label><input type="text" id="service-category-input" value="${esc(m.category||'')}" placeholder="למשל Database"></div>
-      <div class="field"><label>קישור</label><input type="text" id="service-url-input" value="${esc(m.url||'')}" placeholder="https://" dir="ltr"></div>
-      <div class="field"><label>שם משתמש</label><input type="text" id="service-username-input" value="${esc(m.username||'')}" dir="ltr"></div>
-      <div class="field"><label>סיסמה</label><input type="text" id="service-password-input" value="${esc(m.password||'')}" dir="ltr"></div>
-      <button class="btn btn-primary btn-block" style="margin-top:8px;" data-save-service>${icon('check')} שמירה</button>
-    `;
   } else if (m.type === "avatarManage") {
     title = "ניהול אווטרים";
     const groups = getAvatarGroups();
@@ -7259,17 +7218,27 @@ function attachHandlers(){
         if (modal && modal.type === "globalPlayers") updateModal({accounts: []});
       }
     };
-    const openThirdPartyBtn = app.querySelector("[data-open-third-party-services]");
-    if (openThirdPartyBtn) openThirdPartyBtn.onclick = async () => {
-      openModal({type:"thirdPartyServices", services: null});
-      try {
-        const res = await fetch("/api/admin/third-party-services?clientId=" + encodeURIComponent(getClientId()));
-        const services = res.ok ? await res.json() : [];
-        if (modal && modal.type === "thirdPartyServices") updateModal({services});
-      } catch(e) {
-        if (modal && modal.type === "thirdPartyServices") updateModal({services: []});
-      }
-    };
+    // Lazy-fetched once per time this screen opens (guarded on undefined specifically,
+    // not null/[] - an empty real result must not re-trigger this) - the read-only list
+    // renders directly in this screen now (see its own comment on why), not behind a
+    // button into a separate one, so there's no dedicated open-handler to fetch from.
+    if (modal.thirdPartyServices === undefined) {
+      (async () => {
+        try {
+          const res = await fetch("/api/admin/third-party-services?clientId=" + encodeURIComponent(getClientId()));
+          const services = res.ok ? await res.json() : [];
+          if (modal && modal.type === "adminSettings") updateModal({thirdPartyServices: services});
+        } catch(e) {
+          if (modal && modal.type === "adminSettings") updateModal({thirdPartyServices: []});
+        }
+      })();
+    }
+    app.querySelectorAll("[data-copy-value]").forEach(el => el.onclick = async () => {
+      const value = el.dataset.copyValue;
+      if (!value) return;
+      try { await navigator.clipboard.writeText(value); showAlert("הועתק!"); }
+      catch(e) { showAlert(value); }
+    });
   }
 
   if (modal && modal.type === "adminVerify") {
@@ -7323,64 +7292,6 @@ function attachHandlers(){
       if (!res.ok) { showAlert("המחיקה נכשלה - רק Super Admin יכול למחוק משתמשים."); return; }
       updateModal({accounts: (modal.accounts||[]).filter(a => a.email !== email)});
     });
-  }
-
-  if (modal && modal.type === "thirdPartyServices") {
-    const copyButtons = app.querySelectorAll("[data-copy-value]");
-    copyButtons.forEach(el => el.onclick = async () => {
-      const value = el.dataset.copyValue;
-      if (!value) return;
-      try { await navigator.clipboard.writeText(value); showAlert("הועתק!"); }
-      catch(e) { showAlert(value); }
-    });
-    const addBtn = app.querySelector("[data-add-service]");
-    if (addBtn) addBtn.onclick = () => openModal({type:"thirdPartyServiceEdit", id:null, name:"", category:"", url:"", username:"", password:""});
-    app.querySelectorAll("[data-edit-service]").forEach(el => el.onclick = () => {
-      const s = (modal.services||[]).find(x => x.id === el.dataset.editService);
-      if (!s) return;
-      openModal({type:"thirdPartyServiceEdit", id:s.id, name:s.name||"", category:s.category||"", url:s.url||"", username:s.username||"", password:s.password||""});
-    });
-    app.querySelectorAll("[data-delete-service]").forEach(el => el.onclick = async () => {
-      const id = el.dataset.deleteService;
-      const s = (modal.services||[]).find(x => x.id === id);
-      if (!s || !(await showConfirm(`למחוק את "${s.name}" מהרשימה?`))) return;
-      const res = await fetch(`/api/admin/third-party-services/${id}?clientId=${encodeURIComponent(getClientId())}`, {method:"DELETE"});
-      if (!res.ok) { showAlert("המחיקה נכשלה - רק Super Admin יכול לערוך את הרשימה."); return; }
-      updateModal({services: (modal.services||[]).filter(x => x.id !== id)});
-    });
-  }
-
-  if (modal && modal.type === "thirdPartyServiceEdit") {
-    const saveBtn = app.querySelector("[data-save-service]");
-    if (saveBtn) saveBtn.onclick = async () => {
-      const name = document.getElementById("service-name-input").value.trim();
-      if (!name) { showAlert("צריך שם לשירות."); return; }
-      const body = {
-        name,
-        category: document.getElementById("service-category-input").value.trim(),
-        url: document.getElementById("service-url-input").value.trim(),
-        username: document.getElementById("service-username-input").value.trim(),
-        password: document.getElementById("service-password-input").value.trim(),
-      };
-      saveBtn.disabled = true;
-      showButtonLoading(saveBtn);
-      const url = modal.id ? `/api/admin/third-party-services/${modal.id}` : "/api/admin/third-party-services";
-      const res = await fetch(`${url}?clientId=${encodeURIComponent(getClientId())}`, {
-        method: modal.id ? "PUT" : "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body)
-      });
-      if (!res.ok) { showAlert("השמירה נכשלה - רק Super Admin יכול לערוך את הרשימה."); updateModal({}); return; }
-      // Re-fetches rather than patching the list in place this edit came from - simplest
-      // way to stay correct whether this was a new service (needs its server-generated id)
-      // or an edit (the list modal's own copy would otherwise go stale).
-      openModal({type:"thirdPartyServices", services: null});
-      try {
-        const listRes = await fetch("/api/admin/third-party-services?clientId=" + encodeURIComponent(getClientId()));
-        const services = listRes.ok ? await listRes.json() : [];
-        if (modal && modal.type === "thirdPartyServices") updateModal({services});
-      } catch(e) {
-        if (modal && modal.type === "thirdPartyServices") updateModal({services: []});
-      }
-    };
   }
 
   if (modal && modal.type === "avatarManage") {
