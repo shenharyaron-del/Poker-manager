@@ -4877,22 +4877,17 @@ function renderModal(m){
   } else if (m.type === "adminSettings") {
     title = "הגדרות מערכת";
     // Read-only reference list, not a CRUD screen - no add/edit/delete, see its own
-    // comment below for why. Fixed-length mask regardless of the real password's own
-    // length (never hints at how long it actually is) - first and last character only.
-    const maskPassword = (pwd) => !pwd ? "" : (pwd.length <= 2 ? "*".repeat(pwd.length) : pwd[0] + "****" + pwd[pwd.length-1]);
-    // Labeled "URL: / משתמש: / סיסמה:" rows under one "Name (Category)" line per service -
-    // no separate heading-per-category grouping, just the category in parens next to the
-    // name it belongs to.
-    // sensitive=true (password only) marks its copy button so the handler below clears
-    // the clipboard again a short while after - the on-screen mask alone did nothing to
-    // stop the real value sitting in the clipboard (and whatever else reads it) for as
-    // long as the device felt like keeping it, copy being the one action that actually
-    // hands out the unmasked value.
-    const thirdPartyField = (label, valueHtml, copyValue, sensitive) => !copyValue ? "" : `
+    // comment below for why. The password field is just a personal-memory hint, not the
+    // real credential (see the edit modal's own comment) - shown in full, no masking.
+    // Labeled "URL: / משתמש: / סיסמה (רמז):" rows under one "Name (Category)" line per
+    // service - no separate heading-per-category grouping, just the category in parens
+    // next to the name it belongs to. copyValue is optional - omitting it (the password
+    // row below) renders the row with no copy button at all.
+    const thirdPartyField = (label, valueHtml, hasValue, copyValue) => !hasValue ? "" : `
       <div class="row" style="gap:6px;align-items:center;">
         <span style="color:var(--muted);font-size:12px;flex-shrink:0;">${label}:</span>
         ${valueHtml}
-        <button class="icon-btn" data-copy-value="${esc(copyValue)}" ${sensitive?'data-copy-sensitive':''} title="העתק">${icon('copy')}</button>
+        ${copyValue ? `<button class="icon-btn" data-copy-value="${esc(copyValue)}" title="העתק">${icon('copy')}</button>` : ""}
       </div>`;
     const thirdPartyRow = (s) => `
       <div class="roster-row" style="flex-direction:column;align-items:stretch;gap:6px;padding:12px;">
@@ -4900,9 +4895,9 @@ function renderModal(m){
           <span style="font-weight:700;color:var(--gold);">${esc(s.name)}${s.category ? ` (${esc(s.category)})` : ""}</span>
           <button class="icon-btn" data-edit-credentials="${s.id}" title="עריכת שם משתמש/סיסמה">${icon('pencil')}</button>
         </div>
-        ${thirdPartyField("URL", `<a href="${esc(s.url||'')}" target="_blank" rel="noopener" dir="ltr" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gold);font-size:12px;">${esc(s.url||'')}</a>`, s.url)}
-        ${thirdPartyField("משתמש", `<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;" dir="ltr">${esc(s.username||'')}</span>`, s.username)}
-        ${thirdPartyField("סיסמה", `<span style="flex:1;min-width:0;font-size:12px;" dir="ltr">${esc(maskPassword(s.password))}</span>`, s.password, true)}
+        ${thirdPartyField("URL", `<a href="${esc(s.url||'')}" target="_blank" rel="noopener" dir="ltr" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gold);font-size:12px;">${esc(s.url||'')}</a>`, s.url, s.url)}
+        ${thirdPartyField("משתמש", `<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;" dir="ltr">${esc(s.username||'')}</span>`, s.username, s.username)}
+        ${thirdPartyField("סיסמה (רמז)", `<span style="flex:1;min-width:0;font-size:12px;" dir="ltr">${esc(s.password||'')}</span>`, s.password)}
       </div>
     `;
     const thirdPartyServicesHtml = (m.thirdPartyServices || []).map(thirdPartyRow).join("");
@@ -4992,11 +4987,13 @@ function renderModal(m){
   } else if (m.type === "thirdPartyCredentialsEdit") {
     // Deliberately only these two fields - name/category/url come from the read-only
     // list (see adminSettings' own comment on why that stays closed) and aren't editable
-    // here even though this modal is reached from one of its rows.
+    // here even though this modal is reached from one of its rows. "Password" is really
+    // just a personal-memory hint the Super Admin types for themselves, not the real
+    // credential - shown and saved exactly as typed, no masking.
     title = esc(m.name || "עריכת פרטי התחברות");
     body = `
       <div class="field"><label>שם משתמש</label><input type="text" id="credentials-username-input" value="${esc(m.username||'')}" dir="ltr" autofocus></div>
-      <div class="field"><label>סיסמה</label><input type="text" id="credentials-password-input" value="${esc(m.password||'')}" dir="ltr"></div>
+      <div class="field"><label>סיסמה (רמז)</label><input type="text" id="credentials-password-input" value="${esc(m.password||'')}" dir="ltr"></div>
       <button class="btn btn-primary btn-block" style="margin-top:8px;" data-save-credentials>${icon('check')} שמירה</button>
     `;
   } else if (m.type === "avatarManage") {
@@ -7253,23 +7250,8 @@ function attachHandlers(){
     }
     app.querySelectorAll("[data-copy-value]").forEach(el => el.onclick = async () => {
       const value = el.dataset.copyValue;
-      const sensitive = "copySensitive" in el.dataset;
       if (!value) return;
-      try {
-        await navigator.clipboard.writeText(value);
-        showAlert(sensitive ? "הועתק! הלוח יתנקה אוטומטית בעוד 30 שניות." : "הועתק!");
-        if (sensitive) {
-          // Only clears it if the clipboard still holds exactly this value - never wipes
-          // out something else the person copied in the meantime (their own or another
-          // password, a buy-in amount, anything) just because this timer happened to fire.
-          setTimeout(async () => {
-            try {
-              const current = await navigator.clipboard.readText();
-              if (current === value) await navigator.clipboard.writeText("");
-            } catch(e) { /* clipboard read denied/unavailable - nothing to do */ }
-          }, 30000);
-        }
-      }
+      try { await navigator.clipboard.writeText(value); showAlert("הועתק!"); }
       catch(e) { showAlert(value); }
     });
     app.querySelectorAll("[data-edit-credentials]").forEach(el => el.onclick = () => {
