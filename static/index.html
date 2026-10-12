@@ -9097,92 +9097,91 @@ function attachHandlers(){
 }
 
 // ---------- Guard against accidentally leaving the app via the browser/device back button ----------
-// Chrome's "History Manipulation Intervention" silently skips a pushState() call - and the
-// popstate it would otherwise fire on back - when it wasn't triggered by a real user gesture,
-// exactly what a plain pushState() at script load is. That's the reported regression: this
-// used to reliably ask "leave the app?" and, on a modern Chrome/Android build enforcing that
-// intervention, started letting the very first back press (as an installed standalone PWA -
-// manifest.json sets exactly that display mode, confirmed live) exit straight out with no
-// prompt. Re-arming the push on the user's own next tap ties it to a genuine gesture, which
-// the intervention doesn't skip; done both immediately (harmless, and still enough on a
-// browser that doesn't enforce this) and again on the next real tap after every cancel, since
-// the cancel branch's own re-push runs after an await (showConfirm) and so may itself land
-// outside the gesture the back press provided.
-// Exactly ONE guard entry at a time (backGuardDepth), pushed only from a real user gesture
-// (every tap/keypress checks, but only pushes when no guard is in place). The old version
-// pushed once at load AND again on the first tap, so there were often two guard entries:
-// answering "yes, leave" then went back just one step - onto the second guard - and the
-// app stayed open (or asked again). A guard pushed at load is skipped by Chrome anyway (see
-// above), so there's no load-time push: before the very first tap, back leaves directly.
-let backGuardDepth = 0;
+// History entries that let the back button move around inside the app. Chrome on phones
+// only honors an entry pushed right after a complete tap (one entry per tap - "history-
+// action activation"); an entry pushed at any other moment (on touch START, at load, or
+// from inside the back handler itself) makes Chrome mark the page's entry as skippable, and
+// back then jumps straight out of the app - which is why it used to differ by device and
+// by luck. So entries are pushed ONLY from a finished tap (click) or a keypress, at most
+// one per tap, until the history is as deep as the screen the user is on:
+//   groups list = 1, a group = 2, a game = 3, plus 1 while a window is open.
+// The back handler never pushes; it just moves one level up. Each entry remembers its
+// depth (state.seq) so the exit step knows how far back the app starts.
 let backGuardSuppressedUntil = 0;
-function pushBackGuard(){
-  if (backGuardDepth > 0 || Date.now() < backGuardSuppressedUntil) return;
-  history.pushState({pokerManagerGuard: true}, "");
-  backGuardDepth = 1;
+function historyDepth(){ return (history.state && history.state.pokerManagerGuard) ? (history.state.seq || 1) : 0; }
+function desiredHistoryDepth(){
+  const screenDepth = nav.screen === "table" ? 3 : nav.screen === "home" ? 1 : 2;
+  return screenDepth + (modal ? 1 : 0);
 }
-document.addEventListener("pointerdown", pushBackGuard, true);
-document.addEventListener("keydown", pushBackGuard, true);
-// Back works like an app's back, one level up per press (the guard is re-pushed after each
-// in-app step - fine without a fresh tap, since only a page that has NEVER been interacted
-// with gets its history entries skipped by Chrome):
+function topUpHistory(){
+  if (Date.now() < backGuardSuppressedUntil) return;
+  const depth = historyDepth();
+  if (depth >= desiredHistoryDepth()) return;
+  history.pushState({pokerManagerGuard: true, seq: depth + 1}, "");
+}
+// Capture phase, so a tap inside a window still counts (.modal stops click propagation),
+// deferred with setTimeout(0) so it runs after the tapped element's own handler - a tap that
+// just opened a game/window is counted at its new depth, still inside the tap's activation.
+document.addEventListener("click", () => setTimeout(topUpHistory, 0), true);
+document.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") setTimeout(topUpHistory, 0); }, true);
+
+// Back works like an app's back, one level up per press:
 //   an open confirm dialog            -> cancel it
 //   end-of-evening window (seatChips) -> close it, back to the game
 //   group setup windows               -> close (asks to save if edited) and go to the groups list
 //   any other closable window         -> close it
 //   a game (table/player/admin)       -> its group
 //   a group                           -> the groups list
-//   the groups list                   -> "press back again to exit"; a 2nd press within
-//                                        2.5s leaves (the guard isn't re-pushed meanwhile)
+//   the groups list                   -> "press back again to exit"; a 2nd press within 2.5s leaves
 // Windows that can't be dismissed (login, the forced name step, the game welcome screen)
 // just stay put.
 let lastHomeBackAt = 0;
 const BACK_EXIT_WINDOW_MS = 2500;
+function leaveApp(){
+  // Back past every entry the app added: leaves to whatever was before it in a browser
+  // tab. An installed app (or a tab with nothing before it) can't be left by script - then
+  // land on the app's first entry, where the very next back press exits.
+  const depth = historyDepth();
+  backGuardSuppressedUntil = Date.now() + 4000;
+  try { window.close(); } catch(e) { /* not allowed for this window - fine */ }
+  history.go(-(depth + 1));
+  setTimeout(() => {
+    if (document.hidden) return;
+    if (historyDepth() > 0) history.go(-historyDepth());
+    showAlert("לחצו שוב על 'חזור' כדי לצאת");
+  }, 500);
+}
 window.addEventListener("popstate", async () => {
   if (Date.now() < backGuardSuppressedUntil) return;
-  backGuardDepth = 0; // the back press just consumed our guard
-  const stayAndRearm = () => { pushBackGuard(); };
   const openConfirm = document.querySelector(".custom-confirm [data-confirm-cancel]");
-  if (openConfirm) { openConfirm.click(); stayAndRearm(); return; }
+  if (openConfirm) { openConfirm.click(); return; }
   if (modal) {
     const t = modal.type;
     const dismissable = t !== "loginRequired" && !(t === "identityName" && modal.forced) && t !== "directPay";
-    if (!dismissable) { stayAndRearm(); return; }
+    if (!dismissable) return;
     if (t === "chipSetup" || t === "payboxSettings" || t === "buyinSetup") {
       await tryCloseSetupModal();
       if (!modal && nav.screen !== "home") go("home");
-      stayAndRearm();
       return;
     }
     closeModal();
-    stayAndRearm();
     return;
   }
-  if (shouldShowGameWelcome()) { stayAndRearm(); return; }
+  if (shouldShowGameWelcome()) return;
   if (nav.screen === "table") {
     const g = nav.gameId && getGame(nav.gameId);
     const communityId = nav.communityId || (g && g.communityId);
     if (communityId && getCommunity(communityId)) go("community", {communityId});
     else go("home");
-    stayAndRearm();
     return;
   }
-  if (nav.screen !== "home") { go("home"); stayAndRearm(); return; }
-  // Groups list: double press to exit.
+  if (nav.screen !== "home") { go("home"); return; }
+  // Groups list: double press to exit. When no app entries are left, the 2nd press leaves
+  // on its own (no popstate fires); otherwise this leaves explicitly.
   const now = Date.now();
-  if (now - lastHomeBackAt < BACK_EXIT_WINDOW_MS) {
-    // 2nd press inside the window - normally the browser already left on it (no guard was
-    // in place); this branch only runs if some tap re-armed the guard in between.
-    backGuardSuppressedUntil = now + 4000;
-    try { window.close(); } catch(e) { /* not allowed for this window - fine */ }
-    history.back();
-    return;
-  }
+  if (now - lastHomeBackAt < BACK_EXIT_WINDOW_MS) { leaveApp(); return; }
   lastHomeBackAt = now;
   showAlert("לחצו שוב על 'חזור' כדי לצאת");
-  // No guard for the next 2.5s, so a 2nd back press leaves the app; then re-arm.
-  backGuardSuppressedUntil = now + BACK_EXIT_WINDOW_MS;
-  setTimeout(() => { if (!document.hidden) pushBackGuard(); }, BACK_EXIT_WINDOW_MS + 50);
 });
 
 (async function init(){
