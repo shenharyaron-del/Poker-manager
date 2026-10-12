@@ -104,6 +104,13 @@ _INIT_STATEMENTS = (
     "  client_id TEXT PRIMARY KEY,"
     "  email TEXT NOT NULL"
     ")",
+    # One-time, short-lived hand-off of a logged-in device to another browser on the same
+    # phone (Samsung Internet -> Chrome for the app install) - see /api/auth/transfer-token.
+    "CREATE TABLE IF NOT EXISTS device_transfers ("
+    "  token TEXT PRIMARY KEY,"
+    "  client_id TEXT NOT NULL,"
+    "  expires_at TIMESTAMP NOT NULL"
+    ")",
     # One outstanding login code per email at a time - requesting a new one replaces
     # whatever was there before, and a used or expired code is deleted outright.
     "CREATE TABLE IF NOT EXISTS login_codes ("
@@ -2405,11 +2412,60 @@ def set_auth_settings():
     return jsonify({"ok": True})
 
 
+TRANSFER_TOKEN_TTL_SECONDS = 120
+
+
+@app.route("/api/auth/transfer-token", methods=["POST"])
+def create_transfer_token():
+    # Installing the app from Samsung Internet sends the page over to Chrome (Samsung's own
+    # install gets blocked by Play Protect), and Chrome has none of this browser's storage -
+    # without this the person had to type their email again. The token rides in that link,
+    # works once, and only for TRANSFER_TOKEN_TTL_SECONDS. Issued only to a logged-in device;
+    # the clientId is already this device's credential, so this hands over nothing new.
+    body = request.get_json(silent=True) or {}
+    client_id = str(body.get("clientId", "")).strip()
+    if not _trusted_email(client_id):
+        return jsonify({"error": "not logged in"}), 403
+    token = secrets.token_urlsafe(24)
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM device_transfers WHERE expires_at < %s", (datetime.utcnow(),))
+            cur.execute(
+                "INSERT INTO device_transfers (token, client_id, expires_at) VALUES (%s, %s, %s)",
+                (token, client_id, datetime.utcnow() + timedelta(seconds=TRANSFER_TOKEN_TTL_SECONDS)),
+            )
+        conn.commit()
+    return jsonify({"token": token})
+
+
+def _redeem_transfer_token(token):
+    if not token:
+        return None
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM device_transfers WHERE token = %s RETURNING client_id, expires_at", (token,)
+            )
+            row = cur.fetchone()
+        conn.commit()
+    if not row or row[1] < datetime.utcnow():
+        return None
+    return row[0]
+
+
 @app.route("/api/auth/session")
 def auth_session():
     client_id = request.args.get("clientId", "")
     email = _trusted_email(client_id)
     restored_client_id = None
+    if not email:
+        # A one-time hand-off from another browser on this phone (see create_transfer_token)
+        # - same restore path as the device cookie below.
+        transferred_id = _redeem_transfer_token(request.args.get("transfer", ""))
+        if transferred_id and transferred_id != client_id:
+            email = _trusted_email(transferred_id)
+            if email:
+                restored_client_id = transferred_id
     if not email:
         # This device's localStorage id isn't a logged-in device - but if the browser
         # still has our cookie from an earlier login, the device itself is known: hand its

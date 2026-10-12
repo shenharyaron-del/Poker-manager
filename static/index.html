@@ -1937,7 +1937,13 @@ async function checkLoginSession(){
   const RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 8000, 10000, 10000]; // ~43s - covers most free-tier cold starts
   for (let attempt = 0; ; attempt++) {
     try {
-      const res = await fetch("/api/auth/session?clientId=" + encodeURIComponent(getClientId()));
+      // ?xfer= is the one-time hand-off from Samsung Internet's "install" button (see
+      // startInstall) - sent once, then dropped from the address bar either way.
+      const xfer = new URLSearchParams(location.search).get("xfer");
+      const res = await fetch("/api/auth/session?clientId=" + encodeURIComponent(getClientId()) + (xfer ? "&transfer=" + encodeURIComponent(xfer) : ""));
+      if (xfer) {
+        try { const u = new URL(location.href); u.searchParams.delete("xfer"); history.replaceState(history.state, "", u.pathname + u.search + u.hash); } catch(e) {}
+      }
       if (res.ok) {
         const data = await res.json();
         if (data.loggedIn && data.restoredClientId && data.restoredClientId !== getClientId()) {
@@ -3115,11 +3121,25 @@ async function startInstall(){
     try { ev.prompt(); await ev.userChoice; } catch(e) {}
     render();
   } else if (mode === "samsung") {
-    // Opens this same page in Chrome, where the install is the clean one.
-    location.href = `intent://${location.host}${location.pathname}${location.search}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(location.href)};end`;
+    openModal({type: "installViaChrome"});
   } else if (mode === "ios") {
     showAlert("להתקנה על כל המסך: לחצו על כפתור השיתוף ⬆️ בתחתית Safari, ובחרו \"הוסף למסך הבית\".");
   }
+}
+
+// Opens this same page in Chrome, where the install is the clean one - carrying a one-time
+// login hand-off (server: /api/auth/transfer-token) so Chrome, which shares none of this
+// browser's storage, doesn't ask for the email again. Not logged in -> plain link.
+async function openInChromeForInstall(){
+  let xfer = "";
+  try {
+    const res = await fetch("/api/auth/transfer-token", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({clientId: getClientId()})});
+    if (res.ok) xfer = (await res.json()).token || "";
+  } catch(e) { /* no hand-off - Chrome just asks to log in */ }
+  const u = new URL(location.href);
+  u.searchParams.delete("xfer");
+  if (xfer) u.searchParams.set("xfer", xfer);
+  location.href = `intent://${u.host}${u.pathname}${u.search}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(u.href)};end`;
 }
 
 function showAlert(message){
@@ -5672,6 +5692,13 @@ function renderModal(m){
         ${[50,80,100,200].map(v=>`<button class="chip-btn" data-paybox-chip="${v}">₪${v}</button>`).join("")}
       </div>
       <button class="btn btn-primary btn-block" data-confirm-paybox>שמור העברה</button>
+    `;
+  } else if (m.type === "installViaChrome") {
+    title = "התקנה דרך Chrome";
+    body = `
+      <p style="margin-top:0;line-height:1.6;">ההתקנה עובדת דרך Chrome (מהדפדפן הזה אנדרואיד חוסם אותה).</p>
+      <p style="line-height:1.6;">בחלון שייפתח בחרו <b>Chrome</b>, ושם לחצו שוב <b>"📲 התקן אפליקציה"</b>. תישארו מחוברים - לא צריך להכניס אימייל שוב.</p>
+      <button class="btn btn-primary btn-block" data-confirm-install-chrome>המשך</button>
     `;
   } else if (m.type === "directPay") {
     // Opened automatically (see attachHandlers/autoOpenedDirectPay) the moment a player
@@ -8459,6 +8486,11 @@ function attachHandlers(){
       }
       closeModal();
     };
+  }
+
+  if (modal && modal.type === "installViaChrome") {
+    const btn = app.querySelector("[data-confirm-install-chrome]");
+    if (btn) btn.onclick = async () => { btn.disabled = true; showButtonLoading(btn); await openInChromeForInstall(); closeModal(); };
   }
 
   if (modal && modal.type === "directPay") {
