@@ -1523,7 +1523,10 @@ async function v2MaybeAutoCloseNight(gameId){
   const g = await v2LoadGameFull(gameId);
   const seated = (g.seats || []).filter(Boolean);
   const shouldClose = g.players.length > 0 && seated.every(pid => pid in g.cashouts);
-  if (shouldClose && !g.closed) await v2UpdateGame(gameId, {closed: true});
+  if (shouldClose && !g.closed) {
+    await v2UpdateGame(gameId, {closed: true});
+    v2AddGameEvent(gameId, "night_closed", null, null, undefined);
+  }
 }
 
 async function v2ClearSeat(gameId, seatIndex){
@@ -3229,7 +3232,7 @@ function getGame(id){ return state.games.find(g => g.id === id); }
 function maybeAutoCloseNight(g){
   const seated = (g.seats || []).filter(Boolean);
   const shouldClose = g.players.length > 0 && seated.every(pid => pid in g.cashouts);
-  if (shouldClose && !g.closed) g.closed = true;
+  if (shouldClose && !g.closed) { g.closed = true; logGameEvent(g, "night_closed", null, null, undefined); }
 }
 function gamesForCommunity(id){ return state.games.filter(g => g.communityId === id).sort((a,b)=> a.date < b.date ? 1 : -1); }
 
@@ -4378,8 +4381,14 @@ function renderPlayerScreen(gameId){
       text = `${esc(from ? from.name : "שחקן")} ${isFemale(pp.fromPlayerId)?'העבירה':'העביר'} ₪${pp.amount} ל${esc(to ? to.name : "שחקן")}`;
       rowIcon = 'payment';
     } else if (ev.kind === "night_declared_over") {
-      text = `הוכרז על סיום ערב`;
+      text = `הוכרז על סיום ערב${ev.actorName ? ` ע"י ${esc(ev.actorName)}` : ""}`;
       rowIcon = 'check';
+    } else if (ev.kind === "night_closed") {
+      text = ev.actorName ? `הערב נסגר ע"י ${esc(ev.actorName)}` : `הערב נסגר - כולם יצאו מהשולחן`;
+      rowIcon = 'check';
+    } else if (ev.kind === "night_reopened") {
+      text = `הערב נפתח מחדש${ev.actorName ? ` ע"י ${esc(ev.actorName)}` : ""}`;
+      rowIcon = 'plus';
     } else {
       return "";
     }
@@ -6885,7 +6894,7 @@ function attachHandlers(){
       try {
         await v2DeleteCashout(nav.gameId, playerId);
         await v2UpdateLiveChips(nav.gameId, playerId, 0);
-        if (g.closed) await v2UpdateGame(nav.gameId, {closed: false}); // a night with an active player again can't stay "closed"
+        if (g.closed) { await v2UpdateGame(nav.gameId, {closed: false}); v2AddGameEvent(nav.gameId, "night_reopened", null, myIdentity.name, undefined); } // a night with an active player again can't stay "closed"
         v2AddGameEvent(nav.gameId, "returned_to_table", playerId, myIdentity.name, undefined);
       } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); el.disabled = false; return; }
     } else {
@@ -6893,7 +6902,7 @@ function attachHandlers(){
         delete g.cashouts[playerId];
         if (!g.liveChips) g.liveChips = {};
         g.liveChips[playerId] = 0;
-        if (g.closed) g.closed = false;
+        if (g.closed) { g.closed = false; logGameEvent(g, "night_reopened", null, myIdentity.name, undefined); }
         logGameEvent(g, "returned_to_table", playerId, myIdentity.name, undefined);
       });
     }
@@ -6955,10 +6964,12 @@ function attachHandlers(){
     const checkbox = el.querySelector("input[type=checkbox]");
     if (checkbox) checkbox.disabled = true;
     if (USE_RELATIONAL_API) {
-      try { await v2UpdateGame(gameId, {closed: !g.closed}); }
+      const closing = !g.closed;
+      try { await v2UpdateGame(gameId, {closed: closing}); }
       catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); if (checkbox) checkbox.disabled = false; return; }
+      v2AddGameEvent(gameId, closing ? "night_closed" : "night_reopened", null, myIdentity.name, undefined);
     } else {
-      await mutateAndSave(() => { getGame(gameId).closed = !g.closed; });
+      await mutateAndSave(() => { const gm = getGame(gameId); gm.closed = !gm.closed; logGameEvent(gm, gm.closed ? "night_closed" : "night_reopened", null, myIdentity.name, undefined); });
     }
     render();
   });
@@ -8524,8 +8535,9 @@ function attachHandlers(){
       if (USE_RELATIONAL_API) {
         try { await v2UpdateGame(modal.gameId, {closed: true}); }
         catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); endNightFromDirectPayBtn.disabled = false; return; }
+        v2AddGameEvent(modal.gameId, "night_closed", null, myIdentity.name, undefined);
       } else {
-        await mutateAndSave(() => { getGame(modal.gameId).closed = true; });
+        await mutateAndSave(() => { const gm = getGame(modal.gameId); gm.closed = true; logGameEvent(gm, "night_closed", null, myIdentity.name, undefined); });
       }
       closeModal();
     };
@@ -8715,7 +8727,7 @@ function attachHandlers(){
           await v2DeleteCashout(modal.gameId, modal.playerId);
           await v2UpdateLiveChips(modal.gameId, modal.playerId, 0);
           const g = getGame(modal.gameId);
-          if (g.closed) await v2UpdateGame(modal.gameId, {closed: false});
+          if (g.closed) { await v2UpdateGame(modal.gameId, {closed: false}); v2AddGameEvent(modal.gameId, "night_reopened", null, myIdentity.name, undefined); }
           v2AddGameEvent(modal.gameId, "returned_to_table", modal.playerId, myIdentity.name, undefined);
         } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
         closeModal();
@@ -8729,7 +8741,7 @@ function attachHandlers(){
       delete g.cashouts[modal.playerId];
       if (!g.liveChips) g.liveChips = {};
       g.liveChips[modal.playerId] = 0;
-      if (g.closed) g.closed = false;
+      if (g.closed) { g.closed = false; logGameEvent(g, "night_reopened", null, myIdentity.name, undefined); }
       logGameEvent(g, "returned_to_table", modal.playerId, myIdentity.name, undefined);
       saveState();
       closeModal();
