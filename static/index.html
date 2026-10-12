@@ -1216,6 +1216,11 @@ async function v2LinkRosterPlayer(communityId, playerId, clientId){
   await v2Fetch("PATCH", `/communities/${communityId}/roster/${playerId}`, {clientId});
   const p = getCommunity(communityId).roster.find(pl => pl.id === playerId);
   if (p) p.clientId = clientId;
+  // A gender picked before this person had any roster row (e.g. on the name screen right
+  // after opening an invite) had nothing to update then - carry it onto the new row now.
+  if (clientId === myIdentity.id && myIdentity.gender) {
+    try { await v2SetGenderEverywhere(clientId, myIdentity.gender); } catch(e) { /* best-effort */ }
+  }
 }
 
 // Toggles a roster player's community-level admin flag (the admin screen) - see
@@ -2530,6 +2535,7 @@ function lockPortraitForScreen(screenName){
 function linkToGlobalPlayer(p){
   if (!myIdentity.id) return;
   p.clientId = myIdentity.id;
+  if (myIdentity.gender) p.gender = myIdentity.gender;
 }
 // A self-joined player's name should read the same everywhere - renaming them in one
 // community (or via their own device's identity screen) updates every roster copy
@@ -4920,8 +4926,10 @@ function renderModal(m){
     // setGenderEverywhere), not on myIdentity itself - read it off any one of this
     // person's own rows (they're kept in sync with each other), defaulting to male for
     // someone not yet in any roster (e.g. a first-time visitor still on this very screen).
-    let myGender = "male";
-    outer: for (const comm of state.communities) {
+    // myIdentity.gender (set by the buttons below) wins - it exists even before any roster
+    // row does, so the choice shows up right away for someone not yet in a group.
+    let myGender = myIdentity.gender === "female" ? "female" : "male";
+    if (!myIdentity.gender) outer: for (const comm of state.communities) {
       for (const pl of (comm.roster||[])) {
         if (pl.clientId === myIdentity.id) { myGender = pl.gender === "female" ? "female" : "male"; break outer; }
       }
@@ -7186,6 +7194,12 @@ function attachHandlers(){
       const nameInput = document.getElementById("identity-name-input");
       if (nameInput) myIdentity.name = nameInput.value;
       const gender = el.dataset.identityGender;
+      // Kept on the identity too, not only on roster rows: someone not in any group yet
+      // (first visit via an invite) has no row to update, so the choice was lost and the
+      // button looked like it did nothing. v2LinkRosterPlayer/linkToGlobalPlayer copy it
+      // onto the row once they join.
+      myIdentity.gender = gender;
+      saveIdentity();
       if (USE_RELATIONAL_API) {
         try { await v2SetGenderEverywhere(myIdentity.id, gender); }
         catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
