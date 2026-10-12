@@ -186,6 +186,10 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
    border box rather than a dark fill, so the gold buttons inside stay the brightest thing
    in it instead of competing with a tinted background. */
 .buyin-frame{border:1px solid var(--card-b);border-radius:12px;padding:10px;}
+/* Leave-table buttons: a frame whose title sits ON the border line (the line breaks
+   behind the text) - native fieldset/legend behavior. */
+.leave-frame{border:1px solid rgba(212,175,55,.55);border-radius:14px;padding:6px 10px 10px;margin:0;min-width:0;flex-shrink:0;}
+.leave-frame legend{color:var(--gold);font-size:11px;font-weight:700;letter-spacing:.05em;padding:0 8px;margin-right:6px;}
 /* History/table-activity used to be two always-visible stacked panels (a short fixed-height
    one plus a flex:1 one); now they share one tab-switched panel instead, so whichever is
    selected gets ALL the space both used to split between them. The unselected tab is fully
@@ -4467,11 +4471,13 @@ function renderPlayerScreen(gameId){
       </div>
       `}
       ${cashedOut ? "" : `
-      <div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">סיום ערב (יציאה מהשולחן)</div>
-      <div class="buyin-frame" style="display:flex;gap:6px;flex-shrink:0;">
+      <fieldset class="leave-frame">
+        <legend>סיום ערב (יציאה מהשולחן)</legend>
+      <div style="display:flex;gap:6px;">
         <button class="btn flex1 pp-leave-gold" style="background:#B8862B;color:#1a1a1a;display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 4px;font-size:13px;white-space:nowrap;" data-player-leave-table>${icon('out')}ספירת ז'יטונים</button>
         <button class="btn flex1 pp-leave-red" style="background:#B23A3A;color:#fff;display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 4px;font-size:13px;white-space:nowrap;" data-player-leave-no-chips>${icon('out')}נשארתי בלי ז'יטונים 😞</button>
-      </div>`}
+      </div>
+      </fieldset>`}
     </div>
   `;
 }
