@@ -4796,6 +4796,9 @@ function renderTable(gameId){
   `;
 }
 
+// End-of-evening window's opening tab: counting from a photo when the group has chip values
+// set up, otherwise the plain chip-total field (the photo tab can't count anything yet).
+function seatChipsDefaultMode(c){ return (c && (c.chipValues||[]).length) ? "byColor" : "chips"; }
 function renderModal(m){
   let body = "";
   let title = "";
@@ -5703,13 +5706,14 @@ function renderModal(m){
     // the others). Only offer a mode the community actually has data for; "direct"
     // (typing the ₪ total by hand) is always available as a fallback.
     const availableModes = [
+      // First (rightmost) and the one that opens by default - except before the group has
+      // any chip values set up, when it can't count anything yet (see seatChipsDefaultMode).
+      // Always shown even then: the tab explains where to set them up (see modeBody).
+      {key:"byColor", label:"לפי צבע/תמונה", icon:"camera"},
       {key:"chips", label:"סכום ז'יטונים", icon:"coins"},
       {key:"profit", label:"רווח/הפסד", icon:"trend"},
-      // Always shown, even before the group has any chip values set up - the tab then
-      // explains where to set them up instead of silently not existing (see modeBody).
-      {key:"byColor", label:"לפי צבע/תמונה", icon:"camera"},
     ];
-    const mode = (m.chipsMode && availableModes.some(am => am.key === m.chipsMode)) ? m.chipsMode : availableModes[0].key;
+    const mode = (m.chipsMode && availableModes.some(am => am.key === m.chipsMode)) ? m.chipsMode : seatChipsDefaultMode(c);
     // Same tab-over-panel shape as the player screen's history/feed tabs: each mode owns a
     // fixed color (chips = gold, profit = teal, by-photo = violet), the active tab merges
     // into a panel framed in its color, and the inactive ones sit dimmed beside it.
@@ -5792,6 +5796,7 @@ function renderModal(m){
       // picker was tapped open, wiping out whatever the photo (or a manual edit) had there.
       const colorTotals = {};
       chipPhotos.forEach(photo => (photo.stacks||[]).forEach(st => {
+        if (st.ignored) return; // "תתעלם" - e.g. another player's chips caught in the photo
         colorTotals[st.chipValueId] = (colorTotals[st.chipValueId]||0) + st.count;
       }));
       // {photoId, stackId} of the pile whose value-picker is currently open, or null.
@@ -5817,11 +5822,13 @@ function renderModal(m){
         below:            {top:'100%', ty:'-20%'}, // bottommost row: 80% pokes out below the box
         secondFromTop:    {top:'0%',   ty:'-20%'}, // 2nd-from-top (only when there are 4 rows): 20% pokes out above
         secondFromBottom: {top:'100%', ty:'-80%'}, // 2nd-from-bottom row: 20% pokes out below the box
+        middle:           {top:'50%',  ty:'-50%'}, // the middle row of 5: label centered on the pile
       };
       const frameStyleFor = (rank, n) => {
         if (n <= 1 || rank === n-1) return FRAME_STYLES.below;
         if (rank === 0) return FRAME_STYLES.above;
-        if (rank === 1 && n === 4) return FRAME_STYLES.secondFromTop;
+        if (rank === 1 && n >= 4) return FRAME_STYLES.secondFromTop;
+        if (n === 5 && rank === 2) return FRAME_STYLES.middle;
         return FRAME_STYLES.secondFromBottom;
       };
       const renderPhotoBlock = (photo, isAnalyzing) => {
@@ -5846,19 +5853,8 @@ function renderModal(m){
         const rankByRowId = {};
         rankedRowIds.forEach((rowId,i) => { rankByRowId[rowId] = i; });
         const N = rankedRowIds.length;
-        // frameStyleFor only has distinct positions for up to 4 depth rows - beyond that,
-        // rows would start sharing a style and visually collide instead of fanning out.
-        // Piles are still auto-filled into the table below even when this fires (the photo
-        // just can't be marked up on top of), so nothing already counted is lost.
-        if (N > 4) {
-          return `
-            <div style="width:100%;margin-bottom:8px;position:relative;">
-              <img src="${photo.src}" draggable="false" style="width:100%;border-radius:12px;display:block;opacity:.4;">
-              <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;">
-                <p style="background:rgba(0,0,0,.8);color:#fda4af;font-size:13px;text-align:center;padding:12px 14px;border-radius:10px;margin:0;">זוהו ${N} שורות עומק בתמונה הזו - נתמכות עד 4 שורות בתמונה אחת. צלמו את הערמות בשתי תמונות נפרדות במקום אחת.</p>
-              </div>
-            </div>`;
-        }
+        // Up to 5 depth rows are laid out (frameStyleFor); more than that only happens with a
+        // malformed reply, and the piles still show and count - their labels may just overlap.
         // Pushed mostly OUTSIDE the photo's own right edge (the wrapper has no
         // overflow:hidden, so this stays visible in the surrounding padding instead of
         // getting clipped) rather than sitting just inside it - at right:4px this still
@@ -5882,15 +5878,25 @@ function renderModal(m){
           // its own badge, visually spanned well into the row above/below's own badge
           // (reported live as looking misaligned with "the sums on the right"), since rows
           // can sit as little as ~40px apart.
+          const rowIgnored = group.every(st => st.ignored);
+          const isCustomRow = isPickingRow && m.chipRowCustomOpen;
+          const pickBtnStyle = (on) => `background:${on?'var(--gold)':'none'};color:${on?'var(--gold-text)':'var(--text)'};border:1px solid var(--gold);border-radius:8px;padding:5px 9px;font-weight:700;font-size:13px;cursor:pointer;min-width:30px;white-space:nowrap;`;
+          // "אחר" swaps the strip for a number field (any pile size), "תתעלם" drops the whole
+          // row from the count (e.g. another player's chips at the edge of the photo).
           const rowPickerHtml = isPickingRow ? `
             <div style="position:absolute;right:100%;top:50%;transform:translateY(-50%);margin-right:4px;background:var(--card);border:1px solid var(--gold);border-radius:10px;padding:5px;display:flex;flex-direction:row;gap:4px;z-index:10;box-shadow:0 4px 14px rgba(0,0,0,.5);">
-              ${SIZE_OPTIONS.map(sz => `
-                <button type="button" data-pick-chip-row-size="${sz}" data-photo-id="${photo.id}" data-row-id="${rowId}" style="background:${sz===group[0].count?'var(--gold)':'none'};color:${sz===group[0].count?'var(--gold-text)':'var(--text)'};border:1px solid var(--gold);border-radius:8px;padding:5px 9px;font-weight:700;font-size:13px;cursor:pointer;min-width:30px;">${sz}</button>
-              `).join("")}
+              ${isCustomRow ? `
+                <input type="number" inputmode="numeric" min="1" id="chip-row-custom-size" value="${rowIgnored ? '' : group[0].count}" style="width:58px;height:32px;padding:4px;font-size:14px;text-align:center;">
+                <button type="button" data-confirm-chip-row-custom data-photo-id="${photo.id}" data-row-id="${rowId}" style="${pickBtnStyle(true)}">✓</button>
+              ` : `
+                ${SIZE_OPTIONS.map(sz => `<button type="button" data-pick-chip-row-size="${sz}" data-photo-id="${photo.id}" data-row-id="${rowId}" style="${pickBtnStyle(!rowIgnored && sz===group[0].count)}">${sz}</button>`).join("")}
+                <button type="button" data-chip-row-custom data-photo-id="${photo.id}" data-row-id="${rowId}" style="${pickBtnStyle(!rowIgnored && !SIZE_OPTIONS.includes(group[0].count))}">אחר</button>
+                <button type="button" data-ignore-chip-row data-photo-id="${photo.id}" data-row-id="${rowId}" style="${pickBtnStyle(rowIgnored)}">תתעלם</button>
+              `}
             </div>` : "";
           return `
             <div style="position:absolute;right:-16px;top:${topPct}%;transform:translateY(-50%);z-index:5;">
-              <button type="button" data-chip-row-pick data-photo-id="${photo.id}" data-row-id="${rowId}" title="הקישו לבחירת הכמות לכל הערמות בשורה הזו" style="background:var(--gold);color:var(--gold-text);border:none;border-radius:50%;width:30px;height:30px;font-weight:800;font-size:14px;box-shadow:0 2px 6px rgba(0,0,0,.5);cursor:pointer;">${group[0].count}</button>
+              <button type="button" data-chip-row-pick data-photo-id="${photo.id}" data-row-id="${rowId}" title="הקישו לבחירת הכמות לכל הערמות בשורה הזו" style="background:${rowIgnored?'rgba(0,0,0,.6)':'var(--gold)'};color:${rowIgnored?'var(--muted)':'var(--gold-text)'};border:${rowIgnored?'1px solid var(--gold)':'none'};border-radius:50%;width:30px;height:30px;font-weight:800;font-size:14px;box-shadow:0 2px 6px rgba(0,0,0,.5);cursor:pointer;">${rowIgnored ? '–' : group[0].count}</button>
               ${rowPickerHtml}
             </div>`;
         }).join("") : "";
@@ -5918,6 +5924,7 @@ function renderModal(m){
                   <span style="font-size:10px;color:var(--text);">${chipDisplayLabel(v)}</span>
                 </button>
               `).join("")}
+              <button type="button" data-ignore-chip-pile data-photo-id="${photo.id}" data-stack-id="${st.id}" style="background:none;border:${st.ignored?'2px solid var(--gold)':'1px solid rgba(255,255,255,.3)'};border-radius:8px;padding:3px 6px;display:flex;align-items:center;justify-content:center;cursor:pointer;min-width:46px;color:var(--text);font-size:11px;font-weight:700;">תתעלם</button>
             </div>` : "";
           // Only the label itself is framed (one thin border, transparent fill) - this
           // used to also draw a second border+tint around the whole detected box, which
@@ -5930,7 +5937,7 @@ function renderModal(m){
           return `
             <div style="position:absolute;left:${leftPct}%;top:${topPct}%;width:${wPct}%;height:${hPct}%;${isPicking?'z-index:10;':''}">
               <div style="position:absolute;top:${style.top};left:50%;transform:translate(-50%,${style.ty});">
-                <button type="button" data-chip-pile-value data-photo-id="${photo.id}" data-stack-id="${st.id}" style="display:block;background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:6px;padding:2px 6px;font-weight:800;font-size:12px;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,.9),0 0 4px rgba(0,0,0,.9);cursor:pointer;">${cv ? chipDisplayLabel(cv) : '?'}</button>
+                <button type="button" data-chip-pile-value data-photo-id="${photo.id}" data-stack-id="${st.id}" style="display:block;background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:6px;padding:2px 6px;font-weight:800;font-size:12px;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,.9),0 0 4px rgba(0,0,0,.9);cursor:pointer;${st.ignored?'min-width:24px;min-height:20px;':''}">${st.ignored ? '' : (cv ? chipDisplayLabel(cv) : '?')}</button>
                 ${pickerHtml}
               </div>
             </div>`;
@@ -5945,7 +5952,7 @@ function renderModal(m){
       };
       const photoAreaHtml = chipPhotos.length ? `
         ${chipPhotos.map((photo,i) => renderPhotoBlock(photo, m.analyzingChipCount && i === chipPhotos.length-1)).join("")}
-        <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">${m.analyzingChipCount ? "סופר ז'יטונים אוטומטית..." : "הקישו על הערך של ערמה כדי לשנות את הסוג שלה, או על העיגול שבצד כדי לשנות את הכמות של כל השורה."}</p>
+        <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">${m.analyzingChipCount ? "סופר ז'יטונים אוטומטית..." : "טעות בזיהוי? הקישו על המסגרת כדי לשנות את סוג הז'יטון, ועל העיגול שבצד כדי לשנות את הכמות בשורה. ז'יטונים של מישהו אחר בתמונה? בחרו \"תתעלם\"."}</p>
         ${chipPhotos.length < 2 ? `
         <div style="position:relative;margin-bottom:8px;">
           <button type="button" class="btn btn-ghost btn-block" style="pointer-events:none;display:flex;align-items:center;justify-content:center;gap:6px;" ${m.analyzingChipCount?"disabled":""}>${icon('plus')} עוד תמונה (ערמות שלא נכנסו לפריים)</button>
@@ -5958,12 +5965,9 @@ function renderModal(m){
           <input type="file" accept="image/*" capture="environment" id="chip-count-camera-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
         </div>
         <ul style="color:var(--muted);font-size:12px;margin:-4px 0 14px;padding:0 18px 0 0;line-height:1.7;">
-          <li>סדרו את הערמות בשורות לפי מרחק מהמצלמה: הכי רחוק = הגודל הכי גדול, הכי קרוב = הכי קטן.</li>
-          <li>בתמונה אפשר 1 עד 4 שורות, בגדלים קבועים של 10, 5, 3 או 1 ז'יטונים - לא חובה את כל הגדלים (למשל אפשר רק שורה של 5 ושורה של 1).</li>
-          <li>בתוך שורה אפשר לשלב כמה סוגי ז'יטונים שונים, כל עוד כל ערמה מסוג אחד בלבד ובאותו גודל של שאר השורה.</li>
-          <li>אם לא כל הערמות נכנסות לפריים אחד, אפשר להוסיף עוד תמונה אחר כך.</li>
-          <li><a href="/static/chip_count_example.webp" target="_blank" rel="noopener" style="color:var(--gold);">לדוגמה לתמונה מומלצת לחצו כאן</a></li>
-          <li>מומלץ לצלם את התמונה לרוחב.</li>
+          <li>סדרו את הערמות בשורות: הרחוקה מהמצלמה - הערמות הגבוהות (10), הקרובה - הבודדים (1).</li>
+          <li>כל ערמה מסוג ז'יטון אחד, וכל הערמות בשורה באותו גובה.</li>
+          <li>צלמו לרוחב, מלמעלה. <a href="/static/chip_count_example.webp" target="_blank" rel="noopener" style="color:var(--gold);">דוגמה לתמונה טובה</a></li>
         </ul>
       `;
       modeBody = `
@@ -6265,7 +6269,10 @@ function renderModal(m){
   // live as not being able to see the whole photo and table at once - full-screen like
   // the setup flows gives it the same room they get.
   const isSetupFlow = m.type === "chipSetup" || m.type === "payboxSettings" || m.type === "buyinSetup"
-    || (m.type === "seatChips" && m.chipsMode === "byColor" && (((getCommunity((getGame(m.gameId)||{}).communityId)||{}).chipValues)||[]).length > 0);
+    || (m.type === "seatChips" && (() => {
+      const sc = getCommunity((getGame(m.gameId)||{}).communityId) || {};
+      return (m.chipsMode || seatChipsDefaultMode(sc)) === "byColor" && (sc.chipValues||[]).length > 0;
+    })());
   return `
     <div class="overlay${topAnchored ? ' overlay-top' : ''}${isSetupFlow ? ' overlay-fullscreen' : ''}">
       <div class="modal" onclick="event.stopPropagation()">
@@ -8603,8 +8610,8 @@ function attachHandlers(){
     const ratio = c.chipRatio;
     const chipValues = c.chipValues || [];
     const currentChips = (g.liveChips||{})[modal.playerId] || 0;
-    const availableModes = ["chips", "profit", "byColor"];
-    const mode = (modal.chipsMode && availableModes.includes(modal.chipsMode)) ? modal.chipsMode : availableModes[0];
+    const availableModes = ["byColor", "chips", "profit"];
+    const mode = (modal.chipsMode && availableModes.includes(modal.chipsMode)) ? modal.chipsMode : seatChipsDefaultMode(c);
     const profitSign = modal.profitSign === "loss" ? "loss" : "profit";
     // Switching modes swaps out the input(s) entirely - anything typed in the mode being
     // left is about to silently vanish, so warn first rather than losing it with no
@@ -8760,16 +8767,50 @@ function attachHandlers(){
         e.stopPropagation();
         const photoId = el.dataset.photoId, rowId = el.dataset.rowId;
         const isOpen = modal.chipRowPickerFor && modal.chipRowPickerFor.photoId === photoId && String(modal.chipRowPickerFor.rowId) === rowId;
-        updateModal({chipRowPickerFor: isOpen ? null : {photoId, rowId}});
+        updateModal({chipRowPickerFor: isOpen ? null : {photoId, rowId}, chipRowCustomOpen: false});
       });
       app.querySelectorAll("[data-pick-chip-row-size]").forEach(el => el.onclick = (e) => {
         e.stopPropagation();
         const newCount = parseInt(el.dataset.pickChipRowSize, 10);
         const photoId = el.dataset.photoId, rowId = el.dataset.rowId;
         const photos = (modal.chipPhotos||[]).map(p => p.id !== photoId ? p : {
-          ...p, stacks: (p.stacks||[]).map(st => String(st.rowId) === rowId ? {...st, count: newCount} : st)
+          ...p, stacks: (p.stacks||[]).map(st => String(st.rowId) === rowId ? {...st, count: newCount, ignored: false} : st)
         });
-        updateModal({chipPhotos: photos, chipRowPickerFor: null});
+        updateModal({chipPhotos: photos, chipRowPickerFor: null, chipRowCustomOpen: false});
+        refreshHeader();
+      });
+      // "אחר" - any pile size, typed in place of the 4 standard ones.
+      app.querySelectorAll("[data-chip-row-custom]").forEach(el => el.onclick = (e) => {
+        e.stopPropagation();
+        updateModal({chipRowCustomOpen: true});
+        const inp = document.getElementById("chip-row-custom-size");
+        if (inp) { inp.focus(); inp.select(); }
+      });
+      const confirmRowCustom = app.querySelector("[data-confirm-chip-row-custom]");
+      if (confirmRowCustom) {
+        const inp = document.getElementById("chip-row-custom-size");
+        const apply = (e) => {
+          if (e) e.stopPropagation();
+          const n = parseInt(inp && inp.value, 10);
+          if (!(n >= 1 && n <= 100)) { showAlert("הכמות צריכה להיות מספר בין 1 ל-100."); return; }
+          const photoId = confirmRowCustom.dataset.photoId, rowId = confirmRowCustom.dataset.rowId;
+          const photos = (modal.chipPhotos||[]).map(p => p.id !== photoId ? p : {
+            ...p, stacks: (p.stacks||[]).map(st => String(st.rowId) === rowId ? {...st, count: n, ignored: false} : st)
+          });
+          updateModal({chipPhotos: photos, chipRowPickerFor: null, chipRowCustomOpen: false});
+          refreshHeader();
+        };
+        confirmRowCustom.onclick = apply;
+        if (inp) { inp.onclick = (e) => e.stopPropagation(); inp.onkeydown = (e) => { if (e.key === "Enter") apply(e); }; }
+      }
+      // "תתעלם" on a row - none of its piles count; frames stay, empty.
+      app.querySelectorAll("[data-ignore-chip-row]").forEach(el => el.onclick = (e) => {
+        e.stopPropagation();
+        const photoId = el.dataset.photoId, rowId = el.dataset.rowId;
+        const photos = (modal.chipPhotos||[]).map(p => p.id !== photoId ? p : {
+          ...p, stacks: (p.stacks||[]).map(st => String(st.rowId) === rowId ? {...st, ignored: true} : st)
+        });
+        updateModal({chipPhotos: photos, chipRowPickerFor: null, chipRowCustomOpen: false});
         refreshHeader();
       });
       // Tapping a pile's own value label opens/closes a dropdown of every known chip
@@ -8787,7 +8828,17 @@ function attachHandlers(){
         const newValueId = el.dataset.pickChipValue;
         const photoId = el.dataset.photoId, stackId = el.dataset.stackId;
         const photos = (modal.chipPhotos||[]).map(p => p.id !== photoId ? p : {
-          ...p, stacks: (p.stacks||[]).map(st => st.id === stackId ? {...st, chipValueId: newValueId} : st)
+          ...p, stacks: (p.stacks||[]).map(st => st.id === stackId ? {...st, chipValueId: newValueId, ignored: false} : st)
+        });
+        updateModal({chipPhotos: photos, chipValuePickerFor: null});
+        refreshHeader();
+      });
+      // "תתעלם" on one pile - it stops counting; its frame stays on the photo, empty.
+      app.querySelectorAll("[data-ignore-chip-pile]").forEach(el => el.onclick = (e) => {
+        e.stopPropagation();
+        const photoId = el.dataset.photoId, stackId = el.dataset.stackId;
+        const photos = (modal.chipPhotos||[]).map(p => p.id !== photoId ? p : {
+          ...p, stacks: (p.stacks||[]).map(st => st.id === stackId ? {...st, ignored: true} : st)
         });
         updateModal({chipPhotos: photos, chipValuePickerFor: null});
         refreshHeader();
@@ -8827,12 +8878,12 @@ function attachHandlers(){
           // guesses a row wrong, instead of needing it right the first time.
           const prompt = `תמונה 1 מציגה ערימות של ז'יטוני פוקר על שולחן, צולמו בזווית. ${refList}
 שלב ראשון: עבור כל תמונת ייחוס (2 עד ${validChipValues.length+1}), תארו במילה או שתיים את הצבע/עיצוב המרכזי שלה - התבוננו בכל תמונה בנפרד.
-שלב שני: הגדלים האפשריים היחידים הם 10, 5, 3, או ז'יטון בודד (1) - אין ערמות בגדלים אחרים. הערמות מאורגנות לרוב בשורות לפי מרחק מהמצלמה, מהגדולה ביותר (הרחוקה) לקטנה ביותר (הקרובה) - נסו לזהות כמה שורות/רמות גובה שונות יש בתמונה (יכול להיות 1 עד 4), ושייכו לכל שורה את הגודל המתאים לפי הסדר הזה, ביחס לשאר השורות שבתמונה (לא לפי מראה מוחלט). עשו הערכה מושכלת - כל ערמה/ז'יטון בתמונה חייב לקבל גודל, גם אם לא ברור ב-100%. עבור כל ערימה/ז'יטון בתמונה 1, זהו גם לאיזו תמונת-ייחוס היא הכי דומה בצבע/עיצוב (לפי התיאורים משלב ראשון), ותנו תיבה תוחמת (bounding box) בפיקסלים מוחלטים יחסית לתמונה 1 (רוחב ${width}, גובה ${height}) בפורמט [x1,y1,x2,y2].
-החזירו תשובה בפורמט JSON בלבד, בלי טקסט נוסף ובלי markdown, במבנה הזה בדיוק: {"refColors":[{"refImage":2,"color":"..."}],"stacks":[{"box":[x1,y1,x2,y2],"refImage":N,"count":10}]}`;
+שלב שני: הערמות מאורגנות בשורות לפי מרחק מהמצלמה, מהגבוהה ביותר (הרחוקה) לנמוכה ביותר (הקרובה). זהו כמה שורות יש בתמונה (1 עד 5) ותנו לכל ערמה את מספר השורה שלה ("row": 1 = הרחוקה מהמצלמה). הגדלים הרגילים הם 10, 5, 3 או ז'יטון בודד (1) - שייכו לכל שורה את הגודל המתאים לפי הסדר הזה, ביחס לשאר השורות שבתמונה (לא לפי מראה מוחלט). אם יש 5 שורות, לשורה שאין לה גודל רגיל תנו את ההערכה הטובה ביותר שלכם למספר הז'יטונים בערמה. עשו הערכה מושכלת - כל ערמה/ז'יטון בתמונה חייב לקבל גודל, גם אם לא ברור ב-100%. עבור כל ערימה/ז'יטון בתמונה 1, זהו גם לאיזו תמונת-ייחוס היא הכי דומה בצבע/עיצוב (לפי התיאורים משלב ראשון), ותנו תיבה תוחמת (bounding box) בפיקסלים מוחלטים יחסית לתמונה 1 (רוחב ${width}, גובה ${height}) בפורמט [x1,y1,x2,y2].
+החזירו תשובה בפורמט JSON בלבד, בלי טקסט נוסף ובלי markdown, במבנה הזה בדיוק: {"refColors":[{"refImage":2,"color":"..."}],"stacks":[{"box":[x1,y1,x2,y2],"refImage":N,"row":1,"count":10}]}`;
           const result = await callClaudeVisionMulti(images, prompt);
           const rawStacks = (result && Array.isArray(result.stacks)) ? result.stacks : [];
           const stacks = rawStacks.filter(r =>
-            r && Array.isArray(r.box) && r.box.length === 4 && [10,5,3,1].includes(r.count) && typeof r.refImage === "number"
+            r && Array.isArray(r.box) && r.box.length === 4 && Number.isInteger(r.count) && r.count >= 1 && r.count <= 100 && typeof r.refImage === "number"
           );
           // refImage is 1-based over `images` (stack photo = 1, first reference = 2, ...) -
           // refImage - 2 is then a 0-based index into the references actually sent, in the
@@ -8846,7 +8897,10 @@ function attachHandlers(){
           const finalStacks = stacks.map(s => {
             const cv = validChipValues[s.refImage - 2];
             if (!cv) return null;
-            return {id: uid(), box: s.box, chipValueId: cv.id, count: s.count, rowId: s.count};
+            // Grouped by the row the model reported (up to 5 rows - two rows can share a
+            // size); falls back to the size for a reply without a usable row number.
+            const row = (Number.isInteger(s.row) && s.row >= 1 && s.row <= 5) ? `r${s.row}` : s.count;
+            return {id: uid(), box: s.box, chipValueId: cv.id, count: s.count, rowId: row};
           }).filter(Boolean);
           if (modal && modal.type === "seatChips") {
             const photos = (modal.chipPhotos||[]).map(p => p.id === photoId ? {...p, stacks: finalStacks} : p);
