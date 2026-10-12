@@ -4887,11 +4887,17 @@ function renderModal(m){
     // starts at the same spot regardless of which labels happen to be present - without
     // it, a row with "משתמש:" (shorter) left its value sitting further right than one
     // under "סיסמה (רמז):" (longer), reading as misaligned between adjacent rows.
+    // A row with no copy button (the password hint) still reserves that button's own
+    // width via an invisible placeholder - otherwise its value's flex box simply grew
+    // into the freed-up space and, since the value text is left-aligned within it, that
+    // text itself ended up sitting further left than the row above it, not under it.
     const thirdPartyField = (label, valueHtml, hasValue, copyValue) => !hasValue ? "" : `
       <div class="row" style="gap:6px;align-items:center;">
         <span style="color:var(--muted);font-size:12px;flex-shrink:0;width:68px;">${label}:</span>
         ${valueHtml}
-        ${copyValue ? `<button class="icon-btn" data-copy-value="${esc(copyValue)}" title="העתק">${icon('copy')}</button>` : ""}
+        ${copyValue
+          ? `<button class="icon-btn" data-copy-value="${esc(copyValue)}" title="העתק">${icon('copy')}</button>`
+          : `<span class="icon-btn" style="visibility:hidden;">${icon('copy')}</span>`}
       </div>`;
     const thirdPartyRow = (s) => `
       <div class="roster-row" style="flex-direction:column;align-items:stretch;gap:6px;padding:12px;">

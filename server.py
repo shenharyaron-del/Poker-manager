@@ -2331,9 +2331,11 @@ def list_third_party_services():
         return err
     with get_db() as conn:
         with conn.cursor() as cur:
-            # NULLS LAST - an uncategorized service lists after every grouped one, rather
-            # than sorting (NULL-first, Postgres's own default) ahead of all of them.
-            cur.execute("SELECT id, name, url, username, password, category FROM third_party_services ORDER BY category NULLS LAST, sort_order, name")
+            # Plain manual order (sort_order, set at insert time - see create_third_party_
+            # service) - category is just an inline "(Category)" label next to each name
+            # now, not a grouping key, so sorting BY it first (as this used to) no longer
+            # matches what's actually on screen.
+            cur.execute("SELECT id, name, url, username, password, category FROM third_party_services ORDER BY sort_order, name")
             rows = cur.fetchall()
         conn.commit()
     return jsonify([_third_party_service_row(r) for r in rows])
