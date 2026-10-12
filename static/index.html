@@ -9108,17 +9108,37 @@ function attachHandlers(){
 // browser that doesn't enforce this) and again on the next real tap after every cancel, since
 // the cancel branch's own re-push runs after an await (showConfirm) and so may itself land
 // outside the gesture the back press provided.
-function pushBackGuard(){ history.pushState({pokerManagerGuard: true}, ""); }
-function armBackGuardOnNextGesture(){ document.addEventListener("pointerdown", pushBackGuard, {once: true}); }
-pushBackGuard();
-armBackGuardOnNextGesture();
+// Exactly ONE guard entry at a time (backGuardDepth), pushed only from a real user gesture
+// (every tap/keypress checks, but only pushes when no guard is in place). The old version
+// pushed once at load AND again on the first tap, so there were often two guard entries:
+// answering "yes, leave" then went back just one step - onto the second guard - and the
+// app stayed open (or asked again). A guard pushed at load is skipped by Chrome anyway (see
+// above), so there's no load-time push: before the very first tap, back leaves directly.
+let backGuardDepth = 0;
+let backExitPromptOpen = false;
+let backGuardSuppressedUntil = 0;
+function pushBackGuard(){
+  if (backGuardDepth > 0 || backExitPromptOpen || Date.now() < backGuardSuppressedUntil) return;
+  history.pushState({pokerManagerGuard: true}, "");
+  backGuardDepth = 1;
+}
+document.addEventListener("pointerdown", pushBackGuard, true);
+document.addEventListener("keydown", pushBackGuard, true);
 window.addEventListener("popstate", async () => {
-  if (await showConfirm("לצאת מהאפליקציה?")) {
-    history.back();
-  } else {
-    pushBackGuard();
-    armBackGuardOnNextGesture();
-  }
+  if (Date.now() < backGuardSuppressedUntil) return; // our own history.back() below, on the way out
+  backGuardDepth = 0; // the back press just consumed our guard - we're on the app's base entry
+  backExitPromptOpen = true;
+  const leave = await showConfirm("לצאת מהאפליקציה?");
+  backExitPromptOpen = false;
+  if (!leave) { pushBackGuard(); return; } // the "ביטול" tap is a fresh gesture, so this push counts
+  // Leave: with no guard left, going back once more leaves the app in a browser tab. An
+  // installed app (home-screen icon) can't close itself from script, and neither can a tab
+  // that has nothing before the app - in that case the very next back press exits, since
+  // nothing re-arms the guard for a few seconds.
+  backGuardSuppressedUntil = Date.now() + 4000;
+  try { window.close(); } catch(e) { /* not allowed for this window - fine */ }
+  history.back();
+  setTimeout(() => { if (!document.hidden) showAlert("לחצו שוב על 'חזור' כדי לצאת"); }, 700);
 });
 
 (async function init(){
