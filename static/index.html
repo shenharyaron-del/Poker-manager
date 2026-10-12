@@ -59,6 +59,8 @@ body{
 .screen-tag{color:var(--gold);font-size:10px;font-weight:700;letter-spacing:.15em;text-align:center;padding:12px 20px 0;opacity:.8;}
 .screen-tag .crumb-link{background:none;border:none;padding:8px 2px;margin:-8px -2px;font:inherit;letter-spacing:inherit;color:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer;}
 .screen-tag .crumb-sep{margin:0 6px;opacity:.7;}
+.screen-tag{position:relative;}
+.install-chip{position:absolute;left:14px;top:9px;background:rgba(212,175,55,.14);border:1px solid rgba(212,175,55,.55);color:var(--gold);font:inherit;font-size:10px;line-height:1.3;letter-spacing:0;padding:1px 8px;border-radius:12px;cursor:pointer;opacity:1;}
 .eyebrow{color:var(--gold);font-size:11px;font-weight:700;letter-spacing:.2em;margin-bottom:4px;}
 h1{font-size:28px;margin:0;font-weight:700;}
 h1.sm{font-size:20px;}
@@ -3074,6 +3076,51 @@ function openPayboxSettingsModal(communityId){
 // native dialog's own "<hostname> says" chrome, which read as a raw/unpolished
 // Render URL rather than part of the app. Stacks above any open modal (higher
 // z-index), auto-dismisses, and can also be tapped away early.
+// ---------- "Install the app" (full screen, no address bar) ----------
+// Chrome on Android hands us beforeinstallprompt when the site can be installed; its
+// install is built by Google and opens full screen. Samsung Internet's own install builds
+// an app Play Protect blocks ("built for an older Android version"), so there we send the
+// page over to Chrome instead. iPhone has no install API - only instructions.
+let deferredInstallPrompt = null;
+window.addEventListener("beforeinstallprompt", e => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  try { render(); } catch(err) { /* app not booted yet - next render picks it up */ }
+});
+window.addEventListener("appinstalled", () => {
+  deferredInstallPrompt = null;
+  try { render(); } catch(err) {}
+});
+function isRunningInstalled(){
+  return (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true;
+}
+// null when there's nothing to offer (already installed, or a browser with no install path).
+function installMode(){
+  if (isRunningInstalled()) return null;
+  const ua = navigator.userAgent || "";
+  if (/SamsungBrowser/i.test(ua)) return "samsung";
+  if (deferredInstallPrompt) return "prompt";
+  if (/iPhone|iPad|iPod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return "ios";
+  return null;
+}
+function installChipHtml(){
+  return installMode() ? `<button type="button" class="install-chip" data-install-app>📲 התקן</button>` : "";
+}
+async function startInstall(){
+  const mode = installMode();
+  if (mode === "prompt") {
+    const ev = deferredInstallPrompt;
+    deferredInstallPrompt = null;
+    try { ev.prompt(); await ev.userChoice; } catch(e) {}
+    render();
+  } else if (mode === "samsung") {
+    // Opens this same page in Chrome, where the install is the clean one.
+    location.href = `intent://${location.host}${location.pathname}${location.search}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(location.href)};end`;
+  } else if (mode === "ios") {
+    showAlert("להתקנה על כל המסך: לחצו על כפתור השיתוף ⬆️ בתחתית Safari, ובחרו \"הוסף למסך הבית\".");
+  }
+}
+
 function showAlert(message){
   const el = document.createElement("div");
   el.className = "custom-alert";
@@ -3806,7 +3853,7 @@ function render(){
     : nav.screen === "community"
       ? `<div class="screen-tag" style="text-align:right;"><button type="button" class="crumb-link" data-crumb-home>מסך הבית</button><span class="crumb-sep">/</span><span style="color:#fff;">${esc(screenLabel)}</span></div>`
       : `<div class="screen-tag">${esc(screenLabel)}</div>`;
-  html = screenTag + html;
+  html = screenTag.replace(/<\/div>$/, installChipHtml() + '</div>') + html;
   if (modal) html += renderModal(modal);
   else if (welcomeGameId) html += renderGameWelcomeOverlay(welcomeGameId, welcomePlayerId);
   // Captured BEFORE replacing the DOM below - app.innerHTML wipes and recreates these
@@ -4958,6 +5005,7 @@ function renderModal(m){
       <div class="section-title" style="padding:0;margin:0 0 6px;">המיקום שלי בשולחן</div>
       <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">הקישו על מקום כדי לבחור איפה תופיעו תמיד סביב השולחן.</p>
       ${seatPickerHtml}
+      ${installMode() ? `<button class="btn btn-ghost btn-block" style="margin-bottom:12px;" data-install-app>📲 התקן את האפליקציה (מסך מלא)</button>` : ""}
       ${!m.forced ? `<button class="btn btn-ghost btn-block" style="margin-bottom:12px;" data-my-stats>${icon('bar')} הביצועים שלי</button>` : ""}
       <button class="btn btn-primary btn-block" style="margin-bottom:12px;" data-confirm-identity-name>שמור</button>
       ${loginSection}
@@ -6668,6 +6716,7 @@ function attachHandlers(){
   // except whichever one happened to be first in DOM order doing nothing when tapped.
   app.querySelectorAll("[data-back-community]").forEach(el => el.onclick = () => go("community", {communityId: el.dataset.backCommunity}));
   app.querySelectorAll("[data-crumb-home]").forEach(el => el.onclick = () => go("home"));
+  app.querySelectorAll("[data-install-app]").forEach(el => el.onclick = (e) => { e.stopPropagation(); startInstall(); });
 
   const showRoster = app.querySelector("[data-show-roster]");
   if (showRoster) showRoster.onclick = () => openModal({type:"roster", communityId: nav.communityId, editingId:null});
