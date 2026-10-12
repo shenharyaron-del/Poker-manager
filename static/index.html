@@ -228,6 +228,10 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
 /* Table carousel's bottom switcher (see navBarFor in render()). */
 .nav-bar{position:relative;flex-shrink:0;display:flex;align-items:center;justify-content:center;min-height:72px;padding:8px 12px calc(8px + env(safe-area-inset-bottom,0px));
   background:radial-gradient(120% 140% at 50% 0%,#14513a 0%,#0b3426 55%,#07251b 100%);border-top:1px solid rgba(233,196,106,.55);box-shadow:0 -1px 0 rgba(0,0,0,.6),0 -6px 16px rgba(0,0,0,.35);}
+/* 2-page carousel (no admin screen) - just the dots, no side buttons or illustration to
+   make room for, so the bar itself shrinks to match instead of leaving empty vertical
+   space sized for content that isn't there. */
+.nav-bar-compact{min-height:0;padding:10px 12px calc(10px + env(safe-area-inset-bottom,0px));}
 .nav-center{display:flex;flex-direction:column;align-items:center;gap:6px;}
 .nav-center .nav-art{width:20px;height:20px;filter:drop-shadow(0 0 8px rgba(251,191,36,.45));}
 .nav-dots{display:flex;justify-content:center;gap:8px;}
@@ -3698,14 +3702,15 @@ function render(){
       const DOT_LABELS = { admin: "ניהול שחקנים", player: "השחקן שלי", table: "שולחן" };
       // Bottom switcher, rendered INSIDE each page (as if that page were the current one)
       // rather than once under the whole track, so it slides along with its page during a
-      // swipe drag like the rest of the screen. Each copy: that page's illustration (gold,
-      // glowing) above the dots in the middle, and each side names the adjacent screen a
-      // swipe (or a tap right there) leads to, with its own illustration and a chevron
-      // pointing toward it. With just 2 pages (player/table) both sides point to that same
-      // lone "other" screen - cyclicPage already wraps correctly either direction for N=2,
-      // so showing both is just two ways to reach the one place, not a dead button.
+      // swipe drag like the rest of the screen. With all 3 faces (admin carousel): that
+      // page's illustration (gold, glowing) above the dots in the middle, and each side
+      // names the adjacent screen a swipe (or a tap right there) leads to, with its own
+      // illustration and a chevron pointing toward it. With just 2 pages (player/table) the
+      // full version read as oversized for what it does (two side buttons pointing at the
+      // same lone "other" screen either way) - just the dots, smaller, swipe still works.
       const navBarFor = (cur) => {
         const dotsRow = `<div class="nav-dots">${pageOrder.map(key => `<span class="${cur===key?'on':''}" title="${DOT_LABELS[key]}"></span>`).join("")}</div>`;
+        if (N < 3) return `<div class="nav-bar nav-bar-compact">${dotsRow}</div>`;
         const navSide = (key, side) => `<button class="nav-side ${side}" data-swipe-to="${key}">${NAV_ART[key]}<span class="nav-side-label">${side==='left'?'':icon('right')}${esc(DOT_LABELS[key])}${side==='left'?icon('left'):''}</span></button>`;
         return `
           <div class="nav-bar">
