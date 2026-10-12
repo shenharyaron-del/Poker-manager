@@ -409,9 +409,22 @@ def index():
     # Always revalidate with the server before using a cached copy, so a deploy is picked
     # up on the next reload instead of a phone browser silently reusing old JS indefinitely.
     # Flask still sets ETag/Last-Modified, so an unchanged file comes back as a cheap 304.
-    response = send_from_directory(STATIC_DIR, "index.html")
+    # The share-preview tags (og:url/og:image) need absolute URLs, so they're written
+    # against this request's own host - a hardcoded host broke the WhatsApp invite
+    # preview image once the app moved to a different Render service.
+    global _index_html_cache
+    if _index_html_cache is None:
+        with open(os.path.join(STATIC_DIR, "index.html"), encoding="utf-8") as f:
+            _index_html_cache = f.read()
+    base = "https://" + request.host if request.host and not request.host.startswith(("127.", "localhost")) else request.host_url.rstrip("/")
+    html = _index_html_cache.replace(OG_PLACEHOLDER_ORIGIN, base)
+    response = app.response_class(html, mimetype="text/html")
     response.headers["Cache-Control"] = "no-cache, must-revalidate"
     return response
+
+
+_index_html_cache = None
+OG_PLACEHOLDER_ORIGIN = "https://poker-manager-7irt.onrender.com"
 
 
 @app.route("/static/<path:filename>")
