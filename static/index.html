@@ -4060,6 +4060,19 @@ function renderPlayerScreen(gameId){
   // Cashed-out recap (buy-in / final chips / profit) plus a settlement-status line that
   // depends on the community's settlement mode and how far the night has progressed -
   // see the branches below for each combination.
+  // Direct transfers this player made or received tonight (the directPay window records
+  // them) - shown on their own screen so both sides see the money moved.
+  // Verb gender ("העביר"/"העבירה") from the player's roster row - also used by the
+  // activity feed further down.
+  const isFemale = playerId => { const rp = (c.roster||[]).find(pl => pl.id === playerId); return !!rp && rp.gender === "female"; };
+  const playerNameOf = (id) => esc((g.players.find(pl => pl.id === id) || {}).name || "שחקן");
+  const myPaymentsIn = (g.playerPayments||[]).filter(pp => pp.toPlayerId === pid);
+  const myPaymentsOut = (g.playerPayments||[]).filter(pp => pp.fromPlayerId === pid);
+  const paymentNotesHtml = (myPaymentsIn.length || myPaymentsOut.length) ? `
+    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:8px;">
+      ${myPaymentsIn.map(pp => `<div style="background:rgba(110,231,183,.12);border:1px solid rgba(110,231,183,.45);color:#6ee7b7;border-radius:999px;padding:5px 14px;font-size:14px;font-weight:700;">${playerNameOf(pp.fromPlayerId)} ${isFemale(pp.fromPlayerId)?'העבירה':'העביר'} לך ₪${pp.amount}</div>`).join("")}
+      ${myPaymentsOut.map(pp => `<div style="background:rgba(233,196,106,.1);border:1px solid rgba(233,196,106,.45);color:var(--gold);border-radius:999px;padding:5px 14px;font-size:14px;font-weight:700;">✓ העברת ₪${pp.amount} ל${playerNameOf(pp.toPlayerId)}</div>`).join("")}
+    </div>` : "";
   let cashedOutInfoHtml = "";
   if (cashedOut) {
     const finalChipsForInfo = (g.cashouts[pid]||{}).amount || 0;
@@ -4120,7 +4133,7 @@ function renderPlayerScreen(gameId){
     }
     // Lost, mid-game, not closed: no inline status text - the "who do I pay" modal
     // auto-opens itself instead (see attachHandlers/autoOpenedDirectPay).
-    cashedOutInfoHtml = breakdownHtml + statusHtml + exitHighlightsHtml;
+    cashedOutInfoHtml = breakdownHtml + paymentNotesHtml + statusHtml + exitHighlightsHtml;
   }
   const canDeleteBuyins = true; // viewing/editing your own history here, always allowed
   // Carries its own playerId (data-delete-seat-buyin-player) rather than relying on
@@ -4157,6 +4170,8 @@ function renderPlayerScreen(gameId){
     feedEvents.push({ts: g.cashouts[playerId].ts, kind:"cashout", playerId, amount: g.cashouts[playerId].amount});
   });
   (g.events||[]).forEach(ev => feedEvents.push({ts: ev.ts, kind: ev.type, playerId: ev.playerId, amount: ev.amount, actorName: ev.actorName}));
+  // Direct player-to-player transfers recorded at cash-out (see the directPay window).
+  (g.playerPayments||[]).forEach(pp => feedEvents.push({ts: pp.ts, kind: "player_payment", payment: pp}));
   feedEvents.sort((a,b) => (a.ts||0)-(b.ts||0));
   // Identifies the newest event so render() can tell a genuinely new one apart from just
   // a re-render of the same data (see lastSeenFeedEventKey) - the vibrate trigger.
@@ -4173,7 +4188,6 @@ function renderPlayerScreen(gameId){
   // player's own roster row (set from the identityName screen, see
   // v2SetGenderEverywhere), defaulting to male for a one-off guest (never in the roster
   // at all) same as the server does.
-  const isFemale = playerId => { const rp = c.roster.find(pl => pl.id === playerId); return !!rp && rp.gender === "female"; };
   const feedCounts = {}, feedTotals = {};
   const feedRows = feedEvents.map(ev => {
     let text, rowIcon;
@@ -4227,6 +4241,12 @@ function renderPlayerScreen(gameId){
       const pname = player ? player.name : "שחקן";
       text = `${esc(pname)} ${isFemale(ev.playerId)?'הוצאה':'הוצא'} מהשולחן${actorSuffix(pname, ev.actorName)}`;
       rowIcon = 'x';
+    } else if (ev.kind === "player_payment") {
+      const pp = ev.payment;
+      const from = g.players.find(pl => pl.id === pp.fromPlayerId);
+      const to = g.players.find(pl => pl.id === pp.toPlayerId);
+      text = `${esc(from ? from.name : "שחקן")} ${isFemale(pp.fromPlayerId)?'העבירה':'העביר'} ₪${pp.amount} ל${esc(to ? to.name : "שחקן")}`;
+      rowIcon = 'payment';
     } else if (ev.kind === "night_declared_over") {
       text = `הוכרז על סיום ערב`;
       rowIcon = 'check';
@@ -4273,7 +4293,7 @@ function renderPlayerScreen(gameId){
     <div class="player-screen-scroll">
       <div style="text-align:center;padding:6px 0 ${cashedOut?16:4}px;flex-shrink:0;">
         <div style="font-size:26px;font-weight:700;color:var(--text);">${esc(p?p.name:"")}</div>
-        ${cashedOut ? "" : `<div class="pp-total-wrap"><div class="pp-total" data-player-total>₪${buyinTotal}</div><img class="pp-chips" src="/static/player-chips.webp" alt="" draggable="false"></div>`}
+        ${cashedOut ? "" : `<div class="pp-total-wrap"><div class="pp-total" data-player-total>₪${buyinTotal}</div><img class="pp-chips" src="/static/player-chips.webp" alt="" draggable="false"></div>${paymentNotesHtml}`}
         ${(() => {
           // Direct-settlement arrangement(s) involving this player (either side - see
           // getArrangementNotes), same note shown on the admin screen's rows.
