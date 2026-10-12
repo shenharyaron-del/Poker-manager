@@ -3802,7 +3802,7 @@ function render(){
   // screen>, the first two linking home and to the game's group.
   const crumbGame = nav.screen === "table" && nav.gameId ? getGame(nav.gameId) : null;
   const screenTag = crumbGame
-    ? `<div class="screen-tag" style="text-align:right;"><button type="button" class="crumb-link" data-crumb-home>מסך הבית</button><span class="crumb-sep">/</span><button type="button" class="crumb-link" data-back-community="${crumbGame.communityId}">מסך הקבוצה</button><span class="crumb-sep">/</span>${esc(screenLabel)}</div>`
+    ? `<div class="screen-tag" style="text-align:right;"><button type="button" class="crumb-link" data-crumb-home>מסך הבית</button><span class="crumb-sep">/</span><button type="button" class="crumb-link" data-back-community="${crumbGame.communityId}">מסך הקבוצה</button><span class="crumb-sep">/</span><span style="color:#fff;">${esc(screenLabel)}</span></div>`
     : `<div class="screen-tag">${esc(screenLabel)}</div>`;
   html = screenTag + html;
   if (modal) html += renderModal(modal);
