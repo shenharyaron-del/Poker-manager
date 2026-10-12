@@ -2095,6 +2095,12 @@ let autoOpenedDirectPay = new Set();
 // screen (the render-time scanner above only ever catches the viewer's OWN seat, which
 // misses the admin-on-someone-else's-behalf case entirely). No-ops once everyone's done
 // or the night's already marked over - the settlement arrows/checkbox own that instead.
+// Net amount this player already moved to others tonight via recorded direct transfers
+// (paid out minus received) - a player who paid at an earlier cash-out and came back to
+// the table is only asked for what's still open on their next cash-out.
+function directPaidNet(g, playerId){
+  return (g.playerPayments||[]).reduce((s,pp) => s + (pp.fromPlayerId===playerId ? pp.amount : 0) - (pp.toPlayerId===playerId ? pp.amount : 0), 0);
+}
 function maybeOpenDirectPayAfterCashout(gameId, playerId, chips){
   const g = getGame(gameId);
   if (!g) return;
@@ -2106,8 +2112,8 @@ function maybeOpenDirectPayAfterCashout(gameId, playerId, chips){
   const allOut = seatedIds.length > 0 && seatedIds.every(sid => sid in g.cashouts);
   if (allOut || g.closed) return;
   const buyinTotal = g.buyins.filter(b=>b.playerId===playerId).reduce((s,b)=>s+b.amount,0);
-  const profit = chips - buyinTotal;
-  if (profit >= -0.005) return;
+  const profit = chips - buyinTotal + directPaidNet(g, playerId);
+  if (profit >= -0.5) return;
   autoOpenedDirectPay.add(`${gameId}:${playerId}`); // keep the render-time scanner from also firing for the same cash-out
   openModal({type:"directPay", gameId, fromPlayerId: playerId, amount: String(Math.round(Math.abs(profit)*100)/100)});
 }
@@ -3541,6 +3547,22 @@ function computeSettlementTransfers(game){
   return { remaining, alreadyPaid: directPayments };
 }
 
+// Direct-settlement list in settleTransactions' shape ({from, fromName, to, toName, amount})
+// that counts the player-to-player transfers already recorded tonight: each recorded one
+// comes back as paid (with its paymentId), and the rest is the min-transfer match on what
+// is still open after those (computeSettlementTransfers). Recomputing from final balances
+// alone dropped a transfer made mid-night (e.g. a player paid at cash-out, came back and
+// the numbers changed) - the money had moved but nothing accounted for it, and whoever
+// received it was never asked to pass it on.
+function settlementWithPayments(game){
+  const nameOf = id => (game.players.find(p=>p.id===id)||{}).name || "?";
+  const { remaining, alreadyPaid } = computeSettlementTransfers(game);
+  return [
+    ...alreadyPaid.map(dp => ({from: dp.fromPlayerId, fromName: nameOf(dp.fromPlayerId), to: dp.toPlayerId, toName: nameOf(dp.toPlayerId), amount: dp.amount, paid: true, paymentId: dp.id})),
+    ...remaining.map(t => ({from: t.from, fromName: nameOf(t.from), to: t.to, toName: nameOf(t.to), amount: t.amount, paid: false})),
+  ];
+}
+
 // Draws the settlement arrows into #settlement-overlay using each seat-circle's actual
 // measured position, not a percentage guess - the seat-wrap block centers itself (circle
 // + name/caption stacked below) on its left%/top% point, so the circle's own visual
@@ -4055,7 +4077,7 @@ function renderPlayerScreen(gameId){
   const totalCashedOutForSettlement = Object.values(g.cashouts).reduce((s,co)=>s+co.amount,0);
   const potBalancedForSettlement = Math.abs(totalBuyinsForSettlement - totalCashedOutForSettlement) <= 5;
   const mySettlementTxns = (cashedOut && allCashedOutForSettlement && potBalancedForSettlement)
-    ? settleTransactions(computeFinalBalances(g), g.players).filter(t => t.from === pid || t.to === pid)
+    ? settlementWithPayments(g).filter(t => !t.paid && (t.from === pid || t.to === pid))
     : [];
   // Cashed-out recap (buy-in / final chips / profit) plus a settlement-status line that
   // depends on the community's settlement mode and how far the night has progressed -
@@ -4101,7 +4123,10 @@ function renderPlayerScreen(gameId){
     let statusHtml = "";
     // Finished exactly even - nothing to pay or receive, so none of the "the profit will be
     // sent / split" lines below apply.
-    const brokeEven = Math.abs(profitForInfo) < 0.005;
+    // In direct mode, money already moved tonight counts too: someone who ended even but
+    // received a transfer from another player is holding money that still has to go on.
+    const stillOpenForInfo = profitForInfo + ((c.settlementDefault || "direct") === "direct" ? directPaidNet(g, pid) : 0);
+    const brokeEven = Math.abs(stillOpenForInfo) < 0.5 && !mySettlementTxns.length;
     if (brokeEven) {
       statusHtml = "";
     } else if (c.settlementDefault === 'paybox') {
@@ -4128,7 +4153,7 @@ function renderPlayerScreen(gameId){
       ` : `<div style="margin-top:10px;font-weight:700;color:#6ee7b7;">מקבל מ-${esc(t.fromName)} ${t.amount} שח</div>`).join("");
     } else if (g.closed) {
       statusHtml = `<div style="font-size:13px;color:var(--muted);margin-top:10px;">ממתין/ה שכולם יצאו מהשולחן</div>`;
-    } else if (profitForInfo >= -0.005) {
+    } else if (stillOpenForInfo >= -0.5) {
       statusHtml = `<div style="font-size:13px;color:var(--muted);margin-top:10px;">הרווח יישלח אליך בסוף הערב</div>`;
     }
     // Lost, mid-game, not closed: no inline status text - the "who do I pay" modal
@@ -4410,26 +4435,27 @@ function renderGameResultsScreen(gameId){
       topButtonHtml = `<button class="btn btn-primary btn-block" data-open-bit-generic style="margin-top:8px;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:6px;background:#0070E0;color:#fff;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;">פתיחת ביט קבוצתי</button>`;
     }
   } else {
-    const txns = settleTransactions(computeFinalBalances(synthGame), g.players);
+    const txns = settlementWithPayments({...synthGame, playerPayments, payboxPayments});
     const byPayer = {};
     txns.forEach(t => { (byPayer[t.from] = byPayer[t.from] || {name:t.fromName, items:[]}).items.push(t); });
     const payerCardsHtml = Object.keys(byPayer).map(fromId => {
       const payer = byPayer[fromId];
       const rowsHtml = payer.items.map(t => {
-        const existing = playerPayments.find(pp => pp.fromPlayerId === fromId && pp.toPlayerId === t.to);
+        const existing = t.paid ? {id: t.paymentId} : null;
         const paidStyle = existing ? 'text-decoration:line-through;opacity:.5;' : '';
         return `
           <div class="row-between" style="padding:6px 0;">
             <span style="${paidStyle}">${esc(t.toName)}</span>
             <div style="display:flex;align-items:center;gap:8px;">
               <span style="font-weight:700;color:var(--gold);${paidStyle}">₪${t.amount}</span>
+              ${existing ? '<span style="font-size:12px;font-weight:700;color:#6ee7b7;">עבר</span>' : ''}
               <input type="checkbox" data-result-player-payment-toggle data-from="${fromId}" data-to="${t.to}" data-amount="${t.amount}" data-payment-id="${existing?existing.id:''}" ${existing?'checked':''} style="width:18px;height:18px;accent-color:var(--gold);">
             </div>
           </div>`;
       }).join("");
       return `
         <div class="roster-row" style="flex-direction:column;align-items:stretch;">
-          <div style="font-weight:700;color:var(--text);margin-bottom:4px;">${esc(payer.name)} מעביר ל:</div>
+          <div style="font-weight:700;color:var(--text);margin-bottom:4px;">${esc(payer.name)} ${((c.roster||[]).find(rp => rp.id === fromId)||{}).gender === "female" ? "מעבירה" : "מעביר"} ל:</div>
           ${rowsHtml}
         </div>`;
     }).join("");
@@ -4607,10 +4633,10 @@ function renderAdminScreen(gameId){
   // settleTransactions/computeFinalBalances min-transfer calculation.
   let settlementHtml = "";
   if (allCashedOut && !potUnbalanced) {
-    const txns = settleTransactions(computeFinalBalances(g), g.players);
+    const txns = settlementWithPayments(g);
     settlementHtml = `
       <div class="section-title" style="padding:0;margin:16px 0 8px;">מי מעביר למי</div>
-      ${txns.length ? txns.map(t => `<div class="roster-row"><span>${esc(t.fromName)} ← ${esc(t.toName)}</span><span style="font-weight:700;color:var(--gold);">₪${t.amount}</span></div>`).join("") : `<div class="empty" style="padding:10px 0;font-size:13px;">אין תשלומים נדרשים</div>`}
+      ${txns.length ? txns.map(t => `<div class="roster-row"${t.paid?' style="opacity:.6;"':''}><span>${esc(t.fromName)} ← ${esc(t.toName)}</span><span style="font-weight:700;color:${t.paid?'var(--muted)':'var(--gold)'};">₪${t.amount}${t.paid?' ✓ עבר':''}</span></div>`).join("") : `<div class="empty" style="padding:10px 0;font-size:13px;">אין תשלומים נדרשים</div>`}
     `;
   }
 
@@ -6327,9 +6353,9 @@ function attachHandlers(){
       const seatedIds = (g.seats||[]).filter(Boolean);
       const allOut = seatedIds.length > 0 && seatedIds.every(sid => sid in g.cashouts);
       const myBuyinTotal = g.buyins.filter(b=>b.playerId===pid).reduce((s,b)=>s+b.amount,0);
-      const myProfit = (g.cashouts[pid].amount||0) - myBuyinTotal;
+      const myProfit = (g.cashouts[pid].amount||0) - myBuyinTotal + directPaidNet(g, pid);
       const key = `${g.id}:${pid}`;
-      if (!allOut && !g.closed && myProfit < -0.005 && !autoOpenedDirectPay.has(key)) {
+      if (!allOut && !g.closed && myProfit < -0.5 && !autoOpenedDirectPay.has(key)) {
         autoOpenedDirectPay.add(key);
         setTimeout(() => openModal({type:"directPay", gameId: g.id, fromPlayerId: pid, amount: String(Math.round(Math.abs(myProfit)*100)/100)}), 0);
       }
