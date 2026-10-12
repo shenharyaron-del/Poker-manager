@@ -5696,8 +5696,7 @@ function renderModal(m){
   } else if (m.type === "installViaChrome") {
     title = "התקנה דרך Chrome";
     body = `
-      <p style="margin-top:0;line-height:1.6;">ההתקנה עובדת דרך Chrome (מהדפדפן הזה אנדרואיד חוסם אותה).</p>
-      <p style="line-height:1.6;">בחלון שייפתח בחרו <b>Chrome</b>, ושם לחצו שוב <b>"📲 התקן אפליקציה"</b>. תישארו מחוברים - לא צריך להכניס אימייל שוב.</p>
+      <p style="margin-top:0;line-height:1.6;">בחרו <b>Chrome</b>, ושם לחצו שוב <b>"התקן אפליקציה"</b>.</p>
       <button class="btn btn-primary btn-block" data-confirm-install-chrome>המשך</button>
     `;
   } else if (m.type === "directPay") {
