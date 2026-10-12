@@ -4030,6 +4030,27 @@ function renderHome(){
   `;
 }
 
+// What a CLOSED game's card in the group screen should flag, if anything: still waiting
+// on players to leave (direct player-to-player settlement only - the transfers can't be
+// worked out until everyone's out), or everyone's out but the chips declared don't match
+// what was bought in (same ±₪5 tolerance and wording as the table screen's pot line).
+function closedGameAlert(g, c){
+  if (!g.closed) return null;
+  const cashouts = g.cashouts || {};
+  const stillSeated = (g.seats||[]).filter(pid => pid && !(pid in cashouts));
+  if (stillSeated.length) {
+    if ((c.settlementDefault || "direct") !== "direct") return null;
+    const names = stillSeated.map(pid => (g.players.find(p => p.id === pid) || {}).name || "?");
+    return { badge: "ממתין ליציאה", color: "#c2410c",
+      text: `הערב נסגר · עוד ${stillSeated.length} בשולחן${stillSeated.length <= 3 ? ": " + names.map(esc).join(", ") : ""}` };
+  }
+  const buyinTotal = g.buyinTotals ? g.buyinTotals.reduce((s,bt)=>s+bt.amount,0) : (g.buyins||[]).reduce((s,b)=>s+b.amount,0);
+  const chipsTotal = Object.values(cashouts).reduce((s,co)=>s+(co.amount||0),0);
+  const diff = chipsTotal - buyinTotal;
+  if (Math.abs(diff) <= 5) return null;
+  return { badge: "לא מאוזן", color: "#9f1239", text: `${diff > 0 ? "קופה בחוסר" : "קופה בעודף"} ₪${Math.round(Math.abs(diff))}` };
+}
+
 function renderCommunity(communityId){
   const c = getCommunity(communityId);
   if (!c) return `<div class="empty">קבוצה לא נמצאה</div>`;
@@ -4046,9 +4067,10 @@ function renderCommunity(communityId){
   const gamesHtml = newGameCard + games.map(g => {
     const seatedCount = (g.seats||[]).filter(Boolean).length;
     const waitingForPlayers = !g.closed && seatedCount < 2;
+    const gameAlert = closedGameAlert(g, c);
     return `
     <div class="card ${g.closed?"":"card-open"}" data-open-game="${g.id}">
-      <div class="row flex1"><span style="color:#6ee7b7">${icon('cal')}</span><div class="flex1"><div style="font-weight:600">${esc(g.name || g.date)}</div>${g.name ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${esc(g.date)}</div>` : ""}</div>${(g.closed || waitingForPlayers) ? "" : `<span class="open-badge">פעיל</span>`}</div>
+      <div class="row flex1"><span style="color:#6ee7b7">${icon('cal')}</span><div class="flex1"><div style="font-weight:600">${esc(g.name || g.date)}</div>${g.name ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${esc(g.date)}</div>` : ""}${gameAlert ? `<div style="font-size:11px;color:#fdba74;margin-top:2px;">${gameAlert.text}</div>` : ""}</div>${gameAlert ? `<span class="open-badge" style="background:${gameAlert.color};color:#fff;">${gameAlert.badge}</span>` : ((g.closed || waitingForPlayers) ? "" : `<span class="open-badge">פעיל</span>`)}</div>
       ${g.closed ? "" : (waitingForPlayers
         ? `<button class="btn btn-primary" data-invite-game="${g.id}" style="padding:8px 12px;font-size:13px;white-space:nowrap;display:flex;align-items:center;gap:6px;">${icon('share')} הזמנת שחקנים</button>`
         : `<button class="icon-btn gold" data-invite-game="${g.id}" title="הזמן שחקן לשולחן">${icon('share')}</button>`)}
