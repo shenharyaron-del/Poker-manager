@@ -4420,12 +4420,12 @@ function renderPlayerScreen(gameId){
   // first one is still in flight.
   const buyinPending = !!(pendingBuyinRequest && pendingBuyinRequest.gameId === g.id && !pendingBuyinRequest.cancelled);
   const buyinButtonsHtml = playerScreenCustomOpen ? `
-    <div class="buyin-frame" style="display:flex;gap:8px;margin-bottom:14px;flex-shrink:0;">
+    <div style="display:flex;gap:8px;">
       <input type="number" inputmode="decimal" id="player-screen-custom-amount" placeholder="סכום" autofocus ${buyinPending?'disabled':''} style="flex:1;padding:14px 8px;font-size:18px;text-align:center;border-radius:9px;border:1px solid var(--gold);background:var(--input);color:var(--text);">
       <button class="chip-btn" data-player-buyin-custom-confirm ${buyinPending?'disabled':''} style="flex:0 0 auto;padding:14px 18px;font-size:16px;font-weight:700;">${icon('coinsPlus')}</button>
     </div>
   ` : `
-    <div class="buyin-frame" style="display:flex;gap:8px;margin-bottom:14px;flex-shrink:0;">
+    <div style="display:flex;gap:8px;">
       ${getBuyinAmounts(c).map(v=>`<button class="chip-btn" data-player-instant-buyin="${v}" ${buyinPending?'disabled':''} style="flex:1;padding:14px 2px;font-size:18px;">₪${v}</button>`).join("")}
       <button class="chip-btn" data-player-buyin-other ${buyinPending?'disabled':''} style="flex:1;padding:14px 2px;font-size:18px;">אחר</button>
     </div>
@@ -4457,8 +4457,7 @@ function renderPlayerScreen(gameId){
         })()}
         ${cashedOutInfoHtml}
       </div>
-      ${cashedOut ? "" : `<div class="section-title" style="padding:0;margin:0 0 6px;flex-shrink:0;">ריביי</div>`}
-      ${cashedOut ? "" : buyinButtonsHtml}
+      ${cashedOut ? "" : `<fieldset class="leave-frame" style="margin-bottom:14px;"><legend>ריביי</legend>${buyinButtonsHtml}</fieldset>`}
       ${cashedOut ? "" : `
       <div class="player-history-feed mode-${playerHistoryTab}">
         <div class="player-history-feed-tabs">
