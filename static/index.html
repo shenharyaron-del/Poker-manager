@@ -4815,9 +4815,16 @@ function renderModal(m){
       <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">${authSettings.requireVerifyExistingEmail
         ? "כדי להשתמש באפליקציה, התחברו עם האימייל שלכם - משתמשים חדשים ייכנסו ישר, ולחשבון קיים נשלח קוד בן 6 ספרות."
         : "כדי להשתמש באפליקציה, התחברו עם האימייל שלכם."}</p>
-      <input type="email" id="login-email-input" placeholder="האימייל שלך" dir="ltr" autocomplete="email" style="width:100%;text-align:center;margin-bottom:8px;" value="${esc(m.loginEmail || (() => { try { return localStorage.getItem("poker-last-email") || ""; } catch(e) { return ""; } })())}" autofocus>
-      ${m.loginError ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.loginError)}</p>` : ""}
-      <button class="btn btn-primary btn-block" data-send-login-code>${authSettings.requireVerifyExistingEmail ? `${icon('share')} שלח קוד כניסה` : "כנס ל-Poker Manager"}</button>
+      <!-- A real <form> with name="email" + autocomplete="email" is what makes phone
+           browsers (Chrome/Samsung Internet on Android, Safari on iOS) offer the device's
+           saved email in the keyboard bar - a bare input outside a form often gets only
+           the generic password-manager chip. The form never actually submits anywhere:
+           Enter / the button run the same click handler as before. -->
+      <form data-login-form action="#" autocomplete="on" onsubmit="return false;">
+        <input type="email" id="login-email-input" name="email" placeholder="האימייל שלך" dir="ltr" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" style="width:100%;text-align:center;margin-bottom:8px;" value="${esc(m.loginEmail || (() => { try { return localStorage.getItem("poker-last-email") || ""; } catch(e) { return ""; } })())}" autofocus>
+        ${m.loginError ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.loginError)}</p>` : ""}
+        <button type="submit" class="btn btn-primary btn-block" data-send-login-code>${authSettings.requireVerifyExistingEmail ? `${icon('share')} שלח קוד כניסה` : "כנס ל-Poker Manager"}</button>
+      </form>
     `;
   } else if (m.type === "identityName") {
     // Same screen whether this is the mandatory post-login step or an editor-opened
