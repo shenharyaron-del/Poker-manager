@@ -60,6 +60,7 @@ body{
 .screen-tag .crumb-link{background:none;border:none;padding:8px 2px;margin:-8px -2px;font:inherit;letter-spacing:inherit;color:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer;}
 .screen-tag .crumb-sep{margin:0 6px;opacity:.7;}
 .screen-tag{position:relative;}
+@media (max-width:369px){.install-chip .chip-long{display:none;}}
 .install-chip{position:absolute;left:14px;top:9px;background:rgba(212,175,55,.14);border:1px solid rgba(212,175,55,.55);color:var(--gold);font:inherit;font-size:10px;line-height:1.3;letter-spacing:0;padding:1px 8px;border-radius:12px;cursor:pointer;opacity:1;}
 .eyebrow{color:var(--gold);font-size:11px;font-weight:700;letter-spacing:.2em;margin-bottom:4px;}
 h1{font-size:28px;margin:0;font-weight:700;}
@@ -3104,7 +3105,7 @@ function installMode(){
   return null;
 }
 function installChipHtml(){
-  return installMode() ? `<button type="button" class="install-chip" data-install-app>📲 התקן</button>` : "";
+  return installMode() ? `<button type="button" class="install-chip" data-install-app>📲 התקן<span class="chip-long"> אפליקציה</span></button>` : "";
 }
 async function startInstall(){
   const mode = installMode();
