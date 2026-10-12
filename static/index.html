@@ -4883,9 +4883,13 @@ function renderModal(m){
     // service - no separate heading-per-category grouping, just the category in parens
     // next to the name it belongs to. copyValue is optional - omitting it (the password
     // row below) renders the row with no copy button at all.
+    // Fixed label width (sized for the longest one, "סיסמה (רמז):") so every row's VALUE
+    // starts at the same spot regardless of which labels happen to be present - without
+    // it, a row with "משתמש:" (shorter) left its value sitting further right than one
+    // under "סיסמה (רמז):" (longer), reading as misaligned between adjacent rows.
     const thirdPartyField = (label, valueHtml, hasValue, copyValue) => !hasValue ? "" : `
       <div class="row" style="gap:6px;align-items:center;">
-        <span style="color:var(--muted);font-size:12px;flex-shrink:0;">${label}:</span>
+        <span style="color:var(--muted);font-size:12px;flex-shrink:0;width:68px;">${label}:</span>
         ${valueHtml}
         ${copyValue ? `<button class="icon-btn" data-copy-value="${esc(copyValue)}" title="העתק">${icon('copy')}</button>` : ""}
       </div>`;
