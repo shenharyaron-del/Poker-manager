@@ -3130,7 +3130,18 @@ async function startInstall(){
   } else if (mode === "samsung") {
     openModal({type: "installViaChrome"});
   } else if (mode === "ios") {
-    showAlert("להתקנה על כל המסך: לחצו על כפתור השיתוף ⬆️ בתחתית Safari, ובחרו \"הוסף למסך הבית\".");
+    // iPhone has no install API - only instructions, which depend on where the page is open.
+    // A WhatsApp invite usually opens in WhatsApp's in-app Safari view, which has no "Add to
+    // Home Screen" and can't be told apart from real Safari - so the default message covers
+    // both; apps that do mark their in-app browser get a direct "open in Safari" message.
+    const ua = navigator.userAgent || "";
+    if (/FBAN|FBAV|Instagram|WhatsApp|Line\//i.test(ua)) {
+      showAlert("כדי להתקין, פתחו את הקישור ב-Safari (בתפריט ⋯ ← \"פתח ב-Safari\"), ושם לחצו שוב \"התקן אפליקציה\".");
+    } else if (/CriOS/i.test(ua)) {
+      showAlert("להתקנה על כל המסך: לחצו על כפתור השיתוף ⬆️ ליד שורת הכתובת, ובחרו \"הוסף למסך הבית\".");
+    } else {
+      showAlert("להתקנה על כל המסך: לחצו על כפתור השיתוף ⬆️ ובחרו \"הוסף למסך הבית\". נכנסתם מקישור בוואטסאפ? לחצו קודם על סמל ה-Safari 🧭 בפינת המסך, ושם לחצו שוב \"התקן אפליקציה\".");
+    }
   }
 }
 
