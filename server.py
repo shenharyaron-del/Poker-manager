@@ -167,6 +167,22 @@ _INIT_STATEMENTS = (
     ")",
     "CREATE INDEX IF NOT EXISTS bit_links_community_id_idx ON bit_links(community_id)",
     "ALTER TABLE communities ADD COLUMN IF NOT EXISTS active_bit_link_id TEXT",
+    # Super Admin's own cheat-sheet of the 3rd-party services this app depends on (hosting,
+    # DB, email, the Claude API, source control) - not app data at all, so it's gated by
+    # _require_super_admin on every endpoint rather than living under any community/game.
+    # sort_order is set once at insert time (row count at that moment) and never
+    # resequenced - stable manual ordering without an extra reorder endpoint.
+    "CREATE TABLE IF NOT EXISTS third_party_services ("
+    "  id TEXT PRIMARY KEY,"
+    "  name TEXT NOT NULL,"
+    "  url TEXT,"
+    "  username TEXT,"
+    "  password TEXT,"
+    "  sort_order INTEGER NOT NULL DEFAULT 0"
+    ")",
+    # Groups services under a heading (e.g. "Database" above Supabase) - NULL for one with
+    # no category yet, listed ungrouped rather than under a synthetic "other" bucket.
+    "ALTER TABLE third_party_services ADD COLUMN IF NOT EXISTS category TEXT",
 )
 
 
@@ -2300,6 +2316,86 @@ def delete_account():
         with conn.cursor() as cur:
             cur.execute("DELETE FROM accounts WHERE email = %s", (target_email,))
             cur.execute("DELETE FROM trusted_devices WHERE email = %s", (target_email,))
+        conn.commit()
+    return jsonify({"ok": True})
+
+
+def _third_party_service_row(row):
+    return {"id": row[0], "name": row[1], "url": row[2], "username": row[3], "password": row[4], "category": row[5]}
+
+
+@app.route("/api/admin/third-party-services")
+def list_third_party_services():
+    ok, err = _require_super_admin(request.args.get("clientId", ""))
+    if not ok:
+        return err
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            # NULLS LAST - an uncategorized service lists after every grouped one, rather
+            # than sorting (NULL-first, Postgres's own default) ahead of all of them.
+            cur.execute("SELECT id, name, url, username, password, category FROM third_party_services ORDER BY category NULLS LAST, sort_order, name")
+            rows = cur.fetchall()
+        conn.commit()
+    return jsonify([_third_party_service_row(r) for r in rows])
+
+
+@app.route("/api/admin/third-party-services", methods=["POST"])
+def create_third_party_service():
+    ok, err = _require_super_admin(request.args.get("clientId", ""))
+    if not ok:
+        return err
+    body = request.get_json(silent=True) or {}
+    name = str(body.get("name", "")).strip()
+    if not name:
+        return jsonify({"error": "missing name"}), 400
+    new_id = secrets.token_hex(4)
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COALESCE(MAX(sort_order), -1) + 1 FROM third_party_services")
+            next_order = cur.fetchone()[0]
+            cur.execute(
+                "INSERT INTO third_party_services (id, name, url, username, password, category, sort_order) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                (new_id, name, body.get("url"), body.get("username"), body.get("password"), body.get("category"), next_order),
+            )
+            cur.execute("SELECT id, name, url, username, password, category FROM third_party_services WHERE id = %s", (new_id,))
+            row = cur.fetchone()
+        conn.commit()
+    return jsonify(_third_party_service_row(row))
+
+
+@app.route("/api/admin/third-party-services/<service_id>", methods=["PUT"])
+def update_third_party_service(service_id):
+    ok, err = _require_super_admin(request.args.get("clientId", ""))
+    if not ok:
+        return err
+    body = request.get_json(silent=True) or {}
+    sets, params = [], []
+    for key, col in (("name", "name"), ("url", "url"), ("username", "username"), ("password", "password"), ("category", "category")):
+        if key in body:
+            sets.append(f"{col} = %s")
+            params.append(body[key])
+    if not sets:
+        return jsonify({"error": "nothing to update"}), 400
+    params.append(service_id)
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"UPDATE third_party_services SET {', '.join(sets)} WHERE id = %s", params)
+            updated = cur.rowcount
+        conn.commit()
+    if not updated:
+        return jsonify({"error": "not found"}), 404
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/third-party-services/<service_id>", methods=["DELETE"])
+def delete_third_party_service(service_id):
+    ok, err = _require_super_admin(request.args.get("clientId", ""))
+    if not ok:
+        return err
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM third_party_services WHERE id = %s", (service_id,))
         conn.commit()
     return jsonify({"ok": True})
 
