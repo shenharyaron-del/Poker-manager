@@ -3808,7 +3808,18 @@ function render(){
     seated = isSeatedInGame(g);
     if (seated) {
       const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
-      if (myPlayerId && !hasWelcomedGame(g.id)) { welcomeGameId = g.id; welcomePlayerId = myPlayerId; }
+      if (myPlayerId && !hasWelcomedGame(g.id)) {
+        // The "welcome" flag is per browser, so opening an ongoing game somewhere new
+        // (e.g. after moving from Samsung Internet to Chrome to install the app) showed
+        // the just-joined greeting to someone who'd been playing for hours. Only greet a
+        // player who really just sat down: a single buy-in, made in the last 10 minutes,
+        // not cashed out.
+        const myBuyins = (g.buyins||[]).filter(b => b.playerId === myPlayerId);
+        const justJoined = myBuyins.length <= 1 && !(myPlayerId in (g.cashouts||{})) &&
+          !(myBuyins[0] && myBuyins[0].ts && Date.now() - myBuyins[0].ts > 10*60*1000);
+        if (justJoined) { welcomeGameId = g.id; welcomePlayerId = myPlayerId; }
+        else markGameWelcomed(g.id);
+      }
       const pageOrder = swipePageOrder(g, c);
       // Losing admin rights (or just never having had them) between renders shouldn't
       // strand tableSubView on a page that no longer exists in the carousel - falls back
