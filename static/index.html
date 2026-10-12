@@ -9115,30 +9115,74 @@ function attachHandlers(){
 // app stayed open (or asked again). A guard pushed at load is skipped by Chrome anyway (see
 // above), so there's no load-time push: before the very first tap, back leaves directly.
 let backGuardDepth = 0;
-let backExitPromptOpen = false;
 let backGuardSuppressedUntil = 0;
 function pushBackGuard(){
-  if (backGuardDepth > 0 || backExitPromptOpen || Date.now() < backGuardSuppressedUntil) return;
+  if (backGuardDepth > 0 || Date.now() < backGuardSuppressedUntil) return;
   history.pushState({pokerManagerGuard: true}, "");
   backGuardDepth = 1;
 }
 document.addEventListener("pointerdown", pushBackGuard, true);
 document.addEventListener("keydown", pushBackGuard, true);
+// Back works like an app's back, one level up per press (the guard is re-pushed after each
+// in-app step - fine without a fresh tap, since only a page that has NEVER been interacted
+// with gets its history entries skipped by Chrome):
+//   an open confirm dialog            -> cancel it
+//   end-of-evening window (seatChips) -> close it, back to the game
+//   group setup windows               -> close (asks to save if edited) and go to the groups list
+//   any other closable window         -> close it
+//   a game (table/player/admin)       -> its group
+//   a group                           -> the groups list
+//   the groups list                   -> "press back again to exit"; a 2nd press within
+//                                        2.5s leaves (the guard isn't re-pushed meanwhile)
+// Windows that can't be dismissed (login, the forced name step, the game welcome screen)
+// just stay put.
+let lastHomeBackAt = 0;
+const BACK_EXIT_WINDOW_MS = 2500;
 window.addEventListener("popstate", async () => {
-  if (Date.now() < backGuardSuppressedUntil) return; // our own history.back() below, on the way out
-  backGuardDepth = 0; // the back press just consumed our guard - we're on the app's base entry
-  backExitPromptOpen = true;
-  const leave = await showConfirm("לצאת מהאפליקציה?");
-  backExitPromptOpen = false;
-  if (!leave) { pushBackGuard(); return; } // the "ביטול" tap is a fresh gesture, so this push counts
-  // Leave: with no guard left, going back once more leaves the app in a browser tab. An
-  // installed app (home-screen icon) can't close itself from script, and neither can a tab
-  // that has nothing before the app - in that case the very next back press exits, since
-  // nothing re-arms the guard for a few seconds.
-  backGuardSuppressedUntil = Date.now() + 4000;
-  try { window.close(); } catch(e) { /* not allowed for this window - fine */ }
-  history.back();
-  setTimeout(() => { if (!document.hidden) showAlert("לחצו שוב על 'חזור' כדי לצאת"); }, 700);
+  if (Date.now() < backGuardSuppressedUntil) return;
+  backGuardDepth = 0; // the back press just consumed our guard
+  const stayAndRearm = () => { pushBackGuard(); };
+  const openConfirm = document.querySelector(".custom-confirm [data-confirm-cancel]");
+  if (openConfirm) { openConfirm.click(); stayAndRearm(); return; }
+  if (modal) {
+    const t = modal.type;
+    const dismissable = t !== "loginRequired" && !(t === "identityName" && modal.forced) && t !== "directPay";
+    if (!dismissable) { stayAndRearm(); return; }
+    if (t === "chipSetup" || t === "payboxSettings" || t === "buyinSetup") {
+      await tryCloseSetupModal();
+      if (!modal && nav.screen !== "home") go("home");
+      stayAndRearm();
+      return;
+    }
+    closeModal();
+    stayAndRearm();
+    return;
+  }
+  if (shouldShowGameWelcome()) { stayAndRearm(); return; }
+  if (nav.screen === "table") {
+    const g = nav.gameId && getGame(nav.gameId);
+    const communityId = nav.communityId || (g && g.communityId);
+    if (communityId && getCommunity(communityId)) go("community", {communityId});
+    else go("home");
+    stayAndRearm();
+    return;
+  }
+  if (nav.screen !== "home") { go("home"); stayAndRearm(); return; }
+  // Groups list: double press to exit.
+  const now = Date.now();
+  if (now - lastHomeBackAt < BACK_EXIT_WINDOW_MS) {
+    // 2nd press inside the window - normally the browser already left on it (no guard was
+    // in place); this branch only runs if some tap re-armed the guard in between.
+    backGuardSuppressedUntil = now + 4000;
+    try { window.close(); } catch(e) { /* not allowed for this window - fine */ }
+    history.back();
+    return;
+  }
+  lastHomeBackAt = now;
+  showAlert("לחצו שוב על 'חזור' כדי לצאת");
+  // No guard for the next 2.5s, so a 2nd back press leaves the app; then re-arm.
+  backGuardSuppressedUntil = now + BACK_EXIT_WINDOW_MS;
+  setTimeout(() => { if (!document.hidden) pushBackGuard(); }, BACK_EXIT_WINDOW_MS + 50);
 });
 
 (async function init(){
