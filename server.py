@@ -436,10 +436,31 @@ def version():
     return jsonify({"version": APP_VERSION, "relationalApiEnabled": RELATIONAL_API_DEFAULT})
 
 
+# In relational mode communities/games live in their own tables and are served per caller
+# by /api/v2 (see _visible_community_ids) - the legacy blob still carries an old copy of
+# every one of them, so serving it as-is would hand every group to anyone. Strip them.
+_stripped_state_cache = (None, None)
+
+
+def _public_state(data, state_hash):
+    global _stripped_state_cache
+    if not RELATIONAL_API_DEFAULT:
+        return data
+    cached_hash, cached = _stripped_state_cache
+    if cached_hash == state_hash:
+        return cached
+    parsed = _json_or_empty(data)
+    parsed["communities"] = []
+    parsed["games"] = []
+    stripped = json.dumps(parsed)
+    _stripped_state_cache = (state_hash, stripped)
+    return stripped
+
+
 @app.route("/api/state", methods=["GET"])
 def get_state():
-    data, _ = _get_cached_state()
-    return data, 200, {"Content-Type": "application/json"}
+    data, state_hash = _get_cached_state()
+    return _public_state(data, state_hash), 200, {"Content-Type": "application/json"}
 
 
 @app.route("/api/state/hash")
@@ -579,6 +600,109 @@ def _row_to_community(row):
     }
 
 
+# ---------- Who is calling, and which communities may they see ----------
+# Every /api/v2 request carries the device's own id (X-Client-Id, the same id the login
+# flow registers in trusted_devices). From it we derive every id this person is known by:
+# the device id itself, the account's canonical playerId (once logged in), and the roster
+# entries they've claimed (myPlayers, from the account and from this device's identity).
+# A community is visible to its creator, to anyone on its roster linked to one of those
+# ids, and to a super admin. An invite link (X-Invite-Game / X-Invite-Community, taken
+# from the page URL) additionally exposes just that one community, so a brand-new player
+# can open it and join.
+def _json_or_empty(text):
+    try:
+        value = json.loads(text) if text else {}
+        return value if isinstance(value, dict) else {}
+    except ValueError:
+        return {}
+
+
+# Identity lookups cached briefly per device id - every refresh tick fires several /api/v2
+# GETs from the same phone, and the identity behind them doesn't change second to second.
+_caller_cache = {}
+_caller_cache_lock = threading.Lock()
+_CALLER_CACHE_SECONDS = 10
+
+
+def _caller():
+    client_id = request.headers.get("X-Client-Id", "").strip()[:128]
+    invite = {
+        "invite_game": request.headers.get("X-Invite-Game", "").strip()[:64],
+        "invite_community": request.headers.get("X-Invite-Community", "").strip()[:64],
+    }
+    now = time.time()
+    with _caller_cache_lock:
+        hit = _caller_cache.get(client_id)
+    if hit and now - hit[0] < _CALLER_CACHE_SECONDS:
+        return {**hit[1], **invite}
+    ident = _load_caller_identity(client_id)
+    with _caller_cache_lock:
+        if len(_caller_cache) > 5000:
+            _caller_cache.clear()
+        _caller_cache[client_id] = (now, ident)
+    return {**ident, **invite}
+
+
+def _load_caller_identity(client_id):
+    ids, roster_ids, is_super = set(), set(), False
+    if client_id:
+        ids.add(client_id)
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT email FROM trusted_devices WHERE client_id = %s", (client_id,))
+                row = cur.fetchone()
+                account = {}
+                if row:
+                    cur.execute("SELECT data FROM accounts WHERE email = %s", (row[0],))
+                    arow = cur.fetchone()
+                    account = _json_or_empty(arow[0]) if arow else {}
+                    if row[0] == SUPER_ADMIN_EMAIL and SUPER_ADMIN_EMAIL:
+                        is_super = True
+                cur.execute("SELECT data FROM identities WHERE client_id = %s", (client_id,))
+                irow = cur.fetchone()
+                identity = _json_or_empty(irow[0]) if irow else {}
+            conn.commit()
+        if account.get("role") == "superAdmin":
+            is_super = True
+        for src in (account, identity):
+            if isinstance(src.get("playerId"), str):
+                ids.add(src["playerId"])
+            if src is identity and isinstance(src.get("id"), str):
+                ids.add(src["id"])
+            my_players = src.get("myPlayers")
+            if isinstance(my_players, dict):
+                roster_ids.update(v for v in my_players.values() if isinstance(v, str))
+    return {"client_id": client_id, "ids": list(ids), "roster_ids": list(roster_ids), "is_super": is_super}
+
+
+def _visible_community_ids(cur, caller):
+    """Set of community ids this caller may see, or None meaning "all" (super admin)."""
+    if caller["is_super"]:
+        return None
+    visible = set()
+    if caller["ids"] or caller["roster_ids"]:
+        cur.execute(
+            "SELECT c.id FROM communities c WHERE c.created_by = ANY(%s) OR EXISTS ("
+            "  SELECT 1 FROM roster_players r WHERE r.community_id = c.id "
+            "  AND (r.client_id = ANY(%s) OR r.id = ANY(%s)))",
+            (caller["ids"], caller["ids"], caller["roster_ids"]),
+        )
+        visible.update(r[0] for r in cur.fetchall())
+    if caller["invite_game"]:
+        cur.execute("SELECT community_id FROM games WHERE id = %s", (caller["invite_game"],))
+        row = cur.fetchone()
+        if row:
+            visible.add(row[0])
+    if caller["invite_community"]:
+        visible.add(caller["invite_community"])
+    return visible
+
+
+def _can_see_community(cur, caller, community_id):
+    visible = _visible_community_ids(cur, caller)
+    return visible is None or community_id in visible
+
+
 @app.route("/api/v2/communities", methods=["GET"])
 def v2_list_communities():
     # Batches chip_values/paybox_links/roster_players across EVERY community into one query
@@ -588,14 +712,18 @@ def v2_list_communities():
     # with a couple of communities, but each round trip pays the full network latency to the
     # DB, so this was the main reason a normal page load/refresh took several seconds
     # (measured live: ~10 sequential round trips for just 3 communities).
+    caller = _caller()
     with get_db() as conn:
         with conn.cursor() as cur:
+            visible = _visible_community_ids(cur, caller)
             cur.execute(
                 "SELECT id, name, created_by, created_by_name, chip_ratio, active_paybox_link_id, "
                 "settlement_default, updated_at, last_participants, buyin_amounts, active_bit_link_id "
                 "FROM communities ORDER BY name"
             )
             communities = [_row_to_community(r) for r in cur.fetchall()]
+            if visible is not None:
+                communities = [c for c in communities if c["id"] in visible]
             ids = [c["id"] for c in communities]
             for c in communities:
                 c["chipValues"] = []
@@ -647,14 +775,19 @@ def v2_list_communities():
 def v2_list_all_game_summaries():
     # Every game's summary row in ONE query - the periodic refresh used to call the
     # per-community endpoint below once per community, every 6 seconds, on every phone
-    # (N+1 requests per tick). Same row shape as that endpoint.
+    # (N+1 requests per tick). Same row shape as that endpoint. Only games of communities
+    # this caller may see (see _visible_community_ids).
+    caller = _caller()
     with get_db() as conn:
         with conn.cursor() as cur:
+            visible = _visible_community_ids(cur, caller)
             cur.execute(
                 "SELECT id, community_id, name, date, created_by_name, closed, updated_at "
                 "FROM games ORDER BY date DESC"
             )
             games = [_row_to_game_summary(r) for r in cur.fetchall()]
+            if visible is not None:
+                games = [g for g in games if g["communityId"] in visible]
         conn.commit()
     return jsonify(games)
 
@@ -663,8 +796,11 @@ def v2_list_all_game_summaries():
 def v2_list_games(community_id):
     # Summaries only (no buyins/cashouts) - matches the games-list view, which never
     # needs a game's full detail, only enough to render one row per game.
+    caller = _caller()
     with get_db() as conn:
         with conn.cursor() as cur:
+            if not _can_see_community(cur, caller, community_id):
+                return jsonify({"error": "not found"}), 404
             cur.execute(
                 "SELECT id, community_id, name, date, created_by_name, closed, updated_at "
                 "FROM games WHERE community_id = %s ORDER BY date DESC",
@@ -677,6 +813,7 @@ def v2_list_games(community_id):
 
 @app.route("/api/v2/games/<game_id>", methods=["GET"])
 def v2_get_game(game_id):
+    caller = _caller()
     # 7 separate queries (one per child table) - loadStateV2() client-side calls this for
     # EVERY game on EVERY refresh tick by default, which doesn't scale (reported live as
     # general sluggishness + the connection pool contention already found for avatar
@@ -696,6 +833,8 @@ def v2_get_game(game_id):
             if not row:
                 return jsonify({"error": "not found"}), 404
             gid, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at = row
+            if not _can_see_community(cur, caller, community_id):
+                return jsonify({"error": "not found"}), 404
 
             cur.execute("SELECT player_id, name FROM game_players WHERE game_id = %s", (gid,))
             players = [{"id": r[0], "name": r[1]} for r in cur.fetchall()]
@@ -764,6 +903,7 @@ def v2_get_game(game_id):
 
 @app.route("/api/v2/games/<game_id>/summary", methods=["GET"])
 def v2_get_game_summary(game_id):
+    caller = _caller()
     # Cheap counterpart to v2_get_game above, for a closed-and-settled game (see the
     # client's shouldShowGameResults) - a results screen only ever needs each player's
     # TOTAL buy-in (not every individual buy-in row with its own timestamp - the detailed
@@ -783,6 +923,8 @@ def v2_get_game_summary(game_id):
             if not row:
                 return jsonify({"error": "not found"}), 404
             gid, community_id, name, date, created_by_name, closed, updated_at = row
+            if not _can_see_community(cur, caller, community_id):
+                return jsonify({"error": "not found"}), 404
 
             cur.execute("SELECT player_id, name FROM game_players WHERE game_id = %s", (gid,))
             players = [{"id": r[0], "name": r[1]} for r in cur.fetchall()]
@@ -981,9 +1123,18 @@ def v2_update_community(community_id):
 def v2_delete_community(community_id):
     # ON DELETE CASCADE on every community_id/game_id FK takes care of chip_values,
     # paybox_links, roster_players, games and everything under those games in one
-    # statement - see schema.sql.
+    # statement - see schema.sql. Only the community's creator or a super admin may do
+    # this - checked here, not just by hiding the button, since the request itself is
+    # what deletes everything.
+    caller = _caller()
     with get_db() as conn:
         with conn.cursor() as cur:
+            cur.execute("SELECT created_by FROM communities WHERE id = %s FOR UPDATE", (community_id,))
+            row = cur.fetchone()
+            if not row:
+                return jsonify({"error": "not found"}), 404
+            if not caller["is_super"] and row[0] not in caller["ids"]:
+                return jsonify({"error": "only the community creator or a super admin can delete it"}), 403
             cur.execute("DELETE FROM communities WHERE id = %s", (community_id,))
             deleted = cur.rowcount
         conn.commit()

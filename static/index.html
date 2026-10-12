@@ -1166,9 +1166,16 @@ async function v2Fetch(method, path, body){
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), V2_FETCH_TIMEOUT_MS);
   try {
+    // Who's asking (see _caller in server.py): the server only returns communities this
+    // device's person belongs to, plus the one an invite link in the URL points at.
+    const headers = {"X-Client-Id": getClientId()};
+    const urlParams = new URLSearchParams(location.search);
+    if (urlParams.get("game")) headers["X-Invite-Game"] = urlParams.get("game");
+    if (urlParams.get("community")) headers["X-Invite-Community"] = urlParams.get("community");
+    if (body !== undefined) headers["Content-Type"] = "application/json";
     const res = await fetch(`/api/v2${path}`, {
       method,
-      headers: body !== undefined ? {"Content-Type": "application/json"} : undefined,
+      headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
       signal: controller.signal,
     });
@@ -3879,7 +3886,7 @@ function renderHome(){
         <div class="name serif" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c.name)}</div>
         <div class="meta" style="display:flex;align-items:center;gap:4px;min-width:0;"><span style="flex-shrink:0;line-height:0;">${icon('users')}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">נוצרה ע"י ${esc(c.createdByName || "לא ידוע")}</span></div>
       </div>
-      ${(isSuperAdmin() || (c.createdByName && myIdentity.name && c.createdByName === myIdentity.name)) ? `<button class="icon-btn" data-delete-community="${c.id}" style="flex-shrink:0;align-items:center;gap:3px;font-size:11px;font-weight:700;padding:6px 7px;background:rgba(240,168,168,.08);color:#f0b4b4;border:1px solid rgba(240,168,168,.35);">${icon('trash')}מחיקה</button>` : ""}
+      ${(isSuperAdmin() || (c.createdBy && c.createdBy === myIdentity.id)) ? `<button class="icon-btn" data-delete-community="${c.id}" style="flex-shrink:0;align-items:center;gap:3px;font-size:11px;font-weight:700;padding:6px 7px;background:rgba(240,168,168,.08);color:#f0b4b4;border:1px solid rgba(240,168,168,.35);">${icon('trash')}מחיקה</button>` : ""}
       ${(isSuperAdmin() || (c.createdByName && myIdentity.name && c.createdByName === myIdentity.name)) ? `<button class="icon-btn" data-open-chip-setup="${c.id}" title="הגדרות קבוצה" style="flex-shrink:0;align-items:center;gap:3px;font-size:11px;font-weight:700;padding:6px 7px;">${icon('gear')}Setup</button>` : ""}
       <div class="chev">${icon('chev')}</div>
     </div>`).join("");
@@ -8087,7 +8094,10 @@ function attachHandlers(){
     if (confirmBtn) confirmBtn.onclick = async () => {
       if (USE_RELATIONAL_API) {
         try { await v2DeleteCommunity(modal.communityId); }
-        catch(e) { showAlert("מחיקה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+        catch(e) {
+          showAlert(e && e.status === 403 ? "רק מי שיצר את הקבוצה או Super Admin יכולים למחוק אותה." : "מחיקה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב.");
+          return;
+        }
       } else {
         state.games = state.games.filter(g => g.communityId !== modal.communityId);
         state.communities = state.communities.filter(c => c.id !== modal.communityId);
