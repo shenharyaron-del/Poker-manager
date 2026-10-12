@@ -4891,7 +4891,10 @@ function renderModal(m){
       </div>`;
     const thirdPartyRow = (s) => `
       <div class="roster-row" style="flex-direction:column;align-items:stretch;gap:6px;padding:12px;">
-        <span style="font-weight:700;color:var(--gold);">${esc(s.name)}${s.category ? ` (${esc(s.category)})` : ""}</span>
+        <div class="row" style="justify-content:space-between;align-items:center;">
+          <span style="font-weight:700;color:var(--gold);">${esc(s.name)}${s.category ? ` (${esc(s.category)})` : ""}</span>
+          <button class="icon-btn" data-edit-credentials="${s.id}" title="עריכת שם משתמש/סיסמה">${icon('pencil')}</button>
+        </div>
         ${thirdPartyField("URL", `<a href="${esc(s.url||'')}" target="_blank" rel="noopener" dir="ltr" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gold);font-size:12px;">${esc(s.url||'')}</a>`, s.url)}
         ${thirdPartyField("משתמש", `<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;" dir="ltr">${esc(s.username||'')}</span>`, s.username)}
         ${thirdPartyField("סיסמה", `<span style="flex:1;min-width:0;font-size:12px;" dir="ltr">${esc(maskPassword(s.password))}</span>`, s.password)}
@@ -4981,6 +4984,16 @@ function renderModal(m){
         ` : `<p style="color:var(--muted);font-size:13px;">${(m.accounts||[]).length ? "אין משתמשים בסינון הזה." : "עדיין אין משתמשים שהתחברו."}</p>`}
       `;
     }
+  } else if (m.type === "thirdPartyCredentialsEdit") {
+    // Deliberately only these two fields - name/category/url come from the read-only
+    // list (see adminSettings' own comment on why that stays closed) and aren't editable
+    // here even though this modal is reached from one of its rows.
+    title = esc(m.name || "עריכת פרטי התחברות");
+    body = `
+      <div class="field"><label>שם משתמש</label><input type="text" id="credentials-username-input" value="${esc(m.username||'')}" dir="ltr" autofocus></div>
+      <div class="field"><label>סיסמה</label><input type="text" id="credentials-password-input" value="${esc(m.password||'')}" dir="ltr"></div>
+      <button class="btn btn-primary btn-block" style="margin-top:8px;" data-save-credentials>${icon('check')} שמירה</button>
+    `;
   } else if (m.type === "avatarManage") {
     title = "ניהול אווטרים";
     const groups = getAvatarGroups();
@@ -7239,6 +7252,30 @@ function attachHandlers(){
       try { await navigator.clipboard.writeText(value); showAlert("הועתק!"); }
       catch(e) { showAlert(value); }
     });
+    app.querySelectorAll("[data-edit-credentials]").forEach(el => el.onclick = () => {
+      const s = (modal.thirdPartyServices||[]).find(x => x.id === el.dataset.editCredentials);
+      if (!s) return;
+      openModal({type:"thirdPartyCredentialsEdit", id:s.id, name:s.name, username:s.username||"", password:s.password||"", thirdPartyServices: modal.thirdPartyServices});
+    });
+  }
+
+  if (modal && modal.type === "thirdPartyCredentialsEdit") {
+    const saveBtn = app.querySelector("[data-save-credentials]");
+    if (saveBtn) saveBtn.onclick = async () => {
+      const username = document.getElementById("credentials-username-input").value.trim();
+      const password = document.getElementById("credentials-password-input").value.trim();
+      saveBtn.disabled = true;
+      showButtonLoading(saveBtn);
+      const res = await fetch(`/api/admin/third-party-services/${modal.id}?clientId=${encodeURIComponent(getClientId())}`, {
+        method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify({username, password})
+      });
+      if (!res.ok) { showAlert("השמירה נכשלה - רק Super Admin יכול לערוך."); updateModal({}); return; }
+      // Patches the list we came from in place (same copy carried through via `services`
+      // above) rather than a full refetch - avoids a second round trip for a change this
+      // small, and keeps every OTHER row's data exactly as it already was.
+      const updated = (modal.thirdPartyServices||[]).map(s => s.id === modal.id ? {...s, username, password} : s);
+      openModal({type:"adminSettings", thirdPartyServices: updated});
+    };
   }
 
   if (modal && modal.type === "adminVerify") {
