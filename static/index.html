@@ -2099,7 +2099,9 @@ function maybeOpenDirectPayAfterCashout(gameId, playerId, chips){
   const g = getGame(gameId);
   if (!g) return;
   const c = getCommunity(g.communityId);
-  if (!c || c.settlementDefault === "paybox") return;
+  // Only for player-to-player settlement - with a group Paybox/Bit the money goes to the
+  // group, so there's no "who did you pay" to ask.
+  if (!c || (c.settlementDefault || "direct") !== "direct") return;
   const seatedIds = (g.seats||[]).filter(Boolean);
   const allOut = seatedIds.length > 0 && seatedIds.every(sid => sid in g.cashouts);
   if (allOut || g.closed) return;
@@ -4084,7 +4086,12 @@ function renderPlayerScreen(gameId){
     const activePayboxLink = getActivePayboxLink(c);
     const activeBitLink = getActiveBitLink(c);
     let statusHtml = "";
-    if (c.settlementDefault === 'paybox') {
+    // Finished exactly even - nothing to pay or receive, so none of the "the profit will be
+    // sent / split" lines below apply.
+    const brokeEven = Math.abs(profitForInfo) < 0.005;
+    if (brokeEven) {
+      statusHtml = "";
+    } else if (c.settlementDefault === 'paybox') {
       statusHtml = profitForInfo >= 0
         ? `<div style="font-size:13px;color:var(--muted);margin-top:10px;">הרווח יחולק אחרי שכולם ישלמו לקבוצה</div>`
         : (activePayboxLink
@@ -6296,7 +6303,7 @@ function attachHandlers(){
     const g = getGame(nav.gameId);
     const c = g && getCommunity(g.communityId);
     const pid = g && myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
-    if (g && c && pid && (pid in g.cashouts) && c.settlementDefault !== "paybox") {
+    if (g && c && pid && (pid in g.cashouts) && (c.settlementDefault || "direct") === "direct") {
       const seatedIds = (g.seats||[]).filter(Boolean);
       const allOut = seatedIds.length > 0 && seatedIds.every(sid => sid in g.cashouts);
       const myBuyinTotal = g.buyins.filter(b=>b.playerId===pid).reduce((s,b)=>s+b.amount,0);
