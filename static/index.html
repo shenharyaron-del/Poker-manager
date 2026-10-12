@@ -1912,17 +1912,39 @@ async function saveIdentity(){
 // to someone who genuinely already had a trusted device. Only a real HTTP response (loading
 // with loggedIn true or false) is treated as final; anything else is retried with backoff
 // before finally giving up.
+// Last session the server confirmed for this device - used only when the server can't be
+// reached at all (e.g. a Render free-tier cold start that outlasts the retries below), so a
+// logged-in player isn't asked to log in again just because the server was slow to wake.
+// A real answer from the server ("not logged in") always wins and clears it.
+const SESSION_CACHE_KEY = "poker-session-cache";
+function readCachedSession(){
+  try { const v = JSON.parse(localStorage.getItem(SESSION_CACHE_KEY)); return v && v.loggedIn ? v : null; } catch(e) { return null; }
+}
+function writeCachedSession(data){
+  try { if (data) localStorage.setItem(SESSION_CACHE_KEY, JSON.stringify(data)); else localStorage.removeItem(SESSION_CACHE_KEY); } catch(e) { /* storage blocked */ }
+}
 async function checkLoginSession(){
-  const RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 8000]; // ~23s of retrying, on top of each attempt's own fetch time
+  const RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 8000, 10000, 10000]; // ~43s - covers most free-tier cold starts
   for (let attempt = 0; ; attempt++) {
     try {
       const res = await fetch("/api/auth/session?clientId=" + encodeURIComponent(getClientId()));
       if (res.ok) {
         const data = await res.json();
+        if (data.loggedIn && data.restoredClientId && data.restoredClientId !== getClientId()) {
+          // The browser lost localStorage but still had the server's device cookie - put
+          // this device's real id back and reload once, so identity/state load under it.
+          try { localStorage.setItem("poker-tracker-client-id", data.restoredClientId); } catch(e) {}
+          if (!sessionStorage.getItem("poker-restored-device")) {
+            sessionStorage.setItem("poker-restored-device", "1");
+            location.reload();
+            return new Promise(() => {}); // page is reloading
+          }
+        }
+        writeCachedSession(data.loggedIn ? data : null);
         return data.loggedIn ? data : null; // authoritative either way - no more retries
       }
     } catch(e) { /* network error - fall through to retry below */ }
-    if (attempt >= RETRY_DELAYS_MS.length) return null; // genuinely unreachable - fail open to "ask again"
+    if (attempt >= RETRY_DELAYS_MS.length) return readCachedSession(); // unreachable - trust the last confirmed session, if any
     await new Promise(r => setTimeout(r, RETRY_DELAYS_MS[attempt]));
   }
 }
@@ -4793,7 +4815,7 @@ function renderModal(m){
       <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">${authSettings.requireVerifyExistingEmail
         ? "כדי להשתמש באפליקציה, התחברו עם האימייל שלכם - משתמשים חדשים ייכנסו ישר, ולחשבון קיים נשלח קוד בן 6 ספרות."
         : "כדי להשתמש באפליקציה, התחברו עם האימייל שלכם."}</p>
-      <input type="email" id="login-email-input" placeholder="האימייל שלך" dir="ltr" autocomplete="email" style="width:100%;text-align:center;margin-bottom:8px;" value="${esc(m.loginEmail||'')}" autofocus>
+      <input type="email" id="login-email-input" placeholder="האימייל שלך" dir="ltr" autocomplete="email" style="width:100%;text-align:center;margin-bottom:8px;" value="${esc(m.loginEmail || (() => { try { return localStorage.getItem("poker-last-email") || ""; } catch(e) { return ""; } })())}" autofocus>
       ${m.loginError ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.loginError)}</p>` : ""}
       <button class="btn btn-primary btn-block" data-send-login-code>${authSettings.requireVerifyExistingEmail ? `${icon('share')} שלח קוד כניסה` : "כנס ל-Poker Manager"}</button>
     `;
@@ -7154,10 +7176,10 @@ function attachHandlers(){
       if (!email || !email.includes("@")) { updateModal({loginError: "כתובת אימייל לא תקינה"}); return; }
       sendLoginBtn.disabled = true;
       showButtonLoading(sendLoginBtn);
-      // Checked before ever sending a code - if this email already has a device linked,
-      // ask what to do about it first instead of surprising the user after the fact.
-      const hasDevice = await checkEmailHasDevice(email);
-      if (hasDevice) { updateModal({loginStep: "deviceChoice", loginEmail: email, loginError: null}); return; }
+      // No "this email already has a device" step anymore - logging in here no longer
+      // logs the person's other devices out (see verify_login_code in server.py), so
+      // there's nothing to ask about.
+      try { localStorage.setItem("poker-last-email", email); } catch(e) {}
       await sendLoginCodeFor(email);
     };
     app.querySelectorAll("[data-device-choice]").forEach(el => el.onclick = async () => {

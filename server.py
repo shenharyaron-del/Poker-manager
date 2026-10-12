@@ -2278,6 +2278,22 @@ def pre_register_account():
     return jsonify({"ok": True})
 
 
+# A long-lived, server-set cookie holding this device's id - a backup for when the browser
+# wipes localStorage (iOS Safari does that to sites not added to the home screen after 7
+# days without a visit; "clear site data" does it too), which used to turn a logged-in
+# phone into a brand-new, logged-out device. Server-set HttpOnly cookies aren't subject to
+# Safari's 7-day cap on script-written storage. See auth_session for the recovery.
+_DEVICE_COOKIE = "pm_device"
+
+
+def _with_device_cookie(response, client_id):
+    if client_id:
+        secure = request.is_secure or request.headers.get("X-Forwarded-Proto", "") == "https"
+        response.set_cookie(_DEVICE_COOKIE, client_id, max_age=10 * 365 * 24 * 3600,
+                            httponly=True, samesite="Lax", secure=secure)
+    return response
+
+
 @app.route("/api/auth/verify-code", methods=["POST"])
 def verify_login_code():
     body = request.get_json(silent=True) or {}
@@ -2298,8 +2314,12 @@ def verify_login_code():
                 conn.commit()
                 return jsonify({"error": "invalid or expired code"}), 400
             cur.execute("DELETE FROM login_codes WHERE email = %s", (email,))
-            if replace_existing:
-                cur.execute("DELETE FROM trusted_devices WHERE email = %s AND client_id != %s", (email, client_id))
+            # replace_existing is accepted for compatibility with older clients but no
+            # longer logs the person's OTHER devices out: one person routinely has several
+            # "devices" (the home-screen app, the regular browser, WhatsApp's in-app
+            # browser for an invite link), and kicking the others on every login made them
+            # ping-pong - each place logging the previous one out, so everyone kept being
+            # asked to log in again.
             cur.execute(
                 "INSERT INTO trusted_devices (client_id, email) VALUES (%s, %s) "
                 "ON CONFLICT (client_id) DO UPDATE SET email = EXCLUDED.email",
@@ -2309,7 +2329,7 @@ def verify_login_code():
     account = _get_account(email) or _default_account(email)
     _claim_player_id(account, local_id)
     _save_account(email, account)
-    return jsonify({"email": email, **account})
+    return _with_device_cookie(jsonify({"email": email, **account}), client_id)
 
 
 @app.route("/api/auth/quick-login", methods=["POST"])
@@ -2338,8 +2358,7 @@ def quick_login():
             if already_registered and require_verify:
                 conn.commit()
                 return jsonify({"error": "already registered"}), 409
-            if replace_existing:
-                cur.execute("DELETE FROM trusted_devices WHERE email = %s AND client_id != %s", (email, client_id))
+            # replace_existing no longer logs other devices out - see verify_login_code.
             cur.execute(
                 "INSERT INTO trusted_devices (client_id, email) VALUES (%s, %s) "
                 "ON CONFLICT (client_id) DO UPDATE SET email = EXCLUDED.email",
@@ -2349,7 +2368,7 @@ def quick_login():
     account = _get_account(email) or _default_account(email)
     _claim_player_id(account, local_id)
     _save_account(email, account)
-    return jsonify({"email": email, **account})
+    return _with_device_cookie(jsonify({"email": email, **account}), client_id)
 
 
 @app.route("/api/auth/settings")
@@ -2375,11 +2394,26 @@ def set_auth_settings():
 
 @app.route("/api/auth/session")
 def auth_session():
-    email = _trusted_email(request.args.get("clientId", ""))
+    client_id = request.args.get("clientId", "")
+    email = _trusted_email(client_id)
+    restored_client_id = None
+    if not email:
+        # This device's localStorage id isn't a logged-in device - but if the browser
+        # still has our cookie from an earlier login, the device itself is known: hand its
+        # real id back so the client can restore it instead of asking to log in again.
+        cookie_id = request.cookies.get(_DEVICE_COOKIE, "")
+        if cookie_id and cookie_id != client_id:
+            email = _trusted_email(cookie_id)
+            if email:
+                restored_client_id = cookie_id
     if not email:
         return jsonify({"loggedIn": False})
     account = _get_account(email) or _default_account(email)
-    return jsonify({"loggedIn": True, "email": email, **account})
+    body = {"loggedIn": True, "email": email, **account}
+    if restored_client_id:
+        body["restoredClientId"] = restored_client_id
+    # Refreshes the cookie for devices that logged in before it existed.
+    return _with_device_cookie(jsonify(body), restored_client_id or client_id)
 
 
 @app.route("/api/auth/claim-player-id", methods=["POST"])
