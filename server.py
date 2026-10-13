@@ -2712,7 +2712,10 @@ def vision():
     try:
         response = client.messages.create(
             model="claude-sonnet-5",
-            max_tokens=1000,
+            # Was 1000: a chip photo with many piles (one JSON entry each, plus the
+            # per-reference color list and the "mixed" flag) could run past it, the reply
+            # got cut off mid-JSON, and the whole count silently came back empty.
+            max_tokens=4000,
             output_config={"effort": "low"},
             messages=[{"role": "user", "content": content}],
         )
@@ -2728,7 +2731,15 @@ def vision():
     try:
         parsed = json.loads(cleaned)
     except json.JSONDecodeError:
-        return jsonify({"error": "could not parse model response"}), 502
+        # Tolerate a sentence before/after the JSON object.
+        start, end = cleaned.find("{"), cleaned.rfind("}")
+        try:
+            parsed = json.loads(cleaned[start:end + 1]) if start != -1 and end > start else None
+        except json.JSONDecodeError:
+            parsed = None
+        if parsed is None:
+            app.logger.warning("vision: unparseable reply (stop_reason=%s): %s", getattr(response, "stop_reason", None), cleaned[:300])
+            return jsonify({"error": "could not parse model response"}), 502
     return jsonify(parsed)
 
 

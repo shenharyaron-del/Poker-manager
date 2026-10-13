@@ -9323,10 +9323,15 @@ function attachHandlers(){
             const photos = (modal.chipPhotos||[]).map(p => p.id === photoId ? {...p, stacks: finalStacks} : p);
             updateModal({chipPhotos: photos, analyzingChipCount: false, chipsHeaderTouched: true});
             refreshHeader();
+            if (!finalStacks.length) showAlert("לא זוהו ערמות ז'יטונים בתמונה. נסו לצלם שוב, או עדכנו את הכמויות ידנית בטבלה.");
           }
         } catch(e) {
           console.error("chip stack detection failed", e);
-          if (modal && modal.type === "seatChips") updateModal({analyzingChipCount: false});
+          // Used to fail silently - the photo just showed with no values on it.
+          if (modal && modal.type === "seatChips") {
+            updateModal({analyzingChipCount: false});
+            showAlert("הזיהוי האוטומטי לא הצליח. נסו לצלם שוב, או עדכנו את הכמויות ידנית בטבלה.");
+          }
         }
       };
       const captureChipCountPhoto = (fileInputEl) => {
