@@ -4525,8 +4525,8 @@ function renderPlayerScreen(gameId){
     </div>
   ` : `
     <div style="display:flex;gap:8px;">
-      ${getBuyinAmounts(c).map(v=>`<button class="chip-btn" data-player-instant-buyin="${v}" ${buyinPending?'disabled':''} style="flex:1;padding:14px 2px;font-size:18px;">₪${v}</button>`).join("")}
-      <button class="chip-btn" data-player-buyin-other ${buyinPending?'disabled':''} style="flex:1;padding:14px 2px;font-size:18px;">אחר</button>
+      ${getBuyinAmounts(c).map(v=>`<button class="chip-btn" data-player-instant-buyin="${v}" ${(buyinPending||showTableHelper)?'disabled':''} style="flex:1;padding:14px 2px;font-size:18px;">₪${v}</button>`).join("")}
+      <button class="chip-btn" data-player-buyin-other ${(buyinPending||showTableHelper)?'disabled':''} style="flex:1;padding:14px 2px;font-size:18px;">אחר</button>
     </div>
   `;
   // Order (top to bottom): name/total, ריביי buttons, the shared history/feed panel
@@ -6957,8 +6957,18 @@ function attachHandlers(){
   // it settles, cross-device confirm card) instead of saving directly.
   const doPlayerBuyin = async (amt, fromEl) => {
     if (!amt || amt <= 0 || pendingBuyinRequest) return;
+    // Rebuys stay locked while the first-game helper is playing (see tableHelperHtml).
+    if (tableHelperStartedAt && !myIdentity.seenTableHelper) return;
     const gameId = nav.gameId;
-    const pid = myIdentity.myPlayers && myIdentity.myPlayers[getGame(gameId).communityId];
+    const g = getGame(gameId);
+    const pid = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+    // A "rebuy" in the first minute after sitting down is usually a new player re-entering
+    // their entry amount, not a real second purchase - ask before adding it on top.
+    const myBuyins = (g.buyins||[]).filter(b => b.playerId === pid);
+    if (myBuyins.length === 1 && myBuyins[0].ts && Date.now() - myBuyins[0].ts < 60*1000) {
+      const ok = await showConfirm(`נכנסת לשולחן עם ₪${myBuyins[0].amount} לפני פחות מדקה. להוסיף ריביי של ₪${amt} מעל הקנייה הראשונה?`, {okLabel: "כן, הוסף ריביי", cancelLabel: "ביטול"});
+      if (!ok) return;
+    }
     playerScreenCustomOpen = false;
     await performBuyin(gameId, pid, amt, {fromEl});
   };
