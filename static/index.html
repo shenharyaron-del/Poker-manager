@@ -2447,15 +2447,33 @@ function markGameWelcomed(gameId){
 // is saved with the identity, so it doesn't come back on another device either).
 let tableHelperStartedAt = 0;
 const TABLE_HELPER_MS = 12000; // three 4s steps, played once, then it closes by itself
+// "?demo=helper" in the address shows it once more for anyone (e.g. an existing player
+// who wants to see it), without touching the saved seenTableHelper flag.
+let tableHelperDemo = false;
+try {
+  const u = new URL(location.href);
+  if (u.searchParams.get("demo") === "helper") {
+    tableHelperDemo = true;
+    u.searchParams.delete("demo");
+    history.replaceState(history.state, "", u.pathname + u.search + u.hash);
+  }
+} catch(e) {}
+function tableHelperPlaying(){ return !!tableHelperStartedAt && Date.now() - tableHelperStartedAt < TABLE_HELPER_MS; }
 function finishTableHelper(){
+  tableHelperStartedAt = 0;
+  if (tableHelperDemo) { tableHelperDemo = false; render(); return; }
   if (myIdentity.seenTableHelper) return;
   myIdentity.seenTableHelper = true;
   saveIdentity();
-  tableHelperStartedAt = 0;
   render();
 }
 function shouldShowTableHelper(g, pid){
-  if (myIdentity.seenTableHelper || !g || !pid || (pid in (g.cashouts||{}))) return false;
+  if (!g || !pid || (pid in (g.cashouts||{}))) return false;
+  if (tableHelperDemo) {
+    if (tableHelperStartedAt && Date.now() - tableHelperStartedAt >= TABLE_HELPER_MS) { setTimeout(finishTableHelper, 0); return false; }
+    return hasWelcomedGame(g.id);
+  }
+  if (myIdentity.seenTableHelper) return false;
   if (tableHelperStartedAt && Date.now() - tableHelperStartedAt >= TABLE_HELPER_MS) { setTimeout(finishTableHelper, 0); return false; }
   if (!hasWelcomedGame(g.id)) return false; // the welcome screen comes first
   const myIds = new Set(Object.values(myIdentity.myPlayers || {}));
@@ -6958,7 +6976,7 @@ function attachHandlers(){
   const doPlayerBuyin = async (amt, fromEl) => {
     if (!amt || amt <= 0 || pendingBuyinRequest) return;
     // Rebuys stay locked while the first-game helper is playing (see tableHelperHtml).
-    if (tableHelperStartedAt && !myIdentity.seenTableHelper) return;
+    if (tableHelperPlaying()) return;
     const gameId = nav.gameId;
     const g = getGame(gameId);
     const pid = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
