@@ -2298,6 +2298,36 @@ function isCommunityAdmin(c){
 // community's creator - see isCommunityAdmin), may seat other people, end their night, or
 // remove them - anyone typing someone else's name is just a courtesy elsewhere, but this
 // gate is what keeps that from being used to mess with someone else's seat.
+// "סדר קופה": how much to add to (or take from) each checked player's chips so the pot
+// balances - an equal split, except that nobody can go below 0 (the server rejects a
+// negative amount): a player who left with less than their share gives what they have and
+// the rest is spread over the others. Returns {changes: {pid: delta}, unassigned} - the
+// part that couldn't be placed at all (everyone checked is already at 0).
+function computePotFixChanges(g, selectedIds, diff){
+  const balanceOf = pid => (g.cashouts && g.cashouts[pid]) ? (g.cashouts[pid].amount || 0) : ((g.liveChips || {})[pid] || 0);
+  const total = Math.round(-diff * 100) / 100;
+  const changes = {};
+  let remaining = total, active = selectedIds.slice();
+  if (total < 0) {
+    for (;;) {
+      if (!active.length) break;
+      const share = remaining / active.length;
+      const capped = active.filter(pid => balanceOf(pid) + share < 0);
+      if (!capped.length) break;
+      capped.forEach(pid => { changes[pid] = -balanceOf(pid); remaining -= changes[pid]; });
+      active = active.filter(pid => !capped.includes(pid));
+    }
+  }
+  if (active.length) {
+    const share = Math.round((remaining / active.length) * 100) / 100;
+    active.forEach((pid, i) => {
+      // The last one takes the rounding remainder so the total adds up exactly.
+      changes[pid] = i === active.length - 1 ? Math.round((remaining - share * (active.length - 1)) * 100) / 100 : share;
+    });
+    remaining = 0;
+  }
+  return {changes, unassigned: Math.round(remaining * 100) / 100};
+}
 function isTableAdmin(g, c){
   return !!(myIdentity.name && g && myIdentity.name === g.createdByName) || isCommunityAdmin(c);
 }
@@ -4894,7 +4924,10 @@ function renderAdminScreen(gameId){
   if (potUnbalanced) {
     const direction = diff > 0.5 ? "חוסר" : "עודף";
     const selectedIds = seatedIds.filter(id => adminBalanceFixSelected[id]);
-    const perPlayer = selectedIds.length ? Math.round((-diff / selectedIds.length) * 100) / 100 : 0;
+    const potFix = computePotFixChanges(g, selectedIds, diff);
+    const fixAmounts = Object.values(potFix.changes);
+    const perPlayer = fixAmounts.length ? fixAmounts[0] : 0;
+    const unevenFix = fixAmounts.some(v => Math.abs(v - perPlayer) > 0.011);
     potFixHtml = `
       <div class="section-title" style="padding:0;margin:16px 0 8px;">סדר קופה</div>
       <div style="background:#450a0a;color:#fca5a5;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;text-align:center;font-weight:700;">הקופה לא מאוזנת - ${direction} של ₪${Math.abs(Math.round(diff))}</div>
@@ -4905,7 +4938,9 @@ function renderAdminScreen(gameId){
           <span class="flex1">${esc(nameOf(pid))} <span style="color:${profitColor(playerProfit)};font-weight:700;">${playerProfit>0?'+':''}₪${Math.round(playerProfit)}</span></span>
         </div>`;
       }).join("")}
-      ${selectedIds.length ? `<div style="text-align:center;color:var(--muted);font-size:12px;margin:6px 0;">${perPlayer>=0?'כל שחקן מסומן יקבל':'מכל שחקן מסומן יילקח'} ₪${Math.abs(perPlayer)}</div>` : ""}
+      ${selectedIds.length ? `<div style="text-align:center;color:var(--muted);font-size:12px;margin:6px 0;">${unevenFix
+        ? `${diff>0?'יילקח':'יתווסף'} לפי מה שיש לכל אחד (אף אחד לא יורד מתחת ל-0): ${selectedIds.map(pid => `${esc(nameOf(pid))} ₪${Math.abs(potFix.changes[pid]||0)}`).join(", ")}`
+        : `${perPlayer>=0?'כל שחקן מסומן יקבל':'מכל שחקן מסומן יילקח'} ₪${Math.abs(perPlayer)}`}${potFix.unassigned ? ` · לא ניתן לחלק ₪${Math.abs(potFix.unassigned)} - לכל המסומנים כבר 0` : ''}</div>` : ""}
       <button class="btn btn-primary btn-block" data-admin-fix-pot-balance style="background:#0891b2;color:#fff;" ${selectedIds.length?"":"disabled"}>${icon('coins')} סדר קופה</button>
     `;
   }
@@ -7205,25 +7240,36 @@ function attachHandlers(){
     const totalBuyinAll2 = seatedIds2.reduce((s,pid)=>s+(buyinTotals2[pid]||0),0);
     const totalChipsAll2 = seatedIds2.reduce((s,pid)=>s+((g2.liveChips||{})[pid]||0),0);
     const diff2 = totalChipsAll2 - totalBuyinAll2;
-    const perPlayer2 = Math.round((-diff2 / selectedIds2.length) * 100) / 100;
+    // Equal split that never pushes anyone below 0 (see computePotFixChanges) - an equal
+    // share taken from a player who left with less than that went negative, the server
+    // rejected it (400) after the players before them in the loop were already updated,
+    // so every retry fixed part of it and the gap kept shrinking.
+    const {changes} = computePotFixChanges(g2, selectedIds2, diff2);
     if (USE_RELATIONAL_API) {
       try {
         for (const pid of selectedIds2) {
-          const newChips = Math.round(((g2.liveChips[pid]||0) + perPlayer2) * 100) / 100;
+          const delta = changes[pid] || 0;
+          if (!delta) continue;
+          const newChips = Math.max(0, Math.round(((g2.liveChips[pid]||0) + delta) * 100) / 100);
           if (g2.cashouts[pid]) {
-            const newAmount = Math.round(((g2.cashouts[pid].amount||0) + perPlayer2) * 100) / 100;
+            const newAmount = Math.max(0, Math.round(((g2.cashouts[pid].amount||0) + delta) * 100) / 100);
             await v2SetCashout(nav.gameId, pid, newAmount, g2.cashouts[pid].arrangedWith, newChips);
           } else {
             await v2UpdateLiveChips(nav.gameId, pid, newChips);
           }
         }
-      } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); adminFixPotBtn.disabled = false; return; }
+      } catch(e) {
+        const serverSaid = e && e.status && e.status < 500;
+        showAlert(serverSaid ? "סידור הקופה נכשל: " + (e.message || "השרת דחה את השינוי") : "שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב.");
+        adminFixPotBtn.disabled = false; render(); return;
+      }
     } else {
       await mutateAndSave(() => {
         if (!g2.liveChips) g2.liveChips = {};
         selectedIds2.forEach(pid => {
-          g2.liveChips[pid] = Math.round(((g2.liveChips[pid]||0) + perPlayer2) * 100) / 100;
-          if (g2.cashouts[pid]) g2.cashouts[pid].amount = Math.round(((g2.cashouts[pid].amount||0) + perPlayer2) * 100) / 100;
+          const delta = changes[pid] || 0;
+          g2.liveChips[pid] = Math.max(0, Math.round(((g2.liveChips[pid]||0) + delta) * 100) / 100);
+          if (g2.cashouts[pid]) g2.cashouts[pid].amount = Math.max(0, Math.round(((g2.cashouts[pid].amount||0) + delta) * 100) / 100);
         });
       });
     }
