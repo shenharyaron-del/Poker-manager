@@ -198,7 +198,28 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
    exactly, rather than an approximated flat color - while the selected tab is a rounded
    "raised" pill matching the panel's own color (navy for history, charcoal for feed)
    directly below it, same idea as a browser tab merging into its own page. */
-.player-history-feed{display:flex;flex-direction:column;flex:1;min-height:0;margin-bottom:14px;}
+.player-history-feed{display:flex;flex-direction:column;flex:1;min-height:0;margin-bottom:14px;position:relative;}
+/* First-game helper (see tableHelperHtml): 8s loop - step 1 (ריביי, arrow up) for the
+   first half, step 2 (סוף הערב, arrow down) for the second, each frame glowing in turn. */
+.table-helper{position:absolute;inset:0;z-index:6;border-radius:16px;background:rgba(2,20,14,.93);border:1px solid rgba(212,175,55,.6);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px;text-align:center;}
+.th-step{position:absolute;left:14px;right:14px;top:14px;bottom:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;opacity:0;animation:thStep1 8s infinite;}
+.th-step-2{animation-name:thStep2;}
+.th-title{color:var(--gold);font-weight:800;font-size:18px;}
+.th-text{color:#f5f5f4;font-size:15px;line-height:1.5;max-width:280px;}
+.th-arrow{color:var(--gold);font-size:34px;line-height:1;}
+.th-arrow-up{animation:thBounceUp 8s infinite;}
+.th-arrow-down{animation:thBounceDown 8s infinite;}
+/* Centered with margins, not transform - the .btn:active press effect sets its own transform
+   and would shift the button sideways mid-tap, so the click landed off it. */
+.th-ok{position:absolute;bottom:14px;left:0;right:0;margin:0 auto;width:60%;}
+@keyframes thStep1{0%{opacity:0}5%,42%{opacity:1}48%,100%{opacity:0}}
+@keyframes thStep2{0%,50%{opacity:0}55%,92%{opacity:1}98%,100%{opacity:0}}
+@keyframes thBounceUp{0%,10%,20%,30%,40%,50%,100%{transform:translateY(0)}5%,15%,25%,35%,45%{transform:translateY(-10px)}}
+@keyframes thBounceDown{0%,50%,60%,70%,80%,90%,100%{transform:translateY(0)}55%,65%,75%,85%,95%{transform:translateY(10px)}}
+.th-glow-rebuy{animation:thGlow1 8s infinite;}
+.th-glow-leave{animation:thGlow2 8s infinite;}
+@keyframes thGlow1{0%,48%,100%{box-shadow:none;border-color:rgba(212,175,55,.55)}5%,42%{box-shadow:0 0 16px rgba(251,191,36,.6),inset 0 0 10px rgba(251,191,36,.25);border-color:var(--gold)}}
+@keyframes thGlow2{0%,50%,98%,100%{box-shadow:none;border-color:rgba(212,175,55,.55)}55%,92%{box-shadow:0 0 16px rgba(251,191,36,.6),inset 0 0 10px rgba(251,191,36,.25);border-color:var(--gold)}}
 /* Two layers of rounding, for two different corners:
    - The CONTAINER's own outer top corners (clipped via overflow:hidden) - stay rounded no
      matter which tab is active, since rounding only the active tab (and leaving the
@@ -2414,6 +2435,40 @@ function markGameWelcomed(gameId){
 // doRefreshNow to skip re-rendering while it's up, same as it already does for an open
 // modal, so the periodic/SSE auto-refresh doesn't replace the DOM (restarting its fade-in
 // animation, and mid-read) every few seconds while the player is reading it.
+// First-game helper on the player screen: covers the "הקניות שלי / פעילות בשולחן" panel
+// with a short looping animation - first an arrow up to the ריביי buttons, then an arrow
+// down to the leave-table buttons - until "הבנתי". Only for someone with no earlier
+// cashed-out game in any group (a new user), once per account (myIdentity.seenTableHelper
+// is saved with the identity, so it doesn't come back on another device either).
+let tableHelperStartedAt = 0;
+function shouldShowTableHelper(g, pid){
+  if (myIdentity.seenTableHelper || !g || !pid || (pid in (g.cashouts||{}))) return false;
+  if (!hasWelcomedGame(g.id)) return false; // the welcome screen comes first
+  const myIds = new Set(Object.values(myIdentity.myPlayers || {}));
+  const playedBefore = (state.games||[]).some(gm => gm.id !== g.id && Object.keys(gm.cashouts||{}).some(id => myIds.has(id)));
+  return !playedBefore;
+}
+function tableHelperHtml(){
+  if (!tableHelperStartedAt) tableHelperStartedAt = Date.now();
+  // Negative delay = continue the loop where it was, so the periodic re-render (which
+  // rebuilds this markup) doesn't restart the animation every few seconds.
+  const d = `animation-delay:-${(Date.now() - tableHelperStartedAt) % 8000}ms;`;
+  return `
+    <div class="table-helper" data-table-helper>
+      <div class="th-step th-step-1" style="${d}">
+        <div class="th-arrow th-arrow-up" style="${d}">⬆</div>
+        <div class="th-title">ריביי</div>
+        <div class="th-text">קניתם עוד ז'יטונים? לחצו על הסכום בכפתורים למעלה.</div>
+      </div>
+      <div class="th-step th-step-2" style="${d}">
+        <div class="th-title">סוף הערב</div>
+        <div class="th-text">כשאתם קמים מהשולחן, דווחו בכפתורים למטה כמה ז'יטונים נשארו לכם.</div>
+        <div class="th-arrow th-arrow-down" style="${d}">⬇</div>
+      </div>
+      <button class="btn btn-primary th-ok" data-dismiss-table-helper>הבנתי</button>
+    </div>`;
+}
+
 function shouldShowGameWelcome(){
   if (nav.screen !== "table") return false;
   const g = getGame(nav.gameId);
@@ -4207,6 +4262,8 @@ function renderPlayerScreen(gameId){
   // render() only force-scrolls this frame to the bottom when this actually changes.
   const latestHistoryKey = myBuyins.length ? myBuyins[myBuyins.length-1].id : "";
   const cashedOut = pid in g.cashouts;
+  const showTableHelper = shouldShowTableHelper(g, pid);
+  const tableHelperDelay = showTableHelper ? `animation-delay:-${(Date.now() - (tableHelperStartedAt || Date.now())) % 8000}ms;` : "";
   // Once every seated player has cashed out (the night auto-closes via maybeAutoCloseNight
   // at that point - see its own comment) and the pot is balanced, show THIS player directly
   // who they owe/are owed by - computed purely from final chip counts (settleTransactions/
@@ -4475,7 +4532,7 @@ function renderPlayerScreen(gameId){
         })()}
         ${cashedOutInfoHtml}
       </div>
-      ${cashedOut ? "" : `<fieldset class="leave-frame" style="margin-bottom:14px;"><legend>ריביי</legend>${buyinButtonsHtml}</fieldset>`}
+      ${cashedOut ? "" : `<fieldset class="leave-frame${showTableHelper?' th-glow-rebuy':''}" style="margin-bottom:14px;${showTableHelper?tableHelperDelay:''}"><legend>ריביי</legend>${buyinButtonsHtml}</fieldset>`}
       ${cashedOut ? "" : `
       <div class="player-history-feed mode-${playerHistoryTab}">
         <div class="player-history-feed-tabs">
@@ -4485,10 +4542,11 @@ function renderPlayerScreen(gameId){
         ${playerHistoryTab === 'history'
           ? `<div class="player-history-feed-body mode-history" data-player-history data-latest-buyin="${latestHistoryKey}">${historyRows}</div>`
           : `<div class="player-history-feed-body mode-feed" data-player-feed data-latest-event="${latestFeedEventKey}">${feedRows}</div>`}
+        ${showTableHelper ? tableHelperHtml() : ""}
       </div>
       `}
       ${cashedOut ? "" : `
-      <fieldset class="leave-frame">
+      <fieldset class="leave-frame${showTableHelper?' th-glow-leave':''}"${showTableHelper?` style="${tableHelperDelay}"`:''}>
         <legend>סיום ערב (יציאה מהשולחן)</legend>
       <div style="display:flex;gap:6px;">
         <button class="btn flex1 pp-leave-gold" style="background:#B8862B;color:#1a1a1a;display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 4px;font-size:13px;white-space:nowrap;" data-player-leave-table>${icon('out')}ספירת ז'יטונים</button>
@@ -7273,6 +7331,8 @@ function attachHandlers(){
 
   // The blocking first-entry welcome screen (see renderGameWelcomeOverlay) has no close-x
   // and no overlay-click dismissal anywhere - only this button clears its per-device flag.
+  // querySelectorAll: the swipe carousel can hold more than one copy of the player page.
+  app.querySelectorAll("[data-dismiss-table-helper]").forEach(el => el.onclick = () => { myIdentity.seenTableHelper = true; saveIdentity(); tableHelperStartedAt = 0; render(); });
   const welcomeBtn = app.querySelector("[data-dismiss-game-welcome]");
   if (welcomeBtn) welcomeBtn.onclick = () => { markGameWelcomed(welcomeBtn.dataset.dismissGameWelcome); render(); };
 
