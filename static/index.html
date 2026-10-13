@@ -2916,7 +2916,10 @@ function trySwitchSetupTab(targetTab, communityId){
 async function tryCloseSetupModal(){
   captureSetupDraft();
   if (setupDraft && setupDraft.dirty.size) {
-    const shouldSave = await showConfirm("הנתונים שהזנת לא נשמרו. לשמור לפני שסוגרים?");
+    // Same question for the ✕ and the phone's back button. Tapping outside (or back again)
+    // means "never mind" - stay in the setup with the edits intact.
+    const shouldSave = await showConfirm("יש שינויים שלא נשמרו. לשמור?", {okLabel: "שמור", cancelLabel: "צא בלי לשמור", outside: null});
+    if (shouldSave === null) return;
     if (shouldSave) { await saveAllSetup(true); return; }
   }
   closeModal();
@@ -3019,9 +3022,9 @@ async function saveAllSetup(andClose){
       return;
     }
   }
-  const btns = Array.from(document.querySelectorAll("[data-setup-save],[data-setup-save-back]"));
+  const btns = Array.from(document.querySelectorAll("[data-setup-save]"));
   btns.forEach(b => b.disabled = true);
-  const pressed = document.querySelector(andClose ? "[data-setup-save-back]" : "[data-setup-save]");
+  const pressed = document.querySelector("[data-setup-save]");
   if (pressed) showButtonLoading(pressed);
   const steps = [["chips", () => saveSetupChips(cid, d.chips)], ["payments", () => saveSetupPayments(cid, d.payments)], ["buyins", () => saveSetupBuyins(cid, d.buyins)]];
   for (const [tab, run] of steps) {
@@ -3068,7 +3071,6 @@ const SETUP_PANEL_MARK = "setup-panel";
 const SETUP_FOOTER_HTML = `
   <div class="setup-footer" style="display:flex;flex-direction:column;gap:8px;margin-top:4px;">
     <button class="btn btn-primary btn-block" data-setup-save>שמור שינויים</button>
-    <button class="btn btn-ghost btn-block" data-setup-save-back>שמור וחזור לרשימת הקבוצות</button>
   </div>
 `;
 function openPayboxSettingsModal(communityId){
@@ -3176,22 +3178,26 @@ function showAlert(message){
 }
 // showConfirm() - custom stand-in for the browser's native confirm(), same reasoning as
 // showAlert() above. Async since it has to wait for a click instead of blocking the thread.
-function showConfirm(message){
+// opts: okLabel/cancelLabel for the two buttons, outside = what tapping outside the box
+// (or the phone's back button while it's open) resolves to - false (same as cancel) unless
+// a caller needs a separate "never mind" answer.
+function showConfirm(message, opts){
+  const o = Object.assign({okLabel: "אישור", cancelLabel: "ביטול", outside: false}, opts || {});
   return new Promise((resolve) => {
     const el = document.createElement("div");
     el.className = "custom-confirm";
     el.innerHTML = `<div class="custom-confirm-box">
       <div>${esc(String(message))}</div>
       <div class="custom-confirm-actions">
-        <button class="btn btn-ghost btn-block" data-confirm-cancel>ביטול</button>
-        <button class="btn btn-primary btn-block" data-confirm-ok>אישור</button>
+        <button class="btn btn-ghost btn-block" data-confirm-cancel>${esc(o.cancelLabel)}</button>
+        <button class="btn btn-primary btn-block" data-confirm-ok>${esc(o.okLabel)}</button>
       </div>
     </div>`;
     document.body.appendChild(el);
     const finish = (result) => { el.remove(); resolve(result); };
     el.querySelector("[data-confirm-ok]").onclick = () => finish(true);
     el.querySelector("[data-confirm-cancel]").onclick = () => finish(false);
-    el.onclick = (e) => { if (e.target === el) finish(false); };
+    el.onclick = (e) => { if (e.target === el) finish(o.outside); };
   });
 }
 function updateModal(partial){
@@ -6719,8 +6725,6 @@ function attachHandlers(){
   });
   const setupSaveBtn = app.querySelector("[data-setup-save]");
   if (setupSaveBtn) setupSaveBtn.onclick = () => saveAllSetup(false);
-  const setupSaveBackBtn = app.querySelector("[data-setup-save-back]");
-  if (setupSaveBackBtn) setupSaveBackBtn.onclick = () => saveAllSetup(true);
   app.querySelectorAll("[data-setup-tab]").forEach(el => el.onclick = () => {
     trySwitchSetupTab(el.dataset.setupTab, el.dataset.setupCommunity);
   });
@@ -9445,7 +9449,8 @@ function leaveApp(){
 }
 window.addEventListener("popstate", async () => {
   if (Date.now() < backGuardSuppressedUntil) return;
-  const openConfirm = document.querySelector(".custom-confirm [data-confirm-cancel]");
+  // Back while a confirm is open answers it the way tapping outside it would.
+  const openConfirm = document.querySelector(".custom-confirm");
   if (openConfirm) { openConfirm.click(); return; }
   if (modal) {
     const t = modal.type;
