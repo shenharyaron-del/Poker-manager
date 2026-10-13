@@ -204,8 +204,9 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
    glows) - then it closes by itself. */
 .table-helper{position:absolute;inset:0;z-index:6;border-radius:16px;background:rgba(2,20,14,.93);border:1px solid rgba(212,175,55,.6);pointer-events:none;}
 .th-step{position:absolute;inset:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;opacity:0;animation:thStep1 12s linear forwards;}
+.th-step-1{justify-content:flex-start;} /* ריביי at the top - next to the rebuy buttons */
 .th-step-2{animation-name:thStep2;}
-.th-step-3{animation-name:thStep3;}
+.th-step-3{animation-name:thStep3;justify-content:flex-end;} /* סוף הערב at the bottom - next to the leave buttons */
 .th-title{color:var(--gold);font-weight:800;font-size:18px;}
 .th-text{color:#f5f5f4;font-size:15px;line-height:1.5;max-width:280px;}
 .th-arrow{color:var(--gold);font-size:34px;line-height:1;}
