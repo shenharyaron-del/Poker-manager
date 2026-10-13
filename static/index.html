@@ -2773,7 +2773,7 @@ function seatPlayerIfRoom(g, playerId, p){
 // If this device is remembered as a specific roster player in this game's community,
 // and that player isn't seated yet in this game, seat them automatically - so returning
 // players don't have to pick their name every night.
-// "צפייה בלבד": games a group admin / super admin chose to watch without sitting down -
+// "צפייה בלבד": games the super admin chose to watch without sitting down -
 // autoSeatSelf leaves them out of these. Per device, kept in localStorage.
 let watchOnlyGameIds;
 try { watchOnlyGameIds = new Set(JSON.parse(localStorage.getItem("poker-watch-only-games")) || []); }
@@ -2782,8 +2782,8 @@ function setWatchOnly(gameId, on){
   if (on) watchOnlyGameIds.add(gameId); else watchOnlyGameIds.delete(gameId);
   try { localStorage.setItem("poker-watch-only-games", JSON.stringify(Array.from(watchOnlyGameIds))); } catch(e) {}
 }
-// Opening an open game you're not seated in, as an admin or super admin, asks whether to
-// join it or just watch - everyone else is still seated automatically (autoSeatSelf).
+// Opening an open game you're not seated in, as the super admin, asks whether to join it
+// or just watch - everyone else (group admins included) is still seated automatically.
 // Whether autoSeatSelf could seat this device at all - a super admin who isn't in the
 // group's roster can only ever watch, so there's nothing to ask them.
 function canSelfSeat(g){
@@ -2794,7 +2794,7 @@ function canSelfSeat(g){
 }
 function shouldAskWatchOrJoin(g){
   if (!g || g.closed || watchOnlyGameIds.has(g.id) || isSeatedInGame(g) || !canSelfSeat(g)) return false;
-  return isSuperAdmin() || isCommunityAdmin(getCommunity(g.communityId));
+  return isSuperAdmin();
 }
 function autoSeatSelf(gameId){
   const g = getGame(gameId);
