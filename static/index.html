@@ -6215,7 +6215,7 @@ function renderModal(m){
       // photo. The per-color table below stays in raw ₪ terms (see its own row markup) -
       // only the photo labels and the value-picker need the converted number.
       const chipDisplayLabel = (v) => (ratio && ratio !== 1) ? String(Math.round(v.value*ratio*100)/100) : ("₪"+v.value);
-      const SIZE_OPTIONS = [10,5,3,1];
+      const SIZE_OPTIONS = [20,15,10,5,4,3,2,1];
       // How a pile's value-label frame sits against its own box, based on its row's DEPTH
       // RANK in this photo (0 = farthest/topmost row, N-1 = nearest/bottommost) - fans the
       // labels outward from the middle rows instead of letting a row's labels collide with
@@ -6290,14 +6290,14 @@ function renderModal(m){
           // "אחר" swaps the strip for a number field (any pile size), "תתעלם" drops the whole
           // row from the count (e.g. another player's chips at the edge of the photo).
           const rowPickerHtml = isPickingRow ? `
-            <div style="position:absolute;right:100%;top:50%;transform:translateY(-50%);margin-right:4px;background:var(--card);border:1px solid var(--gold);border-radius:10px;padding:5px;display:flex;flex-direction:row;gap:4px;z-index:10;box-shadow:0 4px 14px rgba(0,0,0,.5);">
+            <div style="position:absolute;right:100%;top:50%;transform:translateY(-50%);margin-right:4px;background:var(--card);border:1px solid var(--gold);border-radius:10px;padding:5px;display:${isCustomRow?'flex':'grid'};grid-template-columns:repeat(4,auto);gap:4px;z-index:10;box-shadow:0 4px 14px rgba(0,0,0,.5);">
               ${isCustomRow ? `
                 <input type="number" inputmode="numeric" min="1" id="chip-row-custom-size" value="${rowIgnored ? '' : group[0].count}" style="width:58px;height:32px;padding:4px;font-size:14px;text-align:center;">
                 <button type="button" data-confirm-chip-row-custom data-photo-id="${photo.id}" data-row-id="${rowId}" style="${pickBtnStyle(true)}">✓</button>
               ` : `
                 ${SIZE_OPTIONS.map(sz => `<button type="button" data-pick-chip-row-size="${sz}" data-photo-id="${photo.id}" data-row-id="${rowId}" style="${pickBtnStyle(!rowIgnored && sz===group[0].count)}">${sz}</button>`).join("")}
-                <button type="button" data-chip-row-custom data-photo-id="${photo.id}" data-row-id="${rowId}" style="${pickBtnStyle(!rowIgnored && !SIZE_OPTIONS.includes(group[0].count))}">אחר</button>
-                <button type="button" data-ignore-chip-row data-photo-id="${photo.id}" data-row-id="${rowId}" style="${pickBtnStyle(rowIgnored)}">תתעלם</button>
+                <button type="button" data-chip-row-custom data-photo-id="${photo.id}" data-row-id="${rowId}" style="${pickBtnStyle(!rowIgnored && !SIZE_OPTIONS.includes(group[0].count))}grid-column:span 2;">אחר</button>
+                <button type="button" data-ignore-chip-row data-photo-id="${photo.id}" data-row-id="${rowId}" style="${pickBtnStyle(rowIgnored)}grid-column:span 2;">לא שלי</button>
               `}
             </div>` : "";
           return `
@@ -6330,7 +6330,7 @@ function renderModal(m){
                   <span style="font-size:10px;color:var(--text);">${chipDisplayLabel(v)}</span>
                 </button>
               `).join("")}
-              <button type="button" data-ignore-chip-pile data-photo-id="${photo.id}" data-stack-id="${st.id}" style="background:none;border:${st.ignored?'2px solid var(--gold)':'1px solid rgba(255,255,255,.3)'};border-radius:8px;padding:3px 6px;display:flex;align-items:center;justify-content:center;cursor:pointer;min-width:46px;color:var(--text);font-size:11px;font-weight:700;">תתעלם</button>
+              <button type="button" data-ignore-chip-pile data-photo-id="${photo.id}" data-stack-id="${st.id}" style="background:none;border:${st.ignored?'2px solid var(--gold)':'1px solid rgba(255,255,255,.3)'};border-radius:8px;padding:3px 6px;display:flex;align-items:center;justify-content:center;cursor:pointer;min-width:46px;color:var(--text);font-size:11px;font-weight:700;">לא שלי</button>
             </div>` : "";
           // Only the label itself is framed (one thin border, transparent fill) - this
           // used to also draw a second border+tint around the whole detected box, which
@@ -6359,7 +6359,7 @@ function renderModal(m){
       const photoAreaHtml = chipPhotos.length ? `
         ${chipPhotos.map((photo,i) => renderPhotoBlock(photo, m.analyzingChipCount && i === chipPhotos.length-1)).join("")}
         ${!m.analyzingChipCount && chipPhotos.some(ph => (ph.stacks||[]).some(st => st.mixed && !st.ignored)) ? `<p style="color:#fca5a5;font-size:12px;font-weight:700;margin:0 0 6px;">בערמה המסומנת "mix color" יש ז'יטון בצבע אחר והיא לא נספרת - הקישו עליה ובחרו את הערך הנכון, או סדרו את הערמה וצלמו שוב.</p>` : ""}
-        <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">${m.analyzingChipCount ? "סופר ז'יטונים אוטומטית..." : "טעות בזיהוי? הקישו על המסגרת כדי לשנות את סוג הז'יטון, ועל העיגול שבצד כדי לשנות את הכמות בשורה. ז'יטונים של מישהו אחר בתמונה? בחרו \"תתעלם\"."}</p>
+        <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">${m.analyzingChipCount ? "סופר ז'יטונים אוטומטית..." : "טעות בזיהוי? הקישו על המסגרת כדי לשנות את סוג הז'יטון, ועל העיגול שבצד כדי לשנות את הכמות בשורה. ז'יטונים של מישהו אחר בתמונה? בחרו \"לא שלי\"."}</p>
         ${chipPhotos.length < 2 ? `
         <div style="position:relative;margin-bottom:8px;">
           <button type="button" class="btn btn-ghost btn-block" style="pointer-events:none;display:flex;align-items:center;justify-content:center;gap:6px;" ${m.analyzingChipCount?"disabled":""}>${icon('plus')} עוד תמונה (ערמות שלא נכנסו לפריים)</button>
@@ -6372,7 +6372,7 @@ function renderModal(m){
           <input type="file" accept="image/*" capture="environment" id="chip-count-camera-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
         </div>
         <ul style="color:var(--muted);font-size:12px;margin:-4px 0 14px;padding:0 18px 0 0;line-height:1.7;">
-          <li>סדרו שורות של ערמות בגובה 10, 5, 3 או 1 ז'יטונים - כל השורה באותו גובה, הגבוהות הכי רחוק מהמצלמה. רוצים שורה נוספת בגובה אחר? אפשר לעדכן את הכמות אחרי הצילום.</li>
+          <li>סדרו את הערמות בשורות - בכל שורה ערמות באותו גובה (כל מספר, עדיף כפולות של 5), הגבוהות הכי רחוק מהמצלמה. אפשר לתקן את הכמות אחרי הצילום.</li>
           <li>כל ערמה מסוג אחד של ז'יטונים בלבד.</li>
           <li>צלמו לרוחב, בזווית של כ-30 מעלות. <a href="/static/chip_count_example.webp" target="_blank" rel="noopener" style="color:var(--gold);">דוגמה לתמונה טובה</a></li>
           <li>לא רוצים לצלם? ניתן ידנית לעדכן כמויות בטבלה למטה.</li>
@@ -9339,7 +9339,7 @@ function attachHandlers(){
           // guesses a row wrong, instead of needing it right the first time.
           const prompt = `תמונה 1 מציגה ערימות של ז'יטוני פוקר על שולחן, צולמו בזווית. ${refList}
 שלב ראשון: עבור כל תמונת ייחוס (2 עד ${validChipValues.length+1}), תארו במילה או שתיים את הצבע/עיצוב המרכזי שלה - התבוננו בכל תמונה בנפרד.
-שלב שני: הערמות מאורגנות בשורות לפי מרחק מהמצלמה, מהגבוהה ביותר (הרחוקה) לנמוכה ביותר (הקרובה). זהו כמה שורות יש בתמונה (1 עד 5) ותנו לכל ערמה את מספר השורה שלה ("row": 1 = הרחוקה מהמצלמה). הגדלים הרגילים הם 10, 5, 3 או ז'יטון בודד (1) - שייכו לכל שורה את הגודל המתאים לפי הסדר הזה, ביחס לשאר השורות שבתמונה (לא לפי מראה מוחלט). אם יש 5 שורות, לשורה שאין לה גודל רגיל תנו את ההערכה הטובה ביותר שלכם למספר הז'יטונים בערמה. עשו הערכה מושכלת - כל ערמה/ז'יטון בתמונה חייב לקבל גודל, גם אם לא ברור ב-100%. עבור כל ערימה/ז'יטון בתמונה 1, זהו גם לאיזו תמונת-ייחוס היא הכי דומה בצבע/עיצוב (לפי התיאורים משלב ראשון), ותנו תיבה תוחמת (bounding box) בפיקסלים מוחלטים יחסית לתמונה 1 (רוחב ${width}, גובה ${height}) בפורמט [x1,y1,x2,y2]. בדקו כל ערמה: אם יש בה לפחות ז'יטון אחד בצבע/עיצוב שונה משאר הז'יטונים שבה, סמנו "mixed":true (ותנו refImage לפי הצבע של רוב הערמה); אחרת "mixed":false.
+שלב שני: הערמות מאורגנות בשורות לפי מרחק מהמצלמה, מהגבוהה ביותר (הרחוקה) לנמוכה ביותר (הקרובה). זהו כמה שורות יש בתמונה (1 עד 5) ותנו לכל ערמה את מספר השורה שלה ("row": 1 = הרחוקה מהמצלמה). בכל שורה כל הערמות באותו גובה (אותו מספר ז'יטונים), אבל הגובה יכול להיות כל מספר, והשורות הרחוקות גבוהות יותר. העריכו לכל שורה כמה ז'יטונים יש בכל ערמה שלה (שדה "count", אותו מספר לכל הערמות בשורה) - בעזרת הגובה היחסי בין השורות ועובי ז'יטון בודד. ערמות גדולות הן כמעט תמיד בכפולות של 5 (5, 10, 15, 20...); מתחת ל-5 זה יכול להיות 1 עד 4. עשו הערכה מושכלת - כל ערמה/ז'יטון בתמונה חייב לקבל גודל, גם אם לא ברור ב-100%; המשתמש יכול לתקן אחר כך. עבור כל ערימה/ז'יטון בתמונה 1, זהו גם לאיזו תמונת-ייחוס היא הכי דומה בצבע/עיצוב (לפי התיאורים משלב ראשון), ותנו תיבה תוחמת (bounding box) בפיקסלים מוחלטים יחסית לתמונה 1 (רוחב ${width}, גובה ${height}) בפורמט [x1,y1,x2,y2]. בדקו כל ערמה: אם יש בה לפחות ז'יטון אחד בצבע/עיצוב שונה משאר הז'יטונים שבה, סמנו "mixed":true (ותנו refImage לפי הצבע של רוב הערמה); אחרת "mixed":false.
 החזירו תשובה בפורמט JSON בלבד, בלי טקסט נוסף ובלי markdown, במבנה הזה בדיוק: {"refColors":[{"refImage":2,"color":"..."}],"stacks":[{"box":[x1,y1,x2,y2],"refImage":N,"row":1,"count":10,"mixed":false}]}`;
           const result = await callClaudeVisionMulti(images, prompt);
           const rawStacks = (result && Array.isArray(result.stacks)) ? result.stacks : [];
