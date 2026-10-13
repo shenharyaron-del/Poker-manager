@@ -6140,7 +6140,7 @@ function renderModal(m){
           return `
             <div style="position:absolute;left:${leftPct}%;top:${topPct}%;width:${wPct}%;height:${hPct}%;${isPicking?'z-index:10;':''}">
               <div style="position:absolute;top:${style.top};left:50%;transform:translate(-50%,${style.ty});">
-                <button type="button" data-chip-pile-value data-photo-id="${photo.id}" data-stack-id="${st.id}" style="display:block;background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:6px;padding:2px 6px;font-weight:800;font-size:12px;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,.9),0 0 4px rgba(0,0,0,.9);cursor:pointer;${st.ignored?'min-width:24px;min-height:20px;':''}">${st.ignored ? '' : (cv ? chipDisplayLabel(cv) : '?')}</button>
+                <button type="button" data-chip-pile-value data-photo-id="${photo.id}" data-stack-id="${st.id}" style="display:block;background:${st.mixed?'rgba(0,0,0,.45)':'transparent'};border:${st.mixed?'2px solid #ef4444':'1px solid var(--gold)'};color:${st.mixed?'#fca5a5':'var(--gold)'};border-radius:6px;padding:2px 6px;font-weight:800;font-size:12px;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,.9),0 0 4px rgba(0,0,0,.9);cursor:pointer;${st.ignored?'min-width:24px;min-height:20px;':''}">${st.ignored ? '' : (st.mixed ? 'mix color' : (cv ? chipDisplayLabel(cv) : '?'))}</button>
                 ${pickerHtml}
               </div>
             </div>`;
@@ -6155,6 +6155,7 @@ function renderModal(m){
       };
       const photoAreaHtml = chipPhotos.length ? `
         ${chipPhotos.map((photo,i) => renderPhotoBlock(photo, m.analyzingChipCount && i === chipPhotos.length-1)).join("")}
+        ${!m.analyzingChipCount && chipPhotos.some(ph => (ph.stacks||[]).some(st => st.mixed && !st.ignored)) ? `<p style="color:#fca5a5;font-size:12px;font-weight:700;margin:0 0 6px;">בערמה המסומנת "mix color" יש ז'יטון בצבע אחר - הקישו עליה ובחרו את הערך הנכון, או סדרו את הערמה וצלמו שוב.</p>` : ""}
         <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">${m.analyzingChipCount ? "סופר ז'יטונים אוטומטית..." : "טעות בזיהוי? הקישו על המסגרת כדי לשנות את סוג הז'יטון, ועל העיגול שבצד כדי לשנות את הכמות בשורה. ז'יטונים של מישהו אחר בתמונה? בחרו \"תתעלם\"."}</p>
         ${chipPhotos.length < 2 ? `
         <div style="position:relative;margin-bottom:8px;">
@@ -9047,7 +9048,7 @@ function attachHandlers(){
         const newValueId = el.dataset.pickChipValue;
         const photoId = el.dataset.photoId, stackId = el.dataset.stackId;
         const photos = (modal.chipPhotos||[]).map(p => p.id !== photoId ? p : {
-          ...p, stacks: (p.stacks||[]).map(st => st.id === stackId ? {...st, chipValueId: newValueId, ignored: false} : st)
+          ...p, stacks: (p.stacks||[]).map(st => st.id === stackId ? {...st, chipValueId: newValueId, ignored: false, mixed: false} : st)
         });
         updateModal({chipPhotos: photos, chipValuePickerFor: null});
         refreshHeader();
@@ -9057,7 +9058,7 @@ function attachHandlers(){
         e.stopPropagation();
         const photoId = el.dataset.photoId, stackId = el.dataset.stackId;
         const photos = (modal.chipPhotos||[]).map(p => p.id !== photoId ? p : {
-          ...p, stacks: (p.stacks||[]).map(st => st.id === stackId ? {...st, ignored: true} : st)
+          ...p, stacks: (p.stacks||[]).map(st => st.id === stackId ? {...st, ignored: true, mixed: false} : st)
         });
         updateModal({chipPhotos: photos, chipValuePickerFor: null});
         refreshHeader();
@@ -9097,8 +9098,8 @@ function attachHandlers(){
           // guesses a row wrong, instead of needing it right the first time.
           const prompt = `תמונה 1 מציגה ערימות של ז'יטוני פוקר על שולחן, צולמו בזווית. ${refList}
 שלב ראשון: עבור כל תמונת ייחוס (2 עד ${validChipValues.length+1}), תארו במילה או שתיים את הצבע/עיצוב המרכזי שלה - התבוננו בכל תמונה בנפרד.
-שלב שני: הערמות מאורגנות בשורות לפי מרחק מהמצלמה, מהגבוהה ביותר (הרחוקה) לנמוכה ביותר (הקרובה). זהו כמה שורות יש בתמונה (1 עד 5) ותנו לכל ערמה את מספר השורה שלה ("row": 1 = הרחוקה מהמצלמה). הגדלים הרגילים הם 10, 5, 3 או ז'יטון בודד (1) - שייכו לכל שורה את הגודל המתאים לפי הסדר הזה, ביחס לשאר השורות שבתמונה (לא לפי מראה מוחלט). אם יש 5 שורות, לשורה שאין לה גודל רגיל תנו את ההערכה הטובה ביותר שלכם למספר הז'יטונים בערמה. עשו הערכה מושכלת - כל ערמה/ז'יטון בתמונה חייב לקבל גודל, גם אם לא ברור ב-100%. עבור כל ערימה/ז'יטון בתמונה 1, זהו גם לאיזו תמונת-ייחוס היא הכי דומה בצבע/עיצוב (לפי התיאורים משלב ראשון), ותנו תיבה תוחמת (bounding box) בפיקסלים מוחלטים יחסית לתמונה 1 (רוחב ${width}, גובה ${height}) בפורמט [x1,y1,x2,y2].
-החזירו תשובה בפורמט JSON בלבד, בלי טקסט נוסף ובלי markdown, במבנה הזה בדיוק: {"refColors":[{"refImage":2,"color":"..."}],"stacks":[{"box":[x1,y1,x2,y2],"refImage":N,"row":1,"count":10}]}`;
+שלב שני: הערמות מאורגנות בשורות לפי מרחק מהמצלמה, מהגבוהה ביותר (הרחוקה) לנמוכה ביותר (הקרובה). זהו כמה שורות יש בתמונה (1 עד 5) ותנו לכל ערמה את מספר השורה שלה ("row": 1 = הרחוקה מהמצלמה). הגדלים הרגילים הם 10, 5, 3 או ז'יטון בודד (1) - שייכו לכל שורה את הגודל המתאים לפי הסדר הזה, ביחס לשאר השורות שבתמונה (לא לפי מראה מוחלט). אם יש 5 שורות, לשורה שאין לה גודל רגיל תנו את ההערכה הטובה ביותר שלכם למספר הז'יטונים בערמה. עשו הערכה מושכלת - כל ערמה/ז'יטון בתמונה חייב לקבל גודל, גם אם לא ברור ב-100%. עבור כל ערימה/ז'יטון בתמונה 1, זהו גם לאיזו תמונת-ייחוס היא הכי דומה בצבע/עיצוב (לפי התיאורים משלב ראשון), ותנו תיבה תוחמת (bounding box) בפיקסלים מוחלטים יחסית לתמונה 1 (רוחב ${width}, גובה ${height}) בפורמט [x1,y1,x2,y2]. בדקו כל ערמה: אם יש בה לפחות ז'יטון אחד בצבע/עיצוב שונה משאר הז'יטונים שבה, סמנו "mixed":true (ותנו refImage לפי הצבע של רוב הערמה); אחרת "mixed":false.
+החזירו תשובה בפורמט JSON בלבד, בלי טקסט נוסף ובלי markdown, במבנה הזה בדיוק: {"refColors":[{"refImage":2,"color":"..."}],"stacks":[{"box":[x1,y1,x2,y2],"refImage":N,"row":1,"count":10,"mixed":false}]}`;
           const result = await callClaudeVisionMulti(images, prompt);
           const rawStacks = (result && Array.isArray(result.stacks)) ? result.stacks : [];
           const stacks = rawStacks.filter(r =>
@@ -9119,7 +9120,9 @@ function attachHandlers(){
             // Grouped by the row the model reported (up to 5 rows - two rows can share a
             // size); falls back to the size for a reply without a usable row number.
             const row = (Number.isInteger(s.row) && s.row >= 1 && s.row <= 5) ? `r${s.row}` : s.count;
-            return {id: uid(), box: s.box, chipValueId: cv.id, count: s.count, rowId: row};
+            // mixed: the model saw at least one chip of another color in this pile - flagged
+            // in red on the photo until the user picks a value for it (or ignores it).
+            return {id: uid(), box: s.box, chipValueId: cv.id, count: s.count, rowId: row, mixed: s.mixed === true};
           }).filter(Boolean);
           if (modal && modal.type === "seatChips") {
             const photos = (modal.chipPhotos||[]).map(p => p.id === photoId ? {...p, stacks: finalStacks} : p);
