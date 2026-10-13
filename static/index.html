@@ -189,6 +189,7 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
 /* Leave-table buttons: a frame whose title sits ON the border line (the line breaks
    behind the text) - native fieldset/legend behavior. */
 .leave-frame{border:1px solid rgba(212,175,55,.55);border-radius:14px;padding:6px 10px 10px;margin:0;min-width:0;flex-shrink:0;}
+.setup-frame{margin:0 0 16px;padding:8px 12px 12px;}
 .leave-frame legend{color:var(--gold);font-size:11px;font-weight:700;letter-spacing:.05em;padding:0 8px;margin-right:6px;}
 /* History/table-activity used to be two always-visible stacked panels (a short fixed-height
    one plus a flex:1 one); now they share one tab-switched panel instead, so whichever is
@@ -5447,8 +5448,8 @@ function renderModal(m){
       </div>
     ` : "";
     const pickButtons = `
-      <div style="position:relative;margin-bottom:10px;">
-        <button type="button" class="btn btn-primary btn-block" style="pointer-events:none;">${icon('plus')} צלם</button>
+      <div style="position:relative;">
+        <button type="button" class="btn btn-primary btn-block" style="pointer-events:none;display:flex;align-items:center;justify-content:center;gap:8px;">${icon('camera')} צלם</button>
         <input type="file" accept="image/*" capture="environment" id="chip-camera-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
       </div>
     `;
@@ -5460,15 +5461,19 @@ function renderModal(m){
       body = `
         ${setupTabsHtml(m.communityId, "chips")}
         <p style="color:var(--muted);font-size:12px;margin:0 0 14px;">ערכי הז'יטונים ויחס ההמרה (אופציונלי) - כלי עזר לספירת הז'יטונים בסוף הערב.</p>
-        <div class="section-title" style="padding:0;margin:0 0 6px;">יחס ז'יטונים</div>
+        <fieldset class="leave-frame setup-frame">
+        <legend>יחס ז'יטונים</legend>
         <div class="field">
           <label>1 שקל עבור <input type="number" inputmode="decimal" id="chip-ratio-input" value="${esc(String(shownRatio))}" style="width:70px;display:inline-block;text-align:center;"> ז'יטונים</label>
         </div>
-        <p style="color:var(--muted);font-size:12px;margin-top:-8px;">משמש לספירת ז'יטונים כוללת בסיום ערב.<br>יחס של 1 ל-<span id="chip-ratio-example-x">${esc(String(shownRatio))}</span> אומר שעבור 50 ש"ח תקבל <span id="chip-ratio-example-y">${isNaN(parseFloat(shownRatio)) ? 'Y' : esc(String(Math.round(parseFloat(shownRatio) * 50 * 100) / 100))}</span> ז'יטונים.</p>
-        <div class="section-title" style="padding:0;margin:0 0 6px;">הוספת ויזואליות של הז'יטונים</div>
+        <p style="color:var(--muted);font-size:12px;margin:-8px 0 0;">משמש לספירת ז'יטונים כוללת בסיום ערב.<br>יחס של 1 ל-<span id="chip-ratio-example-x">${esc(String(shownRatio))}</span> אומר שעבור 50 ש"ח תקבל <span id="chip-ratio-example-y">${isNaN(parseFloat(shownRatio)) ? 'Y' : esc(String(Math.round(parseFloat(shownRatio) * 50 * 100) / 100))}</span> ז'יטונים.</p>
+        </fieldset>
+        <fieldset class="leave-frame setup-frame">
+        <legend>הוספת ויזואליות של הז'יטונים</legend>
         <p style="color:var(--muted);font-size:13px;margin-top:0;">צלמו תמונה עם כל הז'יטונים פרוסים בנפרד על משטח, ממבט על (מלמעלה).<br>באמצעות הגדרה זו נוכל לספור ז'יטונים בסיום ערב.</p>
         ${editableList}
         ${pickButtons}
+        </fieldset>
       `;
     } else {
       const markers = (m.imageW && m.imageH) ? m.points.filter(pt => pt.x != null).map(pt => {
@@ -5485,6 +5490,8 @@ function renderModal(m){
       body = `
         ${setupTabsHtml(m.communityId, "chips")}
         <p style="color:var(--muted);font-size:12px;margin:0 0 14px;">ערכי הז'יטונים ויחס ההמרה (אופציונלי) - כלי עזר לספירת הז'יטונים בסוף הערב.</p>
+        <fieldset class="leave-frame setup-frame">
+        <legend>הוספת ויזואליות של הז'יטונים</legend>
         <div style="width:100%;margin-bottom:10px;position:relative;">
           <img src="${m.imageSrc}" data-chip-photo draggable="false" oncontextmenu="return false" style="width:100%;border-radius:12px;display:block;cursor:crosshair;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;${m.analyzingChips?'opacity:.5;':''}">
           ${markers}
@@ -5492,7 +5499,8 @@ function renderModal(m){
         </div>
         <p style="color:var(--muted);font-size:12px;margin-top:0;">${m.analyzingChips ? "מזהה ז'יטונים אוטומטית..." : "הקישו על ז'יטון בתמונה כדי להוסיף מסגרת דוגמה - אפשר לגרור אותה למיקום מדויק, ולגרור את הנקודה הלבנה כדי לשנות את הגודל שיקיף בדיוק את הז'יטון. התמונה בטבלה מתעדכנת תוך כדי הגרירה."}</p>
         ${editableList}
-        <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-retake-photo>${icon('plus')} תמונה אחרת</button>
+        <button class="btn btn-ghost btn-block" data-retake-photo>${icon('plus')} תמונה אחרת</button>
+        </fieldset>
       `;
     }
   } else if (m.type === "newCommunity") {
@@ -5797,29 +5805,34 @@ function renderModal(m){
     body = `
       ${setupTabsHtml(m.communityId, "payments")}
       <p style="color:var(--muted);font-size:12px;margin:0 0 14px;">פתיחה מהירה לקבוצת הפייבוקס או הביט לטובת הסדר התשלומים.<br>אם אין, Poker Manager יציע העברות ישירות בין השחקנים.</p>
-      <div class="section-title" style="padding:0;margin:0 0 8px;display:flex;align-items:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:16px;width:auto;display:block;">קבוצת פייבוקס</div>
+      <fieldset class="leave-frame setup-frame">
+      <legend style="display:flex;align-items:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:14px;width:auto;display:block;">קבוצת פייבוקס</legend>
       ${link ? `
-        <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:10px;margin-bottom:18px;">
+        <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:10px;">
           <input type="text" data-paybox-name-input="${link.id}" value="${esc(payDraft.paybox[link.id] ? payDraft.paybox[link.id].name : '')}" placeholder="${esc(link.name) || 'שם'}" style="margin-bottom:6px;font-weight:700;">
           <input type="text" value="${esc(payDraft.paybox[link.id] ? payDraft.paybox[link.id].link : link.link)}" data-paybox-link-input="${link.id}" placeholder="קישור" dir="ltr">
         </div>
       ` : `
         <div class="field"><label>שם</label><input type="text" id="new-paybox-name" placeholder="שם הקבוצה בפייבוקס"></div>
         <div class="field"><label>קישור</label><input type="text" id="new-paybox-link" placeholder="https://links.payboxapp.com/..." dir="ltr"></div>
-        <button class="btn btn-block lux-paybox" style="margin-bottom:18px;" data-add-paybox-entry><img src="/static/paybox-icon.png" alt="">שמור קבוצת פייבוקס</button>
+        <button class="btn btn-block lux-paybox" data-add-paybox-entry><img src="/static/paybox-icon.png" alt="">שמור קבוצת פייבוקס</button>
       `}
-      <div class="section-title" style="padding:0;margin:0 0 8px;display:flex;align-items:center;gap:6px;"><img src="/static/bit-icon.png" style="height:16px;width:auto;display:block;">קבוצת ביט</div>
+      </fieldset>
+      <fieldset class="leave-frame setup-frame">
+      <legend style="display:flex;align-items:center;gap:6px;"><img src="/static/bit-icon.png" style="height:14px;width:auto;display:block;">קבוצת ביט</legend>
       ${bitLink ? `
-        <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:10px;margin-bottom:18px;">
+        <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:10px;">
           <input type="text" data-bit-name-input="${bitLink.id}" value="${esc(payDraft.bit[bitLink.id] ? payDraft.bit[bitLink.id].name : '')}" placeholder="${esc(bitLink.name) || 'שם'}" style="margin-bottom:6px;font-weight:700;">
           <input type="text" value="${esc(payDraft.bit[bitLink.id] ? payDraft.bit[bitLink.id].link : bitLink.link)}" data-bit-link-input="${bitLink.id}" placeholder="קישור" dir="ltr">
         </div>
       ` : `
         <div class="field"><label>שם</label><input type="text" id="new-bit-name" placeholder="שם הקבוצה בביט"></div>
         <div class="field"><label>קישור</label><input type="text" id="new-bit-link" placeholder="https://www.bitpay.co.il/..." dir="ltr"></div>
-        <button class="btn btn-block lux-bit" style="margin-bottom:18px;" data-add-bit-entry><img src="/static/bit-icon.png" alt="">שמור קבוצת ביט</button>
+        <button class="btn btn-block lux-bit" data-add-bit-entry><img src="/static/bit-icon.png" alt="">שמור קבוצת ביט</button>
       `}
-      <div class="section-title" style="padding:0;margin:0 0 6px;">ברירת מחדל לסיום שולחן</div>
+      </fieldset>
+      <fieldset class="leave-frame setup-frame">
+      <legend>ברירת מחדל לסיום שולחן</legend>
       <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">כשמישהו מסיים ערב, איזו אפשרות תוצע לו כברירת מחדל לתשלום.</p>
       <div class="checkbox-row" style="cursor:${link?'pointer':'not-allowed'};opacity:${link?'1':'.5'};" ${link?`data-select-settlement-default="paybox"`:''}>
         <input type="radio" name="settlement-default" ${settlementDefault==='paybox'?'checked':''} ${link?'':'disabled'}>
@@ -5831,10 +5844,11 @@ function renderModal(m){
         <span class="flex1">תשלום לביט הקבוצתי</span>
       </div>
       ${!bitLink ? `<p style="color:var(--muted);font-size:11px;margin:-2px 0 10px;">דורש הגדרת קבוצת ביט למעלה</p>` : ""}
-      <div class="checkbox-row" style="cursor:pointer;margin-bottom:18px;" data-select-settlement-default="direct">
+      <div class="checkbox-row" style="cursor:pointer;margin-bottom:0;" data-select-settlement-default="direct">
         <input type="radio" name="settlement-default" ${settlementDefault==='direct'?'checked':''}>
         <span class="flex1">העברה ישירות בין שחקנים</span>
       </div>
+      </fieldset>
     `;
   } else if (m.type === "buyinSetup") {
     const c = getCommunity(m.communityId);
