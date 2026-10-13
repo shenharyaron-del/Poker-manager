@@ -6000,6 +6000,7 @@ function renderModal(m){
       const colorTotals = {};
       chipPhotos.forEach(photo => (photo.stacks||[]).forEach(st => {
         if (st.ignored) return; // "תתעלם" - e.g. another player's chips caught in the photo
+        if (st.mixed) return; // "mix color" - counts as 0 until the user picks its value
         colorTotals[st.chipValueId] = (colorTotals[st.chipValueId]||0) + st.count;
       }));
       // {photoId, stackId} of the pile whose value-picker is currently open, or null.
@@ -6155,7 +6156,7 @@ function renderModal(m){
       };
       const photoAreaHtml = chipPhotos.length ? `
         ${chipPhotos.map((photo,i) => renderPhotoBlock(photo, m.analyzingChipCount && i === chipPhotos.length-1)).join("")}
-        ${!m.analyzingChipCount && chipPhotos.some(ph => (ph.stacks||[]).some(st => st.mixed && !st.ignored)) ? `<p style="color:#fca5a5;font-size:12px;font-weight:700;margin:0 0 6px;">בערמה המסומנת "mix color" יש ז'יטון בצבע אחר - הקישו עליה ובחרו את הערך הנכון, או סדרו את הערמה וצלמו שוב.</p>` : ""}
+        ${!m.analyzingChipCount && chipPhotos.some(ph => (ph.stacks||[]).some(st => st.mixed && !st.ignored)) ? `<p style="color:#fca5a5;font-size:12px;font-weight:700;margin:0 0 6px;">בערמה המסומנת "mix color" יש ז'יטון בצבע אחר והיא לא נספרת - הקישו עליה ובחרו את הערך הנכון, או סדרו את הערמה וצלמו שוב.</p>` : ""}
         <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">${m.analyzingChipCount ? "סופר ז'יטונים אוטומטית..." : "טעות בזיהוי? הקישו על המסגרת כדי לשנות את סוג הז'יטון, ועל העיגול שבצד כדי לשנות את הכמות בשורה. ז'יטונים של מישהו אחר בתמונה? בחרו \"תתעלם\"."}</p>
         ${chipPhotos.length < 2 ? `
         <div style="position:relative;margin-bottom:8px;">
@@ -9121,7 +9122,7 @@ function attachHandlers(){
             // size); falls back to the size for a reply without a usable row number.
             const row = (Number.isInteger(s.row) && s.row >= 1 && s.row <= 5) ? `r${s.row}` : s.count;
             // mixed: the model saw at least one chip of another color in this pile - flagged
-            // in red on the photo until the user picks a value for it (or ignores it).
+            // in red on the photo and counted as 0 until the user picks a value for it.
             return {id: uid(), box: s.box, chipValueId: cv.id, count: s.count, rowId: row, mixed: s.mixed === true};
           }).filter(Boolean);
           if (modal && modal.type === "seatChips") {
