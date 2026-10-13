@@ -199,20 +199,20 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
    "raised" pill matching the panel's own color (navy for history, charcoal for feed)
    directly below it, same idea as a browser tab merging into its own page. */
 .player-history-feed{display:flex;flex-direction:column;flex:1;min-height:0;margin-bottom:14px;position:relative;}
-/* First-game helper (see tableHelperHtml): one 12s run of three 4s steps - ריביי (arrow
+/* First-game helper (see tableHelperHtml): one 15s run of three 5s steps - ריביי (arrow
    up, rebuy frame glows), מסך השולחן (swipe hint), סוף הערב (arrow down, leave frame
    glows) - then it closes by itself. */
 .table-helper{position:absolute;inset:0;z-index:6;border-radius:16px;background:rgba(2,20,14,.93);border:1px solid rgba(212,175,55,.6);pointer-events:none;}
-.th-step{position:absolute;inset:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;opacity:0;animation:thStep1 12s linear forwards;}
+.th-step{position:absolute;inset:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;opacity:0;animation:thStep1 15s linear forwards;}
 .th-step-1{justify-content:flex-start;} /* ריביי at the top - next to the rebuy buttons */
 .th-step-2{animation-name:thStep2;}
 .th-step-3{animation-name:thStep3;justify-content:flex-end;} /* סוף הערב at the bottom - next to the leave buttons */
 .th-title{color:var(--gold);font-weight:800;font-size:18px;}
 .th-text{color:#f5f5f4;font-size:15px;line-height:1.5;max-width:280px;}
 .th-arrow{color:var(--gold);font-size:34px;line-height:1;}
-.th-arrow-up{animation:thBounceUp 12s linear forwards;}
-.th-arrow-down{animation:thBounceDown 12s linear forwards;}
-.th-swipe{font-size:34px;line-height:1;animation:thSwipe 12s linear forwards;}
+.th-arrow-up{animation:thBounceUp 15s linear forwards;}
+.th-arrow-down{animation:thBounceDown 15s linear forwards;}
+.th-swipe{font-size:34px;line-height:1;animation:thSwipe 15s linear forwards;}
 .th-swipe-left{animation-name:thSwipeLeft;}
 @keyframes thStep1{0%{opacity:0}3%,29%{opacity:1}33%,100%{opacity:0}}
 @keyframes thStep2{0%,33%{opacity:0}36%,62%{opacity:1}66%,100%{opacity:0}}
@@ -221,8 +221,8 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
 @keyframes thSwipe{0%,36%{transform:translateX(-50px);opacity:0}39%{opacity:1}46%{transform:translateX(50px);opacity:1}48%{transform:translateX(50px);opacity:0}49%{transform:translateX(-50px);opacity:0}51%{opacity:1}58%{transform:translateX(50px);opacity:1}60%,100%{transform:translateX(50px);opacity:0}}
 @keyframes thSwipeLeft{0%,36%{transform:translateX(50px);opacity:0}39%{opacity:1}46%{transform:translateX(-50px);opacity:1}48%{transform:translateX(-50px);opacity:0}49%{transform:translateX(50px);opacity:0}51%{opacity:1}58%{transform:translateX(-50px);opacity:1}60%,100%{transform:translateX(-50px);opacity:0}}
 @keyframes thBounceDown{0%,66%,73%,80%,87%,94%,100%{transform:translateY(0)}69.5%,76.5%,83.5%,90.5%{transform:translateY(10px)}}
-.th-glow-rebuy{animation:thGlow1 12s linear forwards;}
-.th-glow-leave{animation:thGlow2 12s linear forwards;}
+.th-glow-rebuy{animation:thGlow1 15s linear forwards;}
+.th-glow-leave{animation:thGlow2 15s linear forwards;}
 @keyframes thGlow1{0%,33%,100%{box-shadow:none;border-color:rgba(212,175,55,.55)}3%,29%{box-shadow:0 0 16px rgba(251,191,36,.6),inset 0 0 10px rgba(251,191,36,.25);border-color:var(--gold)}}
 @keyframes thGlow2{0%,66%,100%{box-shadow:none;border-color:rgba(212,175,55,.55)}69%,96%{box-shadow:0 0 16px rgba(251,191,36,.6),inset 0 0 10px rgba(251,191,36,.25);border-color:var(--gold)}}
 /* Two layers of rounding, for two different corners:
@@ -2451,7 +2451,7 @@ function markGameWelcomed(gameId){
 // cashed-out game in any group (a new user), once per account (myIdentity.seenTableHelper
 // is saved with the identity, so it doesn't come back on another device either).
 let tableHelperStartedAt = 0;
-const TABLE_HELPER_MS = 12000; // three 4s steps, played once, then it closes by itself
+const TABLE_HELPER_MS = 15000; // three 5s steps, played once, then it closes by itself
 // "?demo=helper" in the address shows it once more for anyone (e.g. an existing player
 // who wants to see it), without touching the saved seenTableHelper flag.
 let tableHelperDemo = false;
