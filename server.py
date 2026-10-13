@@ -1775,6 +1775,14 @@ def v2_add_buyin(game_id):
         return jsonify({"error": "amount must be a positive number"}), 400
     with get_db() as conn:
         with conn.cursor() as cur:
+            # A playerId that isn't actually seated in THIS game used to insert just fine
+            # (no FK, nothing cross-checks it) - confirmed live as a ₪50 buy-in that landed
+            # on a player_id ("pA") nobody at the table ever had, silently unbalancing the
+            # night with no trace of how it got there. Reject it up front instead.
+            cur.execute("SELECT 1 FROM game_players WHERE game_id = %s AND player_id = %s", (game_id, player_id))
+            if not cur.fetchone():
+                conn.rollback()
+                return jsonify({"error": "player not in this game"}), 400
             # ON CONFLICT DO NOTHING: the id is generated client-side, so a request retried
             # after a timeout (the first attempt actually landed) is a no-op instead of a
             # 500 - and the client never has to fall back to a second buy-in with a NEW id,
@@ -1803,6 +1811,16 @@ def v2_add_buyins_bulk(game_id):
             return jsonify({"error": "each buy-in needs id, playerId and a positive amount"}), 400
     with get_db() as conn:
         with conn.cursor() as cur:
+            # Same "is this playerId actually seated in this game" check as the single-
+            # buy-in endpoint above (see its own comment) - checked for every entry up
+            # front, before writing any of them, consistent with the all-or-nothing
+            # transaction below.
+            cur.execute("SELECT player_id FROM game_players WHERE game_id = %s", (game_id,))
+            valid_player_ids = {r[0] for r in cur.fetchall()}
+            for b in buyins:
+                if b["playerId"] not in valid_player_ids:
+                    conn.rollback()
+                    return jsonify({"error": "player not in this game"}), 400
             # All-or-nothing: one transaction, committed once below.
             for b in buyins:
                 cur.execute(
@@ -1850,6 +1868,13 @@ def v2_set_cashout(game_id, player_id):
         return jsonify({"error": "arrangedWith must be a list of player ids"}), 400
     with get_db() as conn:
         with conn.cursor() as cur:
+            # Same "is this playerId actually seated in this game" check as the buy-in
+            # endpoints above (see v2_add_buyin's own comment) - a cash-out for a player
+            # nobody at the table ever had would unbalance the night the same way.
+            cur.execute("SELECT 1 FROM game_players WHERE game_id = %s AND player_id = %s", (game_id, player_id))
+            if not cur.fetchone():
+                conn.rollback()
+                return jsonify({"error": "player not in this game"}), 400
             cur.execute(
                 "INSERT INTO cashouts (game_id, player_id, amount, ts, arranged_with) "
                 "VALUES (%s,%s,%s,now(),%s) "
