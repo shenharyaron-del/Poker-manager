@@ -937,6 +937,11 @@ let hasAppliedFreshStateOnce = false;
 // so it doesn't also get caught by this diff a moment later and double up.
 function detectAndAnnounceNewBuyins(oldGames, newGames){
   (newGames||[]).forEach(ng => {
+    // Only a table this device sits at (or is looking at right now, e.g. an admin
+    // watching it) - with two tables running in the same group, players at one table
+    // were getting the other table's ריביי cards and sounds.
+    const relevant = isSeatedInGame(ng) || (nav.screen === "table" && nav.gameId === ng.id);
+    if (!relevant) { rememberAnnouncedBuyinsBulk((ng.buyins||[]).map(b => b.id)); return; }
     const og = (oldGames||[]).find(g => g.id === ng.id);
     const oldIds = new Set((og ? og.buyins : []).map(b => b.id));
     const playerBuyins = {};
