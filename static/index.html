@@ -1398,7 +1398,13 @@ async function v2EditBitLinks(communityId, links){
 
 async function v2CreateCommunity(id, name, createdBy, createdByName, creatorPlayerId, creatorPlayerName){
   await v2Fetch("POST", "/communities", {id, name, createdBy, createdByName, creatorPlayerId, creatorPlayerName});
-  state.communities.push({id, name, roster: [{id: creatorPlayerId, name: creatorPlayerName, clientId: createdBy}], createdBy, createdByName});
+  // Re-fetched rather than built locally: the setup screen opens right after this, and
+  // every save there (chip values, ratio, payments, ריביי) sends the community's
+  // server-side updatedAt and current lists - a hand-built object had neither, so the
+  // first save on a brand new group was rejected (400) and showed "שמירה נכשלה".
+  try { state.communities = await v2Fetch("GET", "/communities"); }
+  catch(e) { /* fall back to a local copy below */ }
+  if (!getCommunity(id)) state.communities.push({id, name, roster: [{id: creatorPlayerId, name: creatorPlayerName, clientId: createdBy}], createdBy, createdByName, chipValues: [], payboxLinks: [], bitLinks: []});
 }
 
 async function v2DuplicateCommunity(communityId, id, name){
@@ -3076,7 +3082,7 @@ async function saveSetupChips(communityId, chips){
   if (USE_RELATIONAL_API) {
     const c = getCommunity(communityId);
     try {
-      const ok = await v2SetChipValues(communityId, values.length ? values : c.chipValues, validRatio ? ratio : c.chipRatio);
+      const ok = await v2SetChipValues(communityId, values.length ? values : (c.chipValues || []), validRatio ? ratio : c.chipRatio);
       if (!ok) { showAlert("לא הצלחנו לשמור בגלל התנגשות עם שמירה אחרת - נסו את הפעולה שוב."); return false; }
     } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return false; }
   } else {
