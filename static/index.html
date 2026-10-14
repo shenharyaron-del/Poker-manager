@@ -4920,10 +4920,13 @@ function renderPlayerScreen(gameId){
       </div>`;
     })()}
   `;
-  const armed = !!leaveArmed[pickKey];
+  // A closed night (admin's "ערב סגור") forces everyone still at the table into the
+  // end-of-evening state: box ticked and locked, rebuys hidden.
+  const nightClosedLock = !!g.closed;
+  const armed = nightClosedLock || !!leaveArmed[pickKey];
   const leaveHtml = `
     <label class="lv-arm">
-      <input type="checkbox" data-leave-arm ${armed?'checked':''}>
+      <input type="checkbox" data-leave-arm ${armed?'checked':''} ${nightClosedLock?'disabled':''}>
       <span>סיימתי את הערב</span>
       <span class="lv-line"></span>
     </label>
