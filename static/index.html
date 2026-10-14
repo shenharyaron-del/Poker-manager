@@ -4057,12 +4057,14 @@ function render(){
     } else {
       // Not seated (spectator/admin) - only the circles view exists, nothing to swipe to,
       // so skip the carousel machinery entirely and keep the plain single-face structure.
-      html = `<div class="table-swipe-root">${renderTable(nav.gameId)}</div>`;
+      const watchFeed = watchView === "feed" && isSuperAdmin() && !isSeatedInGame(g);
+      html = `<div class="table-swipe-root"${watchFeed ? ' style="display:flex;flex-direction:column;height:100%;"' : ''}>${watchFeed ? renderWatchFeed(nav.gameId) : renderTable(nav.gameId)}</div>`;
     }
     }
   }
   const SUB_VIEW_LABELS = { player: "מסך שחקן", table: "מסך השולחן", admin: "מסך ניהול שחקנים" };
-  const screenLabel = resultsScreen ? "תוצאות משחק" : ((seated && SUB_VIEW_LABELS[tableSubView]) || (SCREEN_NAMES[nav.screen] || nav.screen));
+  const watchFeedOn = nav.screen === "table" && !resultsScreen && !seated && watchView === "feed" && isSuperAdmin();
+  const screenLabel = resultsScreen ? "תוצאות משחק" : watchFeedOn ? "פעילות בשולחן" : ((seated && SUB_VIEW_LABELS[tableSubView]) || (SCREEN_NAMES[nav.screen] || nav.screen));
   // On a game's screens the tag doubles as breadcrumbs: מסך הבית / מסך הקבוצה / <this
   // screen>, the first two linking home and to the game's group.
   const crumbGame = nav.screen === "table" && nav.gameId ? getGame(nav.gameId) : null;
@@ -4355,6 +4357,122 @@ function renderGameWelcomeOverlay(gameId, playerId){
     </div>
   `;
 }
+// The table's activity feed ("פעילות בשולחן") - buy-ins (incl. struck-through deleted
+// ones this device saw), cash-outs, logged events and direct transfers, oldest first.
+// Shared by the player screen and the super admin's watch-only feed page; nothing in it
+// depends on who's looking.
+function buildTableFeed(g, c){
+  const isFemale = playerId => { const rp = (c.roster||[]).find(pl => pl.id === playerId); return !!rp && rp.gender === "female"; };
+  if (!localBuyinLogs[g.id]) localBuyinLogs[g.id] = {};
+  const myBuyinLog = localBuyinLogs[g.id];
+  g.buyins.forEach(b => { if (!myBuyinLog[b.id]) myBuyinLog[b.id] = {ts:b.ts, playerId:b.playerId, amount:b.amount, actorName:b.actorName}; });
+  const liveBuyinIds = new Set(g.buyins.map(b => b.id));
+  const ghostBuyins = Object.keys(myBuyinLog).filter(id => !liveBuyinIds.has(id)).map(id => Object.assign({id}, myBuyinLog[id]));
+  const feedEvents = g.buyins.map(b => ({ts:b.ts, kind:"buyin", buyin:b}));
+  ghostBuyins.forEach(b => feedEvents.push({ts:b.ts, kind:"buyin", buyin:b, ghost:true}));
+  Object.keys(g.cashouts||{}).forEach(playerId => {
+    feedEvents.push({ts: g.cashouts[playerId].ts, kind:"cashout", playerId, amount: g.cashouts[playerId].amount});
+  });
+  (g.events||[]).forEach(ev => feedEvents.push({ts: ev.ts, kind: ev.type, playerId: ev.playerId, amount: ev.amount, actorName: ev.actorName}));
+  // Direct player-to-player transfers recorded at cash-out (see the directPay window).
+  (g.playerPayments||[]).forEach(pp => feedEvents.push({ts: pp.ts, kind: "player_payment", payment: pp}));
+  feedEvents.sort((a,b) => (a.ts||0)-(b.ts||0));
+  // Identifies the newest event so render() can tell a genuinely new one apart from just
+  // a re-render of the same data (see lastSeenFeedEventKey) - the vibrate trigger.
+  const latestFeedEvent = feedEvents[feedEvents.length-1];
+  const latestFeedEventKey = latestFeedEvent ? `${latestFeedEvent.ts}-${latestFeedEvent.kind}-${latestFeedEvent.kind==='buyin'?latestFeedEvent.buyin.id:latestFeedEvent.playerId}` : "";
+  const FEED_COLORS = { gray: "#5c5c5c", white: "var(--text)" };
+  // Carries an actorName whenever the actor differs from the player it's about - the 4
+  // log-based event types always have (see logGameEvent/v2AddGameEvent); a buyin only does
+  // for ones saved since actor_name was added to the buyins table (see performBuyin) -
+  // older rows just read as undefined, same as a player doing it for themselves normally
+  // reads. Omitted entirely (not "ע"י [own name]") when the actor IS the player it's about.
+  const actorSuffix = (playerName, actorName) => (actorName && actorName !== playerName) ? ` ע"י ${esc(actorName)}` : "";
+  // Picks the right verb form for the table activity feed - gender comes from the
+  // player's own roster row (set from the identityName screen, see
+  // v2SetGenderEverywhere), defaulting to male for a one-off guest (never in the roster
+  // at all) same as the server does.
+  const feedCounts = {}, feedTotals = {};
+  const feedRows = feedEvents.map(ev => {
+    let text, rowIcon;
+    // All white now - size/weight (see isRecent below) carries the "what's fresh"
+    // distinction instead of a gray/white color split. A ghost (deleted) buy-in dims to
+    // the gray instead, struck through - see the final return below.
+    const color = ev.ghost ? FEED_COLORS.gray : FEED_COLORS.white;
+    if (ev.kind === "buyin") {
+      const b = ev.buyin;
+      const player = g.players.find(pl => pl.id === b.playerId);
+      const name = esc(player ? player.name : "שחקן");
+      const fem = isFemale(b.playerId);
+      rowIcon = 'coinsPlus';
+      if (ev.ghost) {
+        // Deleted since this device last saw it - a plain "עשה ריביי" without the
+        // entry-vs-rebuy distinction (no longer knowable once it's gone) or a running
+        // total (which must only reflect buy-ins that still actually count).
+        text = `${name} ${fem?'עשתה':'עשה'} ריביי של ₪${b.amount}${actorSuffix(player?player.name:name, b.actorName)}`;
+      } else {
+        feedCounts[b.playerId] = (feedCounts[b.playerId]||0) + 1;
+        feedTotals[b.playerId] = (feedTotals[b.playerId]||0) + b.amount;
+        const isRebuy = feedCounts[b.playerId] > 1;
+        text = isRebuy
+          ? `${name} ${fem?'עשתה':'עשה'} ריביי של ₪${b.amount} (סה"כ קנייה של ₪${feedTotals[b.playerId]})${actorSuffix(player?player.name:name, b.actorName)}`
+          : `${name} ${fem?'נכנסה':'נכנס'} לשולחן עם ₪${b.amount}${actorSuffix(player?player.name:name, b.actorName)}`;
+      }
+    } else if (ev.kind === "cashout") {
+      const player = g.players.find(pl => pl.id === ev.playerId);
+      const name = esc(player ? player.name : "שחקן");
+      const totalBuyin = feedTotals[ev.playerId] || 0;
+      const profit = ev.amount - totalBuyin;
+      const profitText = profit >= 0 ? `₪${Math.round(profit)} רווח` : `₪${Math.abs(Math.round(profit))} הפסד`;
+      text = `${name} ${isFemale(ev.playerId)?'יצאה':'יצא'} מהשולחן עם ₪${ev.amount} ז'יטונים בספירה (${profitText})`;
+      rowIcon = 'out';
+    } else if (ev.kind === "buyin_deleted") {
+      const player = g.players.find(pl => pl.id === ev.playerId);
+      const pname = player ? player.name : "שחקן";
+      // The deleted buy-in's own row no longer comes from here - see the ghost-buyin
+      // entries built from localBuyinLogs above, which (when this device saw the original
+      // buy-in itself) show it struck through at its own true original timestamp instead
+      // of paired next to this cancellation line.
+      text = `${esc(pname)} ${isFemale(ev.playerId)?'ביטלה':'ביטל'} קנייה בסך ₪${ev.amount}${actorSuffix(pname, ev.actorName)}`;
+      rowIcon = 'trash';
+    } else if (ev.kind === "returned_to_table") {
+      const player = g.players.find(pl => pl.id === ev.playerId);
+      const pname = player ? player.name : "שחקן";
+      text = `${esc(pname)} ${isFemale(ev.playerId)?'חזרה':'חזר'} לשולחן${actorSuffix(pname, ev.actorName)}`;
+      rowIcon = 'undo';
+    } else if (ev.kind === "seat_removed") {
+      const player = g.players.find(pl => pl.id === ev.playerId);
+      const pname = player ? player.name : "שחקן";
+      text = `${esc(pname)} ${isFemale(ev.playerId)?'הוצאה':'הוצא'} מהשולחן${actorSuffix(pname, ev.actorName)}`;
+      rowIcon = 'x';
+    } else if (ev.kind === "player_payment") {
+      const pp = ev.payment;
+      const from = g.players.find(pl => pl.id === pp.fromPlayerId);
+      const to = g.players.find(pl => pl.id === pp.toPlayerId);
+      text = `${esc(from ? from.name : "שחקן")} ${isFemale(pp.fromPlayerId)?'העבירה':'העביר'} ₪${pp.amount} ל${esc(to ? to.name : "שחקן")}`;
+      rowIcon = 'payment';
+    } else if (ev.kind === "night_declared_over") {
+      text = `הוכרז על סיום ערב${ev.actorName ? ` ע"י ${esc(ev.actorName)}` : ""}`;
+      rowIcon = 'check';
+    } else if (ev.kind === "night_closed") {
+      text = ev.actorName ? `הערב נסגר ע"י ${esc(ev.actorName)}` : `הערב נסגר - כולם יצאו מהשולחן`;
+      rowIcon = 'check';
+    } else if (ev.kind === "night_reopened") {
+      text = `הערב נפתח מחדש${ev.actorName ? ` ע"י ${esc(ev.actorName)}` : ""}`;
+      rowIcon = 'plus';
+    } else {
+      return "";
+    }
+    // Bold + one font-size step up for anything in the last 5 minutes - draws the eye to
+    // what's actually fresh without needing a separate "new" badge. Never applied to a
+    // ghost row (a cancelled buy-in) regardless of how recent it was - struck through and
+    // dimmed instead, which would otherwise visually fight with "fresh and bold".
+    const isRecent = !ev.ghost && ev.ts && (Date.now() - ev.ts) < 5*60*1000;
+    return `<div class="chat-bubble with-icon" style="color:${color};font-weight:${isRecent?700:400};font-size:${isRecent?15:13}px;${ev.ghost?'text-decoration:line-through;opacity:.7;':''}">${icon(rowIcon)}<div style="flex:1;min-width:0;"><span class="bubble-time">${fmtTime(ev.ts)}</span>${text}</div></div>`;
+  }).join("") || `<div class="chat-bubble" style="color:#f5f5f4;">אין עדיין פעילות בשולחן</div>`;
+  return {feedRows, latestFeedEventKey};
+}
+
 function renderPlayerScreen(gameId){
   const g = getGame(gameId);
   if (!g) return `<div class="empty">משחק לא נמצא</div>`;
@@ -4488,113 +4606,7 @@ function renderPlayerScreen(gameId){
   // comment), then diff against the current live list - any id that's in the log but no
   // longer in g.buyins was deleted, and gets its own struck-through "ghost" row back at
   // its true original timestamp instead of only the separate cancellation line.
-  if (!localBuyinLogs[g.id]) localBuyinLogs[g.id] = {};
-  const myBuyinLog = localBuyinLogs[g.id];
-  g.buyins.forEach(b => { if (!myBuyinLog[b.id]) myBuyinLog[b.id] = {ts:b.ts, playerId:b.playerId, amount:b.amount, actorName:b.actorName}; });
-  const liveBuyinIds = new Set(g.buyins.map(b => b.id));
-  const ghostBuyins = Object.keys(myBuyinLog).filter(id => !liveBuyinIds.has(id)).map(id => Object.assign({id}, myBuyinLog[id]));
-  const feedEvents = g.buyins.map(b => ({ts:b.ts, kind:"buyin", buyin:b}));
-  ghostBuyins.forEach(b => feedEvents.push({ts:b.ts, kind:"buyin", buyin:b, ghost:true}));
-  Object.keys(g.cashouts||{}).forEach(playerId => {
-    feedEvents.push({ts: g.cashouts[playerId].ts, kind:"cashout", playerId, amount: g.cashouts[playerId].amount});
-  });
-  (g.events||[]).forEach(ev => feedEvents.push({ts: ev.ts, kind: ev.type, playerId: ev.playerId, amount: ev.amount, actorName: ev.actorName}));
-  // Direct player-to-player transfers recorded at cash-out (see the directPay window).
-  (g.playerPayments||[]).forEach(pp => feedEvents.push({ts: pp.ts, kind: "player_payment", payment: pp}));
-  feedEvents.sort((a,b) => (a.ts||0)-(b.ts||0));
-  // Identifies the newest event so render() can tell a genuinely new one apart from just
-  // a re-render of the same data (see lastSeenFeedEventKey) - the vibrate trigger.
-  const latestFeedEvent = feedEvents[feedEvents.length-1];
-  const latestFeedEventKey = latestFeedEvent ? `${latestFeedEvent.ts}-${latestFeedEvent.kind}-${latestFeedEvent.kind==='buyin'?latestFeedEvent.buyin.id:latestFeedEvent.playerId}` : "";
-  const FEED_COLORS = { gray: "#5c5c5c", white: "var(--text)" };
-  // Carries an actorName whenever the actor differs from the player it's about - the 4
-  // log-based event types always have (see logGameEvent/v2AddGameEvent); a buyin only does
-  // for ones saved since actor_name was added to the buyins table (see performBuyin) -
-  // older rows just read as undefined, same as a player doing it for themselves normally
-  // reads. Omitted entirely (not "ע"י [own name]") when the actor IS the player it's about.
-  const actorSuffix = (playerName, actorName) => (actorName && actorName !== playerName) ? ` ע"י ${esc(actorName)}` : "";
-  // Picks the right verb form for the table activity feed - gender comes from the
-  // player's own roster row (set from the identityName screen, see
-  // v2SetGenderEverywhere), defaulting to male for a one-off guest (never in the roster
-  // at all) same as the server does.
-  const feedCounts = {}, feedTotals = {};
-  const feedRows = feedEvents.map(ev => {
-    let text, rowIcon;
-    // All white now - size/weight (see isRecent below) carries the "what's fresh"
-    // distinction instead of a gray/white color split. A ghost (deleted) buy-in dims to
-    // the gray instead, struck through - see the final return below.
-    const color = ev.ghost ? FEED_COLORS.gray : FEED_COLORS.white;
-    if (ev.kind === "buyin") {
-      const b = ev.buyin;
-      const player = g.players.find(pl => pl.id === b.playerId);
-      const name = esc(player ? player.name : "שחקן");
-      const fem = isFemale(b.playerId);
-      rowIcon = 'coinsPlus';
-      if (ev.ghost) {
-        // Deleted since this device last saw it - a plain "עשה ריביי" without the
-        // entry-vs-rebuy distinction (no longer knowable once it's gone) or a running
-        // total (which must only reflect buy-ins that still actually count).
-        text = `${name} ${fem?'עשתה':'עשה'} ריביי של ₪${b.amount}${actorSuffix(player?player.name:name, b.actorName)}`;
-      } else {
-        feedCounts[b.playerId] = (feedCounts[b.playerId]||0) + 1;
-        feedTotals[b.playerId] = (feedTotals[b.playerId]||0) + b.amount;
-        const isRebuy = feedCounts[b.playerId] > 1;
-        text = isRebuy
-          ? `${name} ${fem?'עשתה':'עשה'} ריביי של ₪${b.amount} (סה"כ קנייה של ₪${feedTotals[b.playerId]})${actorSuffix(player?player.name:name, b.actorName)}`
-          : `${name} ${fem?'נכנסה':'נכנס'} לשולחן עם ₪${b.amount}${actorSuffix(player?player.name:name, b.actorName)}`;
-      }
-    } else if (ev.kind === "cashout") {
-      const player = g.players.find(pl => pl.id === ev.playerId);
-      const name = esc(player ? player.name : "שחקן");
-      const totalBuyin = feedTotals[ev.playerId] || 0;
-      const profit = ev.amount - totalBuyin;
-      const profitText = profit >= 0 ? `₪${Math.round(profit)} רווח` : `₪${Math.abs(Math.round(profit))} הפסד`;
-      text = `${name} ${isFemale(ev.playerId)?'יצאה':'יצא'} מהשולחן עם ₪${ev.amount} ז'יטונים בספירה (${profitText})`;
-      rowIcon = 'out';
-    } else if (ev.kind === "buyin_deleted") {
-      const player = g.players.find(pl => pl.id === ev.playerId);
-      const pname = player ? player.name : "שחקן";
-      // The deleted buy-in's own row no longer comes from here - see the ghost-buyin
-      // entries built from localBuyinLogs above, which (when this device saw the original
-      // buy-in itself) show it struck through at its own true original timestamp instead
-      // of paired next to this cancellation line.
-      text = `${esc(pname)} ${isFemale(ev.playerId)?'ביטלה':'ביטל'} קנייה בסך ₪${ev.amount}${actorSuffix(pname, ev.actorName)}`;
-      rowIcon = 'trash';
-    } else if (ev.kind === "returned_to_table") {
-      const player = g.players.find(pl => pl.id === ev.playerId);
-      const pname = player ? player.name : "שחקן";
-      text = `${esc(pname)} ${isFemale(ev.playerId)?'חזרה':'חזר'} לשולחן${actorSuffix(pname, ev.actorName)}`;
-      rowIcon = 'undo';
-    } else if (ev.kind === "seat_removed") {
-      const player = g.players.find(pl => pl.id === ev.playerId);
-      const pname = player ? player.name : "שחקן";
-      text = `${esc(pname)} ${isFemale(ev.playerId)?'הוצאה':'הוצא'} מהשולחן${actorSuffix(pname, ev.actorName)}`;
-      rowIcon = 'x';
-    } else if (ev.kind === "player_payment") {
-      const pp = ev.payment;
-      const from = g.players.find(pl => pl.id === pp.fromPlayerId);
-      const to = g.players.find(pl => pl.id === pp.toPlayerId);
-      text = `${esc(from ? from.name : "שחקן")} ${isFemale(pp.fromPlayerId)?'העבירה':'העביר'} ₪${pp.amount} ל${esc(to ? to.name : "שחקן")}`;
-      rowIcon = 'payment';
-    } else if (ev.kind === "night_declared_over") {
-      text = `הוכרז על סיום ערב${ev.actorName ? ` ע"י ${esc(ev.actorName)}` : ""}`;
-      rowIcon = 'check';
-    } else if (ev.kind === "night_closed") {
-      text = ev.actorName ? `הערב נסגר ע"י ${esc(ev.actorName)}` : `הערב נסגר - כולם יצאו מהשולחן`;
-      rowIcon = 'check';
-    } else if (ev.kind === "night_reopened") {
-      text = `הערב נפתח מחדש${ev.actorName ? ` ע"י ${esc(ev.actorName)}` : ""}`;
-      rowIcon = 'plus';
-    } else {
-      return "";
-    }
-    // Bold + one font-size step up for anything in the last 5 minutes - draws the eye to
-    // what's actually fresh without needing a separate "new" badge. Never applied to a
-    // ghost row (a cancelled buy-in) regardless of how recent it was - struck through and
-    // dimmed instead, which would otherwise visually fight with "fresh and bold".
-    const isRecent = !ev.ghost && ev.ts && (Date.now() - ev.ts) < 5*60*1000;
-    return `<div class="chat-bubble with-icon" style="color:${color};font-weight:${isRecent?700:400};font-size:${isRecent?15:13}px;${ev.ghost?'text-decoration:line-through;opacity:.7;':''}">${icon(rowIcon)}<div style="flex:1;min-width:0;"><span class="bubble-time">${fmtTime(ev.ts)}</span>${text}</div></div>`;
-  }).join("") || `<div class="chat-bubble" style="color:#f5f5f4;">אין עדיין פעילות בשולחן</div>`;
+  const {feedRows, latestFeedEventKey} = buildTableFeed(g, c);
   // Every rebuy control (including "אחר") stays disabled from the moment a buy-in request
   // is sent until it settles (success, cancel, or error) - see performBuyin/
   // pendingBuyinRequest - so a second tap can't fire a genuine duplicate buy-in while the
@@ -4982,6 +4994,43 @@ function renderAdminScreen(gameId){
     </div>
   `;
 }
+// Super admin watching a table they don't sit at: "שולחן" / "פעילות בשולחן" switch (the
+// feed page is the activity feed alone, full height), plus the watch-only join button
+// when they could actually be seated (see shouldAskWatchOrJoin).
+let watchView = "table";
+function watchStripHtml(g){
+  const watching = !isSeatedInGame(g);
+  const showTabs = watching && isSuperAdmin();
+  const showJoin = watchOnlyGameIds.has(g.id) && watching && !g.closed && canSelfSeat(g);
+  if (!showTabs && !showJoin) return "";
+  const tab = (key, label) => `<button class="btn ${watchView===key?'btn-primary':'btn-ghost'}" style="padding:5px 10px;font-size:12px;" data-watch-view="${key}">${label}</button>`;
+  return `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:-6px 20px 10px;padding:6px 10px;border:1px solid rgba(212,175,55,.45);border-radius:12px;flex-wrap:wrap;">
+      <span style="color:var(--gold);font-size:12px;font-weight:700;">👁 צפייה בלבד</span>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        ${showTabs ? tab("table", "שולחן") + tab("feed", "פעילות בשולחן") : ""}
+        ${showJoin ? `<button class="btn btn-ghost" style="padding:5px 10px;font-size:12px;" data-stop-watch-only="${g.id}">הצטרפות לשולחן</button>` : ""}
+      </div>
+    </div>`;
+}
+function renderWatchFeed(gameId){
+  const g = getGame(gameId);
+  const c = getCommunity(g.communityId) || {name:"קבוצה", roster:[]};
+  const {feedRows, latestFeedEventKey} = buildTableFeed(g, c);
+  return `
+    <div class="top row" style="padding-top:14px;padding-bottom:16px;flex-shrink:0;">
+      <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
+      <div class="flex1" style="min-width:0;">
+        <h1 class="serif sm" style="color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g.name || c.name)}</h1>
+        <div class="meta" style="color:#6ee7b7;font-size:11px;display:flex;align-items:center;gap:4px;">${icon('cal')}${esc(g.date)}</div>
+      </div>
+    </div>
+    ${watchStripHtml(g)}
+    <div style="flex:1;min-height:0;display:flex;flex-direction:column;padding:0 20px 20px;">
+      <div class="player-history-feed-body mode-feed" data-player-feed data-latest-event="${latestFeedEventKey}" style="border-radius:16px;">${feedRows}</div>
+    </div>`;
+}
+
 function renderTable(gameId){
   const g = getGame(gameId);
   if (!g) return `<div class="empty">משחק לא נמצא</div>`;
@@ -5143,11 +5192,7 @@ function renderTable(gameId){
       </div>
       <button class="icon-btn gold" data-invite-game="${g.id}" title="הזמנת שחקן" style="flex-shrink:0;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;white-space:nowrap;padding:5px 7px;">${icon('share')}הזמנת שחקן</button>
     </div>
-    ${watchOnlyGameIds.has(g.id) && !isSeatedInGame(g) && !g.closed && canSelfSeat(g) ? `
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:-6px 20px 10px;padding:6px 10px;border:1px solid rgba(212,175,55,.45);border-radius:12px;">
-      <span style="color:var(--gold);font-size:12px;font-weight:700;">👁 צפייה בלבד</span>
-      <button class="btn btn-ghost" style="padding:5px 10px;font-size:12px;" data-stop-watch-only="${g.id}">הצטרפות לשולחן</button>
-    </div>` : ""}
+    ${watchStripHtml(g)}
     ${!allCashedOut ? `
     <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:0 20px 10px;">
       <span data-open-poker-odds style="color:#C8902F;font-size:12px;text-align:center;line-height:1.3;cursor:pointer;">מחשבון<br>סיכויי פוקר</span>
@@ -8750,6 +8795,7 @@ function attachHandlers(){
     };
   }
 
+  app.querySelectorAll("[data-watch-view]").forEach(el => el.onclick = () => { watchView = el.dataset.watchView; render(); });
   app.querySelectorAll("[data-stop-watch-only]").forEach(el => el.onclick = () => {
     setWatchOnly(el.dataset.stopWatchOnly, false);
     autoSeatSelf(el.dataset.stopWatchOnly);
