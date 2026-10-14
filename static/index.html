@@ -3300,6 +3300,13 @@ function validateSetupChips(chips){
 // What went wrong saving a setup tab - the server's own reason when it refused the save
 // (a 4xx/5xx with a message), not always "check your connection", so a report like
 // "שמירה נכשלה" can be traced; logged too (see logSync) for the same reason.
+// "שמירה נכשלה" with the server's actual reason when there is one (a 4xx/5xx), so a
+// rejected save doesn't masquerade as a connection problem.
+function saveFailedText(e){
+  try { logSync(`save failed: ${e && e.status ? e.status + " " : ""}${e && e.message}`); } catch(_) {}
+  if (e && e.status) return `שמירה נכשלה: ${e.message} (${e.status})`;
+  return "שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב.";
+}
 function setupSaveErrorText(e, tab){
   const where = {chips: "הז'יטונים", payments: "התשלומים", buyins: "הריביי"}[tab] || "";
   try { logSync(`setup save (${tab}) failed: ${e && e.status ? e.status + " " : ""}${e && e.message}`); } catch(_) {}
@@ -5095,8 +5102,11 @@ function renderGameResultsScreen(gameId){
     // the card's own edge, at the same x on every row - put first, its position would
     // shift with the amount's own width (digit count), which is exactly what looked
     // unaligned before.
-    const checkboxHtml = isGroupPay
-      ? `<input type="checkbox" data-result-paybox-toggle="${r.id}" data-amount="${r.profit}" data-payment-id="${paymentId||''}" ${checked?'checked':''} style="width:18px;height:18px;accent-color:var(--gold);flex-shrink:0;">`
+    // The amount saved with the tick is always positive (the server rejects anything else -
+    // a loser's negative profit made every loser's tick fail with "שמירה נכשלה"). Nothing
+    // to settle for a player who broke even, so no box for them.
+    const checkboxHtml = isGroupPay && Math.abs(r.profit) >= 0.01
+      ? `<input type="checkbox" data-result-paybox-toggle="${r.id}" data-amount="${Math.abs(r.profit)}" data-payment-id="${paymentId||''}" ${checked?'checked':''} style="width:18px;height:18px;accent-color:var(--gold);flex-shrink:0;">`
       : "";
     return `
       <div class="card" style="cursor:default;${isMe ? 'border:1.5px solid var(--gold);' : ''}">
@@ -7413,7 +7423,7 @@ function attachHandlers(){
         if (USE_RELATIONAL_API) await v2AddPayboxPayment(gameId, uid(), playerId, amount);
         else await mutateAndSave(() => { const g = getGame(gameId); if (!g.payboxPayments) g.payboxPayments = []; g.payboxPayments.push({id:uid(), playerId, amount, ts: Date.now()}); });
       }
-    } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+    } catch(e) { showAlert(saveFailedText(e)); }
     render();
   });
   app.querySelectorAll("[data-result-player-payment-toggle]").forEach(el => el.onclick = async () => {
@@ -7428,7 +7438,7 @@ function attachHandlers(){
         if (USE_RELATIONAL_API) await v2AddPlayerPayment(gameId, uid(), fromId, toId, amount);
         else await mutateAndSave(() => { const g = getGame(gameId); if (!g.playerPayments) g.playerPayments = []; g.playerPayments.push({id:uid(), fromPlayerId: fromId, toPlayerId: toId, amount, ts: Date.now()}); });
       }
-    } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+    } catch(e) { showAlert(saveFailedText(e)); }
     render();
   });
   app.querySelectorAll("[data-delete-game]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type:"deleteGame", gameId: el.dataset.deleteGame}); });
