@@ -199,6 +199,34 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
    "raised" pill matching the panel's own color (navy for history, charcoal for feed)
    directly below it, same idea as a browser tab merging into its own page. */
 .player-history-feed{display:flex;flex-direction:column;flex:1;min-height:0;margin-bottom:14px;position:relative;}
+/* Player screen (new design): round chip-style rebuy picks + a confirm bar, and an
+   end-of-evening area unlocked by its "סיום ערב" checkbox. */
+.rb-frame{padding:14px 12px 14px;}
+.rb-chips{display:flex;justify-content:space-between;gap:6px;}
+.rb-chip{width:72px;height:72px;border-radius:50%;flex:0 0 auto;cursor:pointer;color:#e7e5e4;font-weight:800;font-size:17px;font-family:inherit;
+  background:radial-gradient(circle at 50% 50%,#1f5a43 0 52%,#163f30 53% 60%,#1f5a43 61% 100%);
+  border:3px dashed rgba(212,175,55,.35);box-shadow:inset 0 0 0 4px #123528,0 4px 10px rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;}
+.rb-chip.on{color:#fde68a;border-color:var(--gold);box-shadow:inset 0 0 0 4px #123528,0 0 0 2px rgba(251,191,36,.5),0 0 18px rgba(251,191,36,.55);}
+.rb-chip:disabled{opacity:.45;cursor:not-allowed;}
+.rb-confirm{display:block;width:100%;margin-top:14px;padding:14px 10px;border-radius:14px;font-family:inherit;font-size:24px;font-weight:800;color:#e9c46a;cursor:pointer;
+  background:linear-gradient(180deg,#24305a,#141c3a);border:2px solid var(--gold);box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 5px 12px rgba(0,0,0,.45);}
+.rb-confirm:disabled{opacity:.45;cursor:not-allowed;}
+.lv-frame{padding:12px 12px 14px;}
+.lv-arm{display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text);font-size:15px;font-weight:700;margin-bottom:10px;}
+.lv-arm input{width:20px;height:20px;accent-color:var(--gold);flex-shrink:0;}
+.lv-line{flex:1;height:2px;background:linear-gradient(90deg,transparent,rgba(110,231,183,.6));}
+.lv-body.off{opacity:.45;}
+.lv-photo{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 8px;border-radius:14px;cursor:pointer;font-family:inherit;color:#2a1d05;
+  background:linear-gradient(180deg,#fde68a 0%,#f2c14e 45%,#c8922a 100%);border:1px solid rgba(0,0,0,.25);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 4px 10px rgba(0,0,0,.4);}
+.lv-photo span{display:flex;flex-direction:column;line-height:1.15;font-size:15px;}
+.lv-photo small{font-size:11px;font-weight:600;}
+.lv-confirm{display:block;width:100%;margin-top:12px;padding:13px 10px;border-radius:14px;font-family:inherit;font-size:19px;font-weight:800;color:#2a1d05;cursor:pointer;
+  background:linear-gradient(180deg,#fde68a 0%,#f2c14e 45%,#c8922a 100%);border:1px solid rgba(0,0,0,.25);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 5px 12px rgba(0,0,0,.45);}
+.lv-photo:disabled,.lv-confirm:disabled{cursor:not-allowed;}
+.pp-name-select{font-family:inherit;font-size:24px;font-weight:700;color:var(--text);background:transparent;border:1px solid rgba(212,175,55,.45);border-radius:12px;padding:4px 34px 4px 34px;max-width:90%;text-align:center;text-align-last:center;cursor:pointer;
+  -webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23e9c46a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-position:12px 50%;background-size:12px 8px;background-repeat:no-repeat;}
+.pp-name-select option{color:#111;}
+.th-glow-rebuy,.th-glow-leave{position:relative;z-index:7;}
 /* First-game helper (see tableHelperHtml): one 15s run of three 5s steps - ריביי (arrow
    up, rebuy frame glows), מסך השולחן (swipe hint), סוף הערב (arrow down, leave frame
    glows) - then it closes by itself. */
@@ -212,6 +240,12 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
 .th-arrow{color:var(--gold);font-size:34px;line-height:1;}
 .th-arrow-up{animation:thBounceUp 15s linear forwards;}
 .th-arrow-down{animation:thBounceDown 15s linear forwards;}
+/* New player screen: step 1's text sits above the rebuy frame (arrow down to it), step
+   3's below the end-of-evening frame (arrow up to it). */
+.th-arrow-down1{animation:thBounceDown1 15s linear forwards;}
+.th-arrow-up3{animation:thBounceUp3 15s linear forwards;}
+@keyframes thBounceDown1{0%,7%,14%,21%,28%,100%{transform:translateY(0)}3.5%,10.5%,17.5%,24.5%{transform:translateY(10px)}}
+@keyframes thBounceUp3{0%,66%,73%,80%,87%,94%,100%{transform:translateY(0)}69.5%,76.5%,83.5%,90.5%{transform:translateY(-10px)}}
 .th-swipe{font-size:34px;line-height:1;animation:thSwipe 15s linear forwards;}
 .th-swipe-left{animation-name:thSwipeLeft;}
 @keyframes thStep1{0%{opacity:0}3%,29%{opacity:1}33%,100%{opacity:0}}
@@ -2337,8 +2371,10 @@ function isTableAdmin(g, c){
 // admin→player→table→admin, matching the order the feature was specified in. A non-admin
 // (or a spectator/admin not seated in this particular game - see isSeatedInGame) never
 // gets it, same two pages as before.
+// The admin page is gone - admins now reach every player (and the table-wide tools) from
+// the player screen's name dropdown (see renderPlayerScreen / playerViewTarget).
 function swipePageOrder(g, c){
-  return isTableAdmin(g, c) ? ["admin", "player", "table"] : ["player", "table"];
+  return ["player", "table"];
 }
 // One step around that circular order in either direction (delta -1/+1) - used by both
 // the swipe gesture (attachHandlers) and the page it lands on (render) to agree on what
@@ -2535,9 +2571,9 @@ function tableHelperHtml(toLeft){
   return `
     <div class="table-helper" data-table-helper>
       <div class="th-step th-step-1" style="${d}">
-        <div class="th-arrow th-arrow-up" style="${d}">⬆</div>
         <div class="th-title">ריביי</div>
-        <div class="th-text">קניתם עוד ז'יטונים? לחצו על הסכום בכפתורים למעלה.</div>
+        <div class="th-text">קניתם עוד ז'יטונים? בחרו סכום בכפתורים למטה ולחצו "ריביי".</div>
+        <div class="th-arrow th-arrow-down1" style="${d}">⬇</div>
       </div>
       <div class="th-step th-step-2" style="${d}">
         <div class="th-title">מסך השולחן</div>
@@ -2545,9 +2581,9 @@ function tableHelperHtml(toLeft){
         <div class="th-swipe${toLeft ? " th-swipe-left" : ""}" style="${d}">${toLeft ? "👈" : "👉"}</div>
       </div>
       <div class="th-step th-step-3" style="${d}">
+        <div class="th-arrow th-arrow-up3" style="${d}">⬆</div>
         <div class="th-title">סוף הערב</div>
-        <div class="th-text">כשאתם קמים מהשולחן, דווחו בכפתורים למטה כמה ז'יטונים נשארו לכם.</div>
-        <div class="th-arrow th-arrow-down" style="${d}">⬇</div>
+        <div class="th-text">כשאתם קמים מהשולחן, סמנו "סיום ערב" למעלה ודווחו כמה ז'יטונים נשארו לכם.</div>
       </div>
     </div>`;
 }
@@ -2655,6 +2691,7 @@ async function performBuyin(gameId, playerId, amount, opts){
 }
 
 function go(screen, extra){
+  if ((extra||{}).gameId !== nav.gameId) playerViewTarget = null; // admin's dropdown pick is per game
   nav = Object.assign({screen}, extra||{});
   modal = null;
   openHistorySeatPlayerId = null;
@@ -4473,12 +4510,23 @@ function buildTableFeed(g, c){
   return {feedRows, latestFeedEventKey};
 }
 
+// Admin's player dropdown on the player screen (replaces the old admin page): null = my
+// own view, a playerId = that player's view (buy in / cash out on their behalf), or
+// "__tools__" = the table-wide tools (סדר קופה, add a player, close the night, who pays whom).
+let playerViewTarget = null;
+// Per game+player: which rebuy chip is picked (two-step: pick, then confirm), whether the
+// "סיום ערב" box is ticked (unlocks the cash-out controls) and the typed chip count - kept
+// across the periodic re-render.
+const rebuyPick = {}, leaveArmed = {}, leaveAmountDraft = {};
 function renderPlayerScreen(gameId){
   const g = getGame(gameId);
   if (!g) return `<div class="empty">משחק לא נמצא</div>`;
   const c = getCommunity(g.communityId) || {name:"קבוצה", roster:[]};
   const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
-  const pid = myPlayerId;
+  const isAdminView = isTableAdmin(g, c);
+  const toolsView = isAdminView && playerViewTarget === "__tools__";
+  const pid = (isAdminView && playerViewTarget && playerViewTarget !== "__tools__" && g.players.some(pl => pl.id === playerViewTarget)) ? playerViewTarget : myPlayerId;
+  const viewingOther = pid !== myPlayerId;
   const p = g.players.find(pl => pl.id === pid);
   const myBuyins = g.buyins.filter(b => b.playerId === pid).slice().sort((a,b) => (a.ts||0)-(b.ts||0));
   const buyinTotal = myBuyins.reduce((s,b) => s+b.amount, 0);
@@ -4486,7 +4534,7 @@ function renderPlayerScreen(gameId){
   // render() only force-scrolls this frame to the bottom when this actually changes.
   const latestHistoryKey = myBuyins.length ? myBuyins[myBuyins.length-1].id : "";
   const cashedOut = pid in g.cashouts;
-  const showTableHelper = shouldShowTableHelper(g, pid);
+  const showTableHelper = !viewingOther && !toolsView && shouldShowTableHelper(g, pid);
   const tableHelperDelay = showTableHelper ? `animation-delay:-${Math.min(Date.now() - (tableHelperStartedAt || Date.now()), TABLE_HELPER_MS)}ms;` : "";
   // Once every seated player has cashed out (the night auto-closes via maybeAutoCloseNight
   // at that point - see its own comment) and the pot is balanced, show THIS player directly
@@ -4612,17 +4660,58 @@ function renderPlayerScreen(gameId){
   // pendingBuyinRequest - so a second tap can't fire a genuine duplicate buy-in while the
   // first one is still in flight.
   const buyinPending = !!(pendingBuyinRequest && pendingBuyinRequest.gameId === g.id && !pendingBuyinRequest.cancelled);
-  const buyinButtonsHtml = playerScreenCustomOpen ? `
-    <div style="display:flex;gap:8px;">
-      <input type="number" inputmode="decimal" id="player-screen-custom-amount" placeholder="סכום" autofocus ${buyinPending?'disabled':''} style="flex:1;padding:14px 8px;font-size:18px;text-align:center;border-radius:9px;border:1px solid var(--gold);background:var(--input);color:var(--text);">
-      <button class="chip-btn" data-player-buyin-custom-confirm ${buyinPending?'disabled':''} style="flex:0 0 auto;padding:14px 18px;font-size:16px;font-weight:700;">${icon('coinsPlus')}</button>
+  const amounts = getBuyinAmounts(c);
+  const pickKey = g.id + ":" + pid;
+  const picked = rebuyPick[pickKey] !== undefined ? rebuyPick[pickKey] : amounts[0];
+  const rebuyLocked = buyinPending || showTableHelper;
+  const rebuyHtml = `
+    <div class="rb-chips">
+      ${amounts.map(v => `<button class="rb-chip${picked===v?' on':''}" data-rb-pick="${v}" ${rebuyLocked?'disabled':''}><span>₪${v}</span></button>`).join("")}
+      <button class="rb-chip${picked==='other'?' on':''}" data-rb-pick="other" ${rebuyLocked?'disabled':''}><span>אחר</span></button>
     </div>
-  ` : `
-    <div style="display:flex;gap:8px;">
-      ${getBuyinAmounts(c).map(v=>`<button class="chip-btn" data-player-instant-buyin="${v}" ${(buyinPending||showTableHelper)?'disabled':''} style="flex:1;padding:14px 2px;font-size:18px;">₪${v}</button>`).join("")}
-      <button class="chip-btn" data-player-buyin-other ${(buyinPending||showTableHelper)?'disabled':''} style="flex:1;padding:14px 2px;font-size:18px;">אחר</button>
+    ${picked === 'other' ? `
+    <div style="display:flex;gap:8px;margin-top:12px;">
+      <input type="number" inputmode="decimal" id="rb-other-amount" placeholder="סכום ₪" ${rebuyLocked?'disabled':''} style="flex:1;padding:12px 8px;font-size:18px;text-align:center;border-radius:12px;border:1px solid var(--gold);background:var(--input);color:var(--text);">
+      <button class="rb-confirm" style="flex:1.4;margin-top:0;" data-rb-confirm ${rebuyLocked?'disabled':''}>ריביי</button>
+    </div>` : `
+    <button class="rb-confirm" data-rb-confirm ${rebuyLocked?'disabled':''}>ריביי ₪${picked}</button>`}
+  `;
+  const armed = !!leaveArmed[pickKey];
+  const leaveHtml = `
+    <label class="lv-arm">
+      <input type="checkbox" data-leave-arm ${armed?'checked':''}>
+      <span>סיום ערב</span>
+      <span class="lv-line"></span>
+    </label>
+    <div class="lv-body${armed?'':' off'}">
+      <div style="display:flex;gap:10px;align-items:flex-end;">
+        <button class="lv-photo" data-leave-photo ${armed?'':'disabled'}>${icon('out')}<span><b>ספירה</b><small>באמצעות צילום</small></span>${icon('camera')}</button>
+        <div style="flex:1;min-width:0;">
+          <div style="color:var(--muted);font-size:12px;margin-bottom:4px;">סכום הז'יטונים שנשארו</div>
+          <div style="position:relative;">
+            <input type="number" inputmode="decimal" id="lv-amount" value="${esc(leaveAmountDraft[pickKey] || '')}" ${armed?'':'disabled'} style="width:100%;box-sizing:border-box;padding:12px 30px 12px 8px;font-size:18px;border-radius:12px;border:1px solid var(--gold);background:var(--input);color:var(--text);">
+            <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--gold);">₪</span>
+          </div>
+        </div>
+      </div>
+      <button class="lv-confirm" data-leave-confirm ${armed?'':'disabled'}>אישור ספירה סופית</button>
     </div>
   `;
+  // Admin, looking at someone: the per-player actions the old admin page had.
+  const adminPlayerActions = (isAdminView && pid) ? (cashedOut
+    ? `<button class="btn btn-ghost btn-block" style="margin-top:10px;" data-admin-return-to-game="${pid}">החזרה לשולחן</button>`
+    : `<button class="btn btn-ghost btn-block" style="margin-top:4px;font-size:13px;" data-admin-remove-seat="${pid}">הסרת ${esc(p ? p.name : "השחקן")} מהשולחן</button>`) : "";
+  // Name line: plain for a player; for an admin, a dropdown of everyone at the table plus
+  // the table-wide tools.
+  const nameHtml = isAdminView ? (() => {
+    const ids = [...new Set([...(g.seats||[]).filter(Boolean), ...Object.keys(g.cashouts||{})])].filter(id => g.players.some(pl => pl.id === id));
+    if (myPlayerId && !ids.includes(myPlayerId) && g.players.some(pl => pl.id === myPlayerId)) ids.unshift(myPlayerId);
+    const sel = toolsView ? "__tools__" : pid;
+    return `<select class="pp-name-select" data-pp-view-select>
+      ${ids.map(id => { const pl = g.players.find(x => x.id === id); return `<option value="${id}" ${sel===id?'selected':''}>${esc(pl.name)}${id===myPlayerId?' (אני)':''}${id in (g.cashouts||{})?' · יצא':''}</option>`; }).join("")}
+      <option value="__tools__" ${sel==='__tools__'?'selected':''}>🛠 כלי השולחן</option>
+    </select>`;
+  })() : `<div style="font-size:26px;font-weight:700;color:var(--text);">${esc(p?p.name:"")}</div>`;
   // Order (top to bottom): name/total, ריביי buttons, the shared history/feed panel
   // (.player-history-feed, flex:1 - the one section whose size actually adapts, toggled
   // between the two tabs via playerHistoryTab so the leave-table box after it always stays
@@ -4637,40 +4726,25 @@ function renderPlayerScreen(gameId){
       </div>
       <button class="icon-btn gold" data-invite-game="${g.id}" title="הזמנת שחקן" style="flex-shrink:0;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;white-space:nowrap;padding:5px 7px;">${icon('share')}הזמנת שחקן</button>
     </div>
-    <div class="player-screen-scroll">
+    <div class="player-screen-scroll"${showTableHelper ? ' style="position:relative;"' : ''}>
       <div style="text-align:center;padding:6px 0 ${cashedOut?16:4}px;flex-shrink:0;">
-        <div style="font-size:26px;font-weight:700;color:var(--text);">${esc(p?p.name:"")}</div>
+        ${nameHtml}
+        ${toolsView ? "" : `
         ${cashedOut ? "" : `<div class="pp-total-wrap"><div class="pp-total" data-player-total>₪${buyinTotal}</div><img class="pp-chips" src="/static/player-chips.webp" alt="" draggable="false"></div>${paymentNotesHtml}`}
         ${(() => {
           // Direct-settlement arrangement(s) involving this player (either side - see
-          // getArrangementNotes), same note shown on the admin screen's rows.
+          // getArrangementNotes).
           const notes = pid ? getArrangementNotes(g, pid) : [];
           if (!notes.length) return "";
           return `<div style="font-size:12px;color:var(--muted);margin-top:4px;">${notes.map(n => `${n.received?'קיבל':'העביר'} ₪${n.amount} ${n.received?'מ-':'ל-'}${esc(n.name)}`).join(' · ')}</div>`;
         })()}
-        ${cashedOutInfoHtml}
+        ${cashedOutInfoHtml}`}
       </div>
-      ${cashedOut ? "" : `<fieldset class="leave-frame${showTableHelper?' th-glow-rebuy':''}" style="margin-bottom:14px;${showTableHelper?tableHelperDelay:''}"><legend>ריביי</legend>${buyinButtonsHtml}</fieldset>`}
-      ${cashedOut ? "" : `
-      <div class="player-history-feed mode-${playerHistoryTab}">
-        <div class="player-history-feed-tabs">
-          <button class="player-history-feed-tab${playerHistoryTab==='history'?' active':''}" data-player-tab="history">הקניות שלי</button>
-          <button class="player-history-feed-tab${playerHistoryTab==='feed'?' active':''}" data-player-tab="feed">פעילות בשולחן</button>
-        </div>
-        ${playerHistoryTab === 'history'
-          ? `<div class="player-history-feed-body mode-history" data-player-history data-latest-buyin="${latestHistoryKey}">${historyRows}</div>`
-          : `<div class="player-history-feed-body mode-feed" data-player-feed data-latest-event="${latestFeedEventKey}">${feedRows}</div>`}
-        ${showTableHelper ? tableHelperHtml(isTableAdmin(g, c)) : ""}
-      </div>
-      `}
-      ${cashedOut ? "" : `
-      <fieldset class="leave-frame${showTableHelper?' th-glow-leave':''}"${showTableHelper?` style="${tableHelperDelay}"`:''}>
-        <legend>סיום ערב (יציאה מהשולחן)</legend>
-      <div style="display:flex;gap:6px;">
-        <button class="btn flex1 pp-leave-gold" style="background:#B8862B;color:#1a1a1a;display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 4px;font-size:13px;white-space:nowrap;" data-player-leave-table>${icon('out')}ספירת ז'יטונים</button>
-        <button class="btn flex1 pp-leave-red" style="background:#B23A3A;color:#fff;display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 4px;font-size:13px;white-space:nowrap;" data-player-leave-no-chips>${icon('out')}נשארתי בלי ז'יטונים 😞</button>
-      </div>
-      </fieldset>`}
+      ${toolsView ? `<div style="padding:4px 0 16px;">${renderAdminScreen(gameId, true)}</div>` : `
+      ${cashedOut ? "" : `<fieldset class="leave-frame rb-frame${showTableHelper?' th-glow-rebuy':''}" style="margin-bottom:14px;${showTableHelper?tableHelperDelay:''}">${rebuyHtml}</fieldset>`}
+      ${cashedOut ? "" : `<fieldset class="leave-frame lv-frame${showTableHelper?' th-glow-leave':''}"${showTableHelper?` style="${tableHelperDelay}"`:''}>${leaveHtml}</fieldset>`}
+      ${adminPlayerActions}
+      ${showTableHelper ? tableHelperHtml(false) : ""}`}
     </div>
   `;
 }
@@ -4817,7 +4891,7 @@ function renderGameResultsScreen(gameId){
 // building parallel ones - they were already generic on m.playerId, just never had a
 // trigger left pointing at someone OTHER than the viewer's own seat after that panel was
 // removed.
-function renderAdminScreen(gameId){
+function renderAdminScreen(gameId, embedded){
   const g = getGame(gameId);
   if (!g) return `<div class="empty">משחק לא נמצא</div>`;
   const c = getCommunity(g.communityId) || {name:"קבוצה", roster:[]};
@@ -4966,6 +5040,22 @@ function renderAdminScreen(gameId){
     settlementHtml = `
       <div class="section-title" style="padding:0;margin:16px 0 8px;">מי מעביר למי</div>
       ${txns.length ? txns.map(t => `<div class="roster-row"${t.paid?' style="opacity:.6;"':''}><span>${esc(t.fromName)} ← ${esc(t.toName)}</span><span style="font-weight:700;color:${t.paid?'var(--muted)':'var(--gold)'};">₪${t.amount}${t.paid?' ✓ עבר':''}</span></div>`).join("") : `<div class="empty" style="padding:10px 0;font-size:13px;">אין תשלומים נדרשים</div>`}
+    `;
+  }
+
+  // Embedded in the player screen's "כלי השולחן" view (the admin's player dropdown) - just
+  // the table-wide tools; per-player actions live on each player's own view there.
+  if (embedded) {
+    return `
+      ${(c.settlementDefault === 'paybox' || c.settlementDefault === 'bit') ? "" : `
+      <div class="checkbox-row" style="cursor:pointer;margin-bottom:16px;" data-toggle-end-night="${g.id}">
+        <input type="checkbox" ${g.closed?'checked':''} onclick="return false;">
+        <span class="flex1">סיום ערב לכולם</span>
+      </div>`}
+      ${emptySeatRows ? `<div class="section-title" style="padding:0;margin:0 0 8px;">מושבים פנויים</div>${emptySeatRows}` : ""}
+      ${potFixHtml}
+      ${settlementHtml}
+      ${!emptySeatRows && !potFixHtml && !settlementHtml ? `<div class="empty" style="padding:10px 0;font-size:13px;">אין כרגע מה לסדר בשולחן</div>` : ""}
     `;
   }
 
@@ -7101,24 +7191,83 @@ function attachHandlers(){
   // ריביי") since every amount here is a real button that applies itself immediately.
   // Routed through performBuyin (pending banner/cancel, disables every rebuy button until
   // it settles, cross-device confirm card) instead of saving directly.
-  const doPlayerBuyin = async (amt, fromEl) => {
+  const doPlayerBuyin = async (amt, fromEl, targetPid) => {
     if (!amt || amt <= 0 || pendingBuyinRequest) return;
     // Rebuys stay locked while the first-game helper is playing (see tableHelperHtml).
     if (tableHelperPlaying()) return;
     const gameId = nav.gameId;
     const g = getGame(gameId);
-    const pid = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+    // targetPid: an admin buying in for the player picked in the name dropdown.
+    const pid = targetPid || (myIdentity.myPlayers && myIdentity.myPlayers[g.communityId]);
     // A "rebuy" in the first minute after sitting down is usually a new player re-entering
     // their entry amount, not a real second purchase - ask before adding it on top.
     const myBuyins = (g.buyins||[]).filter(b => b.playerId === pid);
     if (myBuyins.length === 1 && myBuyins[0].ts && Date.now() - myBuyins[0].ts < 60*1000) {
-      const ok = await showConfirm(`נכנסת לשולחן עם ₪${myBuyins[0].amount} לפני פחות מדקה. להוסיף ריביי של ₪${amt} מעל הקנייה הראשונה?`, {okLabel: "כן, הוסף ריביי", cancelLabel: "ביטול"});
+      const mine = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+      const who = pid === mine ? "נכנסת" : `${(g.players.find(pl => pl.id === pid) || {}).name || "השחקן"} נכנס/ה`;
+      const ok = await showConfirm(`${who} לשולחן עם ₪${myBuyins[0].amount} לפני פחות מדקה. להוסיף ריביי של ₪${amt} מעל הקנייה הראשונה?`, {okLabel: "כן, הוסף ריביי", cancelLabel: "ביטול"});
       if (!ok) return;
     }
     playerScreenCustomOpen = false;
     await performBuyin(gameId, pid, amt, {fromEl});
   };
   app.querySelectorAll("[data-player-tab]").forEach(el => el.onclick = () => { playerHistoryTab = el.dataset.playerTab; render(); });
+  // New player screen: whose view (admin dropdown), rebuy pick + confirm, and the
+  // "סיום ערב" area (checkbox unlocks it; photo count or a typed amount + confirm).
+  const viewedPid = () => {
+    const g = getGame(nav.gameId);
+    const mine = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+    return (playerViewTarget && playerViewTarget !== "__tools__" && g.players.some(pl => pl.id === playerViewTarget) && isTableAdmin(g, getCommunity(g.communityId))) ? playerViewTarget : mine;
+  };
+  app.querySelectorAll("[data-pp-view-select]").forEach(el => el.onchange = () => {
+    const g = getGame(nav.gameId);
+    const mine = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+    playerViewTarget = el.value === mine ? null : el.value;
+    render();
+  });
+  app.querySelectorAll("[data-rb-pick]").forEach(el => el.onclick = () => {
+    const v = el.dataset.rbPick;
+    rebuyPick[nav.gameId + ":" + viewedPid()] = v === "other" ? "other" : parseFloat(v);
+    render();
+  });
+  app.querySelectorAll("[data-rb-confirm]").forEach(el => el.onclick = () => {
+    const pid = viewedPid();
+    const picked = rebuyPick[nav.gameId + ":" + pid];
+    const amounts = getBuyinAmounts(getCommunity(getGame(nav.gameId).communityId));
+    const amt = picked === "other" ? parseFloat((el.parentElement.querySelector("#rb-other-amount")||{}).value) : (picked !== undefined ? picked : amounts[0]);
+    if (!amt || amt <= 0) { showAlert("הזינו סכום לריביי."); return; }
+    doPlayerBuyin(amt, el, pid);
+  });
+  app.querySelectorAll("[data-leave-arm]").forEach(el => el.onchange = () => { leaveArmed[nav.gameId + ":" + viewedPid()] = el.checked; render(); });
+  app.querySelectorAll("#lv-amount").forEach(el => el.oninput = () => { leaveAmountDraft[nav.gameId + ":" + viewedPid()] = el.value; });
+  app.querySelectorAll("[data-leave-photo]").forEach(el => el.onclick = () => openModal({type:"seatChips", gameId: nav.gameId, playerId: viewedPid()}));
+  app.querySelectorAll("[data-leave-confirm]").forEach(el => el.onclick = async () => {
+    const gameId = nav.gameId, pid = viewedPid();
+    const key = gameId + ":" + pid;
+    const raw = (leaveAmountDraft[key] || "").trim();
+    const amount = parseFloat(raw);
+    if (raw === "" || isNaN(amount) || amount < 0) { showAlert("הזינו את סכום הז'יטונים שנשארו (0 אם לא נשאר כלום)."); return; }
+    const rounded = Math.round(amount * 100) / 100;
+    el.disabled = true;
+    showButtonLoading(el);
+    if (USE_RELATIONAL_API) {
+      try {
+        await v2SetCashout(gameId, pid, rounded, [], rounded);
+        await v2MaybeAutoCloseNight(gameId);
+      } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); el.disabled = false; render(); return; }
+    } else {
+      await mutateAndSave(() => {
+        const freshG = getGame(gameId);
+        if (!freshG.liveChips) freshG.liveChips = {};
+        freshG.liveChips[pid] = rounded;
+        freshG.cashouts[pid] = {amount: rounded, ts: Date.now(), arrangedWith: []};
+        maybeAutoCloseNight(freshG);
+      });
+    }
+    delete leaveArmed[key]; delete leaveAmountDraft[key];
+    render();
+    maybeOpenDirectPayAfterCashout(gameId, pid, rounded);
+  });
   app.querySelectorAll("[data-player-instant-buyin]").forEach(el => el.onclick = () => doPlayerBuyin(parseFloat(el.dataset.playerInstantBuyin), el));
   const playerBuyinOtherBtn = app.querySelector("[data-player-buyin-other]");
   if (playerBuyinOtherBtn) playerBuyinOtherBtn.onclick = () => { playerScreenCustomOpen = true; render(); };
