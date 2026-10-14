@@ -3145,6 +3145,16 @@ function validateSetupChips(chips){
   if (!values.length && !(ratio > 0)) return "צריך להזין ערך לפחות לז'יטון אחד, או יחס ז'יטונים.";
   return null;
 }
+// What went wrong saving a setup tab - the server's own reason when it refused the save
+// (a 4xx/5xx with a message), not always "check your connection", so a report like
+// "שמירה נכשלה" can be traced; logged too (see logSync) for the same reason.
+function setupSaveErrorText(e, tab){
+  const where = {chips: "הז'יטונים", payments: "התשלומים", buyins: "הריביי"}[tab] || "";
+  try { logSync(`setup save (${tab}) failed: ${e && e.status ? e.status + " " : ""}${e && e.message}`); } catch(_) {}
+  if (e && e.status) return `שמירת ${where} נכשלה: ${e.message} (${e.status})`;
+  if (e && /timed out/.test(e.message || "")) return `שמירת ${where} נכשלה - השרת לא ענה בזמן. נסו שוב בעוד רגע.`;
+  return `שמירת ${where} נכשלה - בדוק את החיבור לאינטרנט ונסה שוב.`;
+}
 async function saveSetupChips(communityId, chips){
   const values = [];
   chips.points.forEach(pt => {
@@ -3166,7 +3176,7 @@ async function saveSetupChips(communityId, chips){
     try {
       const ok = await v2SetChipValues(communityId, values.length ? values : (c.chipValues || []), validRatio ? ratio : c.chipRatio);
       if (!ok) { showAlert("לא הצלחנו לשמור בגלל התנגשות עם שמירה אחרת - נסו את הפעולה שוב."); return false; }
-    } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return false; }
+    } catch(e) { showAlert(setupSaveErrorText(e, "chips")); return false; }
   } else {
     await mutateAndSave(() => {
       const c = getCommunity(communityId);
@@ -3188,7 +3198,7 @@ async function saveSetupPayments(communityId, payments){
     try {
       await v2EditPayboxLinks(communityId, edited);
       if (editedBit.length) await v2EditBitLinks(communityId, editedBit);
-    } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return false; }
+    } catch(e) { showAlert(setupSaveErrorText(e, "payments")); return false; }
   } else {
     edited.forEach(({id, name, link}) => { const pl = c.payboxLinks.find(x => x.id === id); if (pl) { pl.name = name; pl.link = link; } });
     editedBit.forEach(({id, name, link}) => { const bl = c.bitLinks.find(x => x.id === id); if (bl) { bl.name = name; bl.link = link; } });
@@ -3209,7 +3219,7 @@ async function saveSetupBuyins(communityId, buyins){
   const buyinAmounts = buyins.map(v => parseFloat(v));
   if (USE_RELATIONAL_API) {
     try { await v2UpdateCommunity(communityId, {buyinAmounts}); }
-    catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return false; }
+    catch(e) { showAlert(setupSaveErrorText(e, "buyins")); return false; }
   } else {
     getCommunity(communityId).buyinAmounts = buyinAmounts;
     saveState();
