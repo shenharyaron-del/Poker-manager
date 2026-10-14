@@ -6331,7 +6331,7 @@ function renderModal(m){
     // Same tab-over-panel shape as the player screen's history/feed tabs: each mode owns a
     // fixed color (chips = gold, profit = teal, by-photo = violet), the active tab merges
     // into a panel framed in its color, and the inactive ones sit dimmed beside it.
-    const modeTabs = m.photoOnly ? "" : `
+    const modeTabs = `
       <div class="mode-tabs">
         ${availableModes.map(am => `<button class="mode-tab mode-tab-${am.key}${mode===am.key?' active':''}" data-chips-mode="${am.key}">${icon(am.icon)}<span>${am.label}</span></button>`).join("")}
       </div>
@@ -6365,7 +6365,7 @@ function renderModal(m){
         total += Math.abs((rawBalances[id]||{}).profit || 0);
         if (pl) names.push(pl.name);
       });
-      arrangedNoteHtml = `<p style="color:var(--text);font-size:12px;margin:-14px 0 16px;text-align:center;">כולל ₪${Math.round(total)} שהועברו ע"י ${names.map(esc).join(', ')} שעזב/ו את השולחן</p>`;
+      arrangedNoteHtml = `<p style="color:var(--text);font-size:12px;margin:${m.photoOnly?'0 0 12px':'-14px 0 16px'};text-align:center;">כולל ₪${Math.round(total)} שהועברו ע"י ${names.map(esc).join(', ')} שעזב/ו את השולחן</p>`;
     }
     // Separate from arrangedNoteHtml above - this is a direct player-to-player payment,
     // not a cash handoff folded into the group settlement math. Without this, a player
@@ -6379,7 +6379,7 @@ function renderModal(m){
         const pl = g.players.find(pp2 => pp2.id === pp.fromPlayerId);
         return pl ? pl.name : "?";
       });
-      directPaymentsNoteHtml = `<p style="color:var(--text);font-size:12px;margin:-14px 0 16px;text-align:center;">קיבלת ₪${Math.round(total)} מ-${names.map(esc).join(', ')}</p>`;
+      directPaymentsNoteHtml = `<p style="color:var(--text);font-size:12px;margin:${m.photoOnly?'0 0 12px':'-14px 0 16px'};text-align:center;">קיבלת ₪${Math.round(total)} מ-${names.map(esc).join(', ')}</p>`;
     }
     let modeBody;
     const byColorUnavailable = mode === "byColor" && !chipValues.length;
@@ -6670,14 +6670,16 @@ function renderModal(m){
     } else {
       modeBody = `<div class="field"><label>סכום ז'יטונים בש"ח</label><input type="number" inputmode="numeric" id="seat-chips-direct" value="${chips}" onfocus="this.select()"></div>`;
     }
+    // Photo-only (see mode above): no recap header and no tab frame - just the photo flow.
     body = `
-      ${headerHtml}
+      ${m.photoOnly ? "" : headerHtml}
       ${arrangedNoteHtml}
       ${directPaymentsNoteHtml}
+      ${m.photoOnly ? `<div style="margin-bottom:16px;">${modeBody}</div>` : `
       <div class="mode-panel-wrap">
         ${modeTabs}
-        <div class="mode-panel mode-panel-${mode}${(!m.photoOnly && mode===availableModes[0].key)?' first':''}${(!m.photoOnly && mode===availableModes[availableModes.length-1].key)?' last':''}">${modeBody}</div>
-      </div>
+        <div class="mode-panel mode-panel-${mode}${mode===availableModes[0].key?' first':''}${mode===availableModes[availableModes.length-1].key?' last':''}">${modeBody}</div>
+      </div>`}
       ${cashedOut ? `
         <p style="color:var(--muted);font-size:12px;">השחקן כבר יצא מהמשחק.</p>
         <button class="btn btn-ghost btn-block" data-return-to-game="${m.playerId}" style="margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('undo')} החזר למשחק</button>
