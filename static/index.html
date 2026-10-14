@@ -6253,8 +6253,8 @@ function renderModal(m){
           const all = sc.roster.map(p => ({id: p.id, ...playerNetProfit(sc.id, p.id)}));
           const ranked = all.filter(isRegular).sort((a, b) => b.net - a.net);
           const place = ranked.findIndex(x => x.id === me.id) + 1;
-          if (place > 0) rankHtml = `<div class="roster-row"><span>המקום שלי בקבוצה <span class="stats-n">(מבין מי ששיחק ביותר מ-40% מהערבים)</span></span><span style="font-weight:700;white-space:nowrap;">${place===1?'🏆 ':''}${place} מתוך ${ranked.length}</span></div>`;
-          else rankHtml = `<div class="roster-row"><span>המקום שלי בקבוצה</span><span style="font-size:12px;color:var(--muted);">נכלל בדירוג אחרי השתתפות ביותר מ-40% מהערבים</span></div>`;
+          if (place > 0) rankHtml = `<div class="roster-row"><span>המקום שלי בקבוצה</span><span style="font-weight:700;white-space:nowrap;">${place===1?'🏆 ':''}${place} מתוך ${ranked.length}</span></div>`;
+          else rankHtml = `<div class="roster-row"><span>המקום שלי בקבוצה</span><span style="font-size:12px;color:var(--muted);">הדירוג רק למי ששיחק ביותר מ-40% מהערבים</span></div>`;
         }
       }
       if (profits.length === 0) {
