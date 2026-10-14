@@ -1,7 +1,7 @@
 {
   "name": "Poker Manager",
   "short_name": "Poker Manager",
-  "description": "ניהול ערבי פוקר, ציפים ומאזנים לקבוצה שלכם",
+  "description": "ניהול ערבי פוקר, ציפים ומאזנים למועדון שלכם",
   "start_url": "/",
   "id": "/",
   "display": "standalone",
