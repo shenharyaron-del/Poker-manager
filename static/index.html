@@ -3468,14 +3468,14 @@ function currentTheme(){
   const cl = document.documentElement.classList;
   return cl.contains("theme-blue") ? "blue" : cl.contains("theme-sand") ? "sand" : "dark";
 }
-function setTheme(key){
+function setTheme(key, noRender){
   const cl = document.documentElement.classList;
   cl.remove("theme-light", "theme-blue", "theme-sand");
   if (key === "blue" || key === "sand") cl.add("theme-light", "theme-" + key);
   try { localStorage.setItem("poker-theme", key); } catch(e) {}
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.content = key === "blue" ? "#4d89a8" : key === "sand" ? "#dfcaa9" : "#022c22";
-  render();
+  if (!noRender) render();
 }
 function themeToggleHtml(){
   return `<button type="button" class="theme-toggle" data-theme-toggle title="החלפת עיצוב"><span class="tt-dot" style="background:${THEMES.find(t => t.key === currentTheme()).swatch};">🎨</span>עיצוב</button>`;
@@ -5619,6 +5619,10 @@ function renderModal(m){
       <div class="section-title" style="padding:0;margin:0 0 6px;">המיקום שלי בשולחן</div>
       <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">הקישו על מקום כדי לבחור איפה תופיעו תמיד סביב השולחן.</p>
       ${seatPickerHtml}
+      <div class="section-title" style="padding:0;margin:0 0 8px;">עיצוב האפליקציה</div>
+      <div style="display:flex;gap:10px;margin-bottom:16px;">
+        ${THEMES.map(t => `<button class="theme-opt${currentTheme()===t.key?' on':''}" data-profile-theme="${t.key}"><span style="background:${t.swatch};height:44px;"></span>${t.label}</button>`).join("")}
+      </div>
       ${installMode() ? `<button class="btn btn-ghost btn-block" style="margin-bottom:12px;" data-install-app>📲 התקן את האפליקציה (מסך מלא)</button>` : ""}
       ${!m.forced ? `<button class="btn btn-ghost btn-block" style="margin-bottom:12px;" data-my-stats>${icon('bar')} הביצועים שלי</button>` : ""}
       <button class="btn btn-primary btn-block" style="margin-bottom:12px;" data-confirm-identity-name>שמור</button>
@@ -7373,6 +7377,13 @@ function attachHandlers(){
   app.querySelectorAll("[data-crumb-home]").forEach(el => el.onclick = () => go("home"));
   app.querySelectorAll("[data-install-app]").forEach(el => el.onclick = (e) => { e.stopPropagation(); startInstall(); });
   app.querySelectorAll("[data-theme-toggle]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type: "themePicker"}); });
+  // Profile screen: switch right away but don't re-render (would drop a half-typed name) -
+  // just move the highlight; the rest of the app picks the colors up through CSS.
+  app.querySelectorAll("[data-profile-theme]").forEach(el => el.onclick = () => {
+    setTheme(el.dataset.profileTheme, true);
+    app.querySelectorAll("[data-profile-theme]").forEach(b => b.classList.toggle("on", b === el));
+    app.querySelectorAll(".theme-toggle .tt-dot").forEach(d => d.style.background = THEMES.find(t => t.key === el.dataset.profileTheme).swatch);
+  });
   app.querySelectorAll("[data-pick-theme]").forEach(el => el.onclick = () => { closeModal(); setTheme(el.dataset.pickTheme); });
 
   const showRoster = app.querySelector("[data-show-roster]");
