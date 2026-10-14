@@ -636,6 +636,13 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .stats-net{border-radius:12px;padding:14px;text-align:center;margin-bottom:12px;}
 .stats-net.pos{background:#065f46;}
 .stats-net.neg{background:#4c0519;}
+.stats-n{font-weight:400;opacity:.85;}
+.stats-win{color:#6ee7b7;} .stats-loss{color:#fda4af;}
+html.theme-light .stats-net.pos{background:#dcf2e3;color:#14532d;border:1px solid #9fd6b1;}
+html.theme-light .stats-net.neg{background:#f8dede;color:#7f1d1d;border:1px solid #e3a5a5;}
+html.theme-light .stats-win{color:#15803d;} html.theme-light .stats-loss{color:#be123c;}
+html.theme-light .stats-grid .box .l{color:var(--muted);}
+html.theme-light .stats-net .pot-label{color:inherit;opacity:.8;}
 .stats-net .val{font-size:24px;font-weight:700;}
 .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
 .stats-grid .box{background:var(--input);border:1px solid var(--card-b);border-radius:12px;padding:10px 12px;}
@@ -647,7 +654,7 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .bar-count{font-size:10px;color:var(--muted);margin-bottom:3px;font-weight:700;}
 .bar-fill{width:100%;max-width:24px;border-radius:4px 4px 0 0;}
 .bar-fill.loss{background:var(--rose-b);}
-.bar-fill.win{background:var(--muted2);}
+.bar-fill.win{background:#22a55a;}
 .bar-label{font-size:7px;color:var(--text);margin-top:4px;text-align:center;white-space:nowrap;}
 .txn-row{display:flex;align-items:center;gap:8px;background:var(--input);border:1px solid var(--card-b);border-radius:12px;padding:12px 14px;margin-bottom:8px;}
 .txn-amt{font-weight:700;color:var(--gold);}
@@ -6186,7 +6193,9 @@ function renderModal(m){
     if (!myCommunities.length) {
       body = `<div class="empty" style="padding:20px 0;">עדיין לא הצטרפת לאף קבוצה.</div>`;
     } else {
-      const selected = (m.selectedCommunityId && myCommunities.some(c=>c.id===m.selectedCommunityId)) ? m.selectedCommunityId : "all";
+      // Only one group: that's the selection (no "הכל" picker, and its rank shows below).
+      const selected = myCommunities.length === 1 ? myCommunities[0].id
+        : (m.selectedCommunityId && myCommunities.some(c=>c.id===m.selectedCommunityId)) ? m.selectedCommunityId : "all";
       const activeCommunities = selected === "all" ? myCommunities : myCommunities.filter(c => c.id === selected);
       const selectorHtml = myCommunities.length > 1 ? `
         <div class="row" style="gap:8px;margin-bottom:14px;flex-wrap:wrap;">
@@ -6219,6 +6228,20 @@ function renderModal(m){
       const avgWin = wins.length ? wins.reduce((s,p)=>s+p,0)/wins.length : null;
       const avgLoss = losses.length ? losses.reduce((s,p)=>s+p,0)/losses.length : null;
       const avgOverall = profits.length ? net/profits.length : null;
+      const pct = n => profits.length ? Math.round(n / profits.length * 100) : 0;
+      // Place in the group (one group selected): everyone in its roster who finished at
+      // least one night, ranked by total net profit there.
+      let rankHtml = "";
+      if (selected !== "all") {
+        const sc = myCommunities.find(c => c.id === selected);
+        const me = sc && sc.roster.find(p => p.clientId === clientId);
+        if (me) {
+          const ranked = sc.roster.map(p => ({id: p.id, ...playerNetProfit(sc.id, p.id)}))
+            .filter(x => x.count > 0).sort((a, b) => b.net - a.net);
+          const place = ranked.findIndex(x => x.id === me.id) + 1;
+          if (place > 0) rankHtml = `<div class="roster-row"><span>המקום שלי בקבוצה</span><span style="font-weight:700;">${place===1?'🏆 ':''}${place} מתוך ${ranked.length}</span></div>`;
+        }
+      }
       if (profits.length === 0) {
         body = selectorHtml + `<div class="empty" style="padding:20px 0;">עדיין לא סיים אף ערב משחק.</div>`;
       } else {
@@ -6227,13 +6250,16 @@ function renderModal(m){
           <div class="stats-grid" style="margin-bottom:10px;">
             <div class="box"><div class="l">ערבים ${selected==='all'?'בכל הקבוצות':'בקבוצה'}</div><div class="v">${totalCommunityGames}</div></div>
             <div class="box"><div class="l">סה"כ ערבים שהשתתף בהם</div><div class="v">${profits.length}</div></div>
-            <div class="box"><div class="l">ממוצע נצחונות</div><div class="v" style="color:#6ee7b7;">${avgWin!=null?`+₪${Math.round(avgWin)}`:"—"}</div></div>
-            <div class="box"><div class="l">ממוצע הפסדים</div><div class="v" style="color:#fda4af;">${avgLoss!=null?`₪${Math.round(avgLoss)}`:"—"}</div></div>
+            <div class="box"><div class="l">ממוצע נצחונות <span class="stats-n">(${wins.length} משחקים)</span></div><div class="v stats-win">${avgWin!=null?`+₪${Math.round(avgWin)}`:"—"}</div></div>
+            <div class="box"><div class="l">ממוצע הפסדים <span class="stats-n">(${losses.length} משחקים)</span></div><div class="v stats-loss">${avgLoss!=null?`₪${Math.round(avgLoss)}`:"—"}</div></div>
+            <div class="box"><div class="l">אחוז נצחונות</div><div class="v stats-win">${pct(wins.length)}%</div></div>
+            <div class="box"><div class="l">אחוז הפסדים</div><div class="v stats-loss">${pct(losses.length)}%</div></div>
           </div>
+          ${rankHtml}
           <div class="roster-row"><span>ממוצע כללי למשחק</span><span style="font-weight:700;">${avgOverall>=0?"+":""}₪${Math.round(avgOverall)}</span></div>
           ${renderBarChart(computeProfitBuckets(profits))}
-          ${best?`<div class="roster-row"><span style="color:#059669;font-size:12px;">הערב הכי טוב (${esc(best.date)}${selected==='all'?` · ${esc(best.communityName)}`:''})</span><span style="color:#6ee7b7;font-weight:700;">+₪${Math.round(best.profit)}</span></div>`:""}
-          ${worst?`<div class="roster-row"><span style="color:#059669;font-size:12px;">הערב הכי גרוע (${esc(worst.date)}${selected==='all'?` · ${esc(worst.communityName)}`:''})</span><span style="color:#fda4af;font-weight:700;">₪${Math.round(worst.profit)}</span></div>`:""}
+          ${best?`<div class="roster-row"><span style="color:#059669;font-size:12px;">הערב הכי טוב (${esc(best.date)}${selected==='all'?` · ${esc(best.communityName)}`:''})</span><span class="stats-win" style="font-weight:700;">+₪${Math.round(best.profit)}</span></div>`:""}
+          ${worst?`<div class="roster-row"><span style="color:#059669;font-size:12px;">הערב הכי גרוע (${esc(worst.date)}${selected==='all'?` · ${esc(worst.communityName)}`:''})</span><span class="stats-loss" style="font-weight:700;">₪${Math.round(worst.profit)}</span></div>`:""}
         `;
       }
     }
