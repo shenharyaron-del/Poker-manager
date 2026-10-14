@@ -5584,6 +5584,12 @@ function renderTable(gameId){
 // End-of-evening window's opening tab: counting from a photo when the group has chip values
 // set up, otherwise the plain chip-total field (the photo tab can't count anything yet).
 function seatChipsDefaultMode(c){ return (c && (c.chipValues||[]).length) ? "byColor" : "chips"; }
+// Pre-filled name for a new table: "ערב פוקר" + the short Hebrew date, e.g. "ערב פוקר אוק 14".
+const HE_MONTHS_SHORT = ["ינו","פבר","מרץ","אפר","מאי","יוני","יולי","אוג","ספט","אוק","נוב","דצמ"];
+function defaultGameName(isoDate){
+  const d = isoDate ? new Date(isoDate + "T12:00:00") : new Date();
+  return `ערב פוקר ${HE_MONTHS_SHORT[d.getMonth()]} ${d.getDate()}`;
+}
 function renderModal(m){
   let body = "";
   let title = "";
@@ -6226,7 +6232,7 @@ function renderModal(m){
     const c = getCommunity(m.communityId);
     title = "ערב משחק חדש";
     body = `
-      <div class="field"><label>שם השולחן</label><input type="text" id="new-game-name" placeholder="${esc(c ? c.name : "")}" autofocus></div>
+      <div class="field"><label>שם השולחן</label><input type="text" id="new-game-name" value="${esc(defaultGameName(m.date))}" placeholder="${esc(c ? c.name : "")}" onfocus="this.select()" autofocus></div>
       <p style="color:var(--muted);font-size:12px;margin-top:-6px;">אחרי היצירה תוכלו להושיב שחקנים סביב השולחן.</p>
       <button class="btn btn-primary btn-block" data-create-game>פתח שולחן</button>
     `;
