@@ -8,6 +8,7 @@
 <link rel="apple-touch-icon" href="/static/icon-192.png">
 <link rel="manifest" href="/static/manifest.json">
 <meta name="theme-color" content="#022c22">
+<script>try{if(localStorage.getItem("poker-theme")==="light"){document.documentElement.classList.add("theme-light");document.querySelector('meta[name="theme-color"]').content="#cfe6f0";}}catch(e){}</script>
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -61,7 +62,8 @@ body{
 .screen-tag .crumb-sep{margin:0 6px;opacity:.7;}
 .screen-tag{position:relative;}
 @media (max-width:369px){.install-chip .chip-long{display:none;}}
-.install-chip{position:absolute;left:14px;top:9px;background:rgba(212,175,55,.14);border:1px solid rgba(212,175,55,.55);color:var(--gold);font:inherit;font-size:10px;line-height:1.3;letter-spacing:0;padding:1px 8px;border-radius:12px;cursor:pointer;opacity:1;}
+.theme-toggle{position:absolute;left:12px;top:6px;width:26px;height:22px;padding:0;border-radius:11px;border:1px solid rgba(212,175,55,.55);background:rgba(212,175,55,.14);font-size:12px;line-height:20px;cursor:pointer;}
+.install-chip{position:absolute;left:44px;top:9px;background:rgba(212,175,55,.14);border:1px solid rgba(212,175,55,.55);color:var(--gold);font:inherit;font-size:10px;line-height:1.3;letter-spacing:0;padding:1px 8px;border-radius:12px;cursor:pointer;opacity:1;}
 .eyebrow{color:var(--gold);font-size:11px;font-weight:700;letter-spacing:.2em;margin-bottom:4px;}
 h1{font-size:28px;margin:0;font-weight:700;}
 h1.sm{font-size:20px;}
@@ -638,6 +640,61 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .txn-amt{font-weight:700;color:var(--gold);}
 .note{color:#059669;font-size:11px;margin-top:12px;line-height:1.6;}
 .back-arrow{background:none;border:none;color:#6ee7b7;cursor:pointer;padding:4px;display:flex;}
+/* ---------- Light theme (html.theme-light, toggled from the ☀️/🌙 button in the top bar) ----------
+   Same layout, a daylight palette: pale blue felt (matches static/table-felt-light.jpg),
+   white cards, dark text, deeper gold for anything gold that has to read on a light page. */
+html.theme-light{
+  color-scheme: light;
+  --bg1:#e4f1f7; --bg2:#b8d8e6;
+  --card:#ffffff; --card-b:#b3d0de;
+  --input:#ffffff; --input-b:#8dbbcf;
+  --text:#14303d; --muted:#3b6b80; --muted2:#2c6f88;
+  --gold:#a86a12; --gold-text:#ffffff;
+  --green-box:#e4f1f7;
+}
+html.theme-light .lux-page{
+  background:
+    radial-gradient(120% 55% at 50% 0%,rgba(255,255,255,.55),transparent 70%),
+    radial-gradient(150% 110% at 50% 45%,transparent 60%,rgba(40,90,115,.18) 100%),
+      linear-gradient(#cfe6f0,#bcdbe8 60%,#a9cfdf);
+  background-size:auto;
+}
+html.theme-light .lux-page.pp-other{
+  background:
+    radial-gradient(120% 55% at 50% 0%,rgba(255,255,255,.55),transparent 70%),
+    radial-gradient(150% 110% at 50% 45%,transparent 60%,rgba(140,50,50,.16) 100%),
+    linear-gradient(#f6dede,#efcfcf 60%,#e6bfbf);
+  background-size:auto;
+}
+html.theme-light .poker-table-felt{background-image:url('/static/table-felt-light.jpg');}
+html.theme-light .btn-ghost{background:#ffffff;color:var(--text);border-color:var(--card-b);}
+html.theme-light .icon-btn{background:#e4f1f7;color:var(--text);}
+html.theme-light .icon-btn.danger{background:#fde2e2;color:#b91c1c;}
+html.theme-light .icon-btn.ok{background:#dcfce7;color:#15803d;}
+html.theme-light .badge-ok{background:#2c6f88;}
+html.theme-light .modal{background:#eef6fa;}
+html.theme-light .overlay{background:rgba(20,48,61,.55);}
+html.theme-light .card-open{background:#fff8e6;}
+html.theme-light .leave-frame{border-color:rgba(168,106,18,.45);background:rgba(255,255,255,.45);}
+html.theme-light .rb-chip{color:#14303d;background:radial-gradient(circle at 50% 50%,#ffffff 0 52%,#d6e9f1 53% 60%,#ffffff 61% 100%);
+  border-color:rgba(168,106,18,.4);box-shadow:inset 0 0 0 4px #c6dfea,0 3px 8px rgba(20,48,61,.2);}
+html.theme-light .rb-chip.on{color:#7a4a08;border-color:var(--gold);box-shadow:inset 0 0 0 4px #c6dfea,0 0 0 2px rgba(168,106,18,.45),0 0 14px rgba(232,170,40,.55);}
+html.theme-light .rb-confirm{color:#fde68a;box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 4px 10px rgba(20,48,61,.3);}
+html.theme-light .rb-cancel-list{background:#ffffff;}
+html.theme-light .lv-pot{background:rgba(255,255,255,.6);}
+html.theme-light .lv-line{background:linear-gradient(90deg,transparent,rgba(44,111,136,.6));}
+html.theme-light .lv-photo,html.theme-light .lv-confirm{box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 3px 8px rgba(20,48,61,.25);}
+html.theme-light .player-page .pp-total{background:linear-gradient(180deg,#c9861c 0%,#a86a12 50%,#7a4a08 100%);-webkit-background-clip:text;background-clip:text;}
+html.theme-light .pp-name-select{background-color:rgba(255,255,255,.55);}
+html.theme-light .nav-bar{background:linear-gradient(180deg,#d7eaf2,#bcdbe8);border-top-color:rgba(168,106,18,.4);box-shadow:0 -4px 12px rgba(20,48,61,.12);}
+html.theme-light .seat-info{background:rgba(255,255,255,.9);}
+html.theme-light .rb-cancel-head{background:rgba(255,255,255,.6);}
+html.theme-light .back-arrow{color:var(--muted2);}
+html.theme-light .lux-page .icon-btn.gold[data-invite-game]{background:linear-gradient(180deg,#ffffff,#e4f1f7)!important;color:var(--gold)!important;}
+/* Inline mint/pink profit & accent text written for the dark page - deepen it on light. */
+html.theme-light [style*="color:#6ee7b7"]{color:#15803d!important;}
+html.theme-light [style*="color:#fda4af"]{color:#be123c!important;}
+html.theme-light [style*="color:#f5f5f4"]{color:var(--text)!important;}
 </style>
 </head>
 <body>
@@ -3351,6 +3408,19 @@ function installMode(){
   if (/iPhone|iPad|iPod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return "ios";
   return null;
 }
+// Light/dark look - a per-device choice (localStorage "poker-theme"), applied as
+// html.theme-light (set before first paint by the inline script in <head>).
+function isLightTheme(){ return document.documentElement.classList.contains("theme-light"); }
+function setTheme(light){
+  document.documentElement.classList.toggle("theme-light", light);
+  try { localStorage.setItem("poker-theme", light ? "light" : "dark"); } catch(e) {}
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.content = light ? "#cfe6f0" : "#022c22";
+  render();
+}
+function themeToggleHtml(){
+  return `<button type="button" class="theme-toggle" data-theme-toggle title="${isLightTheme() ? 'מצב כהה' : 'מצב בהיר'}">${isLightTheme() ? '🌙' : '☀️'}</button>`;
+}
 function installChipHtml(){
   return installMode() ? `<button type="button" class="install-chip" data-install-app>📲 התקן<span class="chip-long"> אפליקציה</span></button>` : "";
 }
@@ -4139,11 +4209,11 @@ function render(){
   // screen>, the first two linking home and to the game's group.
   const crumbGame = nav.screen === "table" && nav.gameId ? getGame(nav.gameId) : null;
   const screenTag = crumbGame
-    ? `<div class="screen-tag" style="text-align:right;"><button type="button" class="crumb-link" data-crumb-home>מסך הבית</button><span class="crumb-sep">/</span><button type="button" class="crumb-link" data-back-community="${crumbGame.communityId}">מסך הקבוצה</button><span class="crumb-sep">/</span><span style="color:#fff;">${esc(screenLabel)}</span></div>`
+    ? `<div class="screen-tag" style="text-align:right;"><button type="button" class="crumb-link" data-crumb-home>מסך הבית</button><span class="crumb-sep">/</span><button type="button" class="crumb-link" data-back-community="${crumbGame.communityId}">מסך הקבוצה</button><span class="crumb-sep">/</span><span style="color:var(--text);">${esc(screenLabel)}</span></div>`
     : nav.screen === "community"
-      ? `<div class="screen-tag" style="text-align:right;"><button type="button" class="crumb-link" data-crumb-home>מסך הבית</button><span class="crumb-sep">/</span><span style="color:#fff;">${esc(screenLabel)}</span></div>`
+      ? `<div class="screen-tag" style="text-align:right;"><button type="button" class="crumb-link" data-crumb-home>מסך הבית</button><span class="crumb-sep">/</span><span style="color:var(--text);">${esc(screenLabel)}</span></div>`
       : `<div class="screen-tag">${esc(screenLabel)}</div>`;
-  html = screenTag.replace(/<\/div>$/, installChipHtml() + '</div>') + html;
+  html = screenTag.replace(/<\/div>$/, themeToggleHtml() + installChipHtml() + '</div>') + html;
   if (modal) html += renderModal(modal);
   else if (welcomeGameId) html += renderGameWelcomeOverlay(welcomeGameId, welcomePlayerId);
   // Captured BEFORE replacing the DOM below - app.innerHTML wipes and recreates these
@@ -7235,6 +7305,7 @@ function attachHandlers(){
   app.querySelectorAll("[data-back-community]").forEach(el => el.onclick = () => go("community", {communityId: el.dataset.backCommunity}));
   app.querySelectorAll("[data-crumb-home]").forEach(el => el.onclick = () => go("home"));
   app.querySelectorAll("[data-install-app]").forEach(el => el.onclick = (e) => { e.stopPropagation(); startInstall(); });
+  app.querySelectorAll("[data-theme-toggle]").forEach(el => el.onclick = (e) => { e.stopPropagation(); setTheme(!isLightTheme()); });
 
   const showRoster = app.querySelector("[data-show-roster]");
   if (showRoster) showRoster.onclick = () => openModal({type:"roster", communityId: nav.communityId, editingId:null});
