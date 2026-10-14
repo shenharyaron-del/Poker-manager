@@ -790,6 +790,10 @@ html.theme-light.theme-blue .card[data-new-community],html.theme-light.theme-blu
 .club-act{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border:none;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
 .club-act-setup{background:#b8862b;color:#fff;}
 .club-act-delete{background:#9f1239;color:#fff;}
+.club-swipe-hint{display:flex;align-items:center;justify-content:center;gap:4px;margin:-4px 0 10px;font-size:11px;color:var(--muted);}
+.club-swipe-hint svg{width:12px;height:12px;}
+@keyframes club-peek{0%{transform:translateX(0)}35%{transform:translateX(-30%)}55%{transform:translateX(-30%)}100%{transform:translateX(0)}}
+.club-swipe .club-front.club-hint-peek{animation:club-peek 1.4s ease-in-out 1;}
 </style>
 </head>
 <body>
@@ -4481,11 +4485,22 @@ if (window.visualViewport) {
 }
 
 let openClubSwipeId = null, clubSwipeDragging = false;
+// Swipe hint: until this device has swiped a club card open once, the first swipeable
+// card gives a short peek to the left (once per app session) and a one-line caption.
+let clubSwipeHintPlayed = false;
+function clubSwipeLearned(){ try { return localStorage.getItem("poker-club-swipe-learned") === "1"; } catch(e) { return true; } }
 // Club card swipe: drag the card left and it follows the finger (capped at half its
 // width), revealing Setup / delete behind it. Released past a quarter of the card it
 // snaps open at half, otherwise back closed. A tap on an open card closes it instead of
 // opening the club; vertical drags are left to the page's own scrolling.
 function attachClubSwipe(){
+  const firstSwipe = app.querySelector("[data-club-swipe]");
+  if (firstSwipe && !clubSwipeHintPlayed && !clubSwipeLearned() && !openClubSwipeId) {
+    clubSwipeHintPlayed = true;
+    const f = firstSwipe.querySelector(".club-front");
+    setTimeout(() => { if (f.isConnected) f.classList.add("club-hint-peek"); }, 600);
+    f.addEventListener("animationend", () => f.classList.remove("club-hint-peek"), {once: true});
+  }
   app.querySelectorAll("[data-club-swipe]").forEach(wrap => {
     const front = wrap.querySelector(".club-front");
     const id = wrap.dataset.clubSwipe;
@@ -4526,6 +4541,10 @@ function attachClubSwipe(){
         const open = shift > wrap.clientWidth * 0.25;
         openClubSwipeId = open ? id : null;
         setShift(open ? maxShift() : 0);
+        if (open && !clubSwipeLearned()) {
+          try { localStorage.setItem("poker-club-swipe-learned", "1"); } catch(_) {}
+          app.querySelectorAll(".club-swipe-hint").forEach(h => h.remove());
+        }
         wrap.dataset.justSwiped = "1";
         setTimeout(() => { delete wrap.dataset.justSwiped; clubSwipeDragging = false; }, 50);
       }
@@ -4549,6 +4568,7 @@ function renderHome(){
   );
   // Setup / delete sit behind each club card - swipe the card left (up to half its width)
   // to reveal them (see attachClubSwipe). A club with neither action just doesn't swipe.
+  let hintShown = false;
   let cards = myCommunities.map(c => {
     const canDelete = isSuperAdmin() || (c.createdBy && c.createdBy === myIdentity.id);
     const canSetup = isSuperAdmin() || (c.createdByName && myIdentity.name && c.createdByName === myIdentity.name);
@@ -4561,6 +4581,8 @@ function renderHome(){
             <div class="chev">${icon('chev')}</div>
     </div>`;
     if (!canDelete && !canSetup) return front;
+    const hint = !hintShown && !clubSwipeLearned();
+    hintShown = true;
     return `
     <div class="club-swipe${openClubSwipeId===c.id?' open':''}" data-club-swipe="${c.id}">
       <div class="club-actions">
@@ -4568,7 +4590,7 @@ function renderHome(){
         ${canDelete ? `<button class="club-act club-act-delete" data-delete-community="${c.id}">${icon('trash')}<span>מחיקה</span></button>` : ""}
       </div>
       ${front}
-    </div>`;
+    </div>${hint ? `<div class="club-swipe-hint">${icon('back')} גררו את המועדון שמאלה ל-Setup ומחיקה</div>` : ""}`;
   }).join("");
   const newCommunityCard = `
     <div class="card" data-new-community style="border-style:dashed;border-color:var(--gold);background:rgba(251,191,36,.06);">
