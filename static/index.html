@@ -247,7 +247,7 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
   background:linear-gradient(180deg,#fde68a 0%,#f2c14e 45%,#c8922a 100%);border:1px solid rgba(0,0,0,.25);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 4px 10px rgba(0,0,0,.4);}
 .lv-photo span{display:flex;flex-direction:column;line-height:1.15;font-size:15px;}
 .lv-photo small{font-size:11px;font-weight:600;}
-.lv-confirm{display:block;width:100%;margin-top:12px;padding:13px 10px;border-radius:14px;font-family:inherit;font-size:19px;font-weight:800;color:#2a1d05;cursor:pointer;
+.lv-confirm{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:12px;padding:13px 10px;border-radius:14px;font-family:inherit;font-size:19px;font-weight:800;color:#2a1d05;cursor:pointer;
   background:linear-gradient(180deg,#fde68a 0%,#f2c14e 45%,#c8922a 100%);border:1px solid rgba(0,0,0,.25);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 5px 12px rgba(0,0,0,.45);}
 .lv-photo:disabled,.lv-confirm:disabled{cursor:not-allowed;}
 .pp-name-select{font-family:inherit;font-size:24px;font-weight:700;color:var(--text);background:transparent;border:1px solid rgba(212,175,55,.45);border-radius:12px;padding:4px 34px 4px 34px;max-width:90%;text-align:center;text-align-last:center;cursor:pointer;
@@ -4922,7 +4922,7 @@ function renderPlayerScreen(gameId){
     </label>
     <div class="lv-body${armed?'':' off'}">
       <div style="display:flex;gap:10px;align-items:flex-end;">
-        <button class="lv-photo" data-leave-photo ${armed?'':'disabled'}>${icon('out')}<span><b>ספירה</b><small>באמצעות צילום</small></span>${icon('camera')}</button>
+        <button class="lv-photo" data-leave-photo ${armed?'':'disabled'}><span><b>ספירה</b><small>באמצעות צילום</small></span>${icon('camera')}</button>
         <div style="flex:1;min-width:0;">
           <div style="color:var(--muted);font-size:12px;margin-bottom:4px;">סכום הז'יטונים שנשארו</div>
           <div style="position:relative;">
@@ -4945,7 +4945,7 @@ function renderPlayerScreen(gameId){
         </div>
         <div style="color:var(--muted);font-size:11px;margin-top:4px;">היחס בקבוצה: ₪1 = ${ratio} ז'יטונים</div>`;
       })()}
-      <button class="lv-confirm" data-leave-confirm ${armed?'':'disabled'}>אישור ספירה סופית</button>
+      <button class="lv-confirm" data-leave-confirm ${armed?'':'disabled'}>${icon('out')}<span>אישור ספירה</span></button>
       ${(() => {
         // The pot as it stands - what was bought in, what's already been taken out by players
         // who left, and what should still be on the table. Updates as others leave.
