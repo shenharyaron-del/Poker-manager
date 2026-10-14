@@ -742,6 +742,11 @@ html.theme-light.theme-sand .lv-line{background:linear-gradient(90deg,transparen
 /* Table nameplates - a very light tint of the theme color instead of plain white */
 html.theme-light.theme-blue .seat-info{background:rgba(226,239,245,.95);--gold:#a86a12;}
 html.theme-light.theme-sand .seat-info{background:rgba(244,234,218,.96);}
+/* Selected rebuy chip on the light themes - a filled gold chip with a solid rim and a lift,
+   so the pick stands out clearly against the pale unselected chips. */
+html.theme-light .rb-chip.on,html.theme-light.theme-sand .rb-chip.on{color:#3a2208;border:3px solid #8a560c;
+  background:radial-gradient(circle at 50% 40%,#fff3c4 0 30%,#f6cf6a 55%,#d99a1e 100%);
+  box-shadow:inset 0 0 0 4px rgba(255,255,255,.45),0 0 0 3px rgba(168,106,18,.35),0 6px 14px rgba(120,70,10,.45);transform:scale(1.08);}
 </style>
 </head>
 <body>
