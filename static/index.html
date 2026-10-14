@@ -644,7 +644,7 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .note{color:#059669;font-size:11px;margin-top:12px;line-height:1.6;}
 .back-arrow{background:none;border:none;color:#6ee7b7;cursor:pointer;padding:4px;display:flex;}
 /* ---------- Light themes base (html.theme-light = "blue" or "sand", picked from the 🎨 button in the top bar) ----------
-   Same layout, a daylight palette: pale blue felt (matches static/table-felt-light.jpg),
+   Same layout, a daylight palette: pale blue felt (matches static/table-felt-blue.webp),
    white cards, dark text, deeper gold for anything gold that has to read on a light page. */
 html.theme-light{
   color-scheme: light;
@@ -669,7 +669,11 @@ html.theme-light .lux-page.pp-other{
     linear-gradient(#f6dede,#efcfcf 60%,#e6bfbf);
   background-size:auto;
 }
-html.theme-light .poker-table-felt{background-image:url('/static/table-felt-light.jpg');}
+/* Table photo with the area outside the wood rail cut out (transparent), so no photo
+   background shows around the rail - no border-radius clip needed. Sand gets the same
+   table recolored to a felt a shade darker than its page. */
+html.theme-light .poker-table-felt{background-image:url('/static/table-felt-blue.webp');border-radius:0;}
+html.theme-light.theme-sand .poker-table-felt{background-image:url('/static/table-felt-sand.webp');}
 html.theme-light .btn-ghost{background:#ffffff;color:var(--text);border-color:var(--card-b);}
 html.theme-light .icon-btn{background:#e4f1f7;color:var(--text);}
 html.theme-light .icon-btn.danger{background:#fde2e2;color:#b91c1c;}
@@ -3443,7 +3447,7 @@ function installMode(){
   return null;
 }
 // Look of the app - a per-device choice (localStorage "poker-theme"): "dark" (the original
-// green), "blue" (felt blue, matches static/table-felt-light.jpg) or "sand" (warm wood/sand).
+// green), "blue" (felt blue, matches static/table-felt-blue.webp) or "sand" (warm wood/sand).
 // Blue and sand share the html.theme-light base rules plus their own html.theme-<name>
 // layer; applied before first paint by the inline script in <head>.
 const THEMES = [
