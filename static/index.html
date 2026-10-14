@@ -15,7 +15,7 @@
 <meta name="apple-mobile-web-app-title" content="Poker Manager">
 <meta property="og:title" content="Poker Manager">
 <meta property="og:url" content="https://poker-manager-7irt.onrender.com/">
-<meta property="og:description" content="ניהול ערבי פוקר, ז'יטונים ומאזנים לקבוצה שלכם">
+<meta property="og:description" content="ניהול ערבי פוקר, ז'יטונים ומאזנים למועדון שלכם">
 <meta property="og:image" content="https://poker-manager-7irt.onrender.com/static/logo-share.jpg">
 <meta property="og:image:type" content="image/jpeg">
 <meta property="og:image:width" content="630">
@@ -782,6 +782,14 @@ html.theme-light.theme-sand .odds-label{color:#6b4a1f!important;}
 html.theme-light .card[data-new-community],html.theme-light .card[data-new-game]{background:rgba(255,255,255,.88)!important;}
 html.theme-light.theme-sand .card[data-new-community],html.theme-light.theme-sand .card[data-new-game]{background:rgba(255,251,244,.92)!important;}
 html.theme-light.theme-blue .card[data-new-community],html.theme-light.theme-blue .card[data-new-game]{--muted:#3b6b80;--gold:#a86a12;}
+/* Club card swipe (home screen): the card slides left over the Setup / delete buttons. */
+.club-swipe{position:relative;margin-bottom:10px;border-radius:16px;overflow:hidden;}
+.club-swipe .club-front{position:relative;z-index:1;margin-bottom:0;transition:transform .22s ease;touch-action:pan-y;will-change:transform;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;}
+.club-swipe.dragging .club-front{transition:none;}
+.club-actions{position:absolute;top:0;bottom:0;right:0;width:50%;display:flex;}
+.club-act{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border:none;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
+.club-act-setup{background:#b8862b;color:#fff;}
+.club-act-delete{background:#9f1239;color:#fff;}
 </style>
 </head>
 <body>
@@ -2020,7 +2028,7 @@ async function doRefreshNow(source){
         // next attempt once the refresh had already finished. The fetched state is still
         // applied either way - only the render is skipped - so the next render (the modal
         // closing, or the next refresh with neither open) already reflects it.
-        if (modal || playerScreenCustomOpen || Object.keys(adminBuyinUi).length || seatDragInProgress || shouldShowGameWelcome()) {
+        if (modal || playerScreenCustomOpen || Object.keys(adminBuyinUi).length || seatDragInProgress || clubSwipeDragging || shouldShowGameWelcome()) {
           logSync(`refresh[${callId}] applied but SKIPPED render - modal, custom-amount input, or game-welcome screen open`);
         } else {
           const scrollY = window.scrollY;
@@ -3893,7 +3901,7 @@ function computeExitHighlights(c, g, playerId){
     const rank = sums.findIndex(x=>x.pid2===playerId) + 1;
     if (sums.length >= 3 && rank >= 1 && rank <= 3) {
       const place = rank===1 ? "ראשון" : rank===2 ? "שני" : "שלישי";
-      candidates.push({pri:3, text:`ב-${N} המשחקים האחרונים אתה במקום ה${place} בקבוצה`});
+      candidates.push({pri:3, text:`ב-${N} המשחקים האחרונים אתה במקום ה${place} במועדון`});
     }
     const myRecentSum = Math.round(sum(last(N)) * 100) / 100;
     if (myRecentSum > 0.005) candidates.push({pri:4, text:`ב-${N} המשחקים האחרונים הרווחת ₪${Math.round(myRecentSum)}`});
@@ -4202,7 +4210,7 @@ function fmtTime(ts){ if(!ts) return ""; const d = new Date(ts); return d.toLoca
 // ---------- Screen names (for talking about the app together, and shown in the header) ----------
 const SCREEN_NAMES = {
   home: "מסך הבית",
-  community: "מסך הקבוצה",
+  community: "מסך המועדון",
   table: "מסך השולחן"
 };
 
@@ -4315,7 +4323,7 @@ function render(){
   // screen>, the first two linking home and to the game's group.
   const crumbGame = nav.screen === "table" && nav.gameId ? getGame(nav.gameId) : null;
   const screenTag = crumbGame
-    ? `<div class="screen-tag" style="text-align:right;"><button type="button" class="crumb-link" data-crumb-home>מסך הבית</button><span class="crumb-sep">/</span><button type="button" class="crumb-link" data-back-community="${crumbGame.communityId}">מסך הקבוצה</button><span class="crumb-sep">/</span><span style="color:var(--text);">${esc(screenLabel)}</span></div>`
+    ? `<div class="screen-tag" style="text-align:right;"><button type="button" class="crumb-link" data-crumb-home>מסך הבית</button><span class="crumb-sep">/</span><button type="button" class="crumb-link" data-back-community="${crumbGame.communityId}">מסך המועדון</button><span class="crumb-sep">/</span><span style="color:var(--text);">${esc(screenLabel)}</span></div>`
     : nav.screen === "community"
       ? `<div class="screen-tag" style="text-align:right;"><button type="button" class="crumb-link" data-crumb-home>מסך הבית</button><span class="crumb-sep">/</span><span style="color:var(--text);">${esc(screenLabel)}</span></div>`
       : `<div class="screen-tag">${esc(screenLabel)}</div>`;
@@ -4472,6 +4480,66 @@ if (window.visualViewport) {
   window.addEventListener("resize", () => requestAnimationFrame(updateRealVh));
 }
 
+let openClubSwipeId = null, clubSwipeDragging = false;
+// Club card swipe: drag the card left and it follows the finger (capped at half its
+// width), revealing Setup / delete behind it. Released past a quarter of the card it
+// snaps open at half, otherwise back closed. A tap on an open card closes it instead of
+// opening the club; vertical drags are left to the page's own scrolling.
+function attachClubSwipe(){
+  app.querySelectorAll("[data-club-swipe]").forEach(wrap => {
+    const front = wrap.querySelector(".club-front");
+    const id = wrap.dataset.clubSwipe;
+    const maxShift = () => wrap.clientWidth * 0.5;
+    const setShift = px => { front.style.transform = px ? `translateX(${-px}px)` : ""; };
+    if (openClubSwipeId === id) setShift(maxShift());
+    let startX = 0, startY = 0, base = 0, shift = 0, mode = null, pid = null;
+    front.addEventListener("pointerdown", e => {
+      startX = e.clientX; startY = e.clientY; mode = null; pid = e.pointerId;
+      base = openClubSwipeId === id ? maxShift() : 0; shift = base;
+    });
+    front.addEventListener("pointermove", e => {
+      if (pid !== e.pointerId) return;
+      const dx = startX - e.clientX, dy = e.clientY - startY;
+      if (!mode) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        mode = Math.abs(dx) > Math.abs(dy) ? "h" : "v";
+        if (mode === "h") {
+          clubSwipeDragging = true; wrap.classList.add("dragging");
+          try { front.setPointerCapture(e.pointerId); } catch(_) {}
+          // Only one card open at a time.
+          if (openClubSwipeId && openClubSwipeId !== id) {
+            const other = app.querySelector(`[data-club-swipe="${openClubSwipeId}"] .club-front`);
+            if (other) other.style.transform = "";
+            openClubSwipeId = null;
+          }
+        }
+      }
+      if (mode !== "h") return;
+      shift = Math.max(0, Math.min(maxShift(), base + dx));
+      setShift(shift);
+    });
+    const end = e => {
+      if (pid !== e.pointerId) return;
+      pid = null;
+      if (mode === "h") {
+        wrap.classList.remove("dragging");
+        const open = shift > wrap.clientWidth * 0.25;
+        openClubSwipeId = open ? id : null;
+        setShift(open ? maxShift() : 0);
+        wrap.dataset.justSwiped = "1";
+        setTimeout(() => { delete wrap.dataset.justSwiped; clubSwipeDragging = false; }, 50);
+      }
+      mode = null;
+    };
+    front.addEventListener("pointerup", end);
+    front.addEventListener("pointercancel", end);
+    // Swallow the click that ends a drag, and a tap on an open card just closes it.
+    front.addEventListener("click", e => {
+      if (wrap.dataset.justSwiped) { e.stopImmediatePropagation(); e.preventDefault(); return; }
+      if (openClubSwipeId === id) { e.stopImmediatePropagation(); e.preventDefault(); openClubSwipeId = null; setShift(0); }
+    }, true);
+  });
+}
 function renderHome(){
   // Only show communities this device actually belongs to - created it, or is linked to
   // a roster entry in it (self-joined via invite link). Super Admin sees everything,
@@ -4479,21 +4547,34 @@ function renderHome(){
   const myCommunities = isSuperAdmin() ? state.communities : state.communities.filter(c =>
     c.createdBy === myIdentity.id || c.roster.some(p => p.clientId === myIdentity.id)
   );
-  let cards = myCommunities.map(c => `
-    <div class="card" data-open-community="${c.id}" style="gap:6px;">
+  // Setup / delete sit behind each club card - swipe the card left (up to half its width)
+  // to reveal them (see attachClubSwipe). A club with neither action just doesn't swipe.
+  let cards = myCommunities.map(c => {
+    const canDelete = isSuperAdmin() || (c.createdBy && c.createdBy === myIdentity.id);
+    const canSetup = isSuperAdmin() || (c.createdByName && myIdentity.name && c.createdByName === myIdentity.name);
+    const front = `
+    <div class="card club-front" data-open-community="${c.id}" style="gap:6px;">
       <div class="flex1" style="min-width:0;">
         <div class="name serif" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c.name)}</div>
-        <div class="meta" style="display:flex;align-items:center;gap:4px;min-width:0;"><span style="flex-shrink:0;line-height:0;">${icon('users')}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">נוצרה ע"י ${esc(c.createdByName || "לא ידוע")}</span></div>
+        <div class="meta" style="display:flex;align-items:center;gap:4px;min-width:0;"><span style="flex-shrink:0;line-height:0;">${icon('users')}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">נוצר ע"י ${esc(c.createdByName || "לא ידוע")}</span></div>
       </div>
-      ${(isSuperAdmin() || (c.createdBy && c.createdBy === myIdentity.id)) ? `<button class="icon-btn" data-delete-community="${c.id}" style="flex-shrink:0;align-items:center;gap:3px;font-size:11px;font-weight:700;padding:6px 7px;background:rgba(240,168,168,.08);color:#f0b4b4;border:1px solid rgba(240,168,168,.35);">${icon('trash')}מחיקה</button>` : ""}
-      ${(isSuperAdmin() || (c.createdByName && myIdentity.name && c.createdByName === myIdentity.name)) ? `<button class="icon-btn" data-open-chip-setup="${c.id}" title="הגדרות קבוצה" style="flex-shrink:0;align-items:center;gap:3px;font-size:11px;font-weight:700;padding:6px 7px;">${icon('gear')}Setup</button>` : ""}
-      <div class="chev">${icon('chev')}</div>
-    </div>`).join("");
+            <div class="chev">${icon('chev')}</div>
+    </div>`;
+    if (!canDelete && !canSetup) return front;
+    return `
+    <div class="club-swipe${openClubSwipeId===c.id?' open':''}" data-club-swipe="${c.id}">
+      <div class="club-actions">
+        ${canSetup ? `<button class="club-act club-act-setup" data-open-chip-setup="${c.id}">${icon('gear')}<span>Setup</span></button>` : ""}
+        ${canDelete ? `<button class="club-act club-act-delete" data-delete-community="${c.id}">${icon('trash')}<span>מחיקה</span></button>` : ""}
+      </div>
+      ${front}
+    </div>`;
+  }).join("");
   const newCommunityCard = `
     <div class="card" data-new-community style="border-style:dashed;border-color:var(--gold);background:rgba(251,191,36,.06);">
       <div class="flex1">
-        <div class="name serif">קבוצה חדשה</div>
-        <div class="meta">${icon('plus')} ${myCommunities.length ? "הקישו ליצירת קבוצה חדשה" : "עדיין אין לך קבוצות משויכות - הקישו כדי ליצור אחת"}</div>
+        <div class="name serif">מועדון חדש</div>
+        <div class="meta">${icon('plus')} ${myCommunities.length ? "הקישו ליצירת מועדון חדש" : "עדיין אין לך מועדונים משויכים - הקישו כדי ליצור אחד"}</div>
       </div>
       <div class="chev">${icon('chev')}</div>
     </div>`;
@@ -4506,10 +4587,10 @@ function renderHome(){
         <div class="hello-name" style="color:var(--muted);font-size:12px;margin-bottom:4px;">שלום, <span data-edit-identity-name style="cursor:pointer;text-decoration:underline;text-underline-offset:3px;">${esc(myIdentity.name || '')}</span></div>
         ${isSuperAdmin() ? `<button class="icon-btn" data-open-admin-settings title="הגדרות">${icon('gear')}</button>` : ""}
       </div>
-      <h1 class="serif" style="margin-top:14px;">הקבוצות שלי</h1>
-      <div class="sub">צרו קבוצה כדי לנהל שחקנים וערבי משחק</div>
+      <h1 class="serif" style="margin-top:14px;">המועדונים שלי</h1>
+      <div class="sub">צרו מועדון כדי לנהל שחקנים וערבי משחק</div>
       <div style="color:var(--muted);font-size:12px;margin-top:6px;line-height:1.6;">
-        קבוצה מאגדת את כל חברי הקבוצה שלכם - ותחתיה נפתחים ערבי המשחק (השולחנות) שלהם.
+        מועדון מאגד את כל חברי המועדון שלכם - ותחתיו נפתחים ערבי המשחק (השולחנות) שלהם.
       </div>
     </div>
     <div class="px5" style="margin-bottom:80px;">${cards}</div>
@@ -4539,7 +4620,7 @@ function closedGameAlert(g, c){
 
 function renderCommunity(communityId){
   const c = getCommunity(communityId);
-  if (!c) return `<div class="empty">קבוצה לא נמצאה</div>`;
+  if (!c) return `<div class="empty">מועדון לא נמצא</div>`;
   const games = gamesForCommunity(communityId);
   const noPlayersYet = c.roster.length === 0;
   const newGameCard = `
@@ -4759,7 +4840,7 @@ function fmtDateTimeShort(ts){
 function renderPlayerScreen(gameId){
   const g = getGame(gameId);
   if (!g) return `<div class="empty">משחק לא נמצא</div>`;
-  const c = getCommunity(g.communityId) || {name:"קבוצה", roster:[]};
+  const c = getCommunity(g.communityId) || {name:"מועדון", roster:[]};
   const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
   const isAdminView = isTableAdmin(g, c);
   // Admin-only "ערב סגור" toggle (g.closed) for groups that settle by direct transfers
@@ -4964,7 +5045,7 @@ function renderPlayerScreen(gameId){
           <span>ז'יטונים =</span>
           <b id="lv-chips-result">₪${leaveChipsDraft[pickKey] ? Math.round((parseFloat(leaveChipsDraft[pickKey]) / ratio) * 100) / 100 : 0}</b>
         </div>
-        <div style="color:var(--muted);font-size:11px;margin-top:4px;">היחס בקבוצה: ₪1 = ${ratio} ז'יטונים</div>`;
+        <div style="color:var(--muted);font-size:11px;margin-top:4px;">היחס במועדון: ₪1 = ${ratio} ז'יטונים</div>`;
       })()}
       <button class="lv-confirm" data-leave-confirm ${armed?'':'disabled'}>${icon('out')}<span>אישור ספירה</span></button>
       ${(() => {
@@ -5065,7 +5146,7 @@ function playerScreenViewingOther(){
 function renderGameResultsScreen(gameId){
   const g = getGame(gameId);
   if (!g) return `<div class="empty">משחק לא נמצא</div>`;
-  const c = getCommunity(g.communityId) || {name:"קבוצה", roster:[]};
+  const c = getCommunity(g.communityId) || {name:"מועדון", roster:[]};
   // Works whether g came from v2LoadGameFull (g.buyins, individual rows) or
   // v2LoadGameSummary (g.buyinTotals, one aggregated row per player already) -
   // computeBalances/settleTransactions/computeFinalBalances only ever sum buyins per
@@ -5195,7 +5276,7 @@ function renderGameResultsScreen(gameId){
 function renderAdminScreen(gameId, embedded){
   const g = getGame(gameId);
   if (!g) return `<div class="empty">משחק לא נמצא</div>`;
-  const c = getCommunity(g.communityId) || {name:"קבוצה", roster:[]};
+  const c = getCommunity(g.communityId) || {name:"מועדון", roster:[]};
   const seats = g.seats || new Array(9).fill(null);
   const buyinTotals = {};
   g.buyins.forEach(b => { buyinTotals[b.playerId] = (buyinTotals[b.playerId]||0) + b.amount; });
@@ -5406,7 +5487,7 @@ function watchStripHtml(g){
 }
 function renderWatchFeed(gameId){
   const g = getGame(gameId);
-  const c = getCommunity(g.communityId) || {name:"קבוצה", roster:[]};
+  const c = getCommunity(g.communityId) || {name:"מועדון", roster:[]};
   const {feedRows, latestFeedEventKey} = buildTableFeed(g, c);
   return `
     <div class="top row" style="padding-top:14px;padding-bottom:16px;flex-shrink:0;">
@@ -5425,7 +5506,7 @@ function renderWatchFeed(gameId){
 function renderTable(gameId){
   const g = getGame(gameId);
   if (!g) return `<div class="empty">משחק לא נמצא</div>`;
-  const c = getCommunity(g.communityId) || {name:"קבוצה", roster:[]};
+  const c = getCommunity(g.communityId) || {name:"מועדון", roster:[]};
   const seats = g.seats || new Array(9).fill(null);
   const buyinTotals = {};
   g.buyins.forEach(b => { buyinTotals[b.playerId] = (buyinTotals[b.playerId]||0) + b.amount; });
@@ -6051,7 +6132,7 @@ function renderModal(m){
     }
   } else if (m.type === "chipSetup") {
     const c = getCommunity(m.communityId);
-    title = "הגדרת פרופיל קבוצה";
+    title = "הגדרת פרופיל מועדון";
     const editableList = m.points.length ? `
       <div class="section-title" style="padding:0;margin:0 0 6px;">ז'יטונים וערכם בש"ח</div>
       <div class="scroll-list" style="margin-bottom:14px;">
@@ -6130,32 +6211,32 @@ function renderModal(m){
       `;
     }
   } else if (m.type === "newCommunity") {
-    title = "קבוצה חדשה";
+    title = "מועדון חדש";
     body = `
       <div style="margin-bottom:12px;">
-        <label style="display:block;color:#059669;font-size:11px;margin-bottom:4px;">שם הקבוצה</label>
+        <label style="display:block;color:#059669;font-size:11px;margin-bottom:4px;">שם המועדון</label>
         <input type="text" id="new-community-name" style="width:100%;" autofocus>
       </div>
-      <button class="btn btn-primary btn-block" data-confirm-new-community>צור קבוצה</button>
+      <button class="btn btn-primary btn-block" data-confirm-new-community>צור מועדון</button>
     `;
   } else if (m.type === "duplicateCommunity") {
     const c = getCommunity(m.communityId);
-    title = "שכפול קבוצה";
+    title = "שכפול מועדון";
     body = `
-      <p style="color:var(--muted);font-size:13px;">תיווצר קבוצה חדשה עם עותק של השחקנים וההגדרות של הז'יטונים מ-<b>${esc(c.name)}</b>. ערבי משחק לא ישוכפלו.</p>
+      <p style="color:var(--muted);font-size:13px;">ייווצר מועדון חדש עם עותק של השחקנים וההגדרות של הז'יטונים מ-<b>${esc(c.name)}</b>. ערבי משחק לא ישוכפלו.</p>
       <div style="margin-bottom:12px;">
-        <label style="display:block;color:#059669;font-size:11px;margin-bottom:4px;">שם הקבוצה החדשה</label>
+        <label style="display:block;color:#059669;font-size:11px;margin-bottom:4px;">שם המועדון החדש</label>
         <input type="text" id="duplicate-community-name" value="${esc(c.name)} - עותק" style="width:100%;" autofocus>
       </div>
-      <button class="btn btn-primary btn-block" data-confirm-duplicate-community>שכפל קבוצה</button>
+      <button class="btn btn-primary btn-block" data-confirm-duplicate-community>שכפל מועדון</button>
     `;
   } else if (m.type === "deleteCommunity") {
     const c = getCommunity(m.communityId);
     const gameCount = gamesForCommunity(m.communityId).length;
-    title = "מחיקת קבוצה";
+    title = "מחיקת מועדון";
     body = `
-      <p style="color:#6ee7b7;font-size:13px;">למחוק לגמרי את הקבוצה <b>${esc(c.name)}</b>?${gameCount ? ` יימחקו גם ${gameCount} ערבי המשחק שלה.` : ""} הפעולה בלתי הפיכה.</p>
-      <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-delete-community>מחק קבוצה</button>
+      <p style="color:#6ee7b7;font-size:13px;">למחוק לגמרי את המועדון <b>${esc(c.name)}</b>?${gameCount ? ` יימחקו גם ${gameCount} ערבי המשחק שלו.` : ""} הפעולה בלתי הפיכה.</p>
+      <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-delete-community>מחק מועדון</button>
     `;
   } else if (m.type === "roster") {
     const c = getCommunity(m.communityId);
@@ -6188,7 +6269,7 @@ function renderModal(m){
   } else if (m.type === "confirmRestoreFromFile") {
     title = "שחזור מקובץ גיבוי";
     body = `
-      <p style="color:#6ee7b7;font-size:13px;">לשחזר מהקובץ <b>${esc(m.fileName)}</b> (${m.numCommunities} קבוצות, ${m.numGames} משחקים)? כל הנתונים הנוכחיים (המשותפים לכולם) יוחלפו בתוכן הקובץ. פעולה זו אינה הפיכה - אם תרצו לשמור על הנתונים הנוכחיים, הורידו גיבוי JSON שלהם קודם.</p>
+      <p style="color:#6ee7b7;font-size:13px;">לשחזר מהקובץ <b>${esc(m.fileName)}</b> (${m.numCommunities} מועדונים, ${m.numGames} משחקים)? כל הנתונים הנוכחיים (המשותפים לכולם) יוחלפו בתוכן הקובץ. פעולה זו אינה הפיכה - אם תרצו לשמור על הנתונים הנוכחיים, הורידו גיבוי JSON שלהם קודם.</p>
       <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-restore-from-file>שחזר מהקובץ</button>
     `;
   } else if (m.type === "stats") {
@@ -6201,7 +6282,7 @@ function renderModal(m){
     const displayName = (myCommunities[0] && (myCommunities[0].roster.find(p=>p.clientId===clientId)||{}).name) || myIdentity.name || "שחקן";
     title = `סטטיסטיקות — ${esc(displayName)}`;
     if (!myCommunities.length) {
-      body = `<div class="empty" style="padding:20px 0;">עדיין לא הצטרפת לאף קבוצה.</div>`;
+      body = `<div class="empty" style="padding:20px 0;">עדיין לא הצטרפת לאף מועדון.</div>`;
     } else {
       // Only one group: that's the selection (no "הכל" picker, and its rank shows below).
       const selected = myCommunities.length === 1 ? myCommunities[0].id
@@ -6253,8 +6334,8 @@ function renderModal(m){
           const all = sc.roster.map(p => ({id: p.id, ...playerNetProfit(sc.id, p.id)}));
           const ranked = all.filter(isRegular).sort((a, b) => b.net - a.net);
           const place = ranked.findIndex(x => x.id === me.id) + 1;
-          if (place > 0) rankHtml = `<div class="roster-row"><span>המקום שלי בקבוצה</span><span style="font-weight:700;white-space:nowrap;">${place===1?'🏆 ':''}${place} מתוך ${ranked.length}</span></div>`;
-          else rankHtml = `<div class="roster-row"><span>המקום שלי בקבוצה</span><span style="font-size:12px;color:var(--muted);">הדירוג רק למי ששיחק ביותר מ-40% מהערבים</span></div>`;
+          if (place > 0) rankHtml = `<div class="roster-row"><span>המקום שלי במועדון</span><span style="font-weight:700;white-space:nowrap;">${place===1?'🏆 ':''}${place} מתוך ${ranked.length}</span></div>`;
+          else rankHtml = `<div class="roster-row"><span>המקום שלי במועדון</span><span style="font-size:12px;color:var(--muted);">הדירוג רק למי ששיחק ביותר מ-40% מהערבים</span></div>`;
         }
       }
       if (profits.length === 0) {
@@ -6263,7 +6344,7 @@ function renderModal(m){
         body = selectorHtml + `
           <div class="stats-net ${net>=0?'pos':'neg'}"><div class="pot-label">מאזן כולל</div><div class="val">${net>=0?"+":""}₪${Math.round(net)}</div></div>
           <div class="stats-grid" style="margin-bottom:10px;">
-            <div class="box"><div class="l">ערבים ${selected==='all'?'בכל הקבוצות':'בקבוצה'}</div><div class="v">${totalCommunityGames}</div></div>
+            <div class="box"><div class="l">ערבים ${selected==='all'?'בכל המועדונים':'במועדון'}</div><div class="v">${totalCommunityGames}</div></div>
             <div class="box"><div class="l">סה"כ ערבים שהשתתף בהם</div><div class="v">${profits.length}</div></div>
             <div class="box"><div class="l">ממוצע נצחונות <span class="stats-n">(${wins.length} משחקים)</span></div><div class="v stats-win">${avgWin!=null?`+₪${Math.round(avgWin)}`:"—"}</div></div>
             <div class="box"><div class="l">ממוצע הפסדים <span class="stats-n">(${losses.length} משחקים)</span></div><div class="v stats-loss">${avgLoss!=null?`₪${Math.round(avgLoss)}`:"—"}</div></div>
@@ -6374,7 +6455,7 @@ function renderModal(m){
       ${activeLink ? `
         <a href="${esc(activeLink)}" class="btn btn-primary btn-block" style="margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} פתח את פייבוקס</a>
       ` : `
-        <p style="color:var(--muted);font-size:12px;margin-bottom:16px;">לא הוגדרה קבוצת פייבוקס - בקשו מיוצר הקבוצה להגדיר אחת ממסך הקבוצה.</p>
+        <p style="color:var(--muted);font-size:12px;margin-bottom:16px;">לא הוגדרה קבוצת פייבוקס - בקשו מיוצר המועדון להגדיר אחת ממסך המועדון.</p>
       `}
       <div class="field"><label>מי העביר?</label>
         <select id="paybox-player" class="select-input">
@@ -6460,7 +6541,7 @@ function renderModal(m){
     `;
   } else if (m.type === "payboxSettings") {
     const c = getCommunity(m.communityId);
-    title = "הגדרת פרופיל קבוצה";
+    title = "הגדרת פרופיל מועדון";
     // Only one link per group-payment app per community now (was a multi-entry list with
     // a "which one is active" radio - simplified since a second group never had a real use
     // case here). Same shape for Paybox and Bit, side by side.
@@ -6518,7 +6599,7 @@ function renderModal(m){
     `;
   } else if (m.type === "buyinSetup") {
     const c = getCommunity(m.communityId);
-    title = "הגדרת פרופיל קבוצה";
+    title = "הגדרת פרופיל מועדון";
     body = `
       ${setupTabsHtml(m.communityId, "buyins")}
       <p style="color:var(--muted);font-size:12px;margin:0 0 14px;">הגדרת סכומי הריביי וסכום הכניסה לשולחן.</p>
@@ -6540,14 +6621,14 @@ function renderModal(m){
         <div class="scroll-list">
           ${avail.map(p => `<div class="checkbox-row" data-pick-player="${p.id}"><span class="flex1">${esc(p.name)}</span></div>`).join("")}
         </div>
-      ` : `<div class="empty" style="padding:12px 0;">כל השחקנים בקבוצה כבר יושבים בשולחן.</div>`}
+      ` : `<div class="empty" style="padding:12px 0;">כל השחקנים במועדון כבר יושבים בשולחן.</div>`}
       <div class="section-title" style="padding:0;margin:10px 0 8px;">או הוסיפו שחקן אורח</div>
-      <p style="color:var(--muted);font-size:11px;margin:0 0 8px;">שחקן חד-פעמי למשחק הזה בלבד - לא יתווסף לרשימת השחקנים הקבועה של הקבוצה.</p>
+      <p style="color:var(--muted);font-size:11px;margin:0 0 8px;">שחקן חד-פעמי למשחק הזה בלבד - לא יתווסף לרשימת השחקנים הקבועה של המועדון.</p>
       <div style="display:flex;gap:8px;margin-bottom:14px;">
         <input type="text" id="pick-seat-guest-name" placeholder="שם האורח" style="flex:1;">
         <button class="btn btn-primary" data-add-guest-seat>${icon('plus')}</button>
       </div>
-      <div class="section-title" style="padding:0;margin:0 0 8px;">או הוסיפו שחקן קבוע לקבוצה</div>
+      <div class="section-title" style="padding:0;margin:0 0 8px;">או הוסיפו שחקן קבוע למועדון</div>
       <p style="color:var(--muted);font-size:11px;margin:0 0 8px;">יתווסף לרשימת השחקנים הקבועה, ויוכל להתחבר בעתיד עם האימייל הזה.</p>
       <div class="field"><input type="text" id="pick-seat-permanent-name" placeholder="שם השחקן"></div>
       <div class="field"><input type="email" id="pick-seat-permanent-email" placeholder="אימייל" dir="ltr"></div>
@@ -6659,7 +6740,7 @@ function renderModal(m){
         <div style="text-align:center;padding:10px 6px 16px;">
           <div style="color:#c4a8ee;margin-bottom:8px;display:flex;justify-content:center;">${icon('camera')}</div>
           <div style="font-size:14px;font-weight:700;margin-bottom:6px;">ספירה לפי צבע/תמונה עדיין לא זמינה</div>
-          <div style="font-size:13px;color:var(--muted);line-height:1.5;">כדי שהצילום יעבוד, צריך להגדיר את הז'יטונים של הקבוצה ב"הגדרת פרופיל קבוצה" ← לשונית "ז'יטונים".<br>${m.photoOnly ? "בינתיים אפשר להזין את הסכום ידנית במסך השחקן." : "בינתיים אפשר לספור בלשונית \"סכום ז'יטונים\" או \"רווח/הפסד\"."}</div>
+          <div style="font-size:13px;color:var(--muted);line-height:1.5;">כדי שהצילום יעבוד, צריך להגדיר את הז'יטונים של המועדון ב"הגדרת פרופיל מועדון" ← לשונית "ז'יטונים".<br>${m.photoOnly ? "בינתיים אפשר להזין את הסכום ידנית במסך השחקן." : "בינתיים אפשר לספור בלשונית \"סכום ז'יטונים\" או \"רווח/הפסד\"."}</div>
         </div>
       `;
     } else if (mode === "byColor") {
@@ -7377,6 +7458,8 @@ function attachHandlers(){
     }
   });
   app.querySelectorAll("[data-open-community]").forEach(el => el.onclick = () => go("community", {communityId: el.dataset.openCommunity}));
+  attachClubSwipe();
+  app.querySelectorAll(".club-act").forEach(b => b.addEventListener("click", () => { openClubSwipeId = null; }));
   app.querySelectorAll("[data-delete-community]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type:"deleteCommunity", communityId: el.dataset.deleteCommunity}); });
   app.querySelectorAll("[data-duplicate-community]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type:"duplicateCommunity", communityId: el.dataset.duplicateCommunity}); });
   app.querySelectorAll("[data-open-chip-setup]").forEach(el => el.onclick = (e) => {
@@ -9083,7 +9166,7 @@ function attachHandlers(){
     const confirmBtn = app.querySelector("[data-confirm-new-community]");
     if (confirmBtn) confirmBtn.onclick = async () => {
       const name = document.getElementById("new-community-name").value.trim();
-      if (!name) { showAlert("צריך להזין שם לקבוצה."); return; }
+      if (!name) { showAlert("צריך להזין שם למועדון."); return; }
       const communityId = uid();
       const creatorPlayer = {id: uid(), name: myIdentity.name};
       linkToGlobalPlayer(creatorPlayer);
@@ -9110,7 +9193,7 @@ function attachHandlers(){
     const confirmBtn = app.querySelector("[data-confirm-duplicate-community]");
     if (confirmBtn) confirmBtn.onclick = async () => {
       const name = document.getElementById("duplicate-community-name").value.trim();
-      if (!name) { showAlert("צריך להזין שם לקבוצה."); return; }
+      if (!name) { showAlert("צריך להזין שם למועדון."); return; }
       if (USE_RELATIONAL_API) {
         try { await v2DuplicateCommunity(modal.communityId, uid(), name); }
         catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
@@ -9134,7 +9217,7 @@ function attachHandlers(){
       if (USE_RELATIONAL_API) {
         try { await v2DeleteCommunity(modal.communityId); }
         catch(e) {
-          showAlert(e && e.status === 403 ? "רק מי שיצר את הקבוצה או Super Admin יכולים למחוק אותה." : "מחיקה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב.");
+          showAlert(e && e.status === 403 ? "רק מי שיצר את המועדון או Super Admin יכולים למחוק אותו." : "מחיקה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב.");
           return;
         }
       } else {
