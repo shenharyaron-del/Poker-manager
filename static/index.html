@@ -4780,7 +4780,7 @@ function renderPlayerScreen(gameId){
   // Admin, looking at someone: the per-player actions the old admin page had.
   const adminPlayerActions = (isAdminView && pid) ? (cashedOut
     ? `<button class="btn btn-ghost btn-block" style="margin-top:10px;" data-admin-return-to-game="${pid}">החזרה לשולחן</button>`
-    : (viewingOther ? `<button class="btn btn-ghost btn-block" style="margin-top:4px;font-size:13px;" data-admin-remove-seat="${pid}">הסרת ${esc(p ? p.name : "השחקן")} מהשולחן</button>` : "")) : "";
+    : ((viewingOther && !armed) ? `<button class="btn btn-ghost btn-block" style="margin-top:4px;font-size:13px;" data-admin-remove-seat="${pid}">הסרת ${esc(p ? p.name : "השחקן")} מהשולחן</button>` : "")) : "";
   // Name line: plain for a player; for an admin, a dropdown of everyone at the table plus
   // the table-wide tools.
   const nameHtml = isAdminView ? (() => {
