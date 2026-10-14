@@ -121,6 +121,11 @@ h1.sm{font-size:20px;}
    100vh/100dvh anyway. */
 body.table-screen{height:100vh;height:100dvh;height:var(--real-vh, 100dvh);min-height:0;overflow:hidden;}
 body.table-screen #app{height:100vh;height:100dvh;height:var(--real-vh, 100dvh);min-height:0;display:flex;flex-direction:column;padding-bottom:0;}
+/* Keyboard up (see updateRealVh): let the page scroll so the rest of the screen below the
+   field can be reached, and fit overlays to the visible area above the keyboard. */
+body.table-screen.kb-open{overflow:visible;}
+body.kb-open .overlay{top:var(--kb-top,0px);bottom:var(--kb-h,0px);}
+body.kb-open .overlay .modal{max-height:100%;}
 /* Wraps whichever face of the table screen is showing (see render()) - re-establishes
    the column layout #app used to give its children directly, now one level removed.
    touch-action:pan-y lets native vertical scroll work everywhere inside (the felt, the
@@ -664,12 +669,14 @@ html.theme-light .lux-page{
       linear-gradient(#cfe6f0,#bcdbe8 60%,#a9cfdf);
   background-size:auto;
 }
-html.theme-light .lux-page.pp-other{
+/* Admin working on another player's seat: a clear (not pale) red, like the dark theme's,
+   but light enough for the light themes' dark text. Theme-qualified so it beats the
+   blue/sand page backgrounds. */
+html.theme-light.theme-blue .lux-page.pp-other,html.theme-light.theme-sand .lux-page.pp-other{
   background:
-    radial-gradient(120% 55% at 50% 0%,rgba(255,255,255,.55),transparent 70%),
-    radial-gradient(150% 110% at 50% 45%,transparent 60%,rgba(140,50,50,.16) 100%),
-    linear-gradient(#f6dede,#efcfcf 60%,#e6bfbf);
-  background-size:auto;
+    radial-gradient(120% 55% at 50% 0%,rgba(255,255,255,.3),transparent 70%),
+    radial-gradient(150% 110% at 50% 45%,transparent 55%,rgba(90,20,20,.3) 100%),
+    linear-gradient(#e2a0a0,#d48585 60%,#c46c6c);
 }
 /* Table photo with the area outside the wood rail cut out (transparent), so no photo
    background shows around the rail - no border-radius clip needed. Sand gets the same
@@ -4408,10 +4415,35 @@ window.addEventListener("resize", () => requestAnimationFrame(layoutTableSize));
 // specifically to track the viewport the user can actually see past the browser's own UI.
 // Falls back to innerHeight (then to the CSS dvh/vh chain, via the var()'s own fallback)
 // on a browser with no Visual Viewport API at all.
-function updateRealVh(){
-  const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-  document.documentElement.style.setProperty("--real-vh", h + "px");
+// While the on-screen keyboard is up (a text field focused and the visible height dropped
+// well below what it was), keep --real-vh at the pre-keyboard height instead of squeezing
+// the fixed-height table screen into the small area above the keyboard - that left the
+// rest of the screen cut off with nothing below it. body.kb-open lets the page scroll so
+// the rest can be reached, and --kb-top/--kb-h pin overlays (modals) to the part of the
+// screen that's actually visible, so their bottom isn't hidden behind the keyboard.
+let preKeyboardVh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+function isTypingField(el){
+  if (!el) return false;
+  if (el.tagName === "TEXTAREA" || el.isContentEditable) return true;
+  return el.tagName === "INPUT" && !/^(checkbox|radio|button|submit|file|range|color)$/i.test(el.type || "");
 }
+function updateRealVh(){
+  const vv = window.visualViewport;
+  const h = vv ? vv.height : window.innerHeight;
+  const ae = document.activeElement;
+  const kb = isTypingField(ae) && h < preKeyboardVh * 0.8;
+  if (!kb) preKeyboardVh = h;
+  const root = document.documentElement.style;
+  root.setProperty("--real-vh", (kb ? preKeyboardVh : h) + "px");
+  root.setProperty("--kb-top", (kb && vv ? vv.offsetTop : 0) + "px");
+  root.setProperty("--kb-h", (kb && vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0) + "px");
+  if (!document.body) return;
+  const wasKb = document.body.classList.contains("kb-open");
+  document.body.classList.toggle("kb-open", kb);
+  // Keyboard just opened inside a modal: bring the field into the (now smaller) view.
+  if (kb && !wasKb && ae.closest && ae.closest(".modal")) setTimeout(() => { try { ae.scrollIntoView({block: "center"}); } catch(e) {} }, 60);
+}
+document.addEventListener("focusout", () => setTimeout(() => requestAnimationFrame(updateRealVh), 50));
 updateRealVh();
 if (window.visualViewport) {
   // "resize" catches the toolbar showing/hiding; "scroll" catches it changing height
