@@ -6325,11 +6325,13 @@ function renderModal(m){
       {key:"chips", label:"סכום ז'יטונים", icon:"coins"},
       {key:"profit", label:"רווח/הפסד", icon:"trend"},
     ];
-    const mode = (m.chipsMode && availableModes.some(am => am.key === m.chipsMode)) ? m.chipsMode : seatChipsDefaultMode(c);
+    // Opened from the player screen's "ספירה באמצעות צילום" button: photo counting only,
+    // no other mode tabs.
+    const mode = m.photoOnly ? "byColor" : (m.chipsMode && availableModes.some(am => am.key === m.chipsMode)) ? m.chipsMode : seatChipsDefaultMode(c);
     // Same tab-over-panel shape as the player screen's history/feed tabs: each mode owns a
     // fixed color (chips = gold, profit = teal, by-photo = violet), the active tab merges
     // into a panel framed in its color, and the inactive ones sit dimmed beside it.
-    const modeTabs = `
+    const modeTabs = m.photoOnly ? "" : `
       <div class="mode-tabs">
         ${availableModes.map(am => `<button class="mode-tab mode-tab-${am.key}${mode===am.key?' active':''}" data-chips-mode="${am.key}">${icon(am.icon)}<span>${am.label}</span></button>`).join("")}
       </div>
@@ -6386,7 +6388,7 @@ function renderModal(m){
         <div style="text-align:center;padding:10px 6px 16px;">
           <div style="color:#c4a8ee;margin-bottom:8px;display:flex;justify-content:center;">${icon('camera')}</div>
           <div style="font-size:14px;font-weight:700;margin-bottom:6px;">ספירה לפי צבע/תמונה עדיין לא זמינה</div>
-          <div style="font-size:13px;color:var(--muted);line-height:1.5;">כדי שהצילום יעבוד, צריך להגדיר את הז'יטונים של הקבוצה ב"הגדרת פרופיל קבוצה" ← לשונית "ז'יטונים".<br>בינתיים אפשר לספור בלשונית "סכום ז'יטונים" או "רווח/הפסד".</div>
+          <div style="font-size:13px;color:var(--muted);line-height:1.5;">כדי שהצילום יעבוד, צריך להגדיר את הז'יטונים של הקבוצה ב"הגדרת פרופיל קבוצה" ← לשונית "ז'יטונים".<br>${m.photoOnly ? "בינתיים אפשר להזין את הסכום ידנית במסך השחקן." : "בינתיים אפשר לספור בלשונית \"סכום ז'יטונים\" או \"רווח/הפסד\"."}</div>
         </div>
       `;
     } else if (mode === "byColor") {
@@ -6579,7 +6581,7 @@ function renderModal(m){
           <input type="file" accept="image/*" capture="environment" id="chip-count-camera-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
         </div>
         <ul style="color:var(--muted);font-size:12px;margin:-4px 0 14px;padding:0 18px 0 0;line-height:1.7;">
-          <li>סדרו את הערמות בשורות - בכל שורה ערמות באותו גובה (כל מספר, עדיף כפולות של 5), הגבוהות הכי רחוק מהמצלמה. אפשר לתקן את הכמות אחרי הצילום.</li>
+          <li>סדרו את הערמות בשורות - בכל שורה ערמות באותו גובה (כל מספר, עדיף כפולות של 5).</li>
           <li>כל ערמה מסוג אחד של ז'יטונים בלבד.</li>
           <li>צלמו לרוחב, בזווית של כ-30 מעלות. <a href="/static/chip_count_example.webp" target="_blank" rel="noopener" style="color:var(--gold);">דוגמה לתמונה טובה</a></li>
           <li>לא רוצים לצלם? ניתן ידנית לעדכן כמויות בטבלה למטה.</li>
@@ -6674,7 +6676,7 @@ function renderModal(m){
       ${directPaymentsNoteHtml}
       <div class="mode-panel-wrap">
         ${modeTabs}
-        <div class="mode-panel mode-panel-${mode}${mode===availableModes[0].key?' first':''}${mode===availableModes[availableModes.length-1].key?' last':''}">${modeBody}</div>
+        <div class="mode-panel mode-panel-${mode}${(!m.photoOnly && mode===availableModes[0].key)?' first':''}${(!m.photoOnly && mode===availableModes[availableModes.length-1].key)?' last':''}">${modeBody}</div>
       </div>
       ${cashedOut ? `
         <p style="color:var(--muted);font-size:12px;">השחקן כבר יצא מהמשחק.</p>
@@ -6886,7 +6888,7 @@ function renderModal(m){
   const isSetupFlow = m.type === "chipSetup" || m.type === "payboxSettings" || m.type === "buyinSetup"
     || (m.type === "seatChips" && (() => {
       const sc = getCommunity((getGame(m.gameId)||{}).communityId) || {};
-      return (m.chipsMode || seatChipsDefaultMode(sc)) === "byColor" && (sc.chipValues||[]).length > 0;
+      return (m.photoOnly ? "byColor" : (m.chipsMode || seatChipsDefaultMode(sc))) === "byColor" && (sc.chipValues||[]).length > 0;
     })());
   return `
     <div class="overlay${topAnchored ? ' overlay-top' : ''}${isSetupFlow ? ' overlay-fullscreen' : ''}">
@@ -7325,7 +7327,7 @@ function attachHandlers(){
     const resultEl = el.closest(".lv-calc").querySelector("#lv-chips-result");
     if (resultEl) resultEl.textContent = "₪" + (amount || 0);
   });
-  app.querySelectorAll("[data-leave-photo]").forEach(el => el.onclick = () => openModal({type:"seatChips", gameId: nav.gameId, playerId: viewedPid()}));
+  app.querySelectorAll("[data-leave-photo]").forEach(el => el.onclick = () => openModal({type:"seatChips", gameId: nav.gameId, playerId: viewedPid(), photoOnly: true}));
   app.querySelectorAll("[data-leave-confirm]").forEach(el => el.onclick = async () => {
     const gameId = nav.gameId, pid = viewedPid();
     const key = gameId + ":" + pid;
@@ -9352,7 +9354,7 @@ function attachHandlers(){
     const chipValues = c.chipValues || [];
     const currentChips = (g.liveChips||{})[modal.playerId] || 0;
     const availableModes = ["byColor", "chips", "profit"];
-    const mode = (modal.chipsMode && availableModes.includes(modal.chipsMode)) ? modal.chipsMode : seatChipsDefaultMode(c);
+    const mode = modal.photoOnly ? "byColor" : (modal.chipsMode && availableModes.includes(modal.chipsMode)) ? modal.chipsMode : seatChipsDefaultMode(c);
     const profitSign = modal.profitSign === "loss" ? "loss" : "profit";
     // Switching modes swaps out the input(s) entirely - anything typed in the mode being
     // left is about to silently vanish, so warn first rather than losing it with no
