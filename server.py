@@ -234,16 +234,34 @@ def _ensure_schema(conn):
             # would otherwise surface as a real 500 to whoever's request lost the race -
             # kept as a second layer of defense even with the advisory lock above, in case
             # some other connection ever touches these tables outside this function.
+            #
+            # Catches ANY psycopg2 error here, not just DuplicateTable/UniqueViolation -
+            # confirmed live as DeadlockDetected (two Render instances running this exact
+            # DDL sequence concurrently during a normal rolling deploy - NOT just when the
+            # advisory lock above failed to serialize them, since a process that loses that
+            # 10s race above proceeds unlocked by design - see that comment), which this
+            # didn't catch, so it escaped the loop and reached the finally block below with
+            # the transaction already aborted - pg_advisory_unlock then raised a SECOND
+            # exception (InFailedSqlTransaction) that crashed the whole process before it
+            # ever bound to a port. Logged (not silent) so a genuine DDL bug is still
+            # visible, but never fatal - whichever instance actually wins converges the
+            # schema either way, this one just moves on to the next statement.
             for statement in _INIT_STATEMENTS:
                 try:
                     cur.execute(statement)
-                except psycopg2.errors.DuplicateTable:
+                except psycopg2.Error as e:
                     conn.rollback()
-                except psycopg2.errors.UniqueViolation:
-                    conn.rollback()
+                    if not isinstance(e, (psycopg2.errors.DuplicateTable, psycopg2.errors.UniqueViolation)):
+                        app.logger.warning("_ensure_schema: statement failed, continuing: %s", e)
         finally:
             if got_lock:
-                cur.execute("SELECT pg_advisory_unlock(%s)", (_SCHEMA_INIT_LOCK_ID,))
+                try:
+                    cur.execute("SELECT pg_advisory_unlock(%s)", (_SCHEMA_INIT_LOCK_ID,))
+                except psycopg2.Error:
+                    # Best-effort - if the transaction is still in a bad state even for
+                    # this, the session-level lock still releases on its own once this
+                    # connection eventually closes. Not worth crashing startup over.
+                    conn.rollback()
     conn.commit()
 
 
