@@ -224,6 +224,13 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
 .lv-arm input{width:20px;height:20px;accent-color:var(--gold);flex-shrink:0;}
 .lv-line{flex:1;height:2px;background:linear-gradient(90deg,transparent,rgba(110,231,183,.6));}
 .lv-body.off{opacity:.45;}
+.lv-calc{display:flex;align-items:center;gap:8px;margin-top:12px;color:var(--text);font-size:14px;white-space:nowrap;}
+.lv-calc input{flex:0 0 90px;width:90px!important;min-width:0;padding:8px;font-size:16px;text-align:center;border-radius:10px;border:1px solid rgba(212,175,55,.6);background:var(--input);color:var(--text);}
+.lv-calc b{color:var(--gold);font-size:16px;}
+.lv-pot{margin-top:12px;padding:10px 12px;border-radius:12px;background:rgba(0,0,0,.3);border:1px solid rgba(212,175,55,.35);}
+.lv-pot > div:first-child{display:flex;justify-content:space-between;align-items:center;color:var(--text);font-size:14px;}
+.lv-pot b{color:var(--gold);font-size:18px;}
+.lv-pot-sub{color:var(--muted);font-size:11px;margin-top:3px;}
 .lv-photo{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 8px;border-radius:14px;cursor:pointer;font-family:inherit;color:#2a1d05;
   background:linear-gradient(180deg,#fde68a 0%,#f2c14e 45%,#c8922a 100%);border:1px solid rgba(0,0,0,.25);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 4px 10px rgba(0,0,0,.4);}
 .lv-photo span{display:flex;flex-direction:column;line-height:1.15;font-size:15px;}
@@ -4525,7 +4532,10 @@ let playerViewTarget = null;
 // Per game+player: which rebuy chip is picked (two-step: pick, then confirm), whether the
 // "סיום ערב" box is ticked (unlocks the cash-out controls) and the typed chip count - kept
 // across the periodic re-render.
-const rebuyPick = {}, leaveArmed = {}, leaveAmountDraft = {}, rebuyCancelOpen = {};
+const rebuyPick = {}, leaveArmed = {}, leaveAmountDraft = {}, rebuyCancelOpen = {}, leaveChipsDraft = {};
+// Ratios easy enough to convert in your head (1 ₪ = 1/2/10/100 chips) - any other one gets
+// a chips → ₪ converter in the end-of-evening area.
+const EASY_CHIP_RATIOS = [1, 2, 10, 100];
 function fmtDateTimeShort(ts){
   if (!ts) return "";
   const d = new Date(ts), two = n => String(n).padStart(2, "0");
@@ -4719,7 +4729,34 @@ function renderPlayerScreen(gameId){
           </div>
         </div>
       </div>
+      ${(() => {
+        // Chips → ₪ converter when the group's ratio isn't an easy one (e.g. 1 ₪ = 4 chips:
+        // 100 chips → ₪25); typing here fills the ₪ field above.
+        const ratio = parseFloat(c.chipRatio) || 1;
+        if (EASY_CHIP_RATIOS.includes(ratio)) return "";
+        return `
+        <div class="lv-calc">
+          <span>מחשבון:</span>
+          <input type="number" inputmode="decimal" id="lv-chips" placeholder="0" value="${esc(leaveChipsDraft[pickKey] || '')}" ${armed?'':'disabled'}>
+          <span>ז'יטונים =</span>
+          <b id="lv-chips-result">₪${leaveChipsDraft[pickKey] ? Math.round((parseFloat(leaveChipsDraft[pickKey]) / ratio) * 100) / 100 : 0}</b>
+        </div>
+        <div style="color:var(--muted);font-size:11px;margin-top:4px;">היחס בקבוצה: ₪1 = ${ratio} ז'יטונים</div>`;
+      })()}
       <button class="lv-confirm" data-leave-confirm ${armed?'':'disabled'}>אישור ספירה סופית</button>
+      ${(() => {
+        // The pot as it stands - what was bought in, what's already been taken out by players
+        // who left, and what should still be on the table. Updates as others leave.
+        const inTotal = g.buyins.reduce((sum,b) => sum + b.amount, 0);
+        const outTotal = Object.values(g.cashouts||{}).reduce((sum,co) => sum + (co.amount||0), 0);
+        const left = Math.round((inTotal - outTotal) * 100) / 100;
+        const stillIn = (g.seats||[]).filter(id => id && !(id in (g.cashouts||{}))).length;
+        return `
+        <div class="lv-pot">
+          <div><span>בקופה עכשיו</span><b>₪${left}</b></div>
+          <div class="lv-pot-sub">נכנסו ₪${Math.round(inTotal*100)/100} · יצאו ₪${Math.round(outTotal*100)/100} · ${stillIn === 1 ? "נשאר שחקן אחד בשולחן" : `נשארו ${stillIn} שחקנים בשולחן`}</div>
+        </div>`;
+      })()}
     </div>
   `;
   // Admin, looking at someone: the per-player actions the old admin page had.
@@ -4766,7 +4803,7 @@ function renderPlayerScreen(gameId){
         ${cashedOutInfoHtml}`}
       </div>
       ${toolsView ? `<div style="padding:4px 0 16px;">${renderAdminScreen(gameId, true)}</div>` : `
-      ${cashedOut ? "" : `<fieldset class="leave-frame rb-frame${showTableHelper?' th-glow-rebuy':''}" style="margin-bottom:14px;${showTableHelper?tableHelperDelay:''}">${rebuyHtml}</fieldset>`}
+      ${(cashedOut || armed) ? "" : `<fieldset class="leave-frame rb-frame${showTableHelper?' th-glow-rebuy':''}" style="margin-bottom:14px;${showTableHelper?tableHelperDelay:''}">${rebuyHtml}</fieldset>`}
       ${cashedOut ? "" : `<fieldset class="leave-frame lv-frame${showTableHelper?' th-glow-leave':''}"${showTableHelper?` style="${tableHelperDelay}"`:''}>${leaveHtml}</fieldset>`}
       ${adminPlayerActions}
       ${showTableHelper ? tableHelperHtml(false) : ""}`}
@@ -7266,6 +7303,18 @@ function attachHandlers(){
   app.querySelectorAll("[data-rb-cancel-toggle]").forEach(el => el.onclick = () => { const k = nav.gameId + ":" + viewedPid(); rebuyCancelOpen[k] = !rebuyCancelOpen[k]; render(); });
   app.querySelectorAll("[data-leave-arm]").forEach(el => el.onchange = () => { leaveArmed[nav.gameId + ":" + viewedPid()] = el.checked; render(); });
   app.querySelectorAll("#lv-amount").forEach(el => el.oninput = () => { leaveAmountDraft[nav.gameId + ":" + viewedPid()] = el.value; });
+  app.querySelectorAll("#lv-chips").forEach(el => el.oninput = () => {
+    const key = nav.gameId + ":" + viewedPid();
+    leaveChipsDraft[key] = el.value;
+    const ratio = parseFloat(getCommunity(getGame(nav.gameId).communityId).chipRatio) || 1;
+    const chips = parseFloat(el.value);
+    const amount = isNaN(chips) ? "" : String(Math.round((chips / ratio) * 100) / 100);
+    leaveAmountDraft[key] = amount;
+    const amountEl = el.closest(".lv-body").querySelector("#lv-amount");
+    if (amountEl) amountEl.value = amount;
+    const resultEl = el.closest(".lv-calc").querySelector("#lv-chips-result");
+    if (resultEl) resultEl.textContent = "₪" + (amount || 0);
+  });
   app.querySelectorAll("[data-leave-photo]").forEach(el => el.onclick = () => openModal({type:"seatChips", gameId: nav.gameId, playerId: viewedPid()}));
   app.querySelectorAll("[data-leave-confirm]").forEach(el => el.onclick = async () => {
     const gameId = nav.gameId, pid = viewedPid();
@@ -7290,7 +7339,7 @@ function attachHandlers(){
         maybeAutoCloseNight(freshG);
       });
     }
-    delete leaveArmed[key]; delete leaveAmountDraft[key];
+    delete leaveArmed[key]; delete leaveAmountDraft[key]; delete leaveChipsDraft[key];
     render();
     maybeOpenDirectPayAfterCashout(gameId, pid, rounded);
   });
