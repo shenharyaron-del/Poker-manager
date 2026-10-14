@@ -4752,6 +4752,10 @@ function renderPlayerScreen(gameId){
   const c = getCommunity(g.communityId) || {name:"קבוצה", roster:[]};
   const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
   const isAdminView = isTableAdmin(g, c);
+  // Admin-only "ערב סגור" toggle (g.closed) for groups that settle by direct transfers
+  // between players - paybox/bit groups close through their own payment flow. On the
+  // player screen since that's where the admin spends the night.
+  const showClosedToggle = isAdminView && !(c.settlementDefault === "paybox" || c.settlementDefault === "bit");
   const toolsView = false;
   const pid = (isAdminView && playerViewTarget && playerViewTarget !== "__tools__" && g.players.some(pl => pl.id === playerViewTarget)) ? playerViewTarget : myPlayerId;
   const viewingOther = pid !== myPlayerId;
@@ -5011,6 +5015,7 @@ function renderPlayerScreen(gameId){
       ${(cashedOut || armed) ? "" : `<fieldset class="leave-frame rb-frame${showTableHelper?' th-glow-rebuy':''}" style="margin-bottom:14px;${showTableHelper?tableHelperDelay:''}">${rebuyHtml}</fieldset>`}
       ${cashedOut ? "" : `<fieldset class="leave-frame lv-frame${showTableHelper?' th-glow-leave':''}"${showTableHelper?` style="${tableHelperDelay}"`:''}>${leaveHtml}</fieldset>`}
       ${adminPlayerActions}
+      ${showClosedToggle ? `<div style="display:flex;justify-content:center;margin-top:12px;flex-shrink:0;"><label class="night-closed-toggle" data-toggle-end-night="${g.id}"><input type="checkbox" ${g.closed?'checked':''} onclick="return false;"><span>ערב סגור</span></label></div>` : ""}
       ${showTableHelper ? tableHelperHtml(false) : ""}`}
     </div>
   `;
@@ -5411,9 +5416,6 @@ function renderTable(gameId){
 
   const seatedIds = seats.filter(Boolean);
   const allCashedOut = seatedIds.length > 0 && seatedIds.every(pid => pid in g.cashouts);
-  // Admin-only "ערב סגור" toggle (g.closed) for groups that settle by direct transfers
-  // between players - paybox/bit groups close through their own payment flow.
-  const showClosedToggle = isTableAdmin(g, c) && !(c.settlementDefault === "paybox" || c.settlementDefault === "bit");
   const admin = isTableAdmin(g, c);
   const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
 
@@ -5564,14 +5566,12 @@ function renderTable(gameId){
       <button class="icon-btn gold" data-invite-game="${g.id}" title="הזמנת שחקן" style="flex-shrink:0;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;white-space:nowrap;padding:5px 7px;">${icon('share')}הזמנת שחקן</button>
     </div>
     ${watchStripHtml(g)}
-    ${(!allCashedOut || showClosedToggle) ? `
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:0 20px 10px;">
-      ${showClosedToggle ? `<label class="night-closed-toggle" data-toggle-end-night="${g.id}"><input type="checkbox" ${g.closed?'checked':''} onclick="return false;"><span>ערב סגור</span></label>` : `<span></span>`}
-      ${!allCashedOut ? `<span style="display:flex;align-items:center;gap:8px;">
+    ${!allCashedOut ? `
+    <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:0 20px 10px;">
       <span data-open-poker-odds class="odds-label" style="color:#C8902F;font-size:12px;text-align:center;line-height:1.3;cursor:pointer;">מחשבון<br>סיכויי פוקר</span>
       <button class="icon-btn" data-open-poker-odds title="מה הסיכויים שלי" style="flex-shrink:0;width:48px;height:auto;background:none;border:none;padding:0;display:inline-flex;align-items:center;justify-content:center;">
         <img src="/static/odds-coin.png" style="width:48px;height:auto;display:block;">
-      </button></span>` : ""}
+      </button>
     </div>` : ""}
     <div class="poker-table-wrap">
       <div class="poker-table-inner ${cropClass}">
