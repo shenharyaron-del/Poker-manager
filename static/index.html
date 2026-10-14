@@ -342,6 +342,14 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
     linear-gradient(#0d3b2b,#0a3124 60%,#082419);
   background-size:auto,auto,180px 180px,auto;
 }
+.lux-page.pp-other{
+  background:
+    radial-gradient(120% 55% at 50% 0%,rgba(252,165,165,.10),transparent 70%),
+    radial-gradient(150% 110% at 50% 45%,transparent 55%,rgba(0,0,0,.55) 100%),
+    var(--pp-leather),
+    linear-gradient(#4a1d1d,#3d1818 60%,#2a1010);
+  background-size:auto,auto,180px 180px,auto;
+}
 .player-page .pp-total-wrap{position:relative;display:flex;flex-direction:column;align-items:center;margin-top:2px;}
 .player-page .pp-total{position:relative;z-index:1;font-size:54px;font-weight:800;line-height:1;letter-spacing:-.01em;
   background:linear-gradient(180deg,#fff3c4 0%,#fcd34d 35%,#d99a1e 62%,#fbbf24 80%,#fde68a 100%);
@@ -2598,7 +2606,7 @@ function tableHelperHtml(toLeft){
       <div class="th-step th-step-3" style="${d}">
         <div class="th-arrow th-arrow-up3" style="${d}">⬆</div>
         <div class="th-title">סוף הערב</div>
-        <div class="th-text">כשאתם קמים מהשולחן, סמנו "סיום ערב" למעלה ודווחו כמה ז'יטונים נשארו לכם.</div>
+        <div class="th-text">כשאתם קמים מהשולחן, סמנו "סיימתי את הערב" למעלה ודווחו כמה ז'יטונים נשארו לכם.</div>
       </div>
     </div>`;
 }
@@ -4108,7 +4116,7 @@ function render(){
           </div>
         `;
       };
-      const pagesHtml = domOrder.map(key => `<div class="swipe-page lux-page${key==='player'?' player-page':''}">${RENDERERS[key]()}${navBarFor(key)}</div>`).join("");
+      const pagesHtml = domOrder.map(key => `<div class="swipe-page lux-page${key==='player'?' player-page':''}${key==='player' && playerScreenViewingOther()?' pp-other':''}">${RENDERERS[key]()}${navBarFor(key)}</div>`).join("");
       html = `<div class="table-swipe-root">
         <div class="swipe-track-viewport">
           <div class="swipe-track" data-swipe-track style="transform:translateX(${restOffset});">
@@ -4557,7 +4565,7 @@ function renderPlayerScreen(gameId){
   const c = getCommunity(g.communityId) || {name:"קבוצה", roster:[]};
   const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
   const isAdminView = isTableAdmin(g, c);
-  const toolsView = isAdminView && playerViewTarget === "__tools__";
+  const toolsView = false;
   const pid = (isAdminView && playerViewTarget && playerViewTarget !== "__tools__" && g.players.some(pl => pl.id === playerViewTarget)) ? playerViewTarget : myPlayerId;
   const viewingOther = pid !== myPlayerId;
   const p = g.players.find(pl => pl.id === pid);
@@ -4725,7 +4733,7 @@ function renderPlayerScreen(gameId){
   const leaveHtml = `
     <label class="lv-arm">
       <input type="checkbox" data-leave-arm ${armed?'checked':''}>
-      <span>סיום ערב</span>
+      <span>סיימתי את הערב</span>
       <span class="lv-line"></span>
     </label>
     <div class="lv-body${armed?'':' off'}">
@@ -4781,7 +4789,6 @@ function renderPlayerScreen(gameId){
     const sel = toolsView ? "__tools__" : pid;
     return `<select class="pp-name-select" data-pp-view-select>
       ${ids.map(id => { const pl = g.players.find(x => x.id === id); return `<option value="${id}" ${sel===id?'selected':''}>${esc(pl.name)}${id===myPlayerId?' (אני)':''}${id in (g.cashouts||{})?' · יצא':''}</option>`; }).join("")}
-      <option value="__tools__" ${sel==='__tools__'?'selected':''}>🛠 כלי השולחן</option>
     </select>`;
   })() : `<div style="font-size:26px;font-weight:700;color:var(--text);">${esc(p?p.name:"")}</div>`;
   // Order (top to bottom): name/total, ריביי buttons, the shared history/feed panel
@@ -4819,6 +4826,17 @@ function renderPlayerScreen(gameId){
       ${showTableHelper ? tableHelperHtml(false) : ""}`}
     </div>
   `;
+}
+
+// True while a table admin has picked another player in the player screen's name dropdown -
+// that page then gets a muted red background (.pp-other) so it's obvious they're working
+// on someone else's seat.
+function playerScreenViewingOther(){
+  const g = getGame(nav.gameId);
+  if (!g || !playerViewTarget || !g.players.some(pl => pl.id === playerViewTarget)) return false;
+  if (!isTableAdmin(g, getCommunity(g.communityId) || {})) return false;
+  const mine = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+  return playerViewTarget !== mine;
 }
 
 // Final, read-only screen for a game that's closed AND balanced (see isGameSettled) -
