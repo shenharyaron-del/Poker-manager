@@ -4856,7 +4856,8 @@ function renderPlayerScreen(gameId){
     }
     // Lost, mid-game, not closed: no inline status text - the "who do I pay" modal
     // auto-opens itself instead (see attachHandlers/autoOpenedDirectPay).
-    cashedOutInfoHtml = breakdownHtml + paymentNotesHtml + statusHtml + exitHighlightsHtml;
+    cashedOutInfoHtml = breakdownHtml + paymentNotesHtml + statusHtml + exitHighlightsHtml
+      + (viewingOther ? "" : `<button class="btn btn-ghost" data-open-my-stats style="margin:14px auto 0;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 18px;font-size:14px;">${icon('bar')} הביצועים שלי</button>`);
   }
   const canDeleteBuyins = true; // viewing/editing your own history here, always allowed
   // Carries its own playerId (data-delete-seat-buyin-player) rather than relying on
@@ -5158,6 +5159,7 @@ function renderGameResultsScreen(gameId){
       ${topButtonHtml}
       ${playerRowsHtml}
       ${transfersHtml}
+      <button class="btn btn-ghost btn-block" data-open-my-stats style="margin-top:16px;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('bar')} הביצועים שלי</button>
     </div>
   `;
 }
@@ -7445,6 +7447,8 @@ function attachHandlers(){
   app.querySelectorAll("[data-back-community]").forEach(el => el.onclick = () => go("community", {communityId: el.dataset.backCommunity}));
   app.querySelectorAll("[data-crumb-home]").forEach(el => el.onclick = () => go("home"));
   app.querySelectorAll("[data-install-app]").forEach(el => el.onclick = (e) => { e.stopPropagation(); startInstall(); });
+  // "הביצועים שלי" on the end-of-night screens (cashed-out player view, game results).
+  app.querySelectorAll("[data-open-my-stats]").forEach(el => el.onclick = () => openModal({type:"stats", clientId: myIdentity.id}));
   app.querySelectorAll("[data-theme-toggle]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type: "themePicker"}); });
   // Profile screen: switch right away but don't re-render (would drop a half-typed name) -
   // just move the highlight; the rest of the app picks the colors up through CSS.
