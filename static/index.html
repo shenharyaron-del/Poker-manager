@@ -519,6 +519,9 @@ input:focus,.select-input:focus{border-color:var(--gold);}
    top to bottom instead, same as a real screen would. */
 .overlay.overlay-fullscreen{align-items:stretch;padding:0;}
 .overlay.overlay-fullscreen .modal{max-width:none;width:100%;height:100%;max-height:none;border-radius:0;border:none;}
+/* The player stats screen: whole phone screen too, but keeps the normal sheet colors. */
+.overlay.overlay-full{align-items:stretch;padding:0;}
+.overlay.overlay-full .modal{max-width:none;width:100%;height:100%;max-height:none;border-radius:0;border:none;}
 .modal{background:#064e3b;width:100%;max-width:480px;border-radius:20px 20px 0 0;border:1px solid var(--card-b);padding:20px;max-height:85vh;overflow-y:auto;}
 @media(min-width:600px){.modal{border-radius:20px;}}
 /* showAlert() - custom stand-in for the browser's native alert(), which always prefixes
@@ -7582,7 +7585,7 @@ function renderModal(m){
       return (m.photoOnly ? "byColor" : (m.chipsMode || seatChipsDefaultMode(sc))) === "byColor" && (sc.chipValues||[]).length > 0;
     })());
   return `
-    <div class="overlay${topAnchored ? ' overlay-top' : ''}${isSetupFlow ? ' overlay-fullscreen' : ''}">
+    <div class="overlay${topAnchored ? ' overlay-top' : ''}${isSetupFlow ? ' overlay-fullscreen' : ''}${m.type === "stats" ? ' overlay-full' : ''}">
       <div class="modal" onclick="event.stopPropagation()">
         <div class="modal-head"><h3 class="serif">${title}</h3>${dismissable ? `<button class="close-x" data-close-modal>${icon('x')}</button>` : ""}</div>
         ${body}${body.includes('class="mode-panel ' + SETUP_PANEL_MARK) ? '</div></div>' + SETUP_FOOTER_HTML : ''}
