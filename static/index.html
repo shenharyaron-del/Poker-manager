@@ -1823,7 +1823,9 @@ async function v2MaybeAutoCloseNight(gameId){
   // silently no-op on a spurious 409, since it was still sending the old token).
   const g = await v2LoadGameFull(gameId);
   const seated = (g.seats || []).filter(Boolean);
-  const shouldClose = g.players.length > 0 && seated.every(pid => pid in g.cashouts);
+  // Only a night that actually had a game (2+ players sat) closes on its own - a table its
+  // opener never sat at, or sat at alone and left, stays open waiting for players.
+  const shouldClose = seated.length >= 2 && seated.every(pid => pid in g.cashouts);
   if (shouldClose && !g.closed) {
     await v2UpdateGame(gameId, {closed: true});
     v2AddGameEvent(gameId, "night_closed", null, null, undefined);
@@ -3708,7 +3710,9 @@ function getGame(id){ return state.games.find(g => g.id === id); }
 // cashout-related actions, including ones on an already-closed game (a no-op then).
 function maybeAutoCloseNight(g){
   const seated = (g.seats || []).filter(Boolean);
-  const shouldClose = g.players.length > 0 && seated.every(pid => pid in g.cashouts);
+  // Only a night that actually had a game (2+ players sat) closes on its own - a table its
+  // opener never sat at, or sat at alone and left, stays open waiting for players.
+  const shouldClose = seated.length >= 2 && seated.every(pid => pid in g.cashouts);
   if (shouldClose && !g.closed) { g.closed = true; logGameEvent(g, "night_closed", null, null, undefined); }
 }
 function gamesForCommunity(id){ return state.games.filter(g => g.communityId === id).sort((a,b)=> a.date < b.date ? 1 : -1); }
@@ -7704,6 +7708,15 @@ function attachHandlers(){
   app.querySelectorAll("[data-open-game]").forEach(el => el.onclick = async () => {
     const gameId = el.dataset.openGame;
     const communityId = getGame(gameId).communityId;
+    // A night that closed itself back when one lone player left (before that stopped
+    // happening - see maybeAutoCloseNight) is reopened so people can still join it.
+    const og = getGame(gameId);
+    if (og.closed && (og.seats||[]).filter(Boolean).length < 2 && (og.players||[]).length <= 1) {
+      try {
+        if (USE_RELATIONAL_API) await v2UpdateGame(gameId, {closed: false});
+        else await mutateAndSave(() => { getGame(gameId).closed = false; });
+      } catch(e) { /* best-effort - the night just stays closed */ }
+    }
     if (shouldAskWatchOrJoin(getGame(gameId))) { openModal({type: "watchOrJoin", gameId}); return; }
     go("table", {gameId, communityId});
     if (USE_RELATIONAL_API) { await ensureGameLoadedForView(gameId); render(); }
