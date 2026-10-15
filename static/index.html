@@ -831,6 +831,8 @@ html.theme-light.theme-blue [style*="background:#0891b2"]{background:#0b2f4a!imp
 .pp-tile{position:relative;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:6px 4px;border-radius:10px;border:1px solid rgba(212,175,55,.45);background:transparent;color:var(--text);font-family:inherit;font-size:13px;font-weight:700;line-height:1.15;cursor:pointer;overflow:visible;}
 .pp-tile bdi{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .pp-tile small{font-size:10px;font-weight:600;color:var(--muted);}
+/* A small gold chevron on each player tile - tapping opens that player's screen. */
+.pp-tile[data-pp-view]::after{content:"";position:absolute;top:50%;left:7px;width:6px;height:6px;border-top:2px solid var(--gold);border-left:2px solid var(--gold);transform:translateY(-50%) rotate(-45deg);opacity:.8;pointer-events:none;}
 .pp-tile.on{border-color:var(--gold);background:rgba(212,175,55,.18);box-shadow:0 0 0 1px rgba(212,175,55,.35);}
 .pp-tile.out{opacity:.65;}
 .pp-tile-invite{border-style:dashed;color:var(--gold);flex-direction:row;gap:4px;font-size:12px;}
