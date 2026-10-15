@@ -238,7 +238,8 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
 .lv-arm{display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text);font-size:15px;font-weight:700;margin-bottom:10px;}
 .lv-arm input{width:20px;height:20px;accent-color:var(--gold);flex-shrink:0;}
 .lv-line{flex:1;height:2px;background:linear-gradient(90deg,transparent,rgba(110,231,183,.6));}
-.lv-body.off{opacity:.45;}
+.lv-body.off{display:none;}
+.lv-arm:has(+ .lv-body.off){margin-bottom:0;}
 .lv-calc{display:flex;align-items:center;gap:8px;margin-top:12px;color:var(--text);font-size:14px;white-space:nowrap;}
 .lv-calc input{flex:0 0 90px;width:90px!important;min-width:0;padding:8px;font-size:16px;text-align:center;border-radius:10px;border:1px solid rgba(212,175,55,.6);background:var(--input);color:var(--text);}
 .lv-calc b{color:var(--gold);font-size:16px;}
@@ -786,6 +787,7 @@ html.theme-light.theme-blue .card[data-new-community],html.theme-light.theme-blu
 .club-swipe{position:relative;margin-bottom:10px;border-radius:16px;overflow:hidden;}
 .club-swipe .club-front{position:relative;z-index:1;margin-bottom:0;transition:transform .22s ease;touch-action:pan-y;will-change:transform;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;}
 .club-swipe.dragging .club-front{transition:none;}
+.club-swipe.shifted .club-front{border-top-right-radius:0;border-bottom-right-radius:0;}
 .club-actions{position:absolute;top:0;bottom:0;right:0;width:50%;display:flex;}
 .club-act{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border:none;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
 .club-act-setup{background:#b8862b;color:#fff;}
@@ -794,6 +796,7 @@ html.theme-light.theme-blue .card[data-new-community],html.theme-light.theme-blu
 .club-swipe-hint svg{width:12px;height:12px;}
 @keyframes club-peek{0%{transform:translateX(0)}35%{transform:translateX(-30%)}55%{transform:translateX(-30%)}100%{transform:translateX(0)}}
 .club-swipe .club-front.club-hint-peek{animation:club-peek 1.4s ease-in-out 1;}
+html.theme-light .tp-row{border-color:var(--card-b)!important;}
 </style>
 </head>
 <body>
@@ -4505,7 +4508,15 @@ function attachClubSwipe(){
     const front = wrap.querySelector(".club-front");
     const id = wrap.dataset.clubSwipe;
     const maxShift = () => wrap.clientWidth * 0.5;
-    const setShift = px => { front.style.transform = px ? `translateX(${-px}px)` : ""; };
+    // The card's moving (right) edge goes square while it's slid open and rounds again
+    // once it's back home (after the slide-back transition, not mid-way).
+    let roundTimer = null;
+    const setShift = px => {
+      front.style.transform = px ? `translateX(${-px}px)` : "";
+      clearTimeout(roundTimer);
+      if (px > 0) wrap.classList.add("shifted");
+      else roundTimer = setTimeout(() => wrap.classList.remove("shifted"), wrap.classList.contains("dragging") ? 0 : 230);
+    };
     if (openClubSwipeId === id) setShift(maxShift());
     let startX = 0, startY = 0, base = 0, shift = 0, mode = null, pid = null;
     front.addEventListener("pointerdown", e => {
@@ -4974,6 +4985,7 @@ function renderPlayerScreen(gameId){
     // Lost, mid-game, not closed: no inline status text - the "who do I pay" modal
     // auto-opens itself instead (see attachHandlers/autoOpenedDirectPay).
     cashedOutInfoHtml = breakdownHtml + paymentNotesHtml + statusHtml + exitHighlightsHtml
+      + ((isAdminView && allCashedOutForSettlement && !potBalancedForSettlement) ? `<button class="btn btn-primary" data-open-pot-fix style="margin:14px auto 0;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 18px;font-size:14px;background:#0891b2;color:#fff;">${icon('coins')} סידור קופה</button>` : "")
       + (viewingOther ? "" : `<button class="btn btn-ghost" data-open-my-stats style="margin:14px auto 0;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 18px;font-size:14px;">${icon('bar')} הביצועים שלי</button>`);
   }
   const canDeleteBuyins = true; // viewing/editing your own history here, always allowed
@@ -5449,6 +5461,10 @@ function renderAdminScreen(gameId, embedded){
 
   // Embedded in the player screen's "כלי השולחן" view (the admin's player dropdown) - just
   // the table-wide tools; per-player actions live on each player's own view there.
+  // Just the pot-balance fix, for the "סידור קופה" window (see data-open-pot-fix).
+  if (embedded === "potFix") {
+    return potFixHtml || `<div class="empty" style="padding:14px 0;font-size:14px;">הקופה מאוזנת ✓</div>`;
+  }
   if (embedded) {
     return `
       ${(c.settlementDefault === 'paybox' || c.settlementDefault === 'bit') ? "" : `
@@ -5873,9 +5889,9 @@ function renderModal(m){
     const thirdPartyRow = (s) => {
       const isOpen = !!expandedIds[s.id];
       return `
-      <div style="border:1px solid rgba(255,255,255,.15);border-radius:12px;margin-bottom:8px;overflow:hidden;">
+      <div class="tp-row" style="border:1px solid rgba(255,255,255,.15);border-radius:12px;margin-bottom:8px;overflow:hidden;">
         <button type="button" data-toggle-service="${s.id}" style="display:flex;align-items:center;justify-content:space-between;width:100%;background:none;border:none;cursor:pointer;color:inherit;font-family:inherit;padding:10px 12px;">
-          <span style="color:#fff;font-size:12px;">${esc(s.name)}${s.category ? ` (${esc(s.category)})` : ""}</span>
+          <span style="color:var(--text);font-size:12px;">${esc(s.name)}${s.category ? ` (${esc(s.category)})` : ""}</span>
           ${icon(isOpen ? 'up' : 'down')}
         </button>
         ${isOpen ? `
@@ -6498,6 +6514,9 @@ function renderModal(m){
       <button class="btn btn-primary btn-block" style="margin-bottom:10px;" data-watch-or-join="join">הצטרפות לשולחן</button>
       <button class="btn btn-ghost btn-block" data-watch-or-join="watch">צפייה בלבד</button>
     `;
+  } else if (m.type === "potFix") {
+    title = "סידור קופה";
+    body = renderAdminScreen(m.gameId, "potFix");
   } else if (m.type === "themePicker") {
     title = "עיצוב";
     const cur = currentTheme();
@@ -7593,6 +7612,7 @@ function attachHandlers(){
   app.querySelectorAll("[data-back-community]").forEach(el => el.onclick = () => go("community", {communityId: el.dataset.backCommunity}));
   app.querySelectorAll("[data-crumb-home]").forEach(el => el.onclick = () => go("home"));
   app.querySelectorAll("[data-install-app]").forEach(el => el.onclick = (e) => { e.stopPropagation(); startInstall(); });
+  app.querySelectorAll("[data-open-pot-fix]").forEach(el => el.onclick = () => openModal({type: "potFix", gameId: nav.gameId}));
   // "הביצועים שלי" on the end-of-night screens (cashed-out player view, game results).
   app.querySelectorAll("[data-open-my-stats]").forEach(el => el.onclick = () => openModal({type:"stats", clientId: myIdentity.id}));
   app.querySelectorAll("[data-theme-toggle]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type: "themePicker"}); });
@@ -7944,7 +7964,7 @@ function attachHandlers(){
       });
     }
     adminBalanceFixSelected = {};
-    render();
+    if (modal && modal.type === "potFix") closeModal(); else render();
   };
 
   const viewSummaryBtn = app.querySelector("[data-view-summary]");
