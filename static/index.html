@@ -788,6 +788,8 @@ html.theme-light.theme-blue .card[data-new-community],html.theme-light.theme-blu
 .club-swipe{position:relative;margin-bottom:10px;border-radius:16px;overflow:hidden;}
 .club-swipe .club-front{position:relative;z-index:1;margin-bottom:0;transition:transform .22s ease;touch-action:pan-y;will-change:transform;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;}
 .club-swipe.dragging .club-front{transition:none;}
+.club-swipe .club-front.card-open{background:linear-gradient(rgba(251,191,36,.08),rgba(251,191,36,.08)),var(--card);}
+html.theme-light .club-swipe .club-front.card-open{background:#fff8e6;}
 .club-swipe.shifted .club-front{border-top-right-radius:0;border-bottom-right-radius:0;}
 .club-actions{position:absolute;top:0;bottom:0;right:0;width:50%;display:flex;}
 .club-act{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border:none;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
@@ -816,6 +818,8 @@ html.theme-light.theme-blue [style*="background:#0891b2"]{background:#0b2f4a!imp
 .seat-hint::after{content:"👇";position:absolute;left:50%;top:-30px;font-size:22px;line-height:1;transform:translateX(-50%);animation:seat-hand 1s ease-in-out infinite;pointer-events:none;}
 @keyframes seat-hand{0%,100%{transform:translate(-50%,0)}50%{transform:translate(-50%,6px)}}
 .game-welcome-overlay.no-anim{animation:none;}
+.status-badge{display:inline-block;flex-shrink:0;font-family:'Rubik',sans-serif;font-size:11px;font-weight:700;color:#fff;border-radius:8px;padding:3px 8px;white-space:nowrap;letter-spacing:0;}
+.status-badge.small{font-size:10px;padding:2px 7px;border-radius:7px;vertical-align:middle;}
 </style>
 </head>
 <body>
@@ -4674,6 +4678,31 @@ function closedGameAlert(g, c){
   return { badge: "לא מאוזן", color: "#9f1239", text: `${diff > 0 ? "קופה בחוסר" : "קופה בעודף"} ₪${Math.round(Math.abs(diff))}` };
 }
 
+// One status per night, each with its own color (club screen cards + a small tag in the
+// game screens' header):
+//   ממתין לשחקנים - fewer than two seated, nobody's left yet
+//   פעיל          - people still at the table (also after "ערב סגור" until they leave)
+//   קופה לא מאוזנת - everyone's out but the declared chips miss the buy-ins by more than ₪5
+//   הסתיים        - everyone's out and the pot balances
+const GAME_STATUS_COLORS = { waiting: "#2563eb", active: "#15803d", unbalanced: "#be123c", done: "#6b7280" };
+function gameStatus(g){
+  const cashouts = g.cashouts || {};
+  const seated = (g.seats || []).filter(Boolean);
+  const still = seated.filter(pid => !(pid in cashouts));
+  if (still.length || (!seated.length && !g.closed)) {
+    if (!Object.keys(cashouts).length && seated.length < 2 && !g.closed) return {key: "waiting", label: "ממתין לשחקנים"};
+    return {key: "active", label: "פעיל"};
+  }
+  const buyinTotal = g.buyinTotals ? g.buyinTotals.reduce((s,bt)=>s+bt.amount,0) : (g.buyins||[]).reduce((s,b)=>s+b.amount,0);
+  const chipsTotal = Object.values(cashouts).reduce((s,co)=>s+(co.amount||0),0);
+  if (Math.abs(chipsTotal - buyinTotal) > 5) return {key: "unbalanced", label: "קופה לא מאוזנת"};
+  return {key: "done", label: "הסתיים"};
+}
+function gameStatusBadge(g, small){
+  const st = gameStatus(g);
+  return `<span class="status-badge${small ? ' small' : ''}" style="background:${GAME_STATUS_COLORS[st.key]};">${st.label}</span>`;
+}
+
 function renderCommunity(communityId){
   const c = getCommunity(communityId);
   if (!c) return `<div class="empty">מועדון לא נמצא</div>`;
@@ -4697,7 +4726,7 @@ function renderCommunity(communityId){
     const canDelete = !!(myIdentity.name && (myIdentity.name === g.createdByName || myIdentity.name === c.createdByName));
     const front = `
     <div class="card club-front ${g.closed?"":"card-open"}" data-open-game="${g.id}">
-      <div class="row flex1"><span style="color:#6ee7b7">${icon('cal')}</span><div class="flex1"><div style="font-weight:600">${esc(g.name || g.date)}</div>${g.name ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${esc(g.date)}</div>` : ""}${gameAlert ? `<div style="font-size:11px;color:#fdba74;margin-top:2px;">${gameAlert.text}</div>` : ""}</div>${gameAlert ? `<span class="open-badge" style="background:${gameAlert.color};color:#fff;">${gameAlert.badge}</span>` : ((g.closed || waitingForPlayers) ? "" : `<span class="open-badge">פעיל</span>`)}</div>
+      <div class="row flex1"><span style="color:#6ee7b7">${icon('cal')}</span><div class="flex1"><div style="font-weight:600">${esc(g.name || g.date)}</div>${g.name ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${esc(g.date)}</div>` : ""}${gameAlert ? `<div style="font-size:11px;color:#fdba74;margin-top:2px;">${gameAlert.text}</div>` : ""}</div>${gameStatusBadge(g)}</div>
       <div class="chev">${icon('chev')}</div>
     </div>`;
     if (!canInvite && !canDelete) return front.replace('class="card club-front ', 'class="card ');
@@ -5160,7 +5189,7 @@ function renderPlayerScreen(gameId){
     <div class="top row" style="padding-top:14px;padding-bottom:16px;flex-shrink:0;">
       <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
       <div class="flex1" style="min-width:0;">
-        <h1 class="serif sm" style="color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g.name || c.name)}</h1>
+        <h1 class="serif sm" style="color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:8px;"><span style="overflow:hidden;text-overflow:ellipsis;">${esc(g.name || c.name)}</span>${gameStatusBadge(g, true)}</h1>
         <div class="meta" style="color:#6ee7b7;font-size:11px;display:flex;align-items:center;gap:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${icon('cal')}${esc(g.date)}${g.createdByName ? ` · נוצר ע"י ${esc(g.createdByName)}` : ""}</div>
       </div>
       <button class="icon-btn gold${aloneAtTable?' invite-hint':''}" data-invite-game="${g.id}" title="הזמנת שחקנים" style="flex-shrink:0;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;white-space:nowrap;padding:5px 7px;">${icon('share')}הזמנת שחקנים</button>
@@ -5323,7 +5352,7 @@ function renderGameResultsScreen(gameId){
       <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
       <div class="flex1" style="min-width:0;">
         <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;">המשחק הסתיים</div>
-        <h1 class="serif sm" style="color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g.name || c.name)}</h1>
+        <h1 class="serif sm" style="color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:8px;"><span style="overflow:hidden;text-overflow:ellipsis;">${esc(g.name || c.name)}</span>${gameStatusBadge(g, true)}</h1>
         <div class="meta" style="color:#6ee7b7;font-size:11px;display:flex;align-items:center;gap:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${icon('cal')}${esc(g.date)} · ${g.players.length} שחקנים</div>
       </div>
     </div>
@@ -5771,7 +5800,7 @@ function renderTable(gameId){
     <div class="top row" style="padding-top:14px;padding-bottom:16px;">
       <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
       <div class="flex1" style="min-width:0;">
-        <h1 class="serif sm" style="color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g.name || c.name)}</h1>
+        <h1 class="serif sm" style="color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:8px;"><span style="overflow:hidden;text-overflow:ellipsis;">${esc(g.name || c.name)}</span>${gameStatusBadge(g, true)}</h1>
         <div class="meta" style="color:#6ee7b7;font-size:11px;display:flex;align-items:center;gap:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${icon('cal')}${esc(g.date)}${g.createdByName ? ` · נוצר ע"י ${esc(g.createdByName)}` : ""}</div>
       </div>
       <button class="icon-btn gold${aloneAtTable?' invite-hint':''}" data-invite-game="${g.id}" title="הזמנת שחקנים" style="flex-shrink:0;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;white-space:nowrap;padding:5px 7px;">${icon('share')}הזמנת שחקנים</button>
