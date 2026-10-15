@@ -174,6 +174,10 @@ _INIT_STATEMENTS = (
     ")",
     "CREATE INDEX IF NOT EXISTS bit_links_community_id_idx ON bit_links(community_id)",
     "ALTER TABLE communities ADD COLUMN IF NOT EXISTS active_bit_link_id TEXT",
+    # When the club was created - for ordering the home screen's club list. Rows that
+    # existed before this column get the migration time; the client falls back to the
+    # date of a club's first game for those (see renderHome).
+    "ALTER TABLE communities ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now()",
     # Super Admin's own cheat-sheet of the 3rd-party services this app depends on (hosting,
     # DB, email, the Claude API, source control) - not app data at all, so it's gated by
     # _require_super_admin on every endpoint rather than living under any community/game.
@@ -626,7 +630,8 @@ def _num(x):
 
 def _row_to_community(row):
     (cid, name, created_by, created_by_name, chip_ratio, active_paybox_link_id,
-     settlement_default, updated_at, last_participants, buyin_amounts, active_bit_link_id) = row
+     settlement_default, updated_at, last_participants, buyin_amounts, active_bit_link_id,
+     created_at) = row
     return {
         "id": cid, "name": name, "createdBy": created_by, "createdByName": created_by_name,
         "chipRatio": _num(chip_ratio), "activePayboxLinkId": active_paybox_link_id,
@@ -635,6 +640,7 @@ def _row_to_community(row):
         "updatedAt": updated_at.isoformat() if updated_at else None,
         "lastParticipants": last_participants,
         "buyinAmounts": buyin_amounts,
+        "createdAt": created_at.isoformat() if created_at else None,
     }
 
 
@@ -756,8 +762,8 @@ def v2_list_communities():
             visible = _visible_community_ids(cur, caller)
             cur.execute(
                 "SELECT id, name, created_by, created_by_name, chip_ratio, active_paybox_link_id, "
-                "settlement_default, updated_at, last_participants, buyin_amounts, active_bit_link_id "
-                "FROM communities ORDER BY name"
+                "settlement_default, updated_at, last_participants, buyin_amounts, active_bit_link_id, "
+                "created_at FROM communities ORDER BY name"
             )
             communities = [_row_to_community(r) for r in cur.fetchall()]
             if visible is not None:
