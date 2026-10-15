@@ -741,7 +741,8 @@ html.theme-light.theme-blue .lv-pot{background:rgba(255,255,255,.75);}
 html.theme-light.theme-blue .lv-pot > div:first-child,html.theme-light.theme-blue .lv-pot-sub{color:#0e2633;}
 html.theme-light.theme-blue .lv-pot b{color:#a86a12;}
 html.theme-light.theme-blue .rb-cancel-head{background:rgba(255,255,255,.85);color:#0e2633;}
-html.theme-light.theme-blue .pp-name-select{color:#0e2633;background-color:rgba(255,255,255,.75);}
+html.theme-light.theme-blue .pp-name-select,html.theme-light.theme-blue .pp-name-box{color:#0e2633;background-color:rgba(255,255,255,.75);}
+html.theme-light.theme-blue .pp-tile{color:#0e2633;background:rgba(255,255,255,.6);}
 html.theme-light.theme-blue .nav-bar{background:linear-gradient(180deg,#4d89a8,#3d7595);}
 html.theme-light.theme-blue .lux-page .icon-btn.gold[data-invite-game]{color:#a86a12!important;}
 html.theme-light.theme-blue .screen-tag{opacity:1;}
@@ -822,6 +823,24 @@ html.theme-light.theme-blue [style*="background:#0891b2"]{background:#0b2f4a!imp
 .game-welcome-overlay.no-anim{animation:none;}
 .status-badge{display:inline-block;flex-shrink:0;font-family:'Rubik',sans-serif;font-size:11px;font-weight:700;color:#fff;border-radius:8px;padding:3px 8px;white-space:nowrap;letter-spacing:0;}
 .status-badge.small{font-size:10px;padding:2px 7px;border-radius:7px;vertical-align:middle;}
+/* Player screen: tiles of everyone at tonight's table above the name (4 per row, max 6) */
+.pp-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:0 0 10px;}
+.pp-tile{position:relative;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:6px 4px;border-radius:10px;border:1px solid rgba(212,175,55,.45);background:transparent;color:var(--text);font-family:inherit;font-size:13px;font-weight:700;line-height:1.15;cursor:pointer;overflow:visible;}
+.pp-tile bdi{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pp-tile small{font-size:10px;font-weight:600;color:var(--muted);}
+.pp-tile.on{border-color:var(--gold);background:rgba(212,175,55,.18);box-shadow:0 0 0 1px rgba(212,175,55,.35);}
+.pp-tile.out{opacity:.65;}
+.pp-tile.static{cursor:default;}
+.pp-tile-invite{border-style:dashed;color:var(--gold);flex-direction:row;gap:4px;font-size:12px;}
+.pp-tile-invite svg{width:14px;height:14px;}
+.pp-tile-more{color:var(--gold);font-size:12px;}
+.pp-tile-more select{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;}
+.tile-hint::after{content:"👉";position:absolute;left:-30px;top:50%;font-size:20px;line-height:1;transform:translateY(-50%);animation:tile-hand 1.1s ease-in-out infinite;pointer-events:none;}
+@keyframes tile-hand{0%,100%{transform:translate(0,-50%)}50%{transform:translate(8px,-50%)}}
+.pp-name-box{display:inline-block;font-size:24px;font-weight:700;color:var(--text);border:1px solid rgba(212,175,55,.45);border-radius:12px;padding:4px 18px;max-width:90%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+html.theme-light .pp-tile{background:rgba(255,255,255,.5);}
+html.theme-light .pp-tile.on{background:#fff3cf;}
+html.theme-light .pp-name-box{background-color:rgba(255,255,255,.55);}
 </style>
 </head>
 <body>
@@ -4712,6 +4731,23 @@ function gameStatusBadge(g, small){
   return `<span class="status-badge${small ? ' small' : ''}" style="background:${GAME_STATUS_COLORS[st.key]};">${st.label}</span>`;
 }
 
+// Share an invite link to a game (native share sheet, else copy to clipboard).
+async function inviteToGame(gameId){
+  const g = getGame(gameId);
+  const c = g && getCommunity(g.communityId);
+  if (!g || !c) return;
+  const url = location.origin + location.pathname + "?game=" + encodeURIComponent(g.id);
+  const text = `הצטרפו אליי למשחק פוקר ב${c.name} - ${g.name || g.date}`;
+  if (navigator.share) {
+    try { await navigator.share({title: "הזמנה למשחק פוקר", text, url}); } catch(err) { /* user cancelled the share sheet */ }
+  } else if (navigator.clipboard && navigator.clipboard.writeText) {
+    try { await navigator.clipboard.writeText(url); showAlert("הקישור הועתק! שלחו אותו לשחקן."); }
+    catch(err) { showAlert(url); }
+  } else {
+    showAlert(url);
+  }
+}
+
 function renderCommunity(communityId){
   const c = getCommunity(communityId);
   if (!c) return `<div class="empty">מועדון לא נמצא</div>`;
@@ -5175,20 +5211,40 @@ function renderPlayerScreen(gameId){
   const adminPlayerActions = (isAdminView && pid) ? (cashedOut
     ? `<button class="btn btn-ghost co-act" data-admin-return-to-game="${pid}">${icon('undo')} החזרה לשולחן</button>`
     : ((viewingOther && !armed) ? `<button class="btn btn-ghost btn-block" style="margin-top:4px;font-size:13px;" data-admin-remove-seat="${pid}">הסרת ${esc(p ? p.name : "השחקן")} מהשולחן</button>` : "")) : "";
-  // Name line: plain for a player; for an admin, a dropdown of everyone at the table plus
-  // the table-wide tools.
-  const nameHtml = isAdminView ? (() => {
-    const ids = [...new Set([...(g.seats||[]).filter(Boolean), ...Object.keys(g.cashouts||{})])].filter(id => g.players.some(pl => pl.id === id));
-    if (myPlayerId && !ids.includes(myPlayerId) && g.players.some(pl => pl.id === myPlayerId)) ids.unshift(myPlayerId);
-    const sel = toolsView ? "__tools__" : pid;
-    // Shrink the font for a long label (e.g. "Ron Rabinovitch (אני) · יצא") so it isn't cut off.
-    const selPl = g.players.find(x => x.id === sel);
-    const selLen = selPl ? selPl.name.length + (sel===myPlayerId ? 6 : 0) + (sel in (g.cashouts||{}) ? 6 : 0) : 0;
-    const selFont = selLen > 24 ? 17 : selLen > 18 ? 20 : null;
-    return `<select class="pp-name-select" data-pp-view-select dir="rtl"${selFont ? ` style="font-size:${selFont}px;"` : ''}>
-      ${ids.map(id => { const pl = g.players.find(x => x.id === id); return `<option value="${id}" dir="rtl" ${sel===id?'selected':''}>\u200F\u2068${esc(pl.name)}\u2069${id===myPlayerId?' (אני)':''}${id in (g.cashouts||{})?' · יצא':''}</option>`; }).join("")}
-    </select>`;
-  })() : `<div style="font-size:26px;font-weight:700;color:var(--text);">${esc(p?p.name:"")}</div>`;
+  // Name line: the viewed player's name in a frame (no dropdown any more - an admin picks
+  // whose screen to see from the tiles above it).
+  const nameHtml = (() => {
+    const nm = p ? p.name : "";
+    const len = nm.length + (cashedOut ? 6 : 0);
+    const font = len > 24 ? 17 : len > 18 ? 20 : null;
+    return `<div class="pp-name-box" dir="rtl"${font ? ` style="font-size:${font}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut ? ' · יצא' : ''}</div>`;
+  })();
+  // Tiles above the name: everyone who entered tonight, in order, then a "הזמן שחקן" tile
+  // in the next free spot (it replaces the header's invite button here). At most 6 tiles, 4
+  // per row - past that, the 6th becomes "עוד N" with a picker for the rest (and invite).
+  // An admin taps a tile to see that player's screen; for everyone else they're a roster.
+  const tilesHtml = (() => {
+    const entered = g.players.filter(pl => (g.seats||[]).includes(pl.id) || pl.id in (g.cashouts||{})).map(pl => pl.id);
+    const canInvite = !g.closed;
+    const tile = id => {
+      const pl = g.players.find(x => x.id === id);
+      const out = id in (g.cashouts||{});
+      return `<button type="button" class="pp-tile${id===pid?' on':''}${out?' out':''}${isAdminView?'':' static'}" ${isAdminView ? `data-pp-view="${id}"` : 'tabindex="-1"'}><bdi>${esc(pl.name)}</bdi>${id===myPlayerId?'<small>אני</small>':''}${out?'<small>יצא</small>':''}</button>`;
+    };
+    const inviteTile = `<button type="button" class="pp-tile pp-tile-invite${aloneAtTable?' tile-hint':''}" data-invite-game="${g.id}">${icon('share')}<span>הזמן שחקן</span></button>`;
+    const total = entered.length + (canInvite ? 1 : 0);
+    let out;
+    if (total <= 6) out = entered.map(tile).join("") + (canInvite ? inviteTile : "");
+    else {
+      const shown = entered.slice(0, 5), rest = entered.slice(5);
+      out = shown.map(tile).join("") + `<div class="pp-tile pp-tile-more">עוד ${rest.length}${canInvite ? ' / הזמנה' : ''}<select data-pp-more dir="rtl">
+        <option value="" selected disabled>בחרו…</option>
+        ${rest.map(id => { const pl = g.players.find(x => x.id === id); return `<option value="${id}" ${isAdminView?'':'disabled'}>\u200F\u2068${esc(pl.name)}\u2069${id in (g.cashouts||{})?' · יצא':''}</option>`; }).join("")}
+        ${canInvite ? `<option value="__invite__">＋ הזמן שחקן</option>` : ""}
+      </select></div>`;
+    }
+    return `<div class="pp-tiles">${out}</div>`;
+  })();
   // Order (top to bottom): name/total, ריביי buttons, the shared history/feed panel
   // (.player-history-feed, flex:1 - the one section whose size actually adapts, toggled
   // between the two tabs via playerHistoryTab so the leave-table box after it always stays
@@ -5201,11 +5257,12 @@ function renderPlayerScreen(gameId){
         <h1 class="serif sm" style="color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:8px;"><span style="overflow:hidden;text-overflow:ellipsis;">${esc(g.name || c.name)}</span>${gameStatusBadge(g, true)}</h1>
         <div class="meta" style="color:#6ee7b7;font-size:11px;display:flex;align-items:center;gap:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${icon('cal')}${esc(g.date)}${g.createdByName ? ` · נוצר ע"י ${esc(g.createdByName)}` : ""}</div>
       </div>
-      <button class="icon-btn gold${aloneAtTable?' invite-hint':''}" data-invite-game="${g.id}" title="הזמנת שחקנים" style="flex-shrink:0;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;white-space:nowrap;padding:5px 7px;">${icon('share')}הזמנת שחקנים</button>
+
     </div>
     ${aloneAtTable && !showTableHelper ? `<div class="alone-hint" data-goto-table-view><span class="alone-hint-arrow">👈</span> אפשר להושיב שחקנים גם ממסך השולחן</div>` : ""}
     <div class="player-screen-scroll"${showTableHelper ? ' style="position:relative;"' : ''}>
       <div style="text-align:center;padding:6px 0 ${cashedOut?16:4}px;flex-shrink:0;">
+        ${tilesHtml}
         ${nameHtml}
         ${toolsView ? "" : `
         ${cashedOut ? "" : `<div class="pp-total-wrap"><div class="pp-total" data-player-total>₪${buyinTotal}</div><img class="pp-chips" src="/static/player-chips.webp" alt="" draggable="false"></div>${paymentNotesHtml}`}
@@ -7683,22 +7740,7 @@ function attachHandlers(){
     render();
   });
   app.querySelectorAll("[data-delete-game]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type:"deleteGame", gameId: el.dataset.deleteGame}); });
-  app.querySelectorAll("[data-invite-game]").forEach(el => el.onclick = async (e) => {
-    e.stopPropagation();
-    const g = getGame(el.dataset.inviteGame);
-    const c = g && getCommunity(g.communityId);
-    if (!g || !c) return;
-    const url = location.origin + location.pathname + "?game=" + encodeURIComponent(g.id);
-    const text = `הצטרפו אליי למשחק פוקר ב${c.name} - ${g.name || g.date}`;
-    if (navigator.share) {
-      try { await navigator.share({title: "הזמנה למשחק פוקר", text, url}); } catch(err) { /* user cancelled the share sheet */ }
-    } else if (navigator.clipboard && navigator.clipboard.writeText) {
-      try { await navigator.clipboard.writeText(url); showAlert("הקישור הועתק! שלחו אותו לשחקן."); }
-      catch(err) { showAlert(url); }
-    } else {
-      showAlert(url);
-    }
-  });
+  app.querySelectorAll("[data-invite-game]").forEach(el => el.onclick = (e) => { e.stopPropagation(); inviteToGame(el.dataset.inviteGame); });
   const shareAppBtn = app.querySelector("[data-share-app]");
   if (shareAppBtn) shareAppBtn.onclick = async () => {
     const url = location.origin + location.pathname;
@@ -7815,10 +7857,18 @@ function attachHandlers(){
     const mine = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
     return (playerViewTarget && playerViewTarget !== "__tools__" && g.players.some(pl => pl.id === playerViewTarget) && isTableAdmin(g, getCommunity(g.communityId))) ? playerViewTarget : mine;
   };
-  app.querySelectorAll("[data-pp-view-select]").forEach(el => el.onchange = () => {
+  app.querySelectorAll("[data-pp-view]").forEach(el => el.onclick = () => {
     const g = getGame(nav.gameId);
     const mine = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
-    playerViewTarget = el.value === mine ? null : el.value;
+    playerViewTarget = el.dataset.ppView === mine ? null : el.dataset.ppView;
+    render();
+  });
+  app.querySelectorAll("[data-pp-more]").forEach(el => el.onchange = () => {
+    const v = el.value;
+    if (v === "__invite__") { inviteToGame(nav.gameId); render(); return; }
+    const g = getGame(nav.gameId);
+    const mine = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+    playerViewTarget = v === mine ? null : v;
     render();
   });
   app.querySelectorAll("[data-rb-pick]").forEach(el => el.onclick = () => {
