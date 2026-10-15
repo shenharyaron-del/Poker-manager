@@ -781,8 +781,10 @@ html.theme-light.theme-blue .overlay-fullscreen .modal{--gold:#a86a12;--gold-tex
 html.theme-light .odds-label{color:#0f4c6b!important;}
 html.theme-light.theme-sand .odds-label{color:#6b4a1f!important;}
 /* "קבוצה חדשה" / "ערב משחק חדש" dashed cards - light like the other cards on the light themes */
-html.theme-light .card[data-new-community],html.theme-light .card[data-new-game]{background:rgba(255,255,255,.88)!important;}
-html.theme-light.theme-sand .card[data-new-community],html.theme-light.theme-sand .card[data-new-game]{background:rgba(255,251,244,.92)!important;}
+/* Light themes: the "new" cards get a pale gold tint and a thicker dashed gold rim, so they
+   read as an "add" slot rather than one more existing club / night. */
+html.theme-light .card[data-new-community],html.theme-light .card[data-new-game]{background:linear-gradient(135deg,#fff4cf,#fde9a8)!important;border:2px dashed #c08a1e!important;}
+html.theme-light.theme-sand .card[data-new-community],html.theme-light.theme-sand .card[data-new-game]{background:linear-gradient(135deg,#f9e7bd,#f1d595)!important;border-color:#9a5f12!important;}
 html.theme-light.theme-blue .card[data-new-community],html.theme-light.theme-blue .card[data-new-game]{--muted:#3b6b80;--gold:#a86a12;}
 /* Club card swipe (home screen): the card slides left over the Setup / delete buttons. */
 .club-swipe{position:relative;margin-bottom:10px;border-radius:16px;overflow:hidden;}
