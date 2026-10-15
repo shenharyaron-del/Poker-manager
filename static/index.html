@@ -10911,8 +10911,9 @@ if ("serviceWorker" in navigator) {
 }
 // Ask the browser to keep this site's storage (the device id / identity in localStorage)
 // instead of evicting it on its own under storage pressure or inactivity. Doesn't stop a
-// manual "clear site data" - the pm_device cookie and login code cover that.
-if (navigator.storage && navigator.storage.persist) {
+// manual "clear site data" - the pm_device cookie and login code cover that. Skipped on
+// Firefox, the one browser that turns this into a permission prompt.
+if (navigator.storage && navigator.storage.persist && !/Firefox\//.test(navigator.userAgent)) {
   navigator.storage.persisted().then(already => { if (!already) return navigator.storage.persist(); }).catch(() => {});
 }
 </script>
