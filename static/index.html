@@ -4536,20 +4536,24 @@ let welcomeFadedIn = null;
 let openClubSwipeId = null, clubSwipeDragging = false;
 // Swipe hint: until this device has swiped a club card open once, the first swipeable
 // card gives a short peek to the left (once per app session) and a one-line caption.
-let clubSwipeHintPlayed = false;
-function clubSwipeLearned(){ try { return localStorage.getItem("poker-club-swipe-learned") === "1"; } catch(e) { return true; } }
+// Separate for club cards (home) and game cards (club screen) - learning one doesn't
+// silence the other's hint.
+const swipeHintPlayed = {club: false, game: false};
+function swipeLearned(kind){ try { return localStorage.getItem(`poker-${kind}-swipe-learned`) === "1"; } catch(e) { return true; } }
+function clubSwipeLearned(){ return swipeLearned("club"); }
 // Club card swipe: drag the card left and it follows the finger (capped at half its
 // width), revealing Setup / delete behind it. Released past a quarter of the card it
 // snaps open at half, otherwise back closed. A tap on an open card closes it instead of
 // opening the club; vertical drags are left to the page's own scrolling.
 function attachClubSwipe(){
-  const firstSwipe = app.querySelector("[data-club-swipe]");
-  if (firstSwipe && !clubSwipeHintPlayed && !clubSwipeLearned() && !openClubSwipeId) {
-    clubSwipeHintPlayed = true;
+  [["club", "[data-club-swipe]"], ["game", '[data-swipe-id^="game:"]']].forEach(([kind, sel]) => {
+    const firstSwipe = app.querySelector(sel);
+    if (!firstSwipe || swipeHintPlayed[kind] || swipeLearned(kind) || openClubSwipeId) return;
+    swipeHintPlayed[kind] = true;
     const f = firstSwipe.querySelector(".club-front");
     setTimeout(() => { if (f.isConnected) f.classList.add("club-hint-peek"); }, 600);
     f.addEventListener("animationend", () => f.classList.remove("club-hint-peek"), {once: true});
-  }
+  });
   app.querySelectorAll("[data-swipe-id]").forEach(wrap => {
     const front = wrap.querySelector(".club-front");
     const id = wrap.dataset.swipeId;
@@ -4598,9 +4602,10 @@ function attachClubSwipe(){
         const open = shift > wrap.clientWidth * 0.25;
         openClubSwipeId = open ? id : null;
         setShift(open ? maxShift() : 0);
-        if (open && !clubSwipeLearned()) {
-          try { localStorage.setItem("poker-club-swipe-learned", "1"); } catch(_) {}
-          app.querySelectorAll(".club-swipe-hint").forEach(h => h.remove());
+        const kind = id.startsWith("game:") ? "game" : "club";
+        if (open && !swipeLearned(kind)) {
+          try { localStorage.setItem(`poker-${kind}-swipe-learned`, "1"); } catch(_) {}
+          app.querySelectorAll(`.club-swipe-hint[data-hint-kind="${kind}"]`).forEach(h => h.remove());
         }
         wrap.dataset.justSwiped = "1";
         setTimeout(() => { delete wrap.dataset.justSwiped; clubSwipeDragging = false; }, 50);
@@ -4661,7 +4666,7 @@ function renderHome(){
         ${canDelete ? `<button class="club-act club-act-delete" data-delete-community="${c.id}">${icon('trash')}<span>מחיקה</span></button>` : ""}
       </div>
       ${front}
-    </div>${hint ? `<div class="club-swipe-hint">${icon('back')} גררו את המועדון שמאלה ל-Setup ומחיקה</div>` : ""}`;
+    </div>${hint ? `<div class="club-swipe-hint" data-hint-kind="club">${icon('back')} גררו את המועדון שמאלה להזמנה, Setup ומחיקה</div>` : ""}`;
   }).join("");
   const newCommunityCard = `
     <div class="card" data-new-community style="border-style:dashed;border-color:var(--gold);background:rgba(251,191,36,.06);">
@@ -4796,6 +4801,7 @@ function renderCommunity(communityId){
       </div>
       <div class="chev">${icon('chev')}</div>
     </div>`;
+  let gameHintShown = false;
   const gamesHtml = newGameCard + games.map(g => {
     const seatedCount = (g.seats||[]).filter(Boolean).length;
     const waitingForPlayers = !g.closed && seatedCount < 2;
@@ -4811,6 +4817,8 @@ function renderCommunity(communityId){
     </div>`;
     if (!canInvite && !canDelete) return front.replace('class="card club-front ', 'class="card ');
     const swipeId = "game:" + g.id;
+    const hint = !gameHintShown && !swipeLearned("game");
+    gameHintShown = true;
     return `
     <div class="club-swipe${openClubSwipeId===swipeId?' open':''}" data-swipe-id="${swipeId}">
       <div class="club-actions">
@@ -4818,7 +4826,7 @@ function renderCommunity(communityId){
         ${canDelete ? `<button class="club-act club-act-delete" data-delete-game="${g.id}">${icon('trash')}<span>מחיקה</span></button>` : ""}
       </div>
       ${front}
-    </div>`;
+    </div>${hint ? `<div class="club-swipe-hint" data-hint-kind="game">${icon('back')} גררו את הערב שמאלה ל${canInvite ? 'הזמנה' : ''}${canInvite && canDelete ? ' ו' : ''}${canDelete ? 'מחיקה' : ''}</div>` : ""}`;
   }).join("");
 
   return `
