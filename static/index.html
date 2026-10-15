@@ -5220,8 +5220,8 @@ function renderPlayerScreen(gameId){
     return `<div class="pp-name-box" dir="rtl"${font ? ` style="font-size:${font}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut ? ' · יצא' : ''}</div>`;
   })();
   // Tiles above the name: everyone who entered tonight, in order, then a "הזמן שחקן" tile
-  // in the next free spot (it replaces the header's invite button here). At most 6 tiles, 4
-  // per row - past that, the 6th becomes "עוד N" with a picker for the rest (and invite).
+  // in the next free spot (it replaces the header's invite button here). At most 8 tiles, 4
+  // per row - past that, the 8th becomes "עוד N" with a picker for the rest (and invite).
   // An admin taps a tile to see that player's screen; for everyone else they're a roster.
   const tilesHtml = (() => {
     // Not me - my own name is already the big one under the tiles.
@@ -5235,9 +5235,9 @@ function renderPlayerScreen(gameId){
     const inviteTile = `<button type="button" class="pp-tile pp-tile-invite${aloneAtTable?' tile-hint':''}" data-invite-game="${g.id}">${icon('share')}<span>הזמן שחקן</span></button>`;
     const total = entered.length + (canInvite ? 1 : 0);
     let out;
-    if (total <= 6) out = entered.map(tile).join("") + (canInvite ? inviteTile : "");
+    if (total <= 8) out = entered.map(tile).join("") + (canInvite ? inviteTile : "");
     else {
-      const shown = entered.slice(0, 5), rest = entered.slice(5);
+      const shown = entered.slice(0, 7), rest = entered.slice(7);
       out = shown.map(tile).join("") + `<div class="pp-tile pp-tile-more">עוד ${rest.length}${canInvite ? ' / הזמנה' : ''}<select data-pp-more dir="rtl">
         <option value="" selected disabled>בחרו…</option>
         ${rest.map(id => { const pl = g.players.find(x => x.id === id); return `<option value="${id}" ${isAdminView?'':'disabled'}>\u200F\u2068${esc(pl.name)}\u2069${id in (g.cashouts||{})?' · יצא':''}</option>`; }).join("")}
