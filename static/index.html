@@ -235,6 +235,7 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
   background:linear-gradient(180deg,#24305a,#141c3a);border:2px solid var(--gold);box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 5px 12px rgba(0,0,0,.45);}
 .rb-confirm:disabled{opacity:.45;cursor:not-allowed;}
 .lv-frame{padding:12px 12px 14px;}
+.lv-frame.lv-frame-top{margin-top:16px;}
 .lv-arm{display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text);font-size:15px;font-weight:700;margin-bottom:10px;}
 .lv-arm input{width:20px;height:20px;accent-color:var(--gold);flex-shrink:0;}
 .lv-line{flex:1;height:2px;background:linear-gradient(90deg,transparent,rgba(110,231,183,.6));}
@@ -797,6 +798,12 @@ html.theme-light.theme-blue .card[data-new-community],html.theme-light.theme-blu
 @keyframes club-peek{0%{transform:translateX(0)}35%{transform:translateX(-30%)}55%{transform:translateX(-30%)}100%{transform:translateX(0)}}
 .club-swipe .club-front.club-hint-peek{animation:club-peek 1.4s ease-in-out 1;}
 html.theme-light .tp-row{border-color:var(--card-b)!important;}
+/* Cashed-out view action buttons - one shared size (סידור קופה / הביצועים שלי / החזרה לשולחן) */
+.co-act{margin:12px auto 0;display:flex;align-items:center;justify-content:center;gap:6px;width:210px;max-width:80%;padding:10px 14px;font-size:14px;}
+.pot-fix-cta{position:relative;width:210px;max-width:80%;margin:14px auto 0;}
+.pot-fix-cta .co-act{margin:0;width:100%;max-width:none;}
+.pot-fix-hand{position:absolute;right:-40px;top:50%;font-size:26px;line-height:1;transform:translateY(-50%);animation:pot-hand 1.1s ease-in-out infinite;pointer-events:none;}
+@keyframes pot-hand{0%,100%{transform:translate(0,-50%)}50%{transform:translate(-10px,-50%)}}
 </style>
 </head>
 <body>
@@ -2519,30 +2526,20 @@ function isCommunityAdmin(c){
 // negative amount): a player who left with less than their share gives what they have and
 // the rest is spread over the others. Returns {changes: {pid: delta}, unassigned} - the
 // part that couldn't be placed at all (everyone checked is already at 0).
+// Pot-balance fix: the gap is split equally between the selected players (last one takes
+// the rounding remainder). No floor - a player can end up further down; see the
+// data-admin-fix-pot-balance handler for how a share bigger than their end-of-night
+// amount is applied.
 function computePotFixChanges(g, selectedIds, diff){
-  const balanceOf = pid => (g.cashouts && g.cashouts[pid]) ? (g.cashouts[pid].amount || 0) : ((g.liveChips || {})[pid] || 0);
   const total = Math.round(-diff * 100) / 100;
   const changes = {};
-  let remaining = total, active = selectedIds.slice();
-  if (total < 0) {
-    for (;;) {
-      if (!active.length) break;
-      const share = remaining / active.length;
-      const capped = active.filter(pid => balanceOf(pid) + share < 0);
-      if (!capped.length) break;
-      capped.forEach(pid => { changes[pid] = -balanceOf(pid); remaining -= changes[pid]; });
-      active = active.filter(pid => !capped.includes(pid));
-    }
-  }
-  if (active.length) {
-    const share = Math.round((remaining / active.length) * 100) / 100;
-    active.forEach((pid, i) => {
-      // The last one takes the rounding remainder so the total adds up exactly.
-      changes[pid] = i === active.length - 1 ? Math.round((remaining - share * (active.length - 1)) * 100) / 100 : share;
+  if (selectedIds.length) {
+    const share = Math.round((total / selectedIds.length) * 100) / 100;
+    selectedIds.forEach((pid, i) => {
+      changes[pid] = i === selectedIds.length - 1 ? Math.round((total - share * (selectedIds.length - 1)) * 100) / 100 : share;
     });
-    remaining = 0;
   }
-  return {changes, unassigned: Math.round(remaining * 100) / 100};
+  return {changes, unassigned: 0};
 }
 function isTableAdmin(g, c){
   return !!(myIdentity.name && g && myIdentity.name === g.createdByName) || isCommunityAdmin(c);
@@ -4985,8 +4982,8 @@ function renderPlayerScreen(gameId){
     // Lost, mid-game, not closed: no inline status text - the "who do I pay" modal
     // auto-opens itself instead (see attachHandlers/autoOpenedDirectPay).
     cashedOutInfoHtml = breakdownHtml + paymentNotesHtml + statusHtml + exitHighlightsHtml
-      + ((isAdminView && allCashedOutForSettlement && !potBalancedForSettlement) ? `<button class="btn btn-primary" data-open-pot-fix style="margin:14px auto 0;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 18px;font-size:14px;background:#0891b2;color:#fff;">${icon('coins')} סידור קופה</button>` : "")
-      + (viewingOther ? "" : `<button class="btn btn-ghost" data-open-my-stats style="margin:14px auto 0;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 18px;font-size:14px;">${icon('bar')} הביצועים שלי</button>`);
+      + ((isAdminView && allCashedOutForSettlement && !potBalancedForSettlement) ? `<div class="pot-fix-cta"><button class="btn btn-primary co-act" data-open-pot-fix style="background:#0891b2;color:#fff;">${icon('coins')} סידור קופה</button><span class="pot-fix-hand">👈</span></div>` : "")
+      + (viewingOther ? "" : `<button class="btn btn-ghost co-act" data-open-my-stats>${icon('bar')} הביצועים שלי</button>`);
   }
   const canDeleteBuyins = true; // viewing/editing your own history here, always allowed
   // Carries its own playerId (data-delete-seat-buyin-player) rather than relying on
@@ -5100,7 +5097,7 @@ function renderPlayerScreen(gameId){
   `;
   // Admin, looking at someone: the per-player actions the old admin page had.
   const adminPlayerActions = (isAdminView && pid) ? (cashedOut
-    ? `<button class="btn btn-ghost" style="margin:10px auto 0;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 18px;font-size:14px;" data-admin-return-to-game="${pid}">${icon('undo')} החזרה לשולחן</button>`
+    ? `<button class="btn btn-ghost co-act" data-admin-return-to-game="${pid}">${icon('undo')} החזרה לשולחן</button>`
     : ((viewingOther && !armed) ? `<button class="btn btn-ghost btn-block" style="margin-top:4px;font-size:13px;" data-admin-remove-seat="${pid}">הסרת ${esc(p ? p.name : "השחקן")} מהשולחן</button>` : "")) : "";
   // Name line: plain for a player; for an admin, a dropdown of everyone at the table plus
   // the table-wide tools.
@@ -5142,7 +5139,7 @@ function renderPlayerScreen(gameId){
       </div>
       ${toolsView ? `<div style="padding:4px 0 16px;">${renderAdminScreen(gameId, true)}</div>` : `
       ${(cashedOut || armed) ? "" : `<fieldset class="leave-frame rb-frame${showTableHelper?' th-glow-rebuy':''}" style="margin-bottom:14px;${showTableHelper?tableHelperDelay:''}">${rebuyHtml}</fieldset>`}
-      ${cashedOut ? "" : `<fieldset class="leave-frame lv-frame${showTableHelper?' th-glow-leave':''}"${showTableHelper?` style="${tableHelperDelay}"`:''}>${leaveHtml}</fieldset>`}
+      ${cashedOut ? "" : `<fieldset class="leave-frame lv-frame${armed?' lv-frame-top':''}${showTableHelper?' th-glow-leave':''}"${showTableHelper?` style="${tableHelperDelay}"`:''}>${leaveHtml}</fieldset>`}
       ${adminPlayerActions}
       ${showClosedToggle ? `<div style="display:flex;justify-content:center;margin-top:12px;flex-shrink:0;"><label class="night-closed-toggle" data-toggle-end-night="${g.id}"><input type="checkbox" ${g.closed?'checked':''} onclick="return false;"><span>ערב סגור</span></label></div>` : ""}
       ${showTableHelper ? tableHelperHtml(false) : ""}`}
@@ -5430,19 +5427,31 @@ function renderAdminScreen(gameId, embedded){
     const fixAmounts = Object.values(potFix.changes);
     const perPlayer = fixAmounts.length ? fixAmounts[0] : 0;
     const unevenFix = fixAmounts.some(v => Math.abs(v - perPlayer) > 0.011);
+    // diff > 0: the declared chips exceed what was bought in - money has to come off
+    // players (the winners are the natural pick); diff < 0: money is left over and goes
+    // to players (the losers are the natural pick).
+    const taking = diff > 0;
+    const groupIds = seatedIds.filter(pid => { const pr = (liveChips[pid]||0) - (buyinTotals[pid]||0); return taking ? pr > 0 : pr < 0; });
+    const allSel = seatedIds.length > 0 && seatedIds.every(pid => adminBalanceFixSelected[pid]);
+    const groupSel = groupIds.length > 0 && groupIds.every(pid => adminBalanceFixSelected[pid]) && seatedIds.every(pid => groupIds.includes(pid) || !adminBalanceFixSelected[pid]);
     potFixHtml = `
       <div class="section-title" style="padding:0;margin:16px 0 8px;">סדר קופה</div>
       <div style="background:#450a0a;color:#fca5a5;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;text-align:center;font-weight:700;">הקופה לא מאוזנת - ${direction} של ₪${Math.abs(Math.round(diff))}</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <label class="checkbox-row" style="cursor:pointer;flex:1;margin:0;"><input type="checkbox" data-pot-fix-select="all" ${allSel?'checked':''}><span class="flex1">סמן את כולם</span></label>
+        ${groupIds.length ? `<label class="checkbox-row" style="cursor:pointer;flex:1;margin:0;"><input type="checkbox" data-pot-fix-select="group" ${groupSel?'checked':''}><span class="flex1">${taking ? 'סמן מורווחים' : 'סמן מופסדים'}</span></label>` : ""}
+      </div>
       ${seatedIds.map(pid => {
         const playerProfit = (liveChips[pid]||0) - (buyinTotals[pid]||0);
+        const change = potFix.changes[pid];
         return `<div class="checkbox-row" style="cursor:pointer;">
           <input type="checkbox" data-admin-balance-fix-toggle="${pid}" ${adminBalanceFixSelected[pid]?'checked':''}>
-          <span class="flex1">${esc(nameOf(pid))} <span style="color:${profitColor(playerProfit)};font-weight:700;">${playerProfit>0?'+':''}₪${Math.round(playerProfit)}</span></span>
+          <span class="flex1">${esc(nameOf(pid))} <span style="color:${profitColor(playerProfit)};font-weight:700;">${playerProfit>0?'+':''}₪${Math.round(playerProfit)}</span>${change ? ` <span style="color:var(--muted);font-size:12px;">← ${change>0?'+':''}₪${Math.round(change*100)/100}</span>` : ''}</span>
         </div>`;
       }).join("")}
-      ${selectedIds.length ? `<div style="text-align:center;color:var(--muted);font-size:12px;margin:6px 0;">${unevenFix
-        ? `${diff>0?'יילקח':'יתווסף'} לפי מה שיש לכל אחד (אף אחד לא יורד מתחת ל-0): ${selectedIds.map(pid => `${esc(nameOf(pid))} ₪${Math.abs(potFix.changes[pid]||0)}`).join(", ")}`
-        : `${perPlayer>=0?'כל שחקן מסומן יקבל':'מכל שחקן מסומן יילקח'} ₪${Math.abs(perPlayer)}`}${potFix.unassigned ? ` · לא ניתן לחלק ₪${Math.abs(potFix.unassigned)} - לכל המסומנים כבר 0` : ''}</div>` : ""}
+      <div style="text-align:center;color:var(--muted);font-size:12px;margin:6px 0;">${selectedIds.length
+        ? `${perPlayer>=0?'כל שחקן מסומן יקבל':'מכל שחקן מסומן יילקח'} ₪${Math.abs(perPlayer)}`
+        : (taking ? `סמנו מאילו שחקנים להחסיר את ₪${Math.abs(Math.round(diff))}` : `סמנו לאילו שחקנים להעביר את ₪${Math.abs(Math.round(diff))}`)}</div>
       <button class="btn btn-primary btn-block" data-admin-fix-pot-balance style="background:#0891b2;color:#fff;" ${selectedIds.length?"":"disabled"}>${icon('coins')} סדר קופה</button>
     `;
   }
@@ -5890,15 +5899,15 @@ function renderModal(m){
       const isOpen = !!expandedIds[s.id];
       return `
       <div class="tp-row" style="border:1px solid rgba(255,255,255,.15);border-radius:12px;margin-bottom:8px;overflow:hidden;">
-        <button type="button" data-toggle-service="${s.id}" style="display:flex;align-items:center;justify-content:space-between;width:100%;background:none;border:none;cursor:pointer;color:inherit;font-family:inherit;padding:10px 12px;">
-          <span style="color:var(--text);font-size:12px;">${esc(s.name)}${s.category ? ` (${esc(s.category)})` : ""}</span>
-          ${icon(isOpen ? 'up' : 'down')}
-        </button>
+        <div style="display:flex;align-items:center;">
+          ${isOpen ? `<button class="icon-btn" data-edit-credentials="${s.id}" title="עריכת שם משתמש/סיסמה" style="margin-right:8px;flex-shrink:0;">${icon('pencil')}</button>` : ""}
+          <button type="button" data-toggle-service="${s.id}" style="display:flex;align-items:center;justify-content:space-between;flex:1;min-width:0;background:none;border:none;cursor:pointer;color:inherit;font-family:inherit;padding:10px 12px;">
+            <span style="color:var(--text);font-size:12px;">${esc(s.name)}${s.category ? ` (${esc(s.category)})` : ""}</span>
+            ${icon(isOpen ? 'up' : 'down')}
+          </button>
+        </div>
         ${isOpen ? `
         <div style="padding:0 12px 12px;display:flex;flex-direction:column;gap:6px;">
-          <div class="row" style="justify-content:flex-end;">
-            <button class="icon-btn" data-edit-credentials="${s.id}" title="עריכת שם משתמש/סיסמה">${icon('pencil')}</button>
-          </div>
           ${thirdPartyField("URL", `<a href="${esc(s.url||'')}" target="_blank" rel="noopener" dir="ltr" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gold);font-size:12px;">${esc(s.url||'')}</a>`, s.url, s.url)}
           ${thirdPartyField("משתמש", `<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;" dir="ltr">${esc(s.username||'')}</span>`, s.username, s.username)}
           ${thirdPartyField("סיסמה (רמז)", `<span style="flex:1;min-width:0;font-size:12px;" dir="ltr">${esc(s.password||'')}</span>`, s.password)}
@@ -7904,6 +7913,18 @@ function attachHandlers(){
     }
     render();
   });
+  app.querySelectorAll("[data-pot-fix-select]").forEach(el => el.onchange = () => {
+    const g = getGame(nav.gameId);
+    const liveChips = g.liveChips || {};
+    const bt = {}; g.buyins.forEach(b => { bt[b.playerId] = (bt[b.playerId]||0) + b.amount; });
+    const seated = (g.seats||[]).filter(Boolean);
+    const diff = seated.reduce((s,pid)=>s+(liveChips[pid]||0),0) - seated.reduce((s,pid)=>s+(bt[pid]||0),0);
+    const group = el.dataset.potFixSelect === "all" ? seated
+      : seated.filter(pid => { const pr = (liveChips[pid]||0) - (bt[pid]||0); return diff > 0 ? pr > 0 : pr < 0; });
+    adminBalanceFixSelected = {};
+    if (el.checked) group.forEach(pid => { adminBalanceFixSelected[pid] = true; });
+    render();
+  });
   app.querySelectorAll("[data-admin-balance-fix-toggle]").forEach(el => el.onchange = () => {
     adminBalanceFixSelected[el.dataset.adminBalanceFixToggle] = el.checked;
     render();
@@ -7940,13 +7961,22 @@ function attachHandlers(){
         for (const pid of selectedIds2) {
           const delta = changes[pid] || 0;
           if (!delta) continue;
-          const newChips = Math.max(0, Math.round(((g2.liveChips[pid]||0) + delta) * 100) / 100);
-          if (g2.cashouts[pid]) {
-            const newAmount = Math.max(0, Math.round(((g2.cashouts[pid].amount||0) + delta) * 100) / 100);
-            await v2SetCashout(nav.gameId, pid, newAmount, g2.cashouts[pid].arrangedWith, newChips);
-          } else {
-            await v2UpdateLiveChips(nav.gameId, pid, newChips);
+          // Adding: raise their end-of-night amount. Taking: lower it, down to 0 at most
+          // (the server won't store a negative amount) - whatever's left is charged as an
+          // extra buy-in, which moves their result by the same amount.
+          const cur = g2.cashouts[pid] ? (g2.cashouts[pid].amount||0) : ((g2.liveChips||{})[pid]||0);
+          const fromAmount = delta >= 0 ? delta : -Math.min(-delta, cur);
+          const charge = Math.round((delta - fromAmount) * -100) / 100;
+          const newChips = Math.max(0, Math.round((((g2.liveChips||{})[pid]||0) + fromAmount) * 100) / 100);
+          if (fromAmount) {
+            if (g2.cashouts[pid]) {
+              const newAmount = Math.max(0, Math.round(((g2.cashouts[pid].amount||0) + fromAmount) * 100) / 100);
+              await v2SetCashout(nav.gameId, pid, newAmount, g2.cashouts[pid].arrangedWith, newChips);
+            } else {
+              await v2UpdateLiveChips(nav.gameId, pid, newChips);
+            }
           }
+          if (charge > 0) await v2AddBuyin(nav.gameId, uid(), pid, charge, myIdentity.name);
         }
       } catch(e) {
         const serverSaid = e && e.status && e.status < 500;
@@ -7958,8 +7988,12 @@ function attachHandlers(){
         if (!g2.liveChips) g2.liveChips = {};
         selectedIds2.forEach(pid => {
           const delta = changes[pid] || 0;
-          g2.liveChips[pid] = Math.max(0, Math.round(((g2.liveChips[pid]||0) + delta) * 100) / 100);
-          if (g2.cashouts[pid]) g2.cashouts[pid].amount = Math.max(0, Math.round(((g2.cashouts[pid].amount||0) + delta) * 100) / 100);
+          const cur = g2.cashouts[pid] ? (g2.cashouts[pid].amount||0) : (g2.liveChips[pid]||0);
+          const fromAmount = delta >= 0 ? delta : -Math.min(-delta, cur);
+          const charge = Math.round((delta - fromAmount) * -100) / 100;
+          g2.liveChips[pid] = Math.max(0, Math.round(((g2.liveChips[pid]||0) + fromAmount) * 100) / 100);
+          if (g2.cashouts[pid]) g2.cashouts[pid].amount = Math.max(0, Math.round(((g2.cashouts[pid].amount||0) + fromAmount) * 100) / 100);
+          if (charge > 0) g2.buyins.push({id: uid(), playerId: pid, amount: charge, ts: Date.now(), actorName: myIdentity.name});
         });
       });
     }
