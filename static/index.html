@@ -4578,14 +4578,21 @@ function attachClubSwipe(){
     }, true);
   });
 }
+function clubCreatedKey(c){
+  let key = c.createdAt ? String(c.createdAt).slice(0, 10) : "9999-99-99";
+  gamesForCommunity(c.id).forEach(g => { if (g.date && g.date < key) key = g.date; });
+  return key;
+}
 function renderHome(){
   // Only show communities this device actually belongs to - created it, or is linked to
   // a roster entry in it (self-joined via invite link). Super Admin sees everything,
   // since they're managing the whole app, not just their own games.
   const myCommunities = (isSuperAdmin() ? state.communities : state.communities.filter(c =>
     c.createdBy === myIdentity.id || c.roster.some(p => p.clientId === myIdentity.id)
-  // Clubs this user created come first (stable sort - the rest keep their order).
-  )).slice().sort((a, b) => (b.createdBy === myIdentity.id) - (a.createdBy === myIdentity.id));
+  // Clubs this user created come first; within each group, newest first by creation date
+  // (createdAt, or the club's first game's date when that's earlier - clubs that existed
+  // before createdAt was recorded all share the migration time).
+  )).slice().sort((a, b) => ((b.createdBy === myIdentity.id) - (a.createdBy === myIdentity.id)) || clubCreatedKey(b).localeCompare(clubCreatedKey(a)));
   // Setup / delete sit behind each club card - swipe the card left (up to half its width)
   // to reveal them (see attachClubSwipe). A club with neither action just doesn't swipe.
   let hintShown = false;
