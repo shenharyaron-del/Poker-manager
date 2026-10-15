@@ -840,6 +840,9 @@ html.theme-light.theme-blue [style*="background:#0891b2"]{background:#0b2f4a!imp
 html.theme-light .pp-tile{background:rgba(255,255,255,.5);}
 html.theme-light .pp-tile.on{background:#fff3cf;}
 html.theme-light .pp-name-box{background-color:rgba(255,255,255,.55);}
+.pp-name-box{position:relative;}
+.pp-name-box.with-back{padding-left:72px;padding-right:72px;}
+.pp-back-me{position:absolute;left:6px;top:50%;transform:translateY(-50%);background:#fff;color:#7f1d1d;border:none;border-radius:999px;padding:4px 10px;font-family:inherit;font-size:12px;font-weight:700;line-height:1.3;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.25);}
 </style>
 </head>
 <body>
@@ -4751,6 +4754,18 @@ async function inviteToGame(gameId){
   }
 }
 
+// After doing something on ANOTHER player's screen (their rebuy / end of night), briefly
+// confirm it and drop back to my own screen - one-off help for someone else is the usual
+// reason to be on their screen, and staying there invites a mistaken second action.
+function returnToMyScreenAfter(gameId, pid, what){
+  const g = getGame(gameId);
+  const mine = g && myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+  if (!g || !pid || pid === mine || playerViewTarget !== pid) return;
+  const name = (g.players.find(pl => pl.id === pid) || {}).name || "השחקן";
+  showAlert(`${what} ${/^[\u0590-\u05FF]/.test(name) ? "ל" : "ל-"}${name} ✓ - חוזרים למסך שלך`);
+  setTimeout(() => { if (playerViewTarget === pid) { playerViewTarget = null; render(); } }, 1200);
+}
+
 function renderCommunity(communityId){
   const c = getCommunity(communityId);
   if (!c) return `<div class="empty">מועדון לא נמצא</div>`;
@@ -5223,7 +5238,7 @@ function renderPlayerScreen(gameId){
     const nm = p ? p.name : "";
     const len = nm.length + (cashedOut ? 6 : 0);
     const font = len > 24 ? 17 : len > 18 ? 20 : null;
-    return `<div class="pp-name-box" dir="rtl"${font ? ` style="font-size:${font}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut ? ' · יצא' : ''}</div>`;
+    return `<div class="pp-name-box${viewingOther ? ' with-back' : ''}" dir="rtl"${font ? ` style="font-size:${font}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut ? ' · יצא' : ''}${viewingOther ? `<button type="button" class="pp-back-me" data-pp-back-me title="חזרה למסך שלי">↩ אני</button>` : ''}</div>`;
   })();
   // Tiles above the name: everyone who entered tonight, in order, then a "הזמן שחקן" tile
   // in the next free spot (it replaces the header's invite button here). At most 8 tiles, 4
@@ -7863,7 +7878,9 @@ function attachHandlers(){
       if (!ok) return;
     }
     playerScreenCustomOpen = false;
+    const before = (getGame(gameId).buyins||[]).filter(b => b.playerId === pid).length;
     await performBuyin(gameId, pid, amt, {fromEl});
+    if ((getGame(gameId).buyins||[]).filter(b => b.playerId === pid).length > before) returnToMyScreenAfter(gameId, pid, `ריביי ₪${amt}`);
   };
   app.querySelectorAll("[data-player-tab]").forEach(el => el.onclick = () => { playerHistoryTab = el.dataset.playerTab; render(); });
   // New player screen: whose view (admin dropdown), rebuy pick + confirm, and the
@@ -7881,6 +7898,7 @@ function attachHandlers(){
     playerViewTarget = (id === mine || id === playerViewTarget) ? null : id;
     render();
   });
+  app.querySelectorAll("[data-pp-back-me]").forEach(el => el.onclick = () => { playerViewTarget = null; render(); });
   app.querySelectorAll("[data-pp-more]").forEach(el => el.onchange = () => {
     const v = el.value;
     if (v === "__invite__") { inviteToGame(nav.gameId); render(); return; }
@@ -7944,6 +7962,7 @@ function attachHandlers(){
     delete leaveArmed[key]; delete leaveAmountDraft[key]; delete leaveChipsDraft[key];
     render();
     maybeOpenDirectPayAfterCashout(gameId, pid, rounded);
+    returnToMyScreenAfter(gameId, pid, "סיום הערב נרשם");
   });
   app.querySelectorAll("[data-player-instant-buyin]").forEach(el => el.onclick = () => doPlayerBuyin(parseFloat(el.dataset.playerInstantBuyin), el));
   const playerBuyinOtherBtn = app.querySelector("[data-player-buyin-other]");
@@ -10345,6 +10364,7 @@ function attachHandlers(){
       }
       closeModal();
       maybeOpenDirectPayAfterCashout(gameId, playerId, chips);
+      returnToMyScreenAfter(gameId, playerId, "סיום הערב נרשם");
     };
   }
 
