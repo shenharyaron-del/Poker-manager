@@ -10909,6 +10909,12 @@ if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("/sw.js").catch(() => {});
   });
 }
+// Ask the browser to keep this site's storage (the device id / identity in localStorage)
+// instead of evicting it on its own under storage pressure or inactivity. Doesn't stop a
+// manual "clear site data" - the pm_device cookie and login code cover that.
+if (navigator.storage && navigator.storage.persist) {
+  navigator.storage.persisted().then(already => { if (!already) return navigator.storage.persist(); }).catch(() => {});
+}
 </script>
 </body>
 </html>
