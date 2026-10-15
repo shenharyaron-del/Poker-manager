@@ -4589,6 +4589,11 @@ function attachClubSwipe(){
     }, true);
   });
 }
+// "Created by me" - by this device's id or by name (a club opened from another device, or
+// before the current id existed, only matches by name - same rule as the Setup button).
+function isMyClub(c){
+  return c.createdBy === myIdentity.id || !!(myIdentity.name && c.createdByName === myIdentity.name);
+}
 function clubCreatedKey(c){
   let key = c.createdAt ? String(c.createdAt).slice(0, 10) : "9999-99-99";
   gamesForCommunity(c.id).forEach(g => { if (g.date && g.date < key) key = g.date; });
@@ -4603,7 +4608,7 @@ function renderHome(){
   // Clubs this user created come first; within each group, newest first by creation date
   // (createdAt, or the club's first game's date when that's earlier - clubs that existed
   // before createdAt was recorded all share the migration time).
-  )).slice().sort((a, b) => ((b.createdBy === myIdentity.id) - (a.createdBy === myIdentity.id)) || clubCreatedKey(b).localeCompare(clubCreatedKey(a)));
+  )).slice().sort((a, b) => (isMyClub(b) - isMyClub(a)) || clubCreatedKey(b).localeCompare(clubCreatedKey(a)));
   // Setup / delete sit behind each club card - swipe the card left (up to half its width)
   // to reveal them (see attachClubSwipe). A club with neither action just doesn't swipe.
   let hintShown = false;
@@ -4693,6 +4698,8 @@ function gameStatus(g){
     if (!Object.keys(cashouts).length && seated.length < 2 && !g.closed) return {key: "waiting", label: "ממתין לשחקנים"};
     return {key: "active", label: "פעיל"};
   }
+  // A night only one player ever sat at (and they've left) never really happened.
+  if (seated.length <= 1 && (g.players || []).length <= 1) return {key: "waiting", label: "ממתין לשחקנים"};
   const buyinTotal = g.buyinTotals ? g.buyinTotals.reduce((s,bt)=>s+bt.amount,0) : (g.buyins||[]).reduce((s,b)=>s+b.amount,0);
   const chipsTotal = Object.values(cashouts).reduce((s,co)=>s+(co.amount||0),0);
   if (Math.abs(chipsTotal - buyinTotal) > 5) return {key: "unbalanced", label: "קופה לא מאוזנת"};
