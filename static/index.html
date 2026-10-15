@@ -6,9 +6,9 @@
 <title>Poker Manager</title>
 <link rel="icon" type="image/png" href="/static/logo.png">
 <link rel="apple-touch-icon" href="/static/icon-192.png">
-<link rel="manifest" href="/static/manifest.json">
+<link rel="manifest" id="app-manifest" href="/static/manifest.json">
 <meta name="theme-color" content="#022c22">
-<script>try{var t=localStorage.getItem("poker-theme");if(t==="light")t="blue";if(t==="blue"||t==="sand"){document.documentElement.classList.add("theme-light","theme-"+t);document.querySelector('meta[name="theme-color"]').content=t==="blue"?"#4d89a8":"#dfcaa9";}}catch(e){}</script>
+<script>try{var t=localStorage.getItem("poker-theme");if(t==="light")t="blue";if(t==="blue"||t==="sand"){document.documentElement.classList.add("theme-light","theme-"+t);document.querySelector('meta[name="theme-color"]').content=t==="blue"?"#4d89a8":"#dfcaa9";document.getElementById("app-manifest").href="/static/manifest-"+t+".json";}}catch(e){}</script>
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -3599,6 +3599,10 @@ function setTheme(key, noRender){
   try { localStorage.setItem("poker-theme", key); } catch(e) {}
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.content = key === "blue" ? "#4d89a8" : key === "sand" ? "#dfcaa9" : "#022c22";
+  // The installed app's bottom (Android navigation) bar takes its color from the manifest,
+  // not the theme-color meta - one manifest per theme so it isn't stuck on dark green.
+  const man = document.getElementById("app-manifest");
+  if (man) man.href = key === "blue" || key === "sand" ? `/static/manifest-${key}.json` : "/static/manifest.json";
   if (!noRender) render();
 }
 function themeToggleHtml(){
