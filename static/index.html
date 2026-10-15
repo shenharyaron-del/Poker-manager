@@ -807,6 +807,14 @@ html.theme-light .tp-row{border-color:var(--card-b)!important;}
 /* Blue theme: the paybox-blue (#0891b2) buttons - pay to paybox, סידור קופה - blend into
    the blue page; give them a deep navy fill and a light rim instead. */
 html.theme-light.theme-blue [style*="background:#0891b2"]{background:#0b2f4a!important;border:1.5px solid rgba(255,255,255,.75)!important;box-shadow:0 3px 10px rgba(0,20,40,.35);}
+/* Alone at a new table: pointing hands at "הזמנת שחקן" and at an empty seat. */
+.invite-hint{position:relative;overflow:visible;}
+.invite-hint::after{content:"👈";position:absolute;right:-32px;top:50%;font-size:22px;line-height:1;transform:translateY(-50%);animation:pot-hand 1.1s ease-in-out infinite;pointer-events:none;}
+.alone-hint{flex-shrink:0;text-align:center;font-size:13px;font-weight:700;color:var(--gold);margin:-8px 20px 4px;cursor:pointer;}
+.alone-hint-arrow{display:inline-block;animation:alone-arrow 1.1s ease-in-out infinite;}
+@keyframes alone-arrow{0%,100%{transform:translateX(0)}50%{transform:translateX(-8px)}}
+.seat-hint::after{content:"👇";position:absolute;left:50%;top:-30px;font-size:22px;line-height:1;transform:translateX(-50%);animation:seat-hand 1s ease-in-out infinite;pointer-events:none;}
+@keyframes seat-hand{0%,100%{transform:translate(-50%,0)}50%{transform:translate(-50%,6px)}}
 </style>
 </head>
 <body>
@@ -4504,9 +4512,9 @@ function attachClubSwipe(){
     setTimeout(() => { if (f.isConnected) f.classList.add("club-hint-peek"); }, 600);
     f.addEventListener("animationend", () => f.classList.remove("club-hint-peek"), {once: true});
   }
-  app.querySelectorAll("[data-club-swipe]").forEach(wrap => {
+  app.querySelectorAll("[data-swipe-id]").forEach(wrap => {
     const front = wrap.querySelector(".club-front");
-    const id = wrap.dataset.clubSwipe;
+    const id = wrap.dataset.swipeId;
     const maxShift = () => wrap.clientWidth * 0.5;
     // The card's moving (right) edge goes square while it's slid open and rounds again
     // once it's back home (after the slide-back transition, not mid-way).
@@ -4534,7 +4542,7 @@ function attachClubSwipe(){
           try { front.setPointerCapture(e.pointerId); } catch(_) {}
           // Only one card open at a time.
           if (openClubSwipeId && openClubSwipeId !== id) {
-            const other = app.querySelector(`[data-club-swipe="${openClubSwipeId}"] .club-front`);
+            const other = app.querySelector(`[data-swipe-id="${openClubSwipeId}"] .club-front`);
             if (other) other.style.transform = "";
             openClubSwipeId = null;
           }
@@ -4595,7 +4603,7 @@ function renderHome(){
     const hint = !hintShown && !clubSwipeLearned();
     hintShown = true;
     return `
-    <div class="club-swipe${openClubSwipeId===c.id?' open':''}" data-club-swipe="${c.id}">
+    <div class="club-swipe${openClubSwipeId===c.id?' open':''}" data-club-swipe="${c.id}" data-swipe-id="${c.id}">
       <div class="club-actions">
         ${canSetup ? `<button class="club-act club-act-setup" data-open-chip-setup="${c.id}">${icon('gear')}<span>Setup</span></button>` : ""}
         ${canDelete ? `<button class="club-act club-act-delete" data-delete-community="${c.id}">${icon('trash')}<span>מחיקה</span></button>` : ""}
@@ -4659,7 +4667,7 @@ function renderCommunity(communityId){
   const newGameCard = `
     <div class="card" data-new-game style="border-style:dashed;border-color:var(--gold);background:rgba(251,191,36,.06);${noPlayersYet ? 'opacity:.5;cursor:not-allowed;' : ''}">
       <div class="flex1">
-        <div class="name serif">ערב משחק חדש</div>
+        <div class="name serif">צור שולחן חדש</div>
         <div class="meta">${icon('plus')} ${noPlayersYet ? "הוסיפו שחקנים תחילה" : "הקישו כדי לפתוח שולחן חדש"}</div>
       </div>
       <div class="chev">${icon('chev')}</div>
@@ -4668,21 +4676,31 @@ function renderCommunity(communityId){
     const seatedCount = (g.seats||[]).filter(Boolean).length;
     const waitingForPlayers = !g.closed && seatedCount < 2;
     const gameAlert = closedGameAlert(g, c);
-    return `
-    <div class="card ${g.closed?"":"card-open"}" data-open-game="${g.id}">
+    // Invite / delete sit behind the card - swipe it left to reveal them, same as the
+    // club cards on the home screen (see attachClubSwipe). Visible: name, date, status.
+    const canInvite = !g.closed;
+    const canDelete = !!(myIdentity.name && (myIdentity.name === g.createdByName || myIdentity.name === c.createdByName));
+    const front = `
+    <div class="card club-front ${g.closed?"":"card-open"}" data-open-game="${g.id}">
       <div class="row flex1"><span style="color:#6ee7b7">${icon('cal')}</span><div class="flex1"><div style="font-weight:600">${esc(g.name || g.date)}</div>${g.name ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${esc(g.date)}</div>` : ""}${gameAlert ? `<div style="font-size:11px;color:#fdba74;margin-top:2px;">${gameAlert.text}</div>` : ""}</div>${gameAlert ? `<span class="open-badge" style="background:${gameAlert.color};color:#fff;">${gameAlert.badge}</span>` : ((g.closed || waitingForPlayers) ? "" : `<span class="open-badge">פעיל</span>`)}</div>
-      ${g.closed ? "" : (waitingForPlayers
-        ? `<button class="btn btn-primary" data-invite-game="${g.id}" style="padding:8px 12px;font-size:13px;white-space:nowrap;display:flex;align-items:center;gap:6px;">${icon('share')} הזמנת שחקנים</button>`
-        : `<button class="icon-btn gold" data-invite-game="${g.id}" title="הזמן שחקן לשולחן">${icon('share')}</button>`)}
-      ${myIdentity.name && (myIdentity.name === g.createdByName || myIdentity.name === c.createdByName) ? `<button class="icon-btn danger" data-delete-game="${g.id}">${icon('trash')}</button>` : ""}
       <div class="chev">${icon('chev')}</div>
+    </div>`;
+    if (!canInvite && !canDelete) return front.replace('class="card club-front ', 'class="card ');
+    const swipeId = "game:" + g.id;
+    return `
+    <div class="club-swipe${openClubSwipeId===swipeId?' open':''}" data-swipe-id="${swipeId}">
+      <div class="club-actions">
+        ${canInvite ? `<button class="club-act club-act-setup" data-invite-game="${g.id}">${icon('share')}<span>${waitingForPlayers ? 'הזמנת שחקנים' : 'הזמנה'}</span></button>` : ""}
+        ${canDelete ? `<button class="club-act club-act-delete" data-delete-game="${g.id}">${icon('trash')}<span>מחיקה</span></button>` : ""}
+      </div>
+      ${front}
     </div>`;
   }).join("");
 
   return `
     <div class="top row" style="padding-bottom:8px;">
       <button class="back-arrow" data-back-home>${icon('back')}</button>
-      <h1 class="serif sm flex1">${esc(c.name)}</h1>
+      <h1 class="serif sm flex1">מועדון: ${esc(c.name)}</h1>
     </div>
     <div class="px5 row" style="justify-content:flex-end;align-items:center;gap:10px;margin-bottom:10px;">
       <button class="btn btn-ghost btn-sm" data-show-roster style="display:flex;align-items:center;gap:6px;flex-shrink:0;">${icon('users')} שחקנים (${c.roster.length})</button>
@@ -4873,6 +4891,8 @@ function fmtDateTimeShort(ts){
 function renderPlayerScreen(gameId){
   const g = getGame(gameId);
   if (!g) return `<div class="empty">משחק לא נמצא</div>`;
+  // Alone at a fresh table: point at "הזמנת שחקן" (and, on the circles view, an empty seat).
+  const aloneAtTable = !g.closed && (g.seats||[]).filter(Boolean).length === 1;
   const c = getCommunity(g.communityId) || {name:"מועדון", roster:[]};
   const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
   const isAdminView = isTableAdmin(g, c);
@@ -5128,8 +5148,9 @@ function renderPlayerScreen(gameId){
         <h1 class="serif sm" style="color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g.name || c.name)}</h1>
         <div class="meta" style="color:#6ee7b7;font-size:11px;display:flex;align-items:center;gap:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${icon('cal')}${esc(g.date)}${g.createdByName ? ` · נוצר ע"י ${esc(g.createdByName)}` : ""}</div>
       </div>
-      <button class="icon-btn gold" data-invite-game="${g.id}" title="הזמנת שחקן" style="flex-shrink:0;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;white-space:nowrap;padding:5px 7px;">${icon('share')}הזמנת שחקן</button>
+      <button class="icon-btn gold${aloneAtTable?' invite-hint':''}" data-invite-game="${g.id}" title="הזמנת שחקן" style="flex-shrink:0;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;white-space:nowrap;padding:5px 7px;">${icon('share')}הזמנת שחקן</button>
     </div>
+    ${aloneAtTable && !showTableHelper ? `<div class="alone-hint" data-goto-table-view><span class="alone-hint-arrow">👈</span> אפשר להושיב שחקנים גם מהשולחן</div>` : ""}
     <div class="player-screen-scroll"${showTableHelper ? ' style="position:relative;"' : ''}>
       <div style="text-align:center;padding:6px 0 ${cashedOut?16:4}px;flex-shrink:0;">
         ${nameHtml}
@@ -5568,6 +5589,8 @@ function renderWatchFeed(gameId){
 function renderTable(gameId){
   const g = getGame(gameId);
   if (!g) return `<div class="empty">משחק לא נמצא</div>`;
+  const aloneAtTable = !g.closed && (g.seats||[]).filter(Boolean).length === 1;
+  let seatHintUsed = false;
   const c = getCommunity(g.communityId) || {name:"מועדון", roster:[]};
   const seats = g.seats || new Array(9).fill(null);
   const buyinTotals = {};
@@ -5598,7 +5621,9 @@ function renderTable(gameId){
       // Only the table/community creator can seat a guest into an empty seat - everyone
       // else gets a plain circle (no +) that's still a valid drop target for repositioning
       // an already-seated player via drag, just not tappable to add someone new.
-      return `<div class="seat-wrap" style="left:${x}%;top:${y}%;" data-seat="${i}"><div class="seat-circle vacant">${admin?'+':''}</div></div>`;
+      const hintHere = aloneAtTable && admin && !seatHintUsed;
+      if (hintHere) seatHintUsed = true;
+      return `<div class="seat-wrap${hintHere?' seat-hint':''}" style="left:${x}%;top:${y}%;" data-seat="${i}"><div class="seat-circle vacant">${admin?'+':''}</div></div>`;
     }
     const p = g.players.find(pl => pl.id === pid);
     const name = p ? p.name : "?";
@@ -5724,7 +5749,7 @@ function renderTable(gameId){
         <h1 class="serif sm" style="color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g.name || c.name)}</h1>
         <div class="meta" style="color:#6ee7b7;font-size:11px;display:flex;align-items:center;gap:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${icon('cal')}${esc(g.date)}${g.createdByName ? ` · נוצר ע"י ${esc(g.createdByName)}` : ""}</div>
       </div>
-      <button class="icon-btn gold" data-invite-game="${g.id}" title="הזמנת שחקן" style="flex-shrink:0;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;white-space:nowrap;padding:5px 7px;">${icon('share')}הזמנת שחקן</button>
+      <button class="icon-btn gold${aloneAtTable?' invite-hint':''}" data-invite-game="${g.id}" title="הזמנת שחקן" style="flex-shrink:0;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;white-space:nowrap;padding:5px 7px;">${icon('share')}הזמנת שחקן</button>
     </div>
     ${watchStripHtml(g)}
     ${!allCashedOut ? `
@@ -6423,7 +6448,7 @@ function renderModal(m){
     }
   } else if (m.type === "newGame") {
     const c = getCommunity(m.communityId);
-    title = "ערב משחק חדש";
+    title = "שולחן חדש";
     body = `
       <div class="field"><label>שם השולחן</label><input type="text" id="new-game-name" value="${esc(defaultGameName(m.date))}" placeholder="${esc(c ? c.name : "")}" onfocus="this.select()" autofocus></div>
       <p style="color:var(--muted);font-size:12px;margin-top:-6px;">אחרי היצירה תוכלו להושיב שחקנים סביב השולחן.</p>
@@ -7636,6 +7661,7 @@ function attachHandlers(){
   app.querySelectorAll("[data-back-community]").forEach(el => el.onclick = () => go("community", {communityId: el.dataset.backCommunity}));
   app.querySelectorAll("[data-crumb-home]").forEach(el => el.onclick = () => go("home"));
   app.querySelectorAll("[data-install-app]").forEach(el => el.onclick = (e) => { e.stopPropagation(); startInstall(); });
+  app.querySelectorAll("[data-goto-table-view]").forEach(el => el.onclick = () => { tableSubView = "table"; render(); });
   app.querySelectorAll("[data-open-pot-fix]").forEach(el => el.onclick = () => openModal({type: "potFix", gameId: nav.gameId}));
   // "הביצועים שלי" on the end-of-night screens (cashed-out player view, game results).
   app.querySelectorAll("[data-open-my-stats]").forEach(el => el.onclick = () => openModal({type:"stats", clientId: myIdentity.id}));
@@ -8752,6 +8778,9 @@ function attachHandlers(){
             // this, the creator's own table opened with ₪0 bought in instead of the usual
             // default. Fire-and-forget, same reasoning as v2ClaimSeat's own call.
             performBuyin(gid, creatorPlayer.id, getBuyinAmounts(c)[0], {isEntry: true, actorName: myIdentity.name});
+            if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
+            myIdentity.myPlayers[c.id] = creatorPlayer.id;
+            saveIdentity();
           } catch(e) {
             showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב.");
             createBtn.disabled = false; nameInput.disabled = false; createBtn.textContent = "פתח שולחן";
@@ -8765,7 +8794,10 @@ function attachHandlers(){
             return;
           }
         }
-        go("community", {communityId:c.id});
+        // Straight into the new table (the welcome screen shows first) - the creator is
+        // already seated there.
+        if (creatorPlayer) { tableSubView = "player"; go("table", {gameId: gid, communityId: c.id}); }
+        else go("community", {communityId:c.id});
         return;
       }
       // The date is kept only for sort order, defaulting to today - there's no picker
@@ -8788,10 +8820,13 @@ function attachHandlers(){
       // relational equivalent), it has no "first time seated here -> auto buy-in" trigger
       // of its own, so the creator's own table would otherwise open with ₪0 bought in.
       if (creatorPlayer) performBuyin(g.id, creatorPlayer.id, getBuyinAmounts(c)[0], {isEntry: true, actorName: myIdentity.name});
-      // Land back on the games list, not straight into the table - the new game's card
-      // is right there with an "invite players" button, so that's reachable in one tap
-      // instead of having to navigate back to it after creating the table.
-      go("community", {communityId:c.id});
+      // Straight into the new table (the welcome screen shows first).
+      if (creatorPlayer) {
+        if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
+        myIdentity.myPlayers[c.id] = creatorPlayer.id;
+        saveIdentity();
+        tableSubView = "player"; go("table", {gameId: g.id, communityId: c.id});
+      } else go("community", {communityId:c.id});
     };
   }
 
