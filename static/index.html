@@ -830,7 +830,6 @@ html.theme-light.theme-blue [style*="background:#0891b2"]{background:#0b2f4a!imp
 .pp-tile small{font-size:10px;font-weight:600;color:var(--muted);}
 .pp-tile.on{border-color:var(--gold);background:rgba(212,175,55,.18);box-shadow:0 0 0 1px rgba(212,175,55,.35);}
 .pp-tile.out{opacity:.65;}
-.pp-tile.static{cursor:default;}
 .pp-tile-invite{border-style:dashed;color:var(--gold);flex-direction:row;gap:4px;font-size:12px;}
 .pp-tile-invite svg{width:14px;height:14px;}
 .pp-tile-more{color:var(--gold);font-size:12px;}
@@ -4990,7 +4989,10 @@ function renderPlayerScreen(gameId){
   // player screen since that's where the admin spends the night.
   const showClosedToggle = isAdminView && !(c.settlementDefault === "paybox" || c.settlementDefault === "bit");
   const toolsView = false;
-  const pid = (isAdminView && playerViewTarget && playerViewTarget !== "__tools__" && g.players.some(pl => pl.id === playerViewTarget)) ? playerViewTarget : myPlayerId;
+  // Any player can work on another player's screen (rebuy / end of night for them) - only
+  // removing someone from the table or bringing them back stays admin-only (see
+  // adminPlayerActions).
+  const pid = (playerViewTarget && playerViewTarget !== "__tools__" && g.players.some(pl => pl.id === playerViewTarget)) ? playerViewTarget : myPlayerId;
   const viewingOther = pid !== myPlayerId;
   const p = g.players.find(pl => pl.id === pid);
   const myBuyins = g.buyins.filter(b => b.playerId === pid).slice().sort((a,b) => (a.ts||0)-(b.ts||0));
@@ -5231,7 +5233,7 @@ function renderPlayerScreen(gameId){
     const tile = id => {
       const pl = g.players.find(x => x.id === id);
       const out = id in (g.cashouts||{});
-      return `<button type="button" class="pp-tile${id===pid?' on':''}${out?' out':''}${isAdminView?'':' static'}" ${isAdminView ? `data-pp-view="${id}"` : 'tabindex="-1"'}><bdi>${esc(pl.name)}</bdi>${out?'<small>יצא</small>':''}</button>`;
+      return `<button type="button" class="pp-tile${id===pid?' on':''}${out?' out':''}" data-pp-view="${id}"><bdi>${esc(pl.name)}</bdi>${out?'<small>יצא</small>':''}</button>`;
     };
     const inviteTile = `<button type="button" class="pp-tile pp-tile-invite${aloneAtTable?' tile-hint':''}" data-invite-game="${g.id}">${icon('share')}<span>הזמן שחקן</span></button>`;
     const total = entered.length + (canInvite ? 1 : 0);
@@ -5241,7 +5243,7 @@ function renderPlayerScreen(gameId){
       const shown = entered.slice(0, 7), rest = entered.slice(7);
       out = shown.map(tile).join("") + `<div class="pp-tile pp-tile-more">עוד ${rest.length}${canInvite ? ' / הזמנה' : ''}<select data-pp-more dir="rtl">
         <option value="" selected disabled>בחרו…</option>
-        ${rest.map(id => { const pl = g.players.find(x => x.id === id); return `<option value="${id}" ${isAdminView?'':'disabled'}>\u200F\u2068${esc(pl.name)}\u2069${id in (g.cashouts||{})?' · יצא':''}</option>`; }).join("")}
+        ${rest.map(id => { const pl = g.players.find(x => x.id === id); return `<option value="${id}">\u200F\u2068${esc(pl.name)}\u2069${id in (g.cashouts||{})?' · יצא':''}</option>`; }).join("")}
         ${canInvite ? `<option value="__invite__">＋ הזמן שחקן</option>` : ""}
       </select></div>`;
     }
@@ -5287,13 +5289,12 @@ function renderPlayerScreen(gameId){
   `;
 }
 
-// True while a table admin has picked another player in the player screen's name dropdown -
+// True while a player has picked another player's tile on the player screen -
 // that page then gets a muted red background (.pp-other) so it's obvious they're working
 // on someone else's seat.
 function playerScreenViewingOther(){
   const g = getGame(nav.gameId);
   if (!g || !playerViewTarget || !g.players.some(pl => pl.id === playerViewTarget)) return false;
-  if (!isTableAdmin(g, getCommunity(g.communityId) || {})) return false;
   const mine = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
   return playerViewTarget !== mine;
 }
@@ -7857,7 +7858,7 @@ function attachHandlers(){
   const viewedPid = () => {
     const g = getGame(nav.gameId);
     const mine = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
-    return (playerViewTarget && playerViewTarget !== "__tools__" && g.players.some(pl => pl.id === playerViewTarget) && isTableAdmin(g, getCommunity(g.communityId))) ? playerViewTarget : mine;
+    return (playerViewTarget && playerViewTarget !== "__tools__" && g.players.some(pl => pl.id === playerViewTarget)) ? playerViewTarget : mine;
   };
   app.querySelectorAll("[data-pp-view]").forEach(el => el.onclick = () => {
     const g = getGame(nav.gameId);
