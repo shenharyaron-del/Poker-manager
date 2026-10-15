@@ -5226,7 +5226,8 @@ function renderPlayerScreen(gameId){
   const tilesHtml = (() => {
     // Not me - my own name is already the big one under the tiles.
     const entered = g.players.filter(pl => pl.id !== myPlayerId && ((g.seats||[]).includes(pl.id) || pl.id in (g.cashouts||{}))).map(pl => pl.id);
-    const canInvite = !g.closed;
+    // 9 seats at most - no "הזמן שחקן" once they're all taken.
+    const canInvite = !g.closed && (g.seats||[]).slice(0, 9).filter(Boolean).length < 9;
     const tile = id => {
       const pl = g.players.find(x => x.id === id);
       const out = id in (g.cashouts||{});
