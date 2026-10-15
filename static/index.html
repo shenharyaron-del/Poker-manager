@@ -844,6 +844,12 @@ html.theme-light .pp-name-box{background-color:rgba(255,255,255,.55);}
 .pp-name-box.with-back{padding-left:72px;padding-right:72px;}
 .pp-back-me{position:absolute;left:6px;top:50%;transform:translateY(-50%);background:#fff;color:#7f1d1d;border:none;border-radius:999px;padding:4px 10px;font-family:inherit;font-size:12px;font-weight:700;line-height:1.3;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.25);}
 .club-act-invite{background:#2563eb;color:#fff;}
+/* Activity feed / history panels on the light themes: a light panel with white bubbles and
+   dark text - the dark panel kept the theme's dark text on near-black. */
+html.theme-light .player-history-feed-body.mode-feed,html.theme-light .player-history-feed-body.mode-history,
+html.theme-light .chat-frame[data-player-history],html.theme-light .chat-frame[data-player-feed]{background-image:linear-gradient(rgba(255,255,255,.78),rgba(255,255,255,.78)),url('/static/chat-bg.png');border-color:var(--card-b);box-shadow:inset 0 0 12px rgba(0,0,0,.06);}
+html.theme-light .chat-bubble{background:rgba(255,255,255,.95);border:1px solid var(--card-b);color:var(--text);--muted:#5b6b73;}
+html.theme-light.theme-blue .chat-bubble{--text:#0e2633;color:#0e2633;}
 </style>
 </head>
 <body>
