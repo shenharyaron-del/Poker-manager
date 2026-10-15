@@ -804,6 +804,9 @@ html.theme-light .tp-row{border-color:var(--card-b)!important;}
 .pot-fix-cta .co-act{margin:0;width:100%;max-width:none;}
 .pot-fix-hand{position:absolute;right:-40px;top:50%;font-size:26px;line-height:1;transform:translateY(-50%);animation:pot-hand 1.1s ease-in-out infinite;pointer-events:none;}
 @keyframes pot-hand{0%,100%{transform:translate(0,-50%)}50%{transform:translate(-10px,-50%)}}
+/* Blue theme: the paybox-blue (#0891b2) buttons - pay to paybox, סידור קופה - blend into
+   the blue page; give them a deep navy fill and a light rim instead. */
+html.theme-light.theme-blue [style*="background:#0891b2"]{background:#0b2f4a!important;border:1.5px solid rgba(255,255,255,.75)!important;box-shadow:0 3px 10px rgba(0,20,40,.35);}
 </style>
 </head>
 <body>
@@ -4938,7 +4941,7 @@ function renderPlayerScreen(gameId){
     const exitHighlights = computeExitHighlights(c, g, pid);
     const exitHighlightsHtml = exitHighlights.length ? `
       <div style="margin-top:18px;display:flex;flex-direction:column;gap:8px;flex-shrink:0;">
-        ${exitHighlights.map(t => `<div style="background:rgba(255,255,255,.06);border:1px solid var(--card-b);border-radius:12px;padding:12px 14px;text-align:center;font-size:14px;font-weight:600;color:var(--text);">${esc(t)}</div>`).join("")}
+        ${exitHighlights.map(t => `<div style="text-align:center;font-size:14px;font-weight:600;color:var(--text);">${esc(t)}</div>`).join("")}
       </div>
     ` : "";
     const activePayboxLink = getActivePayboxLink(c);
@@ -5105,8 +5108,12 @@ function renderPlayerScreen(gameId){
     const ids = [...new Set([...(g.seats||[]).filter(Boolean), ...Object.keys(g.cashouts||{})])].filter(id => g.players.some(pl => pl.id === id));
     if (myPlayerId && !ids.includes(myPlayerId) && g.players.some(pl => pl.id === myPlayerId)) ids.unshift(myPlayerId);
     const sel = toolsView ? "__tools__" : pid;
-    return `<select class="pp-name-select" data-pp-view-select>
-      ${ids.map(id => { const pl = g.players.find(x => x.id === id); return `<option value="${id}" ${sel===id?'selected':''}>${esc(pl.name)}${id===myPlayerId?' (אני)':''}${id in (g.cashouts||{})?' · יצא':''}</option>`; }).join("")}
+    // Shrink the font for a long label (e.g. "Ron Rabinovitch (אני) · יצא") so it isn't cut off.
+    const selPl = g.players.find(x => x.id === sel);
+    const selLen = selPl ? selPl.name.length + (sel===myPlayerId ? 6 : 0) + (sel in (g.cashouts||{}) ? 6 : 0) : 0;
+    const selFont = selLen > 24 ? 17 : selLen > 18 ? 20 : null;
+    return `<select class="pp-name-select" data-pp-view-select dir="rtl"${selFont ? ` style="font-size:${selFont}px;"` : ''}>
+      ${ids.map(id => { const pl = g.players.find(x => x.id === id); return `<option value="${id}" dir="rtl" ${sel===id?'selected':''}>\u200F\u2068${esc(pl.name)}\u2069${id===myPlayerId?' (אני)':''}${id in (g.cashouts||{})?' · יצא':''}</option>`; }).join("")}
     </select>`;
   })() : `<div style="font-size:26px;font-weight:700;color:var(--text);">${esc(p?p.name:"")}</div>`;
   // Order (top to bottom): name/total, ריביי buttons, the shared history/feed panel
@@ -5434,6 +5441,14 @@ function renderAdminScreen(gameId, embedded){
     const groupIds = seatedIds.filter(pid => { const pr = (liveChips[pid]||0) - (buyinTotals[pid]||0); return taking ? pr > 0 : pr < 0; });
     const allSel = seatedIds.length > 0 && seatedIds.every(pid => adminBalanceFixSelected[pid]);
     const groupSel = groupIds.length > 0 && groupIds.every(pid => adminBalanceFixSelected[pid]) && seatedIds.every(pid => groupIds.includes(pid) || !adminBalanceFixSelected[pid]);
+    // Someone who cashed out more than 10 minutes ago has probably left already - worth
+    // knowing before changing their numbers.
+    const leftAgoNote = pid => {
+      const ts = g.cashouts[pid] && g.cashouts[pid].ts;
+      const t = ts ? new Date(ts).getTime() : 0;
+      const mins = t ? Math.floor((Date.now() - t) / 60000) : 0;
+      return mins > 10 ? `<div style="color:var(--muted);font-size:11px;font-weight:400;">יצא לפני ${mins >= 60 ? `${Math.floor(mins/60)} ש' ו-${mins%60} דק'` : `${mins} דק'`}</div>` : "";
+    };
     potFixHtml = `
       <div class="section-title" style="padding:0;margin:16px 0 8px;">סדר קופה</div>
       <div style="background:#450a0a;color:#fca5a5;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;text-align:center;font-weight:700;">הקופה לא מאוזנת - ${direction} של ₪${Math.abs(Math.round(diff))}</div>
@@ -5446,7 +5461,7 @@ function renderAdminScreen(gameId, embedded){
         const change = potFix.changes[pid];
         return `<div class="checkbox-row" style="cursor:pointer;">
           <input type="checkbox" data-admin-balance-fix-toggle="${pid}" ${adminBalanceFixSelected[pid]?'checked':''}>
-          <span class="flex1">${esc(nameOf(pid))} <span style="color:${profitColor(playerProfit)};font-weight:700;">${playerProfit>0?'+':''}₪${Math.round(playerProfit)}</span>${change ? ` <span style="color:var(--muted);font-size:12px;">← ${change>0?'+':''}₪${Math.round(change*100)/100}</span>` : ''}</span>
+          <span class="flex1"><bdi>${esc(nameOf(pid))}</bdi> <span style="color:${profitColor(playerProfit)};font-weight:700;">${playerProfit>0?'+':''}₪${Math.round(playerProfit)}</span>${change ? ` <span style="color:var(--muted);font-size:12px;">← ${change>0?'+':''}₪${Math.round(change*100)/100}</span>` : ''}${leftAgoNote(pid)}</span>
         </div>`;
       }).join("")}
       <div style="text-align:center;color:var(--muted);font-size:12px;margin:6px 0;">${selectedIds.length
