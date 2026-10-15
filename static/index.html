@@ -815,6 +815,7 @@ html.theme-light.theme-blue [style*="background:#0891b2"]{background:#0b2f4a!imp
 @keyframes alone-arrow{0%,100%{transform:translateX(0)}50%{transform:translateX(-8px)}}
 .seat-hint::after{content:"👇";position:absolute;left:50%;top:-30px;font-size:22px;line-height:1;transform:translateX(-50%);animation:seat-hand 1s ease-in-out infinite;pointer-events:none;}
 @keyframes seat-hand{0%,100%{transform:translate(-50%,0)}50%{transform:translate(-50%,6px)}}
+.game-welcome-overlay.no-anim{animation:none;}
 </style>
 </head>
 <body>
@@ -4344,7 +4345,12 @@ function render(){
       : `<div class="screen-tag">${esc(screenLabel)}</div>`;
   html = screenTag.replace(/<\/div>$/, themeToggleHtml() + installChipHtml() + '</div>') + html;
   if (modal) html += renderModal(modal);
-  else if (welcomeGameId) html += renderGameWelcomeOverlay(welcomeGameId, welcomePlayerId);
+  else if (welcomeGameId) {
+    // Fade in only the first time - every later render (the entry buy-in landing, a
+    // refresh) rebuilds this markup, and replaying the fade-in each time made it flash.
+    html += renderGameWelcomeOverlay(welcomeGameId, welcomePlayerId).replace('class="game-welcome-overlay"', `class="game-welcome-overlay${welcomeFadedIn === welcomeGameId ? ' no-anim' : ''}"`);
+    welcomeFadedIn = welcomeGameId;
+  }
   // Captured BEFORE replacing the DOM below - app.innerHTML wipes and recreates these
   // elements from scratch every render, so a brand new element always starts at
   // scrollTop 0 regardless of where the old one was left. Not explicitly restoring that
@@ -4495,6 +4501,7 @@ if (window.visualViewport) {
   window.addEventListener("resize", () => requestAnimationFrame(updateRealVh));
 }
 
+let welcomeFadedIn = null;
 let openClubSwipeId = null, clubSwipeDragging = false;
 // Swipe hint: until this device has swiped a club card open once, the first swipeable
 // card gives a short peek to the left (once per app session) and a one-line caption.
@@ -5156,9 +5163,9 @@ function renderPlayerScreen(gameId){
         <h1 class="serif sm" style="color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g.name || c.name)}</h1>
         <div class="meta" style="color:#6ee7b7;font-size:11px;display:flex;align-items:center;gap:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${icon('cal')}${esc(g.date)}${g.createdByName ? ` · נוצר ע"י ${esc(g.createdByName)}` : ""}</div>
       </div>
-      <button class="icon-btn gold${aloneAtTable?' invite-hint':''}" data-invite-game="${g.id}" title="הזמנת שחקן" style="flex-shrink:0;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;white-space:nowrap;padding:5px 7px;">${icon('share')}הזמנת שחקן</button>
+      <button class="icon-btn gold${aloneAtTable?' invite-hint':''}" data-invite-game="${g.id}" title="הזמנת שחקנים" style="flex-shrink:0;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;white-space:nowrap;padding:5px 7px;">${icon('share')}הזמנת שחקנים</button>
     </div>
-    ${aloneAtTable && !showTableHelper ? `<div class="alone-hint" data-goto-table-view><span class="alone-hint-arrow">👈</span> אפשר להושיב שחקנים גם מהשולחן</div>` : ""}
+    ${aloneAtTable && !showTableHelper ? `<div class="alone-hint" data-goto-table-view><span class="alone-hint-arrow">👈</span> אפשר להושיב שחקנים גם ממסך השולחן</div>` : ""}
     <div class="player-screen-scroll"${showTableHelper ? ' style="position:relative;"' : ''}>
       <div style="text-align:center;padding:6px 0 ${cashedOut?16:4}px;flex-shrink:0;">
         ${nameHtml}
@@ -5539,7 +5546,7 @@ function renderAdminScreen(gameId, embedded){
         <h1 class="serif sm" style="color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g.name || c.name)}</h1>
         <div class="meta" style="color:#6ee7b7;font-size:11px;display:flex;align-items:center;gap:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${icon('cal')}${esc(g.date)}${g.createdByName ? ` · נוצר ע"י ${esc(g.createdByName)}` : ""}</div>
       </div>
-      <button class="icon-btn gold" data-invite-game="${g.id}" title="הזמנת שחקן" style="flex-shrink:0;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;white-space:nowrap;padding:5px 7px;">${icon('share')}הזמנת שחקן</button>
+      <button class="icon-btn gold" data-invite-game="${g.id}" title="הזמנת שחקנים" style="flex-shrink:0;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;white-space:nowrap;padding:5px 7px;">${icon('share')}הזמנת שחקנים</button>
     </div>
     <div data-admin-scroll style="flex:1;min-height:0;overflow-y:auto;padding:0 20px 20px;touch-action:pan-y;">
       ${(c.settlementDefault === 'paybox' || c.settlementDefault === 'bit') ? "" : `
@@ -5598,7 +5605,6 @@ function renderTable(gameId){
   const g = getGame(gameId);
   if (!g) return `<div class="empty">משחק לא נמצא</div>`;
   const aloneAtTable = !g.closed && (g.seats||[]).filter(Boolean).length === 1;
-  let seatHintUsed = false;
   const c = getCommunity(g.communityId) || {name:"מועדון", roster:[]};
   const seats = g.seats || new Array(9).fill(null);
   const buyinTotals = {};
@@ -5621,6 +5627,18 @@ function renderTable(gameId){
   const rotationOffset = (mySeatIdx >= 0 && mySeatIdx < 9) ? ((getMySeatPosition() - mySeatIdx) % 9 + 9) % 9 : 0;
   const visualPos = (i) => i === 9 ? 9 : (i + rotationOffset) % 9;
 
+  // The "seat someone here" hand goes on the empty seat closest to the invite button
+  // (top-left corner of the screen), so the two pointers read together.
+  let hintSeatIdx = -1;
+  if (aloneAtTable && isTableAdmin(g, c)) {
+    let best = Infinity;
+    seats.forEach((pid, i) => {
+      if (pid || i === 9) return;
+      const [sx, sy] = SEAT_POS[visualPos(i)];
+      const d = (sx - 5) * (sx - 5) + (sy + 10) * (sy + 10);
+      if (d < best) { best = d; hintSeatIdx = i; }
+    });
+  }
   const seatsHtml = seats.map((pid, i) => {
     const [x,y] = SEAT_POS[visualPos(i)];
     if (!pid) {
@@ -5629,8 +5647,7 @@ function renderTable(gameId){
       // Only the table/community creator can seat a guest into an empty seat - everyone
       // else gets a plain circle (no +) that's still a valid drop target for repositioning
       // an already-seated player via drag, just not tappable to add someone new.
-      const hintHere = aloneAtTable && admin && !seatHintUsed;
-      if (hintHere) seatHintUsed = true;
+      const hintHere = i === hintSeatIdx;
       return `<div class="seat-wrap${hintHere?' seat-hint':''}" style="left:${x}%;top:${y}%;" data-seat="${i}"><div class="seat-circle vacant">${admin?'+':''}</div></div>`;
     }
     const p = g.players.find(pl => pl.id === pid);
@@ -5757,7 +5774,7 @@ function renderTable(gameId){
         <h1 class="serif sm" style="color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g.name || c.name)}</h1>
         <div class="meta" style="color:#6ee7b7;font-size:11px;display:flex;align-items:center;gap:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${icon('cal')}${esc(g.date)}${g.createdByName ? ` · נוצר ע"י ${esc(g.createdByName)}` : ""}</div>
       </div>
-      <button class="icon-btn gold${aloneAtTable?' invite-hint':''}" data-invite-game="${g.id}" title="הזמנת שחקן" style="flex-shrink:0;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;white-space:nowrap;padding:5px 7px;">${icon('share')}הזמנת שחקן</button>
+      <button class="icon-btn gold${aloneAtTable?' invite-hint':''}" data-invite-game="${g.id}" title="הזמנת שחקנים" style="flex-shrink:0;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;white-space:nowrap;padding:5px 7px;">${icon('share')}הזמנת שחקנים</button>
     </div>
     ${watchStripHtml(g)}
     ${!allCashedOut ? `
