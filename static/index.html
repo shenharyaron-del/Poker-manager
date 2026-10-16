@@ -928,12 +928,13 @@ html.theme-light.theme-sand .rb-confirm{background:linear-gradient(180deg,#bf8a4
 .ttl-chip{font-family:inherit;font-size:11px;padding:3px 9px;border-radius:999px;border:1px solid var(--card-b);background:transparent;color:var(--muted);cursor:pointer;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .ttl-chip.me{border-color:var(--gold);color:var(--gold);font-weight:700;}
 .ttl-chip.sel{border-color:#3b82f6;color:#3b82f6;font-weight:700;}
-.ttl-list{display:flex;flex-direction:column;}
+.ttl-list{display:flex;flex-direction:column;max-height:330px;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding-left:2px;}
 .ttl-row{display:flex;gap:10px;align-items:baseline;padding:6px 2px;border-bottom:1px solid var(--card-b);font-size:13px;color:var(--text);}
 .ttl-row:last-child{border-bottom:none;}
 .ttl-time{flex-shrink:0;min-width:34px;color:var(--gold);font-weight:700;font-variant-numeric:tabular-nums;direction:ltr;text-align:right;}
 .ttl-text{flex:1;min-width:0;}
-.ttl-by{color:var(--muted);font-size:11px;}
+.ttl-by,.feed-by{font-size:.8em;font-weight:400;opacity:.6;}
+.ttl-time.hl{color:#fff;background:#3b82f6;border-radius:6px;padding:0 5px;}
 /* "פתח בכרום" bar, only inside another app's built-in browser (see inAppBrowserBar). */
 .inapp-bar{position:fixed;top:0;left:0;right:0;z-index:400;display:flex;align-items:center;gap:8px;padding:8px 10px;padding-top:max(8px, env(safe-area-inset-top));background:#1d4ed8;color:#fff;font-size:12px;box-shadow:0 2px 10px rgba(0,0,0,.35);}
 .inapp-bar span{flex:1;min-width:0;}
@@ -5335,7 +5336,8 @@ function buildTableFeed(g, c){
   // for ones saved since actor_name was added to the buyins table (see performBuyin) -
   // older rows just read as undefined, same as a player doing it for themselves normally
   // reads. Omitted entirely (not "ע"י [own name]") when the actor IS the player it's about.
-  const actorSuffix = (playerName, actorName) => (actorName && actorName !== playerName) ? ` ע"י ${esc(actorName)}` : "";
+  // Muted and smaller (.feed-by) so the action itself is what stands out in the row.
+  const actorSuffix = (playerName, actorName) => (actorName && actorName !== playerName) ? ` <span class="feed-by">ע"י ${esc(actorName)}</span>` : "";
   // Picks the right verb form for the table activity feed - gender comes from the
   // player's own roster row (set from the identityName screen, see
   // v2SetGenderEverywhere), defaulting to male for a one-off guest (never in the roster
@@ -5400,13 +5402,13 @@ function buildTableFeed(g, c){
       text = `${esc(from ? from.name : "שחקן")} ${isFemale(pp.fromPlayerId)?'העבירה':'העביר'} ₪${pp.amount} ל${esc(to ? to.name : "שחקן")}`;
       rowIcon = 'payment';
     } else if (ev.kind === "night_declared_over") {
-      text = `הוכרז על סיום ערב${ev.actorName ? ` ע"י ${esc(ev.actorName)}` : ""}`;
+      text = `הוכרז על סיום ערב${ev.actorName ? ` <span class="feed-by">ע"י ${esc(ev.actorName)}</span>` : ""}`;
       rowIcon = 'check';
     } else if (ev.kind === "night_closed") {
-      text = ev.actorName ? `הערב נסגר ע"י ${esc(ev.actorName)}` : `הערב נסגר - כולם יצאו מהשולחן`;
+      text = ev.actorName ? `הערב נסגר <span class="feed-by">ע"י ${esc(ev.actorName)}</span>` : `הערב נסגר - כולם יצאו מהשולחן`;
       rowIcon = 'check';
     } else if (ev.kind === "night_reopened") {
-      text = `הערב נפתח מחדש${ev.actorName ? ` ע"י ${esc(ev.actorName)}` : ""}`;
+      text = `הערב נפתח מחדש${ev.actorName ? ` <span class="feed-by">ע"י ${esc(ev.actorName)}</span>` : ""}`;
       rowIcon = 'plus';
     } else {
       return "";
@@ -6376,6 +6378,7 @@ function renderTable(gameId){
 function tableTimelineOn(){ try { return localStorage.getItem("poker-table-view") === "timeline"; } catch(e) { return false; } }
 function setTableView(v){ try { localStorage.setItem("poker-table-view", v); } catch(e) {} }
 let timelineHighlight = {}; // gameId -> the player tapped in the chips row (shown in blue)
+const timelineListScroll = {}; // gameId -> scrollTop of "מה קרה בערב"
 function fmtElapsed(ms){
   const m = Math.max(0, Math.round(ms / 60000));
   return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`;
@@ -6447,7 +6450,7 @@ function renderTableTimeline(g, c, myPlayerId){
     const first = !seen[b.playerId];
     seen[b.playerId] = true;
     if (first) entryTs[b.playerId] = b.ts;
-    rows.push({ts: b.ts, text: first
+    rows.push({ts: b.ts, pid: b.playerId, text: first
       ? `<b>${esc(name(b.playerId))}</b> ${fem(b.playerId) ? "נכנסה" : "נכנס"} עם ₪${b.amount}${by(b.playerId, b.actorName)}`
       : `<b>${esc(name(b.playerId))}</b> ריביי ₪${b.amount}${by(b.playerId, b.actorName)}`});
   });
@@ -6456,18 +6459,19 @@ function renderTableTimeline(g, c, myPlayerId){
     const profit = (co.amount || 0) - (totals[pid] || 0);
     const res = Math.abs(profit) < 0.5 ? "מאוזן" : profit > 0 ? `+₪${Math.round(profit)}` : `-₪${Math.abs(Math.round(profit))}`;
     const dur = entryTs[pid] && co.ts ? ` אחרי ${fmtElapsed(co.ts - entryTs[pid])}` : "";
-    rows.push({ts: co.ts, text: `<b>${esc(name(pid))}</b> ${fem(pid) ? "יצאה" : "יצא"} עם ₪${co.amount} <span class="${profit >= 0 ? 'stats-win' : 'stats-loss'}">(<bdi dir="ltr">${res}</bdi>)</span>${dur}`});
+    rows.push({ts: co.ts, pid, text: `<b>${esc(name(pid))}</b> ${fem(pid) ? "יצאה" : "יצא"} עם ₪${co.amount} <span class="${profit >= 0 ? 'stats-win' : 'stats-loss'}">(<bdi dir="ltr">${res}</bdi>)</span>${dur}`});
   });
   events.forEach(e => {
-    if (e.type === "returned_to_table") rows.push({ts: e.ts, text: `<b>${esc(name(e.playerId))}</b> ${fem(e.playerId) ? "חזרה" : "חזר"} לשולחן${by(e.playerId, e.actorName)}`});
-    else if (e.type === "seat_removed") rows.push({ts: e.ts, text: `<b>${esc(name(e.playerId))}</b> ${fem(e.playerId) ? "הוצאה" : "הוצא"} מהשולחן${by(e.playerId, e.actorName)}`});
+    if (e.type === "returned_to_table") rows.push({ts: e.ts, pid: e.playerId, text: `<b>${esc(name(e.playerId))}</b> ${fem(e.playerId) ? "חזרה" : "חזר"} לשולחן${by(e.playerId, e.actorName)}`});
+    else if (e.type === "seat_removed") rows.push({ts: e.ts, pid: e.playerId, text: `<b>${esc(name(e.playerId))}</b> ${fem(e.playerId) ? "הוצאה" : "הוצא"} מהשולחן${by(e.playerId, e.actorName)}`});
     else if (e.type === "pot_fixed") rows.push({ts: e.ts, text: `סידור קופה${e.actorName ? ` <span class="ttl-by">ע"י ${esc(e.actorName)}</span>` : ""}`});
     else if (e.type === "night_closed") rows.push({ts: e.ts, text: `הערב נסגר${e.actorName ? ` <span class="ttl-by">ע"י ${esc(e.actorName)}</span>` : ""}`});
     else if (e.type === "night_declared_over") rows.push({ts: e.ts, text: `הוכרז על סיום הערב${e.actorName ? ` <span class="ttl-by">ע"י ${esc(e.actorName)}</span>` : ""}`});
     else if (e.type === "night_reopened") rows.push({ts: e.ts, text: `הערב נפתח מחדש${e.actorName ? ` <span class="ttl-by">ע"י ${esc(e.actorName)}</span>` : ""}`});
   });
   rows.sort((a, b) => (a.ts || 0) - (b.ts || 0));
-  const list = rows.map(r => `<div class="ttl-row"><span class="ttl-time">${fmtElapsed((r.ts || t0) - t0)}</span><span class="ttl-text">${r.text}</span></div>`).join("");
+  // The player tapped in the chips row (see timelineHighlight) - their rows' times light up.
+  const list = rows.map(r => `<div class="ttl-row"><span class="ttl-time${sel && r.pid === sel ? ' hl' : ''}">${fmtElapsed((r.ts || t0) - t0)}</span><span class="ttl-text">${r.text}</span></div>`).join("");
   return `
     <div class="px5">
       <fieldset class="leave-frame stats-frame" style="margin-top:0;"><legend>קניות לאורך הערב</legend>
@@ -6476,7 +6480,7 @@ function renderTableTimeline(g, c, myPlayerId){
         <div class="stats-frame-note">הקו עולה בכל קנייה ויורד בסכום שהוחזר לקופה ביציאה. מתחת ל-0 = ברווח.</div>
       </fieldset>
       <fieldset class="leave-frame stats-frame"><legend>מה קרה בערב</legend>
-        <div class="ttl-list">${list}</div>
+        <div class="ttl-list" data-ttl-list="${g.id}">${list}</div>
       </fieldset>
     </div>`;
 }
@@ -8517,6 +8521,12 @@ function attachHandlers(){
   };
   app.querySelectorAll("[data-pp-back-me]").forEach(el => el.onclick = () => { playerViewTarget = null; render(); });
   app.querySelectorAll("[data-table-view]").forEach(el => el.onclick = () => { setTableView(el.dataset.tableView); render(); });
+  // "מה קרה בערב" scrolls inside its own box - keep its position through re-renders.
+  app.querySelectorAll("[data-ttl-list]").forEach(el => {
+    const gid = el.dataset.ttlList;
+    if (timelineListScroll[gid]) el.scrollTop = timelineListScroll[gid];
+    el.onscroll = () => { timelineListScroll[gid] = el.scrollTop; };
+  });
   app.querySelectorAll("[data-timeline-pick]").forEach(el => el.onclick = () => {
     const gid = nav.gameId, pid = el.dataset.timelinePick;
     timelineHighlight[gid] = timelineHighlight[gid] === pid ? null : pid;
