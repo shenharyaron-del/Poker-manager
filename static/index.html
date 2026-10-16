@@ -875,6 +875,8 @@ html.theme-light.theme-blue .chat-bubble{--text:#0e2633;color:#0e2633;}
 .login-or{text-align:center;color:var(--muted);font-size:12px;margin:10px 0 8px;}
 .login-link{display:block;margin:12px auto 0;background:none;border:none;color:var(--muted);font:inherit;font-size:13px;cursor:pointer;}
 .login-link u{color:var(--gold);text-underline-offset:3px;}
+.signup-existing{margin-top:14px;padding-top:12px;border-top:1px solid var(--card-b);text-align:center;color:var(--muted);font-size:12px;}
+.signup-existing .btn{margin-top:8px;}
 </style>
 </head>
 <body>
@@ -6195,6 +6197,9 @@ function renderModal(m){
         ${m.loginError ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.loginError)}</p>` : ""}
         <button type="submit" class="btn btn-primary btn-block" data-passkey-signup-go>👆 המשך עם טביעת אצבע</button>
       </form>
+      <div class="signup-existing">כבר יש לך חשבון? לא צריך להירשם שוב:
+        <button class="btn btn-ghost btn-block" data-passkey-login>👆 התחבר עם טביעת אצבע</button>
+      </div>
       <button class="login-link" data-signup-back>חזרה</button>
     ` : m.loginStep === "deviceChoice" ? `
       <p style="color:var(--muted);font-size:13px;margin-bottom:14px;">הכתובת <span dir="ltr">${esc(m.loginEmail)}</span> כבר רשומה במערכת עם מכשיר מחובר. האם להתחבר ממכשיר זה?</p>
