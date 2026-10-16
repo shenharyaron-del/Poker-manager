@@ -6822,7 +6822,15 @@ function renderModal(m){
         </div>
       </div>`;
     }).join("");
+    // Super admin: who opened the club, and re-pointing it to me - for a club saved under
+    // an old device id that no longer matches my account.
+    const creatorHtml = isSuperAdmin() ? `
+      <div class="roster-row" style="margin-bottom:12px;">
+        <span style="font-size:13px;">פתח את המועדון: <b>${esc(c.createdByName || "לא ידוע")}</b>${isClubCreator(c) ? " (אתה)" : ""}</span>
+        ${isClubCreator(c) ? "" : `<button class="btn btn-ghost btn-sm" data-claim-club-creator="${c.id}">חבר אליי</button>`}
+      </div>` : "";
     body = `
+      ${creatorHtml}
       <p style="color:var(--muted);font-size:12px;margin:0 0 14px;">כפתור המגן ${icon('shield')} הופך שחקן לאדמין - אדמין יכול לנהל שחקנים אחרים בשמם (ריביי, הושבה, יציאה מהשולחן ועוד).</p>
       <div class="scroll-list" style="margin-bottom:16px;">${rows || '<div class="empty" style="padding:10px 0;">אין עדיין שחקנים ברשימה</div>'}</div>
     `;
@@ -7784,6 +7792,17 @@ function attachHandlers(){
   });
   app.querySelectorAll("[data-pick-theme]").forEach(el => el.onclick = () => { closeModal(); setTheme(el.dataset.pickTheme); });
 
+  app.querySelectorAll("[data-claim-club-creator]").forEach(el => el.onclick = async () => {
+    const c = getCommunity(el.dataset.claimClubCreator);
+    if (!c || !(await showConfirm(`לחבר את "${c.name}" אליך כמי שפתח את המועדון?`))) return;
+    el.disabled = true;
+    showButtonLoading(el);
+    try {
+      await v2UpdateCommunity(c.id, {createdBy: myIdentity.id, createdByName: myIdentity.name || ""});
+      showAlert("המועדון חובר אליך ✓");
+    } catch(e) { showAlert("השמירה נכשלה - נסו שוב."); }
+    render();
+  });
   const showRoster = app.querySelector("[data-show-roster]");
   if (showRoster) showRoster.onclick = () => openModal({type:"roster", communityId: nav.communityId, editingId:null});
 

@@ -1294,6 +1294,13 @@ def v2_update_community(community_id):
         return jsonify({"error": "chipRatio must be a positive number"}), 400
     if "settlementDefault" in body and body["settlementDefault"] not in ("direct", "paybox", "bit"):
         return jsonify({"error": "invalid settlementDefault"}), 400
+    # Re-pointing who opened the club (e.g. a club from before accounts, saved under an old
+    # device id) - super admin only.
+    if "createdBy" in body:
+        if not _caller().get("is_super"):
+            return jsonify({"error": "only a super admin can change the club's creator"}), 403
+        if not isinstance(body["createdBy"], str) or not body["createdBy"].strip() or len(body["createdBy"]) > 128:
+            return jsonify({"error": "invalid createdBy"}), 400
     if "buyinAmounts" in body and body["buyinAmounts"] is not None:
         amounts = body["buyinAmounts"]
         if (not isinstance(amounts, list) or not amounts or len(amounts) > 10
@@ -1313,6 +1320,9 @@ def v2_update_community(community_id):
         fields.append("settlement_default = %s"); params.append(body["settlementDefault"])
     if "lastParticipants" in body:
         fields.append("last_participants = %s"); params.append(Json(body["lastParticipants"]))
+    if "createdBy" in body:
+        fields.append("created_by = %s"); params.append(body["createdBy"].strip())
+        fields.append("created_by_name = %s"); params.append(str(body.get("createdByName") or "")[:80] or None)
     if "buyinAmounts" in body:
         fields.append("buyin_amounts = %s"); params.append(Json(body["buyinAmounts"]) if body["buyinAmounts"] is not None else None)
     if not fields:
