@@ -8303,7 +8303,9 @@ function attachHandlers(){
   const shareAppBtn = app.querySelector("[data-share-app]");
   if (shareAppBtn) shareAppBtn.onclick = async () => {
     const url = location.origin + location.pathname;
-    const text = `בואו תנסו את Poker Manager - אפליקציה לניהול ערבי פוקר, ז'יטונים ומאזנים בין חברים - ${url}`;
+    // The link goes in `url` only - WhatsApp appends it to the text, so having it in the
+    // text too showed it twice (same as the club / game invites already do).
+    const text = `בואו תנסו את Poker Manager - אפליקציה לניהול ערבי פוקר, ז'יטונים ומאזנים בין חברים`;
     // Same approach data-invite-game already uses (the table screen's "הזמנת שחקן") - the
     // native share sheet hands off straight into the WhatsApp app's own chat picker. The
     // old wa.me link this used to always open instead goes through WhatsApp's web
@@ -8314,7 +8316,7 @@ function attachHandlers(){
     if (navigator.share) {
       try { await navigator.share({title: "Poker Manager", text, url}); } catch(err) { /* user cancelled the share sheet */ }
     } else {
-      window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank", "noopener");
+      window.open("https://wa.me/?text=" + encodeURIComponent(text + " - " + url), "_blank", "noopener");
     }
   };
   const backHome = app.querySelector("[data-back-home]"); if (backHome) backHome.onclick = () => go("home");
