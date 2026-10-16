@@ -265,39 +265,6 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
 .pp-name-select{font-family:inherit;font-size:24px;font-weight:700;color:var(--text);background:transparent;border:1px solid rgba(212,175,55,.45);border-radius:12px;padding:4px 34px 4px 34px;max-width:90%;text-align:center;text-align-last:center;cursor:pointer;
   -webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23e9c46a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-position:12px 50%;background-size:12px 8px;background-repeat:no-repeat;}
 .pp-name-select option{color:#111;}
-.th-glow-rebuy,.th-glow-leave{position:relative;z-index:7;}
-/* First-game helper (see tableHelperHtml): one 15s run of three 5s steps - ריביי (arrow
-   up, rebuy frame glows), מסך השולחן (swipe hint), סוף הערב (arrow down, leave frame
-   glows) - then it closes by itself. */
-.table-helper{position:absolute;inset:0;z-index:6;border-radius:16px;background:rgba(2,20,14,.93);border:1px solid rgba(212,175,55,.6);pointer-events:none;}
-.th-step{position:absolute;inset:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;opacity:0;animation:thStep1 15s linear forwards;}
-.th-step-1{justify-content:flex-start;} /* ריביי at the top - next to the rebuy buttons */
-.th-step-2{animation-name:thStep2;}
-.th-step-3{animation-name:thStep3;justify-content:flex-end;} /* סוף הערב at the bottom - next to the leave buttons */
-.th-title{color:var(--gold);font-weight:800;font-size:18px;}
-.th-text{color:#f5f5f4;font-size:15px;line-height:1.5;max-width:280px;}
-.th-arrow{color:var(--gold);font-size:34px;line-height:1;}
-.th-arrow-up{animation:thBounceUp 15s linear forwards;}
-.th-arrow-down{animation:thBounceDown 15s linear forwards;}
-/* New player screen: step 1's text sits above the rebuy frame (arrow down to it), step
-   3's below the end-of-evening frame (arrow up to it). */
-.th-arrow-down1{animation:thBounceDown1 15s linear forwards;}
-.th-arrow-up3{animation:thBounceUp3 15s linear forwards;}
-@keyframes thBounceDown1{0%,7%,14%,21%,28%,100%{transform:translateY(0)}3.5%,10.5%,17.5%,24.5%{transform:translateY(10px)}}
-@keyframes thBounceUp3{0%,66%,73%,80%,87%,94%,100%{transform:translateY(0)}69.5%,76.5%,83.5%,90.5%{transform:translateY(-10px)}}
-.th-swipe{font-size:34px;line-height:1;animation:thSwipe 15s linear forwards;}
-.th-swipe-left{animation-name:thSwipeLeft;}
-@keyframes thStep1{0%{opacity:0}3%,29%{opacity:1}33%,100%{opacity:0}}
-@keyframes thStep2{0%,33%{opacity:0}36%,62%{opacity:1}66%,100%{opacity:0}}
-@keyframes thStep3{0%,66%{opacity:0}69%,96%{opacity:1}100%{opacity:0}}
-@keyframes thBounceUp{0%,7%,14%,21%,28%,100%{transform:translateY(0)}3.5%,10.5%,17.5%,24.5%{transform:translateY(-10px)}}
-@keyframes thSwipe{0%,36%{transform:translateX(-50px);opacity:0}39%{opacity:1}46%{transform:translateX(50px);opacity:1}48%{transform:translateX(50px);opacity:0}49%{transform:translateX(-50px);opacity:0}51%{opacity:1}58%{transform:translateX(50px);opacity:1}60%,100%{transform:translateX(50px);opacity:0}}
-@keyframes thSwipeLeft{0%,36%{transform:translateX(50px);opacity:0}39%{opacity:1}46%{transform:translateX(-50px);opacity:1}48%{transform:translateX(-50px);opacity:0}49%{transform:translateX(50px);opacity:0}51%{opacity:1}58%{transform:translateX(-50px);opacity:1}60%,100%{transform:translateX(-50px);opacity:0}}
-@keyframes thBounceDown{0%,66%,73%,80%,87%,94%,100%{transform:translateY(0)}69.5%,76.5%,83.5%,90.5%{transform:translateY(10px)}}
-.th-glow-rebuy{animation:thGlow1 15s linear forwards;}
-.th-glow-leave{animation:thGlow2 15s linear forwards;}
-@keyframes thGlow1{0%,33%,100%{box-shadow:none;border-color:rgba(212,175,55,.55)}3%,29%{box-shadow:0 0 16px rgba(251,191,36,.6),inset 0 0 10px rgba(251,191,36,.25);border-color:var(--gold)}}
-@keyframes thGlow2{0%,66%,100%{box-shadow:none;border-color:rgba(212,175,55,.55)}69%,96%{box-shadow:0 0 16px rgba(251,191,36,.6),inset 0 0 10px rgba(251,191,36,.25);border-color:var(--gold)}}
 /* Two layers of rounding, for two different corners:
    - The CONTAINER's own outer top corners (clipped via overflow:hidden) - stay rounded no
      matter which tab is active, since rounding only the active tab (and leaving the
@@ -3086,77 +3053,6 @@ function markGameWelcomed(gameId){
 // doRefreshNow to skip re-rendering while it's up, same as it already does for an open
 // modal, so the periodic/SSE auto-refresh doesn't replace the DOM (restarting its fade-in
 // animation, and mid-read) every few seconds while the player is reading it.
-// First-game helper on the player screen: covers the "הקניות שלי / פעילות בשולחן" panel
-// with a short looping animation - first an arrow up to the ריביי buttons, then an arrow
-// down to the leave-table buttons - until "הבנתי". Only for someone with no earlier
-// cashed-out game in any group (a new user), once per account (myIdentity.seenTableHelper
-// is saved with the identity, so it doesn't come back on another device either).
-let tableHelperStartedAt = 0;
-const TABLE_HELPER_MS = 15000; // three 5s steps, played once, then it closes by itself
-// "?demo=helper" in the address shows it once more for anyone (e.g. an existing player
-// who wants to see it), without touching the saved seenTableHelper flag.
-let tableHelperDemo = false;
-try {
-  const u = new URL(location.href);
-  if (u.searchParams.get("demo") === "helper") {
-    tableHelperDemo = true;
-    u.searchParams.delete("demo");
-    history.replaceState(history.state, "", u.pathname + u.search + u.hash);
-  }
-} catch(e) {}
-function tableHelperPlaying(){ return !!tableHelperStartedAt && Date.now() - tableHelperStartedAt < TABLE_HELPER_MS; }
-function finishTableHelper(){
-  tableHelperStartedAt = 0;
-  if (tableHelperDemo) { tableHelperDemo = false; render(); return; }
-  if (myIdentity.seenTableHelper) return;
-  myIdentity.seenTableHelper = true;
-  saveIdentity();
-  render();
-}
-function shouldShowTableHelper(g, pid){
-  if (!g || !pid || (pid in (g.cashouts||{}))) return false;
-  if (tableHelperDemo) {
-    if (tableHelperStartedAt && Date.now() - tableHelperStartedAt >= TABLE_HELPER_MS) { setTimeout(finishTableHelper, 0); return false; }
-    return hasWelcomedGame(g.id);
-  }
-  if (myIdentity.seenTableHelper) return false;
-  if (tableHelperStartedAt && Date.now() - tableHelperStartedAt >= TABLE_HELPER_MS) { setTimeout(finishTableHelper, 0); return false; }
-  if (!hasWelcomedGame(g.id)) return false; // the welcome screen comes first
-  const myIds = new Set(Object.values(myIdentity.myPlayers || {}));
-  const playedBefore = (state.games||[]).some(gm => gm.id !== g.id && Object.keys(gm.cashouts||{}).some(id => myIds.has(id)));
-  return !playedBefore;
-}
-// toLeft: an admin's carousel is admin/player/table, where a drag to the RIGHT lands on
-// the admin page - the table is a drag to the left. Everyone else has just player/table,
-// where a drag right reaches the table.
-function tableHelperHtml(toLeft){
-  if (!tableHelperStartedAt) {
-    tableHelperStartedAt = Date.now();
-    setTimeout(finishTableHelper, TABLE_HELPER_MS);
-  }
-  // Negative delay = continue where it was, so the periodic re-render (which rebuilds
-  // this markup) doesn't restart the animation every few seconds.
-  const d = `animation-delay:-${Math.min(Date.now() - tableHelperStartedAt, TABLE_HELPER_MS)}ms;`;
-  return `
-    <div class="table-helper" data-table-helper>
-      <div class="th-step th-step-1" style="${d}">
-        <div class="th-title">ריביי</div>
-        <div class="th-text">קניתם עוד ז'יטונים? בחרו סכום בכפתורים למטה ולחצו "ריביי".</div>
-        <div class="th-arrow th-arrow-down1" style="${d}">⬇</div>
-      </div>
-      <div class="th-step th-step-2" style="${d}">
-        <div class="th-title">מסך השולחן</div>
-        <div class="th-text">גררו ${toLeft ? "שמאלה" : "ימינה"} כדי לעבור למסך השולחן ולראות את הקניות של כולם.</div>
-        <div class="th-swipe${toLeft ? " th-swipe-left" : ""}" style="${d}">${toLeft ? "👈" : "👉"}</div>
-      </div>
-      <div class="th-step th-step-3" style="${d}">
-        <div class="th-arrow th-arrow-up3" style="${d}">⬆</div>
-        <div class="th-title">סוף הערב</div>
-        <div class="th-text">כשאתם קמים מהשולחן, סמנו "סיימתי את הערב" למעלה ודווחו כמה ז'יטונים נשארו לכם.</div>
-      </div>
-    </div>`;
-}
-
 function shouldShowGameWelcome(){
   if (nav.screen !== "table") return false;
   const g = getGame(nav.gameId);
@@ -5470,8 +5366,6 @@ function renderPlayerScreen(gameId){
   // render() only force-scrolls this frame to the bottom when this actually changes.
   const latestHistoryKey = myBuyins.length ? myBuyins[myBuyins.length-1].id : "";
   const cashedOut = pid in g.cashouts;
-  const showTableHelper = !viewingOther && !toolsView && shouldShowTableHelper(g, pid);
-  const tableHelperDelay = showTableHelper ? `animation-delay:-${Math.min(Date.now() - (tableHelperStartedAt || Date.now()), TABLE_HELPER_MS)}ms;` : "";
   // Once every seated player has cashed out (the night auto-closes via maybeAutoCloseNight
   // at that point - see its own comment) and the pot is balanced, show THIS player directly
   // who they owe/are owed by - computed purely from final chip counts (settleTransactions/
@@ -5601,7 +5495,7 @@ function renderPlayerScreen(gameId){
   const amounts = getBuyinAmounts(c);
   const pickKey = g.id + ":" + pid;
   const picked = rebuyPick[pickKey] !== undefined ? rebuyPick[pickKey] : amounts[0];
-  const rebuyLocked = buyinPending || showTableHelper;
+  const rebuyLocked = buyinPending;
   const rebuyHtml = `
     <div class="rb-chips">
       ${amounts.map(v => `<button class="rb-chip${picked===v?' on':''}" data-rb-pick="${v}" ${rebuyLocked?'disabled':''}><span>₪${v}</span></button>`).join("")}
@@ -5739,8 +5633,8 @@ function renderPlayerScreen(gameId){
       </div>
 
     </div>
-    ${aloneAtTable && !showTableHelper ? `<div class="alone-hint" data-goto-table-view><span class="alone-hint-arrow">👈</span> אפשר להושיב שחקנים גם ממסך השולחן</div>` : ""}
-    <div class="player-screen-scroll"${showTableHelper ? ' style="position:relative;"' : ''}>
+    ${aloneAtTable ? `<div class="alone-hint" data-goto-table-view><span class="alone-hint-arrow">👈</span> אפשר להושיב שחקנים גם ממסך השולחן</div>` : ""}
+    <div class="player-screen-scroll">
       <div style="text-align:center;padding:6px 0 ${cashedOut?16:4}px;flex-shrink:0;">
         ${tilesHtml}
         ${nameHtml}
@@ -5756,11 +5650,11 @@ function renderPlayerScreen(gameId){
         ${cashedOutInfoHtml}`}
       </div>
       ${toolsView ? `<div style="padding:4px 0 16px;">${renderAdminScreen(gameId, true)}</div>` : `
-      ${(cashedOut || armed) ? "" : `<fieldset class="leave-frame rb-frame${showTableHelper?' th-glow-rebuy':''}" style="margin-bottom:14px;${showTableHelper?tableHelperDelay:''}">${rebuyHtml}</fieldset>`}
-      ${cashedOut ? "" : `<fieldset class="leave-frame lv-frame${armed?' lv-frame-top':''}${showTableHelper?' th-glow-leave':''}"${showTableHelper?` style="${tableHelperDelay}"`:''}>${leaveHtml}</fieldset>`}
+      ${(cashedOut || armed) ? "" : `<fieldset class="leave-frame rb-frame" style="margin-bottom:14px;">${rebuyHtml}</fieldset>`}
+      ${cashedOut ? "" : `<fieldset class="leave-frame lv-frame${armed?' lv-frame-top':''}">${leaveHtml}</fieldset>`}
       ${adminPlayerActions}
       ${showClosedToggle ? `<div style="display:flex;justify-content:center;margin-top:12px;flex-shrink:0;"><label class="night-closed-toggle" data-toggle-end-night="${g.id}"><input type="checkbox" ${g.closed?'checked':''} onclick="return false;"><span>ערב סגור</span></label></div>` : ""}
-      ${showTableHelper ? tableHelperHtml(false) : ""}`}
+`}
     </div>
   `;
 }
@@ -8496,8 +8390,6 @@ function attachHandlers(){
   // it settles, cross-device confirm card) instead of saving directly.
   const doPlayerBuyin = async (amt, fromEl, targetPid) => {
     if (!amt || amt <= 0 || pendingBuyinRequest) return;
-    // Rebuys stay locked while the first-game helper is playing (see tableHelperHtml).
-    if (tableHelperPlaying()) return;
     const gameId = nav.gameId;
     const g = getGame(gameId);
     // targetPid: an admin buying in for the player picked in the name dropdown.
