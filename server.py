@@ -761,7 +761,9 @@ def _load_caller_identity(client_id):
             my_players = src.get("myPlayers")
             if isinstance(my_players, dict):
                 roster_ids.update(v for v in my_players.values() if isinstance(v, str))
-    return {"client_id": client_id, "ids": list(ids), "roster_ids": list(roster_ids), "is_super": is_super}
+    name = (account.get("name") if client_id else None) or (identity.get("name") if client_id else None)
+    return {"client_id": client_id, "ids": list(ids), "roster_ids": list(roster_ids), "is_super": is_super,
+            "name": name if isinstance(name, str) else None}
 
 
 def _visible_community_ids(cur, caller):
@@ -790,6 +792,51 @@ def _visible_community_ids(cur, caller):
 def _can_see_community(cur, caller, community_id):
     visible = _visible_community_ids(cur, caller)
     return visible is None or community_id in visible
+
+
+# ---------- Rights (server-side enforcement) ----------
+# The same rules the client uses to show/hide buttons (isCommunityAdmin, isTableAdmin,
+# "my own player"), checked here too - hiding a button stops nobody who sends the request
+# directly. Identity is by id only (see _load_caller_identity), never by display name -
+# except a table from before games.created_by existed, whose creator is only known by name.
+def _rights(cur, caller, community_id, game_id=None):
+    r = {"member": False, "community_admin": False, "table_admin": False, "my_players": set()}
+    if not community_id:
+        return r
+    r["member"] = _can_see_community(cur, caller, community_id)
+    cur.execute(
+        "SELECT id, client_id, is_admin FROM roster_players WHERE community_id = %s "
+        "AND (client_id = ANY(%s) OR id = ANY(%s))",
+        (community_id, caller["ids"], caller["roster_ids"]),
+    )
+    rows = cur.fetchall()
+    r["my_players"] = {row[0] for row in rows}
+    my_ids = set(caller["ids"]) | {row[1] for row in rows if row[1]}
+    cur.execute("SELECT created_by FROM communities WHERE id = %s", (community_id,))
+    crow = cur.fetchone()
+    r["community_admin"] = bool(
+        caller["is_super"] or (crow and crow[0] and crow[0] in my_ids) or any(row[2] for row in rows)
+    )
+    r["table_admin"] = r["community_admin"]
+    if game_id and not r["table_admin"]:
+        cur.execute("SELECT created_by, created_by_name FROM games WHERE id = %s", (game_id,))
+        grow = cur.fetchone()
+        if grow:
+            if grow[0]:
+                r["table_admin"] = grow[0] in my_ids
+            else:
+                r["table_admin"] = bool(caller.get("name") and caller["name"] == grow[1])
+    return r
+
+
+def _game_community(cur, game_id):
+    cur.execute("SELECT community_id FROM games WHERE id = %s", (game_id,))
+    row = cur.fetchone()
+    return row[0] if row else None
+
+
+def _forbidden():
+    return jsonify({"error": "forbidden"}), 403
 
 
 @app.route("/api/v2/communities", methods=["GET"])
