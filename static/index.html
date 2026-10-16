@@ -882,6 +882,11 @@ html.theme-light.theme-blue .chat-bubble{--text:#0e2633;color:#0e2633;}
 .pp-tile.pp-tile-me small{color:#93c5fd;font-weight:700;}
 html.theme-light .pp-tile.pp-tile-me{border-color:#2563eb;background:#dbeafe;}
 html.theme-light .pp-tile.pp-tile-me small{color:#1d4ed8;}
+/* Club profile setup sections: no fill of their own - the same color inside as around
+   them, so the title sitting on the frame line isn't cut in two by a lighter panel. The
+   blue theme gets a stronger gold line, the pale one there barely showed. */
+.setup-frame,html.theme-light .setup-frame,html.theme-light.theme-blue .setup-frame,html.theme-light.theme-sand .setup-frame{background:transparent;}
+html.theme-light.theme-blue .setup-frame{border:1.5px solid rgba(168,106,18,.8);}
 </style>
 </head>
 <body>
