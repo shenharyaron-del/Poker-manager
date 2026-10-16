@@ -1858,13 +1858,13 @@ async function v2AddGamePlayer(gameId, id, name){
 // Returns true on success, false if the seat was already taken (caller re-syncs that one
 // seat and lets the user pick another - see the section comment on the server side for
 // why this is a single atomic DB check rather than a read-modify-write).
-async function v2ClaimSeat(gameId, seatIndex, playerId, name){
-  const result = await v2Fetch("POST", `/games/${gameId}/seats/${seatIndex}`, {playerId, name});
+async function v2ClaimSeat(gameId, seatIndex, playerId, name, gender){
+  const result = await v2Fetch("POST", `/games/${gameId}/seats/${seatIndex}`, {playerId, name, ...(gender ? {gender} : {})});
   if (result.conflict) return false;
   const g = getGame(gameId);
   g.seats = result.seats;
   g.updatedAt = result.updatedAt;
-  if (!g.players.some(p => p.id === playerId)) g.players.push({id: playerId, name});
+  if (!g.players.some(p => p.id === playerId)) g.players.push({id: playerId, name, ...(gender ? {gender} : {})});
   if (g.liveChips[playerId] === undefined) g.liveChips[playerId] = 0;
   // First time ever seated in this game (not a returning cashed-out player - that path
   // clears their cashout entry directly, never calls claimSeat again) - auto-buy-in with
@@ -5205,14 +5205,21 @@ const SEAT_POS = [
 // a given game (see showBuyinConfirmCard, which now skips the green card/sound entirely for
 // isEntry buy-ins in favor of this). hasWelcomedGame/markGameWelcomed (per-device
 // localStorage, same pattern as announcedBuyinIds) make this fire exactly once per game.
+// Female by the club roster, or - for a one-off guest, who has no roster row - by the
+// gender saved on their row for this game.
+function playerIsFemale(g, c, playerId){
+  const rp = ((c && c.roster) || []).find(pl => pl.id === playerId);
+  if (rp) return rp.gender === "female";
+  const gp = ((g && g.players) || []).find(pl => pl.id === playerId);
+  return !!gp && gp.gender === "female";
+}
 function renderGameWelcomeOverlay(gameId, playerId){
   const g = getGame(gameId);
   if (!g) return "";
   const c = getCommunity(g.communityId) || {roster:[]};
   const p = g.players.find(pl => pl.id === playerId);
   const buyinTotal = g.buyins.filter(b => b.playerId === playerId).reduce((s,b) => s+b.amount, 0);
-  const rp = c.roster.find(pl => pl.id === playerId);
-  const female = !!rp && rp.gender === "female";
+  const female = playerIsFemale(g, c, playerId);
   const name = (p && p.name) || myIdentity.name || "שחקן";
   const careVerb = female ? "דאגי" : "דאג";
   return `
@@ -5236,7 +5243,7 @@ function renderGameWelcomeOverlay(gameId, playerId){
 // Shared by the player screen and the super admin's watch-only feed page; nothing in it
 // depends on who's looking.
 function buildTableFeed(g, c){
-  const isFemale = playerId => { const rp = (c.roster||[]).find(pl => pl.id === playerId); return !!rp && rp.gender === "female"; };
+  const isFemale = playerId => playerIsFemale(g, c, playerId);
   if (!localBuyinLogs[g.id]) localBuyinLogs[g.id] = {};
   const myBuyinLog = localBuyinLogs[g.id];
   g.buyins.forEach(b => { if (!myBuyinLog[b.id]) myBuyinLog[b.id] = {ts:b.ts, playerId:b.playerId, amount:b.amount, actorName:b.actorName}; });
@@ -5410,7 +5417,7 @@ function renderPlayerScreen(gameId){
   // them) - shown on their own screen so both sides see the money moved.
   // Verb gender ("העביר"/"העבירה") from the player's roster row - also used by the
   // activity feed further down.
-  const isFemale = playerId => { const rp = (c.roster||[]).find(pl => pl.id === playerId); return !!rp && rp.gender === "female"; };
+  const isFemale = playerId => playerIsFemale(g, c, playerId);
   const playerNameOf = (id) => esc((g.players.find(pl => pl.id === id) || {}).name || "שחקן");
   const myPaymentsIn = (g.playerPayments||[]).filter(pp => pp.toPlayerId === pid);
   const myPaymentsOut = (g.playerPayments||[]).filter(pp => pp.fromPlayerId === pid);
@@ -5551,7 +5558,7 @@ function renderPlayerScreen(gameId){
   const leaveHtml = `
     <label class="lv-arm">
       <input type="checkbox" data-leave-arm ${armed?'checked':''} ${nightClosedLock?'disabled':''}>
-      <span>${viewingOther && p ? `<bdi>${esc(p.name)}</bdi> ${((c && c.roster) || []).some(r => r.id === pid && r.gender === "female") ? "סיימה" : "סיים"} את הערב` : "סיימתי את הערב"}</span>
+      <span>${viewingOther && p ? `<bdi>${esc(p.name)}</bdi> ${playerIsFemale(g, c, pid) ? "סיימה" : "סיים"} את הערב` : "סיימתי את הערב"}</span>
       <span class="lv-line"></span>
     </label>
     <div class="lv-body${armed?'':' off'}">
@@ -7287,8 +7294,9 @@ function renderModal(m){
       ` : `<div class="empty" style="padding:12px 0;">כל השחקנים במועדון כבר יושבים בשולחן.</div>`}
       <div class="section-title" style="padding:0;margin:10px 0 8px;">או הוסיפו שחקן אורח</div>
       <p style="color:var(--muted);font-size:11px;margin:0 0 8px;">שחקן חד-פעמי למשחק הזה בלבד - לא יתווסף לרשימת השחקנים הקבועה של המועדון.</p>
-      <div style="display:flex;gap:8px;margin-bottom:14px;">
-        <input type="text" id="pick-seat-guest-name" placeholder="שם האורח" style="flex:1;">
+      <div class="gender-name-row" style="margin-bottom:14px;">
+        <input type="text" id="pick-seat-guest-name" placeholder="שם האורח">
+        <div class="gender-seg" role="group" aria-label="מין"><button type="button" class="on" data-guest-gender="male" title="זכר">ז</button><button type="button" data-guest-gender="female" title="נקבה">נ</button></div>
         <button class="btn btn-primary" data-add-guest-seat>${icon('plus')}</button>
       </div>
       <div class="section-title" style="padding:0;margin:0 0 8px;">או הוסיפו שחקן קבוע למועדון</div>
@@ -10376,6 +10384,9 @@ function attachHandlers(){
       });
       closeModal();
     });
+    app.querySelectorAll("[data-guest-gender]").forEach(el => el.onclick = () => {
+      app.querySelectorAll("[data-guest-gender]").forEach(b => b.classList.toggle("on", b === el));
+    });
     const addGuestBtn = app.querySelector("[data-add-guest-seat]");
     if (addGuestBtn) addGuestBtn.onclick = async () => {
       const nameInput = document.getElementById("pick-seat-guest-name");
@@ -10389,7 +10400,8 @@ function attachHandlers(){
         // by design, see schema.sql), so they won't show up as a permanent group member.
         const guestId = uid();
         try {
-          const ok = await v2ClaimSeat(modal.gameId, modal.seatIndex, guestId, name);
+          const gBtn = app.querySelector("[data-guest-gender].on");
+          const ok = await v2ClaimSeat(modal.gameId, modal.seatIndex, guestId, name, gBtn ? gBtn.dataset.guestGender : "male");
           if (!ok) showAlert("המושב הזה כבר תפוס - בחרו מושב אחר.");
         } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
         closeModal();

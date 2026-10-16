@@ -143,6 +143,9 @@ _INIT_STATEMENTS = (
     # by this, not by created_by_name, which is just a display name anyone could copy.
     # NULL on tables from before this column (those fall back to the name client-side).
     "ALTER TABLE games ADD COLUMN IF NOT EXISTS created_by TEXT",
+    # A one-off guest's gender (ז / נ in the add-player window) - guests have no roster
+    # row to hold it, so it lives on their row for that one game. NULL = not given.
+    "ALTER TABLE game_players ADD COLUMN IF NOT EXISTS gender TEXT",
     # One-time, short-lived WebAuthn challenges (register or login), deleted when used.
     "CREATE TABLE IF NOT EXISTS passkey_challenges ("
     "  id TEXT PRIMARY KEY,"
@@ -1041,8 +1044,8 @@ def v2_get_game(game_id):
             if not _can_see_community(cur, caller, community_id):
                 return jsonify({"error": "not found"}), 404
 
-            cur.execute("SELECT player_id, name FROM game_players WHERE game_id = %s", (gid,))
-            players = [{"id": r[0], "name": r[1]} for r in cur.fetchall()]
+            cur.execute("SELECT player_id, name, gender FROM game_players WHERE game_id = %s", (gid,))
+            players = [{"id": r[0], "name": r[1], **({"gender": r[2]} if r[2] else {})} for r in cur.fetchall()]
 
             cur.execute("SELECT id, player_id, amount, ts, actor_name FROM buyins WHERE game_id = %s ORDER BY ts", (gid,))
             buyins = [
@@ -1131,8 +1134,8 @@ def v2_get_game_summary(game_id):
             if not _can_see_community(cur, caller, community_id):
                 return jsonify({"error": "not found"}), 404
 
-            cur.execute("SELECT player_id, name FROM game_players WHERE game_id = %s", (gid,))
-            players = [{"id": r[0], "name": r[1]} for r in cur.fetchall()]
+            cur.execute("SELECT player_id, name, gender FROM game_players WHERE game_id = %s", (gid,))
+            players = [{"id": r[0], "name": r[1], **({"gender": r[2]} if r[2] else {})} for r in cur.fetchall()]
 
             cur.execute(
                 "SELECT player_id, SUM(amount) FROM buyins WHERE game_id = %s GROUP BY player_id", (gid,)
@@ -1886,6 +1889,7 @@ def v2_claim_seat(game_id, seat_index):
     # transaction, matching seatPlayerIfRoom's bundled side effects client-side.
     body = request.get_json(silent=True) or {}
     player_id, name = body.get("playerId"), body.get("name")
+    gender = body.get("gender") if body.get("gender") in ("male", "female") else None
     if not _valid_id(player_id):
         return jsonify({"error": "playerId required"}), 400
     if not 0 <= seat_index < _MAX_SEATS:
@@ -1911,9 +1915,9 @@ def v2_claim_seat(game_id, seat_index):
                 conn.commit()
                 return jsonify({"conflict": True}), 409
             cur.execute(
-                "INSERT INTO game_players (game_id, player_id, name) VALUES (%s,%s,%s) "
+                "INSERT INTO game_players (game_id, player_id, name, gender) VALUES (%s,%s,%s,%s) "
                 "ON CONFLICT (game_id, player_id) DO NOTHING",
-                (game_id, player_id, name),
+                (game_id, player_id, name, gender),
             )
             cur.execute(
                 "UPDATE games SET live_chips = live_chips || %s::jsonb "
