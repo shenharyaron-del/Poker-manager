@@ -892,6 +892,18 @@ html.theme-light.theme-blue .setup-frame,html.theme-light.theme-blue .stats-fram
 .stats-frame{margin:16px 0 0;padding:6px 10px 10px;}
 .stats-frame .stats-frame-note{color:var(--muted);font-size:10px;margin:0 2px 2px;}
 .stats-frame .tl-scroll{background:transparent;border:none;padding:4px 0 0;}
+/* ריביי button: stronger colors, and a light sweep across it every 15 seconds. */
+.rb-confirm{position:relative;overflow:hidden;background:linear-gradient(180deg,#3654c4,#1c2c78);color:#fde68a;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 0 0 1px rgba(251,191,36,.35),0 6px 16px rgba(0,0,0,.5);}
+.rb-confirm::after{content:"";position:absolute;top:0;bottom:0;left:-60%;width:45%;pointer-events:none;
+  background:linear-gradient(105deg,transparent 0%,rgba(255,255,255,.55) 50%,transparent 100%);transform:skewX(-20deg);
+  animation:rb-shine 15s ease-in-out 1.5s infinite;}
+.rb-confirm:disabled::after{animation:none;display:none;}
+@keyframes rb-shine{0%{left:-60%}8%{left:120%}100%{left:120%}}
+@media (prefers-reduced-motion: reduce){.rb-confirm::after{animation:none;display:none;}}
+html.theme-light .rb-confirm{background:linear-gradient(180deg,#3654c4,#1c2c78);color:#fde68a;}
+html.theme-light.theme-blue .rb-confirm{background:linear-gradient(180deg,#ffe58a,#f5b82e 45%,#c4831a);color:#2a1d05;border-color:#fff3c4;box-shadow:0 0 0 1px rgba(255,243,196,.6),0 6px 16px rgba(10,30,50,.45);}
+html.theme-light.theme-sand .rb-confirm{background:linear-gradient(180deg,#bf8a45,#8f5d24);color:#fffaf0;border-color:#7a4a17;box-shadow:0 6px 16px rgba(90,55,20,.4);}
 </style>
 </head>
 <body>
