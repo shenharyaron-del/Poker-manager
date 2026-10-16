@@ -1445,15 +1445,16 @@ def v2_add_roster_player(community_id):
     player_id, name = body.get("id"), body.get("name")
     if not player_id or not name:
         return jsonify({"error": "id and name required"}), 400
+    gender = "female" if body.get("gender") == "female" else "male"
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO roster_players (id, community_id, name) VALUES (%s,%s,%s) "
+                "INSERT INTO roster_players (id, community_id, name, gender) VALUES (%s,%s,%s,%s) "
                 "ON CONFLICT (id) DO NOTHING",
-                (player_id, community_id, name),
+                (player_id, community_id, name, gender),
             )
         conn.commit()
-    return jsonify({"id": player_id, "name": name}), 201
+    return jsonify({"id": player_id, "name": name, "gender": gender}), 201
 
 
 @app.route("/api/v2/communities/<community_id>/roster/<player_id>", methods=["PATCH"])
