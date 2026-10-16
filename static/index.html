@@ -766,6 +766,7 @@ html.theme-light.theme-blue .mode-panel{background:#dcebf3;}
    around the panel; the panel itself stays light with dark text. */
 html.theme-light.theme-blue .overlay-fullscreen .modal{background:linear-gradient(#5f9ab8,#4d89a8 60%,#3d7595);--text:#fff;--muted:#e3f1f7;--gold:#f2c14e;--gold-text:#2a1d05;color:#fff;}
 html.theme-light.theme-blue .overlay-fullscreen .mode-panel{--text:#111;--muted:#1a1a1a;--gold:#a86a12;--gold-text:#fff;color:#111;}
+html.theme-light.theme-blue .overlay-fullscreen :is(.roster-row,.btn-ghost){--text:#111;--muted:#3b6b80;color:#111;}
 /* "מחשבון סיכויי פוקר" on the table screen */
 html.theme-light .odds-label{color:#0f4c6b!important;}
 html.theme-light.theme-sand .odds-label{color:#6b4a1f!important;}
@@ -6400,9 +6401,6 @@ function renderTableTimeline(g, c, myPlayerId){
     </div>`;
 }
 
-// End-of-evening window's opening tab: counting from a photo when the group has chip values
-// set up, otherwise the plain chip-total field (the photo tab can't count anything yet).
-function seatChipsDefaultMode(c){ return (c && (c.chipValues||[]).length) ? "byColor" : "chips"; }
 // Pre-filled name for a new table: "ערב פוקר" + the short Hebrew date, e.g. "ערב פוקר אוק 14".
 const HE_MONTHS_SHORT = ["ינו","פבר","מרץ","אפר","מאי","יוני","יולי","אוג","ספט","אוק","נוב","דצמ"];
 function defaultGameName(isoDate){
@@ -7446,45 +7444,9 @@ function renderModal(m){
     title = `סיום ערב: ${esc(p ? p.name : "שחקן")}`;
     const chipValues = c.chipValues || [];
     const ratio = c.chipRatio;
-    // Four distinct, mutually-exclusive ways to arrive at the same ₪ total - shown one at
-    // a time behind a mode switch instead of several inline together, which read as one
-    // confusing combined form (unclear which field to actually use, leftover values in
-    // the others). Only offer a mode the community actually has data for; "direct"
-    // (typing the ₪ total by hand) is always available as a fallback.
-    const availableModes = [
-      // First (rightmost) and the one that opens by default - except before the group has
-      // any chip values set up, when it can't count anything yet (see seatChipsDefaultMode).
-      // Always shown even then: the tab explains where to set them up (see modeBody).
-      {key:"byColor", label:"לפי צבע/תמונה", icon:"camera"},
-      {key:"chips", label:"סכום ז'יטונים", icon:"coins"},
-      {key:"profit", label:"רווח/הפסד", icon:"trend"},
-    ];
-    // Opened from the player screen's "ספירה באמצעות צילום" button: photo counting only,
-    // no other mode tabs.
-    const mode = m.photoOnly ? "byColor" : (m.chipsMode && availableModes.some(am => am.key === m.chipsMode)) ? m.chipsMode : seatChipsDefaultMode(c);
-    // Same tab-over-panel shape as the player screen's history/feed tabs: each mode owns a
-    // fixed color (chips = gold, profit = teal, by-photo = violet), the active tab merges
-    // into a panel framed in its color, and the inactive ones sit dimmed beside it.
-    const modeTabs = `
-      <div class="mode-tabs">
-        ${availableModes.map(am => `<button class="mode-tab mode-tab-${am.key}${mode===am.key?' active':''}" data-chips-mode="${am.key}">${icon(am.icon)}<span>${am.label}</span></button>`).join("")}
-      </div>
-    `;
-    // Fixed, non-editable recap at the top - same three numbers regardless of which mode
-    // is active below, live-updated on every keystroke in that mode's own input(s). The
-    // counted/profit cells stay blank (not "₪0") until m.chipsHeaderTouched - set once the
-    // player (or their photo) actually produces a real count - attachHandlers' own
-    // refreshHeader() overwrites these immediately after mount either way, this is just
-    // what briefly shows before that runs.
-    const touched = !!m.chipsHeaderTouched;
-    const initProfit = Math.round((chips-buyinTotal)*100)/100;
-    const headerHtml = `
-      <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:12px 4px;margin-bottom:22px;display:grid;grid-template-columns:1fr 1fr 1fr;text-align:center;">
-        <div><div style="font-size:11px;color:var(--muted);">סה"כ קנייה</div><div style="font-weight:700;">₪${buyinTotal}</div></div>
-        <div><div style="font-size:11px;color:var(--muted);">ז'יטונים שספרנו</div><div id="chips-header-counted" style="font-weight:700;">${touched ? `₪${chips}` : ""}</div></div>
-        <div><div style="font-size:11px;color:var(--muted);">רווח/הפסד</div><div id="chips-header-profit" style="font-weight:700;color:${profitColor(initProfit)};">${touched ? `${initProfit>0?'+':''}₪${initProfit}` : ""}</div></div>
-      </div>
-    `;
+    // Counting is by photo only - the old tabs (chip total / profit) were dropped; a
+    // manual amount is typed on the player screen's own end-of-evening frame instead.
+    const mode = "byColor";
     // If any already-departed player arranged payment directly through THIS player (see
     // arrangedWith below and computeArrangementAdjustments), note it right under the
     // recap - otherwise the jump in what this player owes the group looks unexplained.
@@ -7499,7 +7461,7 @@ function renderModal(m){
         total += Math.abs((rawBalances[id]||{}).profit || 0);
         if (pl) names.push(pl.name);
       });
-      arrangedNoteHtml = `<p style="color:var(--text);font-size:12px;margin:${m.photoOnly?'0 0 12px':'-14px 0 16px'};text-align:center;">כולל ₪${Math.round(total)} שהועברו ע"י ${names.map(esc).join(', ')} שעזב/ו את השולחן</p>`;
+      arrangedNoteHtml = `<p style="color:var(--text);font-size:12px;margin:0 0 12px;text-align:center;">כולל ₪${Math.round(total)} שהועברו ע"י ${names.map(esc).join(', ')} שעזב/ו את השולחן</p>`;
     }
     // Separate from arrangedNoteHtml above - this is a direct player-to-player payment,
     // not a cash handoff folded into the group settlement math. Without this, a player
@@ -7513,7 +7475,7 @@ function renderModal(m){
         const pl = g.players.find(pp2 => pp2.id === pp.fromPlayerId);
         return pl ? pl.name : "?";
       });
-      directPaymentsNoteHtml = `<p style="color:var(--text);font-size:12px;margin:${m.photoOnly?'0 0 12px':'-14px 0 16px'};text-align:center;">קיבלת ₪${Math.round(total)} מ-${names.map(esc).join(', ')}</p>`;
+      directPaymentsNoteHtml = `<p style="color:var(--text);font-size:12px;margin:0 0 12px;text-align:center;">קיבלת ₪${Math.round(total)} מ-${names.map(esc).join(', ')}</p>`;
     }
     let modeBody;
     const byColorUnavailable = mode === "byColor" && !chipValues.length;
@@ -7522,7 +7484,7 @@ function renderModal(m){
         <div style="text-align:center;padding:10px 6px 16px;">
           <div style="color:#c4a8ee;margin-bottom:8px;display:flex;justify-content:center;">${icon('camera')}</div>
           <div style="font-size:14px;font-weight:700;margin-bottom:6px;">ספירה לפי צבע/תמונה עדיין לא זמינה</div>
-          <div style="font-size:13px;color:var(--muted);line-height:1.5;">כדי שהצילום יעבוד, צריך להגדיר את הז'יטונים של המועדון ב"הגדרת פרופיל מועדון" ← לשונית "ז'יטונים".<br>${m.photoOnly ? "בינתיים אפשר להזין את הסכום ידנית במסך השחקן." : "בינתיים אפשר לספור בלשונית \"סכום ז'יטונים\" או \"רווח/הפסד\"."}</div>
+          <div style="font-size:13px;color:var(--muted);line-height:1.5;">כדי שהצילום יעבוד, צריך להגדיר את הז'יטונים של המועדון ב"הגדרת פרופיל מועדון" ← לשונית "ז'יטונים".<br>בינתיים אפשר להזין את הסכום ידנית במסך השחקן.</div>
         </div>
       `;
     } else if (mode === "byColor") {
@@ -7738,82 +7700,11 @@ function renderModal(m){
           `; }).join("")}
         </div>
       `;
-    } else if (mode === "chips") {
-      // Ratio-aware: typing chip count or shekels fills in the other field automatically
-      // (see the matching oninput wiring in attachHandlers), replacing the old separate
-      // "ספירת ז'יטונים"/"סכום ז'יטונים בש"ח" mode tabs with one combined field pair.
-      // RTL layout, right to left: ₪ field, "=", ratio, "÷", chip-count field - reads left
-      // to right as the actual math ("qty ÷ ratio = ₪"). The separator symbols get their
-      // own top margin (not just align-items:center on the row) so they line up with the
-      // INPUT boxes specifically, not the vertical center of label+input together - without
-      // it they read as centered against the label too and sit visibly too high.
-      modeBody = (ratio && ratio !== 1) ? `
-        <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">הקלידו כמה ז'יטונים נשאר לכם ביציאה, או ישר את הסכום בשקלים - השדה השני יתמלא אוטומטית (1 ש"ח שווה ${ratio} ז'יטונים).</p>
-        <div style="display:flex;align-items:flex-start;gap:8px;justify-content:center;margin-bottom:6px;">
-          <div class="field" style="margin:0;width:110px;text-align:center;">
-            <label style="text-align:center;">סכום בש"ח</label>
-            <div style="display:flex;align-items:center;justify-content:center;gap:4px;border-radius:12px;background:var(--input);border:1px solid var(--input-b);padding:0 10px;">
-              <span style="color:var(--muted);font-weight:700;">₪</span>
-              <input type="number" inputmode="numeric" id="seat-chips-direct" value="${chips}" onfocus="this.select()" style="width:60px;text-align:center;background:transparent;border:none;padding:11px 0;">
-            </div>
-          </div>
-          <span style="font-weight:700;color:var(--muted);margin-top:28px;">=</span>
-          <span style="font-weight:700;color:var(--muted);margin-top:28px;">${ratio}</span>
-          <span style="font-weight:700;color:var(--muted);margin-top:28px;">÷</span>
-          <div class="field" style="margin:0;width:100px;text-align:center;">
-            <label style="text-align:center;">כמות ז'יטונים</label>
-            <input type="number" inputmode="numeric" id="total-chip-qty" placeholder="0" style="width:100%;text-align:center;">
-          </div>
-        </div>
-      ` : `
-        ${ratio === 1 ? `<p style="color:var(--muted);font-size:12px;margin:0 0 10px;">הקלידו כמה ז'יטונים נשאר לכם ביציאה.</p>` : ""}
-        <div class="field" style="text-align:center;">
-          <label style="text-align:center;">סכום ז'יטונים בש"ח</label>
-          <div style="display:flex;align-items:center;justify-content:center;gap:4px;border-radius:12px;background:var(--input);border:1px solid var(--input-b);padding:0 10px;max-width:120px;margin:0 auto;">
-            <span style="color:var(--muted);font-weight:700;">₪</span>
-            <input type="number" inputmode="numeric" id="seat-chips-direct" value="${chips}" onfocus="this.select()" style="width:80px;text-align:center;background:transparent;border:none;padding:11px 0;">
-          </div>
-        </div>
-      `;
-    } else if (mode === "profit") {
-      // Sign picked via a toggle instead of typing a minus sign - a plain numeric keypad
-      // (inputmode="numeric") doesn't reliably offer a "-" key on mobile, and the picked
-      // sign is clearer at a glance than scanning for one anyway. The toggle and the
-      // amount field are one combined widget (big sign+number display, toggle bar right
-      // under it) rather than a row of mode buttons sitting above a separate plain field.
-      const profitSign = m.profitSign === "loss" ? "loss" : "profit";
-      const isLoss = profitSign === "loss";
-      const signColor = isLoss ? "#fb923c" : "#6ee7b7";
-      modeBody = `
-        <style>#seat-chips-profit::selection{color:${signColor};background:#1d4ed8;-webkit-text-fill-color:${signColor};}</style>
-        <div style="background:#1f1f1f;border-radius:16px;overflow:hidden;margin-bottom:14px;">
-          <div style="padding:22px 16px 14px;text-align:center;">
-            <div style="display:flex;align-items:baseline;justify-content:center;gap:0;">
-              <input type="number" inputmode="numeric" id="seat-chips-profit" placeholder="0" min="0" value="${esc(m.profitAmount||'')}" style="font-size:40px;font-weight:800;color:${signColor};background:transparent;border:none;width:${Math.max(String(m.profitAmount||'0').length,1)}ch;text-align:center;padding:0;" onfocus="this.select()">
-              <span style="font-size:40px;font-weight:800;color:${signColor};">${isLoss?'-':'+'}</span>
-            </div>
-            <div style="color:var(--muted);font-size:12px;margin-top:8px;">הקש רווח (+) או הפסד (-)</div>
-          </div>
-          <div style="display:flex;">
-            <button data-profit-sign="profit" style="flex:1;padding:12px 4px;border:none;font-weight:700;font-size:13px;background:#15803d;opacity:${!isLoss?1:.55};color:#fff;">רווח (+)</button>
-            <div style="flex:1;padding:12px 4px;color:var(--muted);text-align:center;font-size:12px;display:flex;align-items:center;justify-content:center;">רווח/הפסד</div>
-            <button data-profit-sign="loss" style="flex:1;padding:12px 4px;border:none;font-weight:700;font-size:13px;background:#c2410c;opacity:${isLoss?1:.55};color:#fff;">הפסד (-)</button>
-          </div>
-        </div>
-      `;
-    } else {
-      modeBody = `<div class="field"><label>סכום ז'יטונים בש"ח</label><input type="number" inputmode="numeric" id="seat-chips-direct" value="${chips}" onfocus="this.select()"></div>`;
     }
-    // Photo-only (see mode above): no recap header and no tab frame - just the photo flow.
     body = `
-      ${m.photoOnly ? "" : headerHtml}
       ${arrangedNoteHtml}
       ${directPaymentsNoteHtml}
-      ${m.photoOnly ? `<div style="margin-bottom:16px;">${modeBody}</div>` : `
-      <div class="mode-panel-wrap">
-        ${modeTabs}
-        <div class="mode-panel mode-panel-${mode}${mode===availableModes[0].key?' first':''}${mode===availableModes[availableModes.length-1].key?' last':''}">${modeBody}</div>
-      </div>`}
+      <div style="margin-bottom:16px;">${modeBody}</div>
       ${cashedOut ? `
         <p style="color:var(--muted);font-size:12px;">השחקן כבר יצא מהמשחק.</p>
         <button class="btn btn-ghost btn-block" data-return-to-game="${m.playerId}" style="margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('undo')} החזר למשחק</button>
@@ -8024,7 +7915,7 @@ function renderModal(m){
   const isSetupFlow = m.type === "chipSetup" || m.type === "payboxSettings" || m.type === "buyinSetup"
     || (m.type === "seatChips" && (() => {
       const sc = getCommunity((getGame(m.gameId)||{}).communityId) || {};
-      return (m.photoOnly ? "byColor" : (m.chipsMode || seatChipsDefaultMode(sc))) === "byColor" && (sc.chipValues||[]).length > 0;
+      return (sc.chipValues||[]).length > 0;
     })());
   return `
     <div class="overlay${topAnchored ? ' overlay-top' : ''}${isSetupFlow ? ' overlay-fullscreen' : ''}${m.type === "stats" ? ' overlay-full' : ''}">
@@ -8498,7 +8389,7 @@ function attachHandlers(){
     const resultEl = el.closest(".lv-calc").querySelector("#lv-chips-result");
     if (resultEl) resultEl.textContent = "₪" + (amount || 0);
   });
-  app.querySelectorAll("[data-leave-photo]").forEach(el => el.onclick = () => openModal({type:"seatChips", gameId: nav.gameId, playerId: viewedPid(), photoOnly: true}));
+  app.querySelectorAll("[data-leave-photo]").forEach(el => el.onclick = () => openModal({type:"seatChips", gameId: nav.gameId, playerId: viewedPid()}));
   app.querySelectorAll("[data-leave-confirm]").forEach(el => el.onclick = async () => {
     const gameId = nav.gameId, pid = viewedPid();
     const key = gameId + ":" + pid;
@@ -10688,68 +10579,11 @@ function attachHandlers(){
     const ratio = c.chipRatio;
     const chipValues = c.chipValues || [];
     const currentChips = (g.liveChips||{})[modal.playerId] || 0;
-    const availableModes = ["byColor", "chips", "profit"];
-    const mode = modal.photoOnly ? "byColor" : (modal.chipsMode && availableModes.includes(modal.chipsMode)) ? modal.chipsMode : seatChipsDefaultMode(c);
-    const profitSign = modal.profitSign === "loss" ? "loss" : "profit";
-    // Switching modes swaps out the input(s) entirely - anything typed in the mode being
-    // left is about to silently vanish, so warn first rather than losing it with no
-    // chance to notice (e.g. a half-typed per-color count).
-    const hasEnteredData = () => {
-      if (mode === "byColor") {
-        return Array.from(app.querySelectorAll("[data-color-count]")).some(el => (parseFloat(el.value)||0) !== 0);
-      }
-      if (mode === "profit") return (document.getElementById("seat-chips-profit")||{}).value?.trim() !== "";
-      const qtyEl = document.getElementById("total-chip-qty");
-      if (qtyEl && qtyEl.value.trim() !== "") return true;
-      const el = document.getElementById("seat-chips-direct");
-      return el && el.value.trim() !== "" && parseFloat(el.value) !== currentChips;
-    };
-    // Jumps straight to typing after picking a mode - one less tap before the keyboard
-    // is actually up. updateModal() renders synchronously, so the new mode's input
-    // already exists in the DOM by the time this runs. byColor has no single field to
-    // land on (the per-color counts are secondary to the photo/pickers) - auto-focusing
-    // the first one just popped the keyboard open over the photo every time this tab
-    // opened, so it's skipped here.
-    const focusModeInput = (forMode) => {
-      const idByMode = {chips:"seat-chips-direct", profit:"seat-chips-profit"};
-      const el = idByMode[forMode] ? document.getElementById(idByMode[forMode]) : null;
-      if (el) el.focus();
-    };
-    app.querySelectorAll("[data-chips-mode]").forEach(el => el.onclick = async () => {
-      if (hasEnteredData() && !(await showConfirm("יש נתונים שהוקלדו במצב הנוכחי - מעבר למצב אחר ימחק אותם. להמשיך?"))) return;
-      const newMode = el.dataset.chipsMode;
-      // The confirm above already told the user leaving byColor deletes its data - that
-      // has to include the photo(s) themselves, not just the per-color table (which reset
-      // to 0 on its own just by re-rendering with no live population). Leaving the photo
-      // in modal state meant coming back to byColor later showed a stale photo sitting
-      // above an already-zeroed table, out of sync with each other.
-      const leavingByColor = mode === "byColor" ? {chipPhotos: [], chipValuePickerFor: null, chipRowPickerFor: null} : {};
-      // The header recap goes blank again on every mode switch, matching the data it's
-      // summarizing having just been discarded (see leavingByColor above, and byColor's
-      // table resetting to 0 on its own just by losing its photos) - showing the OLD mode's
-      // last count would otherwise linger over the new, still-empty mode's inputs.
-      updateModal({chipsMode: newMode, chipsHeaderTouched: false, ...leavingByColor});
-      focusModeInput(newMode);
-    });
-    app.querySelectorAll("[data-profit-sign]").forEach(el => el.onclick = () => {
-      // Re-rendering the modal (updateModal) rebuilds this input from scratch - carry its
-      // current value through as profitAmount so picking a sign doesn't erase what was
-      // already typed, only the sign/color (see its value="" binding above).
-      const currentAmount = (document.getElementById("seat-chips-profit")||{}).value || "";
-      updateModal({profitSign: el.dataset.profitSign, profitAmount: currentAmount});
-      const amountInput = document.getElementById("seat-chips-profit");
-      if (amountInput) amountInput.focus();
-    });
+    const mode = "byColor";
     // "Counted" here means today's mode's own current input(s), read fresh each time -
     // used both to keep the fixed recap header live and to compute what actually gets
     // saved on confirm, so the two can never disagree with each other.
     const computeCounted = () => {
-      if (mode === "profit") {
-        const el = document.getElementById("seat-chips-profit");
-        const v = el ? parseFloat(el.value) : NaN;
-        const magnitude = isNaN(v) ? 0 : Math.abs(v);
-        return buyinTotal + (profitSign === "loss" ? -magnitude : magnitude);
-      }
       if (mode === "byColor") {
         let total = 0;
         // Editable input, pre-filled from the photo(s) on every render (see colorTotals
@@ -10765,9 +10599,7 @@ function attachHandlers(){
         });
         return total;
       }
-      const el = document.getElementById("seat-chips-direct");
-      const v = el ? parseFloat(el.value) : NaN;
-      return isNaN(v) ? 0 : v;
+      return 0;
     };
     // Mutated directly on the live modal object (no updateModal/render - this runs on
     // every keystroke, and re-rendering the whole modal on each one would both be overkill
@@ -10794,37 +10626,6 @@ function attachHandlers(){
       if (profitEl) { profitEl.textContent = `${profit>0?'+':''}₪${profit}`; profitEl.style.color = profitColor(profit); }
     };
     app.querySelectorAll("input[type=number]").forEach(el => el.oninput = () => { markHeaderTouched(); refreshHeader(); });
-    // profit mode's big amount field also shrinks/grows to hug its own digits (in "ch"
-    // units, ~1 digit wide each) so the number stays visually centered with the sign snug
-    // against it, instead of sitting in a wide fixed box - overrides the generic
-    // refreshHeader-only binding just set above, layering the resize on top of it.
-    const profitAmountInput = document.getElementById("seat-chips-profit");
-    if (profitAmountInput) profitAmountInput.oninput = () => {
-      profitAmountInput.style.width = Math.max(profitAmountInput.value.length, 1) + "ch";
-      markHeaderTouched();
-      refreshHeader();
-    };
-    // "chips" mode's two fields (shekels / chip count) mirror each other live via the
-    // community's ratio - overrides the generic refreshHeader-only binding just set above
-    // for these two specific inputs, layering the cross-fill on top of it.
-    if (mode === "chips" && ratio > 0) {
-      const directInput = document.getElementById("seat-chips-direct");
-      const qtyInput = document.getElementById("total-chip-qty");
-      if (directInput && qtyInput) {
-        directInput.oninput = () => {
-          const v = parseFloat(directInput.value);
-          qtyInput.value = isNaN(v) ? "" : Math.round(v * ratio);
-          markHeaderTouched();
-          refreshHeader();
-        };
-        qtyInput.oninput = () => {
-          const v = parseFloat(qtyInput.value);
-          directInput.value = isNaN(v) ? "" : Math.round((v / ratio) * 100) / 100;
-          markHeaderTouched();
-          refreshHeader();
-        };
-      }
-    }
     refreshHeader();
     if (mode === "byColor") {
       // Sends the fresh stack photo PLUS each known chip's own reference photo from
@@ -11029,7 +10830,7 @@ function attachHandlers(){
       // the total buy-in used to fall back to the last live-chips value without a word, and
       // an untouched form ended the night at ₪0 on one tap.
       if (isNaN(v) || v < 0) { showAlert("הסכום לא תקין - ההפסד לא יכול להיות גדול מסך הקנייה."); return; }
-      if (!modal.chipsHeaderTouched && mode !== "profit") {
+      if (!modal.chipsHeaderTouched) {
         const sure = await showConfirm(`לא הוזן סכום ז'יטונים. לסיים את הערב עם ₪${v}?`);
         if (!sure) return;
       }
