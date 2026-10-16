@@ -6198,11 +6198,11 @@ function renderModal(m){
       ${m.error ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.error)}</p>` : ""}
       <button class="btn btn-primary btn-block" data-add-email-verify>אשר</button>
     ` : `
-      <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">נשלח קוד לאימות. אחרי האימות תוכל להתחבר גם עם האימייל, וטביעת האצבע תמשיך לעבוד.</p>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">${authSettings.requireVerifyExistingEmail ? "נשלח קוד לאימות. אחרי האימות" : "אחרי ההוספה"} תוכל להתחבר גם עם האימייל, וטביעת האצבע תמשיך לעבוד.</p>
       <form action="#" autocomplete="on" onsubmit="return false;">
         <input type="email" id="add-email-input" name="email" placeholder="האימייל שלך" dir="ltr" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" value="${esc(m.email || "")}" style="width:100%;text-align:center;margin-bottom:8px;" autofocus>
         ${m.error ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.error)}</p>` : ""}
-        <button type="submit" class="btn btn-primary btn-block" data-add-email-send>שלח קוד</button>
+        <button type="submit" class="btn btn-primary btn-block" data-add-email-send>${authSettings.requireVerifyExistingEmail ? "שלח קוד" : "הוסף אימייל"}</button>
       </form>
     `;
   } else if (m.type === "identityName") {
@@ -8932,7 +8932,15 @@ function attachHandlers(){
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { updateModal({email, error: "כתובת אימייל לא תקינה"}); return; }
       sendBtn.disabled = true; showButtonLoading(sendBtn);
       try {
-        await addEmailPost("request", {email});
+        const res = await addEmailPost("request", {email});
+        if (res.email) {
+          // Verification codes are off (admin setup) - attached right away.
+          applyAccountToIdentity(res);
+          saveIdentity();
+          closeModal();
+          showAlert("האימייל נוסף לחשבון ✓");
+          return;
+        }
         updateModal({step: "code", email, error: null});
       } catch(e) {
         updateModal({email, error: e.status === 409 ? "האימייל הזה כבר רשום לחשבון אחר - אי אפשר לחבר אותו לחשבון הזה." : "שליחת הקוד נכשלה - נסו שוב."});
