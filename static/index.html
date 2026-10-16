@@ -894,9 +894,10 @@ html.theme-light.theme-blue .setup-frame,html.theme-light.theme-blue .stats-fram
 html.theme-light .rb-confirm{background:linear-gradient(180deg,#3654c4,#1c2c78);color:#fde68a;}
 html.theme-light.theme-blue .rb-confirm{background:linear-gradient(180deg,#ffe58a,#f5b82e 45%,#c4831a);color:#2a1d05;border-color:#fff3c4;box-shadow:0 0 0 1px rgba(255,243,196,.6),0 6px 16px rgba(10,30,50,.45);}
 html.theme-light.theme-sand .rb-confirm{background:linear-gradient(180deg,#bf8a45,#8f5d24);color:#fffaf0;border-color:#7a4a17;box-shadow:0 6px 16px rgba(90,55,20,.4);}
-.pp-name-row{display:flex;align-items:center;justify-content:center;gap:8px;padding:0 4%;}
-.pp-name-row .pp-name-box{flex:1 1 auto;min-width:0;max-width:62%;}
-.pp-back-me{flex:0 1 auto;max-width:36%;min-height:44px;padding:6px 14px;border-radius:12px;border:2px solid #93c5fd;background:#1d4ed8;color:#fff;font-family:inherit;font-size:16px;font-weight:800;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.35);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pp-name-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;align-items:stretch;}
+.pp-name-row .pp-name-box{grid-column:2 / span 2;min-width:0;max-width:none;width:100%;padding:6px 8px;display:flex;align-items:center;justify-content:center;}
+.pp-name-row .pp-name-box bdi{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pp-back-me{grid-column:4;min-width:0;min-height:44px;padding:6px 6px;border-radius:12px;border:2px solid #93c5fd;background:#1d4ed8;color:#fff;font-family:inherit;font-size:16px;font-weight:800;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.35);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 </style>
 </head>
 <body>
@@ -5601,9 +5602,9 @@ function renderPlayerScreen(gameId){
     // Looking at someone else: my own name, as a button beside theirs, takes me back to my
     // own screen.
     const me = myPlayerId && g.players.find(x => x.id === myPlayerId);
-    return viewingOther && me
-      ? `<div class="pp-name-row">${box}<button type="button" class="pp-back-me" data-pp-back-me title="חזרה למסך שלי"><bdi>${esc(me.name)}</bdi></button></div>`
-      : box;
+    // Same 4-column grid as the tiles above: the name spans the 2nd-3rd columns, my own
+    // name button (when looking at someone else) sits in the 4th.
+    return `<div class="pp-name-row">${box}${viewingOther && me ? `<button type="button" class="pp-back-me" data-pp-back-me title="חזרה למסך שלי"><bdi>${esc(me.name)}</bdi></button>` : ""}</div>`;
   })();
   // Tiles above the name: everyone who entered tonight, in order, then a "הזמן שחקן" tile
   // in the next free spot (it replaces the header's invite button here). At most 8 tiles, 4
