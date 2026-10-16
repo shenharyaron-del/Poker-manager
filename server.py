@@ -716,6 +716,14 @@ def _caller():
     return {**ident, **invite}
 
 
+def _forget_caller(client_id):
+    # Called right after a device logs in: its cached identity (from before, when it was
+    # still anonymous) would otherwise hide the person's clubs for up to
+    # _CALLER_CACHE_SECONDS after the login.
+    with _caller_cache_lock:
+        _caller_cache.pop(client_id, None)
+
+
 def _load_caller_identity(client_id):
     ids, roster_ids, is_super = set(), set(), False
     if client_id:
@@ -2427,6 +2435,7 @@ def verify_login_code():
     account = _get_account(email) or _default_account(email)
     _claim_player_id(account, local_id)
     _save_account(email, account)
+    _forget_caller(client_id)
     return _with_device_cookie(jsonify({"email": email, **account, "hasPasskey": _has_passkey(email)}), client_id)
 
 
@@ -2466,6 +2475,7 @@ def quick_login():
     account = _get_account(email) or _default_account(email)
     _claim_player_id(account, local_id)
     _save_account(email, account)
+    _forget_caller(client_id)
     return _with_device_cookie(jsonify({"email": email, **account, "hasPasskey": _has_passkey(email)}), client_id)
 
 
@@ -2746,7 +2756,144 @@ def passkey_login_verify():
     account = _get_account(email) or _default_account(email)
     _claim_player_id(account, local_id)
     _save_account(email, account)
+    _forget_caller(client_id)
     return _with_device_cookie(jsonify({"email": email, **account, "hasPasskey": True}), client_id)
+
+
+# ---------- Passkey-only accounts (phase 2) ----------
+# A new player can sign up with just a fingerprint. The account still lives in the same
+# email-keyed tables, under an internal key with no "@" ("pk:" + random hex, lowercase so
+# the lower()-ing endpoints like set-role/delete-account still match it) - so "has a real
+# email" is simply "@" in the key, and no login code can ever be sent to it (EMAIL_RE).
+# Adding a real email later (verified by code) re-keys the account in place.
+def _is_passkey_only(key):
+    return bool(key) and "@" not in key
+
+
+@app.route("/api/auth/passkey/signup-options", methods=["POST"])
+def passkey_signup_options():
+    if webauthn is None:
+        return _passkey_unavailable()
+    key = "pk:" + secrets.token_hex(12)
+    rp_id, _ = _passkey_rp()
+    options = webauthn.generate_registration_options(
+        rp_id=rp_id,
+        rp_name="Poker Manager",
+        user_id=hashlib.sha256(("pm-user:" + key).encode()).digest(),
+        user_name="Poker Manager",
+        user_display_name="Poker Manager",
+        authenticator_selection=AuthenticatorSelectionCriteria(
+            resident_key=ResidentKeyRequirement.REQUIRED,
+            user_verification=UserVerificationRequirement.PREFERRED,
+        ),
+    )
+    challenge_id = _store_challenge(options.challenge, key)
+    return jsonify({"challengeId": challenge_id, "options": json.loads(webauthn.options_to_json(options))})
+
+
+@app.route("/api/auth/passkey/signup-verify", methods=["POST"])
+def passkey_signup_verify():
+    if webauthn is None:
+        return _passkey_unavailable()
+    body = request.get_json(silent=True) or {}
+    client_id = str(body.get("clientId", "")).strip()
+    local_id = str(body.get("localId", "")).strip()
+    if not client_id:
+        return jsonify({"error": "missing clientId"}), 400
+    challenge, key = _take_challenge(body.get("challengeId"))
+    if not challenge or not _is_passkey_only(key):
+        return jsonify({"error": "expired"}), 400
+    rp_id, origin = _passkey_rp()
+    try:
+        verified = webauthn.verify_registration_response(
+            credential=body.get("credential"),
+            expected_challenge=challenge,
+            expected_rp_id=rp_id,
+            expected_origin=origin,
+        )
+    except Exception as e:
+        return jsonify({"error": "verification failed", "detail": str(e)}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO passkeys (credential_id, email, public_key, sign_count) VALUES (%s, %s, %s, %s)",
+                (bytes_to_base64url(verified.credential_id), key,
+                 bytes_to_base64url(verified.credential_public_key), verified.sign_count),
+            )
+            cur.execute(
+                "INSERT INTO trusted_devices (client_id, email) VALUES (%s, %s) "
+                "ON CONFLICT (client_id) DO UPDATE SET email = EXCLUDED.email",
+                (client_id, key),
+            )
+        conn.commit()
+    account = _default_account(key)
+    _claim_player_id(account, local_id)
+    _save_account(key, account)
+    _forget_caller(client_id)
+    return _with_device_cookie(jsonify({"email": key, **account, "hasPasskey": True}), client_id)
+
+
+def _email_taken(email):
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM accounts WHERE email = %s UNION SELECT 1 FROM trusted_devices WHERE email = %s LIMIT 1",
+                (email, email),
+            )
+            row = cur.fetchone()
+        conn.commit()
+    return row is not None
+
+
+@app.route("/api/auth/add-email/request", methods=["POST"])
+def add_email_request():
+    # Step 1 of "הוסף אימייל כגיבוי": only for a passkey-only account, and only for an
+    # address no other account uses (two people's histories are never merged here).
+    body = request.get_json(silent=True) or {}
+    key = _trusted_email(str(body.get("clientId", "")).strip())
+    email = str(body.get("email", "")).strip().lower()
+    if not _is_passkey_only(key):
+        return jsonify({"error": "not a passkey-only account"}), 403
+    if not EMAIL_RE.match(email):
+        return jsonify({"error": "invalid email"}), 400
+    if _email_taken(email):
+        return jsonify({"error": "email taken"}), 409
+    return request_login_code()
+
+
+@app.route("/api/auth/add-email/verify", methods=["POST"])
+def add_email_verify():
+    body = request.get_json(silent=True) or {}
+    client_id = str(body.get("clientId", "")).strip()
+    key = _trusted_email(client_id)
+    email = str(body.get("email", "")).strip().lower()
+    code = str(body.get("code", "")).strip()
+    if not _is_passkey_only(key):
+        return jsonify({"error": "not a passkey-only account"}), 403
+    if not EMAIL_RE.match(email) or not code:
+        return jsonify({"error": "missing email/code"}), 400
+    if _email_taken(email):
+        return jsonify({"error": "email taken"}), 409
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT code, expires_at FROM login_codes WHERE email = %s", (email,))
+            row = cur.fetchone()
+            if not row or row[0] != code or row[1] < datetime.utcnow():
+                conn.commit()
+                return jsonify({"error": "invalid or expired code"}), 400
+            cur.execute("DELETE FROM login_codes WHERE email = %s", (email,))
+            # Re-key in place, all in one transaction: same account data, devices and
+            # passkeys, now under the real address.
+            cur.execute("UPDATE accounts SET email = %s WHERE email = %s", (email, key))
+            cur.execute("UPDATE trusted_devices SET email = %s WHERE email = %s", (email, key))
+            cur.execute("UPDATE passkeys SET email = %s WHERE email = %s", (email, key))
+        conn.commit()
+    account = _get_account(email) or _default_account(email)
+    if email == SUPER_ADMIN_EMAIL and account.get("role") != "superAdmin":
+        account["role"] = "superAdmin"
+        _save_account(email, account)
+    _forget_caller(client_id)
+    return jsonify({"email": email, **account, "hasPasskey": True})
 
 
 @app.route("/api/auth/claim-player-id", methods=["POST"])
