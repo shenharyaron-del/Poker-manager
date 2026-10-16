@@ -896,7 +896,7 @@ html.theme-light.theme-sand .rb-confirm{background:linear-gradient(180deg,#bf8a4
 .tv-seg{display:flex;border:1px solid rgba(212,175,55,.55);border-radius:10px;overflow:hidden;flex-shrink:0;}
 .tv-seg button{background:transparent;border:none;color:var(--text);font-family:inherit;font-size:13px;padding:6px 12px;cursor:pointer;}
 .tv-seg button.on{background:var(--gold);color:var(--gold-text);font-weight:700;}
-.ttl-chart svg{display:block;height:auto;overflow:visible;}
+.ttl-chart svg{display:block;height:auto;overflow:visible;cursor:pointer;}
 .ttl-grid{stroke:var(--card-b);stroke-width:1;opacity:.6;}
 .ttl-zero{stroke:var(--muted);stroke-width:1;opacity:.7;}
 .ttl-ax{fill:var(--muted);font-size:9px;font-family:inherit;}
@@ -6194,7 +6194,7 @@ function renderTableTimeline(g, c, myPlayerId){
   return `
     <div class="px5 ttl-wrap">
       <fieldset class="leave-frame stats-frame" style="margin-top:0;"><legend>קניות לאורך הערב</legend>
-        <div class="ttl-chart"><svg viewBox="0 0 ${W} ${H}" width="100%" direction="ltr">${svg}</svg></div>
+        <div class="ttl-chart"><svg viewBox="0 0 ${W} ${H}" width="100%" direction="ltr" data-ttl-lines="${esc(JSON.stringify(series.map(s => [s.pid, s.pts.map(p => [Math.round(X(p[0])), Math.round(Y(p[1]))])])))}">${svg}</svg></div>
         <div class="ttl-chips">${chips}</div>
       </fieldset>
       <fieldset class="leave-frame stats-frame ttl-list-frame"><legend>מה קרה בערב</legend>
@@ -7891,6 +7891,28 @@ function attachHandlers(){
   app.querySelectorAll("[data-timeline-pick]").forEach(el => el.onclick = () => {
     const gid = nav.gameId, pid = el.dataset.timelinePick;
     timelineHighlight[gid] = timelineHighlight[gid] === pid ? null : pid;
+    render();
+  });
+  // Tapping a line in the chart picks that player, same as their chip below it. Lines
+  // that share the tapped spot (several players at the same amount) - the first one in
+  // tonight's entry order wins.
+  app.querySelectorAll("[data-ttl-lines]").forEach(svgEl => svgEl.onclick = (e) => {
+    let lines;
+    try { lines = JSON.parse(svgEl.dataset.ttlLines); } catch(err) { return; }
+    const ctm = svgEl.getScreenCTM();
+    if (!ctm) return;
+    const pt = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
+    const segDist = (ax, ay, bx, by) => {
+      const dx = bx - ax, dy = by - ay, len = dx * dx + dy * dy;
+      const t = len ? Math.max(0, Math.min(1, ((pt.x - ax) * dx + (pt.y - ay) * dy) / len)) : 0;
+      return Math.hypot(pt.x - (ax + t * dx), pt.y - (ay + t * dy));
+    };
+    const hit = lines.find(([, pts]) => pts.some((p, i) => i && segDist(pts[i-1][0], pts[i-1][1], p[0], p[1]) <= 8));
+    if (!hit) return;
+    const gid = nav.gameId, g = getGame(gid);
+    // My own line is always drawn in gold - tapping it just clears the other highlight.
+    const mine = g && myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+    timelineHighlight[gid] = (hit[0] === mine || timelineHighlight[gid] === hit[0]) ? null : hit[0];
     render();
   });
   app.querySelectorAll("[data-pp-view]").forEach(el => el.onclick = () => {
