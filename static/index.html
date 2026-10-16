@@ -846,8 +846,6 @@ html.theme-light .pp-tile{background:rgba(255,255,255,.5);}
 html.theme-light .pp-tile.on{background:#fff3cf;}
 html.theme-light .pp-name-box{background-color:rgba(255,255,255,.55);}
 .pp-name-box{position:relative;}
-.pp-name-box.with-back{padding-left:72px;padding-right:72px;}
-.pp-back-me{position:absolute;left:6px;top:50%;transform:translateY(-50%);background:#fff;color:#7f1d1d;border:none;border-radius:999px;padding:4px 10px;font-family:inherit;font-size:12px;font-weight:700;line-height:1.3;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.25);}
 .club-act-invite{background:#2563eb;color:#fff;}
 /* Activity feed / history panels on the light themes: a light panel with white bubbles and
    dark text - the dark panel kept the theme's dark text on near-black. */
@@ -877,6 +875,10 @@ html.theme-light.theme-blue .chat-bubble{--text:#0e2633;color:#0e2633;}
 .login-link u{color:var(--gold);text-underline-offset:3px;}
 .signup-existing{margin-top:14px;padding-top:12px;border-top:1px solid var(--card-b);text-align:center;color:var(--muted);font-size:12px;}
 .signup-existing .btn{margin-top:8px;}
+.pp-tile.pp-tile-me{border:2px solid #60a5fa;background:rgba(96,165,250,.16);}
+.pp-tile.pp-tile-me small{color:#93c5fd;font-weight:700;}
+html.theme-light .pp-tile.pp-tile-me{border-color:#2563eb;background:#dbeafe;}
+html.theme-light .pp-tile.pp-tile-me small{color:#1d4ed8;}
 </style>
 </head>
 <body>
@@ -5497,20 +5499,25 @@ function renderPlayerScreen(gameId){
     const nm = p ? p.name : "";
     const len = nm.length + (cashedOut ? 6 : 0);
     const font = len > 24 ? 17 : len > 18 ? 20 : null;
-    return `<div class="pp-name-box${viewingOther ? ' with-back' : ''}" dir="rtl"${font ? ` style="font-size:${font}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut ? ' · יצא' : ''}${viewingOther ? `<button type="button" class="pp-back-me" data-pp-back-me title="חזרה למסך שלי">↩ אני</button>` : ''}</div>`;
+    return `<div class="pp-name-box" dir="rtl"${font ? ` style="font-size:${font}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut ? ' · יצא' : ''}</div>`;
   })();
   // Tiles above the name: everyone who entered tonight, in order, then a "הזמן שחקן" tile
   // in the next free spot (it replaces the header's invite button here). At most 8 tiles, 4
   // per row - past that, the 8th becomes "עוד N" with a picker for the rest (and invite).
   // An admin taps a tile to see that player's screen; for everyone else they're a roster.
   const tilesHtml = (() => {
-    // Not me - my own name is already the big one under the tiles.
-    const entered = g.players.filter(pl => pl.id !== myPlayerId && ((g.seats||[]).includes(pl.id) || pl.id in (g.cashouts||{}))).map(pl => pl.id);
+    // Everyone but the player in the big box. Each keeps a fixed slot (tonight's entry
+    // order, without me); while I'm looking at someone else, MY tile (⭐ אני) takes that
+    // player's slot - tapping it is how I get back to my own screen.
+    let entered = g.players.filter(pl => pl.id !== myPlayerId && ((g.seats||[]).includes(pl.id) || pl.id in (g.cashouts||{}))).map(pl => pl.id);
+    const meEntered = !!myPlayerId && g.players.some(pl => pl.id === myPlayerId && ((g.seats||[]).includes(pl.id) || pl.id in (g.cashouts||{})));
+    if (viewingOther && meEntered && entered.includes(pid)) entered = entered.map(id => id === pid ? myPlayerId : id);
     // 9 seats at most - no "הזמן שחקן" once they're all taken.
     const canInvite = !g.closed && (g.seats||[]).slice(0, 9).filter(Boolean).length < 9;
     const tile = id => {
       const pl = g.players.find(x => x.id === id);
       const out = id in (g.cashouts||{});
+      if (id === myPlayerId) return `<button type="button" class="pp-tile pp-tile-me${out?' out':''}" data-pp-view="${id}" title="חזרה למסך שלי"><bdi>${esc(pl.name)}</bdi><small>⭐ אני</small></button>`;
       return `<button type="button" class="pp-tile${id===pid?' on':''}${out?' out':''}" data-pp-view="${id}"><bdi>${esc(pl.name)}</bdi>${out?'<small>יצא</small>':''}</button>`;
     };
     const inviteTile = `<button type="button" class="pp-tile pp-tile-invite${aloneAtTable?' tile-hint':''}" data-invite-game="${g.id}">${icon('share')}<span>הזמן שחקן</span></button>`;
@@ -5518,6 +5525,9 @@ function renderPlayerScreen(gameId){
     let out;
     if (total <= 8) out = entered.map(tile).join("") + (canInvite ? inviteTile : "");
     else {
+      // My tile always stays among the visible ones, never inside "עוד N".
+      const meAt = entered.indexOf(myPlayerId);
+      if (meAt > 6) { entered = entered.slice(); [entered[6], entered[meAt]] = [entered[meAt], entered[6]]; }
       const shown = entered.slice(0, 7), rest = entered.slice(7);
       out = shown.map(tile).join("") + `<div class="pp-tile pp-tile-more">עוד ${rest.length}${canInvite ? ' / הזמנה' : ''}<select data-pp-more dir="rtl">
         <option value="" selected disabled>בחרו…</option>
@@ -8213,7 +8223,6 @@ function attachHandlers(){
     playerViewTarget = (id === mine || id === playerViewTarget) ? null : id;
     render();
   });
-  app.querySelectorAll("[data-pp-back-me]").forEach(el => el.onclick = () => { playerViewTarget = null; render(); });
   app.querySelectorAll("[data-pp-more]").forEach(el => el.onchange = () => {
     const v = el.value;
     if (v === "__invite__") { inviteToGame(nav.gameId); render(); return; }
