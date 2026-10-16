@@ -6870,7 +6870,7 @@ function renderModal(m){
         <div class="row" style="gap:8px;"><span>${esc(p.name)}</span>${netBadge(playerNetProfit(m.communityId, p.id))}</div>
         <div class="row" style="gap:4px;">
           ${roleBtn}
-          <button class="icon-btn danger" data-remove-player="${p.id}">${icon('trash')}</button>
+          ${viewerIsAdmin ? `<button class="icon-btn danger" data-remove-player="${p.id}">${icon('trash')}</button>` : ""}
         </div>
       </div>`;
     }).join("");

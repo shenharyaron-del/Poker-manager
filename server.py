@@ -839,6 +839,75 @@ def _forbidden():
     return jsonify({"error": "forbidden"}), 403
 
 
+def _guard(community_id=None, game_id=None, need="member", players=None):
+    """None when the caller may go ahead, else a 403 response.
+
+    need: "member" (can see the club - which an invite link also grants, so a new player
+    can join), "community_admin" or "table_admin". players: for "admin or the player
+    themself" actions - also allowed when every one of these player ids is the caller's.
+    An unknown game/club passes through so the endpoint itself answers 404.
+    """
+    caller = _caller()
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            if game_id and not community_id:
+                community_id = _game_community(cur, game_id)
+            if not community_id:
+                conn.commit()
+                return None
+            r = _rights(cur, caller, community_id, game_id)
+        conn.commit()
+    if not r["member"]:
+        return _forbidden()
+    if need == "member" or r.get(need):
+        return None
+    if players and all(pid in r["my_players"] for pid in players):
+        return None
+    return _forbidden()
+
+
+def _roster_patch_denied(community_id, player_id, body):
+    # isAdmin: a community admin's toggle. clientId (linking a row to a person): a
+    # community admin; or the caller linking a row to themself, when that row isn't
+    # already someone else's; or a table admin's pre-registered guest, whose new unlinked
+    # row is linked to its own id (see v2PreRegisterPlayer).
+    if "isAdmin" in body:
+        denied = _guard(community_id=community_id, need="community_admin")
+        if denied:
+            return denied
+    if "clientId" in body:
+        denied = _guard(community_id=community_id)
+        if denied:
+            return denied
+        caller = _caller()
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT client_id FROM roster_players WHERE id = %s AND community_id = %s",
+                            (player_id, community_id))
+                row = cur.fetchone()
+                r = _rights(cur, caller, community_id)
+            conn.commit()
+        current = row[0] if row else None
+        new = body.get("clientId")
+        if r["community_admin"] or not row:
+            return None
+        if new in caller["ids"] and (not current or current in caller["ids"]):
+            return None
+        if not current and new == player_id:
+            return None
+        return _forbidden()
+    return None
+
+
+def _seat_occupant(game_id, seat_index):
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT seats -> %s FROM games WHERE id = %s", (seat_index, game_id))
+            row = cur.fetchone()
+        conn.commit()
+    return row[0] if row and isinstance(row[0], str) else None
+
+
 @app.route("/api/v2/communities", methods=["GET"])
 def v2_list_communities():
     # Batches chip_values/paybox_links/roster_players across EVERY community into one query
@@ -1113,6 +1182,9 @@ def v2_get_game_summary(game_id):
 
 @app.route("/api/v2/games/<game_id>/events", methods=["POST"])
 def v2_add_game_event(game_id):
+    denied = _guard(game_id=game_id)
+    if denied:
+        return denied
     # Only for the action types that leave no other trace - see game_events' own comment
     # in _INIT_STATEMENTS. player_id is nullable (a whole-night event like
     # "night_declared_over" isn't about any one seat); amount is nullable too (only
@@ -1206,6 +1278,9 @@ def v2_create_community():
 
 @app.route("/api/v2/communities/<community_id>", methods=["PATCH"])
 def v2_update_community(community_id):
+    denied = _guard(community_id=community_id, need="community_admin")
+    if denied:
+        return denied
     body = request.get_json(silent=True) or {}
     updated_at = body.get("updatedAt")
     if not updated_at:
@@ -1281,6 +1356,9 @@ def v2_delete_community(community_id):
 
 @app.route("/api/v2/communities/<community_id>/duplicate", methods=["POST"])
 def v2_duplicate_community(community_id):
+    denied = _guard(community_id=community_id, need="community_admin")
+    if denied:
+        return denied
     body = request.get_json(silent=True) or {}
     new_id, new_name = body.get("id"), body.get("name")
     if not new_id or not new_name:
@@ -1358,6 +1436,9 @@ def v2_duplicate_community(community_id):
 
 @app.route("/api/v2/communities/<community_id>/roster", methods=["POST"])
 def v2_add_roster_player(community_id):
+    denied = _guard(community_id=community_id)
+    if denied:
+        return denied
     # Unconditional insert, no duplicate-name check - matches the client's current
     # data-add-roster behavior exactly (confirmed during Phase 3 research).
     body = request.get_json(silent=True) or {}
@@ -1385,6 +1466,9 @@ def v2_update_roster_player(community_id, player_id):
     # same "single row, single field" shape, just a different field. Accepts either or
     # both fields present; the client always sends exactly one of them per call today.
     body = request.get_json(silent=True) or {}
+    denied = _roster_patch_denied(community_id, player_id, body)
+    if denied:
+        return denied
     sets, params = [], []
     if "clientId" in body:
         sets.append("client_id = %s")
@@ -1410,6 +1494,9 @@ def v2_update_roster_player(community_id, player_id):
 
 @app.route("/api/v2/communities/<community_id>/roster/<player_id>", methods=["DELETE"])
 def v2_remove_roster_player(community_id, player_id):
+    denied = _guard(community_id=community_id, need="community_admin")
+    if denied:
+        return denied
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -1437,6 +1524,9 @@ def v2_remove_roster_player(community_id, player_id):
 def v2_rename_player_everywhere(client_id):
     # Cross-community by design - a logged-in player's roster entries in every community
     # they've joined share one clientId and should all show the same name.
+    # Only for one of the caller's own ids - this renames them in every club.
+    if client_id not in _caller()["ids"]:
+        return _forbidden()
     body = request.get_json(silent=True) or {}
     name = body.get("name")
     if not name:
@@ -1454,6 +1544,9 @@ def v2_set_gender_everywhere(client_id):
     # Cross-community, same reasoning as the name endpoint just above - a real person's
     # gender doesn't vary by which community's roster row you're looking at. Used only to
     # pick the right verb gender in the table activity feed.
+    # Only for one of the caller's own ids - this renames them in every club.
+    if client_id not in _caller()["ids"]:
+        return _forbidden()
     body = request.get_json(silent=True) or {}
     gender = "female" if body.get("gender") == "female" else "male"
     with get_db() as conn:
@@ -1466,6 +1559,9 @@ def v2_set_gender_everywhere(client_id):
 
 @app.route("/api/v2/communities/<community_id>/chip-values", methods=["PUT"])
 def v2_set_chip_values(community_id):
+    denied = _guard(community_id=community_id, need="community_admin")
+    if denied:
+        return denied
     # Full replace, not incremental - matches the client's chipSetup save exactly (it
     # always sends the complete list, never a delta).
     body = request.get_json(silent=True) or {}
@@ -1502,6 +1598,9 @@ def v2_set_chip_values(community_id):
 
 @app.route("/api/v2/communities/<community_id>/paybox-links", methods=["POST"])
 def v2_add_paybox_link(community_id):
+    denied = _guard(community_id=community_id, need="community_admin")
+    if denied:
+        return denied
     body = request.get_json(silent=True) or {}
     link_id, name, link = body.get("id"), body.get("name"), body.get("link")
     if not link_id or not link:
@@ -1525,6 +1624,9 @@ def v2_add_paybox_link(community_id):
 
 @app.route("/api/v2/communities/<community_id>/paybox-links", methods=["PUT"])
 def v2_edit_paybox_links(community_id):
+    denied = _guard(community_id=community_id, need="community_admin")
+    if denied:
+        return denied
     # Bulk in-place edit of name/link on existing entries - matches data-save-paybox-entries.
     body = request.get_json(silent=True) or {}
     links = body.get("links")
@@ -1543,6 +1645,9 @@ def v2_edit_paybox_links(community_id):
 
 @app.route("/api/v2/communities/<community_id>/paybox-links/<link_id>", methods=["DELETE"])
 def v2_delete_paybox_link(community_id, link_id):
+    denied = _guard(community_id=community_id, need="community_admin")
+    if denied:
+        return denied
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM paybox_links WHERE id = %s AND community_id = %s", (link_id, community_id))
@@ -1566,6 +1671,9 @@ def v2_delete_paybox_link(community_id, link_id):
 # community can offer either (or both) as its shared group-payment option.
 @app.route("/api/v2/communities/<community_id>/bit-links", methods=["POST"])
 def v2_add_bit_link(community_id):
+    denied = _guard(community_id=community_id, need="community_admin")
+    if denied:
+        return denied
     body = request.get_json(silent=True) or {}
     link_id, name, link = body.get("id"), body.get("name"), body.get("link")
     if not link_id or not link:
@@ -1589,6 +1697,9 @@ def v2_add_bit_link(community_id):
 
 @app.route("/api/v2/communities/<community_id>/bit-links", methods=["PUT"])
 def v2_edit_bit_links(community_id):
+    denied = _guard(community_id=community_id, need="community_admin")
+    if denied:
+        return denied
     # Bulk in-place edit of name/link on existing entries - matches data-save-bit-entries.
     body = request.get_json(silent=True) or {}
     links = body.get("links")
@@ -1607,6 +1718,9 @@ def v2_edit_bit_links(community_id):
 
 @app.route("/api/v2/communities/<community_id>/bit-links/<link_id>", methods=["DELETE"])
 def v2_delete_bit_link(community_id, link_id):
+    denied = _guard(community_id=community_id, need="community_admin")
+    if denied:
+        return denied
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM bit_links WHERE id = %s AND community_id = %s", (link_id, community_id))
@@ -1659,6 +1773,9 @@ def v2_create_game():
         return jsonify({"error": "id and communityId required"}), 400
     name, date, created_by_name = body.get("name"), body.get("date"), body.get("createdByName")
     creator_player_id, creator_player_name = body.get("creatorPlayerId"), body.get("creatorPlayerName")
+    denied = _guard(community_id=community_id)
+    if denied:
+        return denied
     # Only an id this caller actually is (see _caller) - else this device's own id.
     caller = _caller()
     created_by = body.get("createdBy")
@@ -1691,6 +1808,12 @@ def v2_update_game(game_id):
     updated_at = body.get("updatedAt")
     if not updated_at:
         return jsonify({"error": "updatedAt required"}), 400
+    # Closing / reopening the night happens automatically from any member's app (everyone
+    # cashed out, or a lone player's closed table reopened), so that's for any member;
+    # renaming the table is the table admin's.
+    denied = _guard(game_id=game_id, need="table_admin" if "name" in body else "member")
+    if denied:
+        return denied
     fields, params = [], []
     if "name" in body:
         fields.append("name = %s"); params.append(body["name"])
@@ -1716,6 +1839,9 @@ def v2_update_game(game_id):
 
 @app.route("/api/v2/games/<game_id>", methods=["DELETE"])
 def v2_delete_game(game_id):
+    denied = _guard(game_id=game_id, need="table_admin")
+    if denied:
+        return denied
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM games WHERE id = %s", (game_id,))
@@ -1728,6 +1854,9 @@ def v2_delete_game(game_id):
 
 @app.route("/api/v2/games/<game_id>/players", methods=["POST"])
 def v2_add_game_player(game_id):
+    denied = _guard(game_id=game_id)
+    if denied:
+        return denied
     # The "everyone who's ever sat here" list - upsert, never removed just because a seat
     # gets cleared (only the full remove-from-game purge below drops someone from it).
     body = request.get_json(silent=True) or {}
@@ -1748,6 +1877,9 @@ def v2_add_game_player(game_id):
 
 @app.route("/api/v2/games/<game_id>/seats/<int:seat_index>", methods=["POST"])
 def v2_claim_seat(game_id, seat_index):
+    denied = _guard(game_id=game_id)
+    if denied:
+        return denied
     # Atomic "sit here only if it's still empty" - see the section comment above. Also
     # upserts game_players and initializes live_chips for this player, in the same
     # transaction, matching seatPlayerIfRoom's bundled side effects client-side.
@@ -1793,6 +1925,11 @@ def v2_claim_seat(game_id, seat_index):
 
 @app.route("/api/v2/games/<game_id>/seats/<int:seat_index>", methods=["DELETE"])
 def v2_clear_seat(game_id, seat_index):
+    # Clearing a seat: a table admin, or the player in it (cancelling a mistaken join).
+    occupant = _seat_occupant(game_id, seat_index)
+    denied = _guard(game_id=game_id, need="table_admin", players=[occupant] if occupant else None)
+    if denied:
+        return denied
     # Clearing a seat also drops that player's buy-ins in THIS game and their live_chips
     # entry, matching removeSeat/"clear seat" - but NOT game_players, which keeps their
     # history visible (see the removeFromGame purge below for the full-removal version).
@@ -1827,6 +1964,9 @@ def v2_clear_seat(game_id, seat_index):
 
 @app.route("/api/v2/games/<game_id>/seats/swap", methods=["PUT"])
 def v2_swap_seats(game_id):
+    denied = _guard(game_id=game_id)
+    if denied:
+        return denied
     # Single atomic UPDATE reading both old values off the same row image under the row
     # lock - no read-then-write round trip, so nothing to race against.
     body = request.get_json(silent=True) or {}
@@ -1851,6 +1991,9 @@ def v2_swap_seats(game_id):
 
 @app.route("/api/v2/games/<game_id>/players/<player_id>", methods=["DELETE"])
 def v2_remove_game_player(game_id, player_id):
+    denied = _guard(game_id=game_id, need="table_admin", players=[player_id])
+    if denied:
+        return denied
     # Full purge - the removeFromGame flow: drops game_players, buy-ins, paybox payments,
     # the cashout, live_chips, and clears their seat, all in one transaction. Reopens a
     # closed game if it was closed only because everyone (including this player) had
@@ -1888,6 +2031,9 @@ def v2_remove_game_player(game_id, player_id):
 
 @app.route("/api/v2/games/<game_id>/buyins", methods=["POST"])
 def v2_add_buyin(game_id):
+    denied = _guard(game_id=game_id)
+    if denied:
+        return denied
     body = request.get_json(silent=True) or {}
     buyin_id, player_id, amount = body.get("id"), body.get("playerId"), body.get("amount")
     actor_name = body.get("actorName")
@@ -1924,6 +2070,9 @@ def v2_add_buyin(game_id):
 
 @app.route("/api/v2/games/<game_id>/buyins/bulk", methods=["POST"])
 def v2_add_buyins_bulk(game_id):
+    denied = _guard(game_id=game_id)
+    if denied:
+        return denied
     body = request.get_json(silent=True) or {}
     buyins = body.get("buyins")
     if not buyins or not isinstance(buyins, list):
@@ -1957,6 +2106,9 @@ def v2_add_buyins_bulk(game_id):
 
 @app.route("/api/v2/games/<game_id>/buyins/<buyin_id>", methods=["DELETE"])
 def v2_delete_buyin(game_id, buyin_id):
+    denied = _guard(game_id=game_id)
+    if denied:
+        return denied
     # The only single-buy-in mutation the client has is delete - there's no edit-in-place
     # for a buy-in (only for a cashout, see PUT cashouts below); correcting one is always
     # delete-then-re-add on the client side.
@@ -1974,6 +2126,9 @@ def v2_delete_buyin(game_id, buyin_id):
 
 @app.route("/api/v2/games/<game_id>/cashouts/<player_id>", methods=["PUT"])
 def v2_set_cashout(game_id, player_id):
+    denied = _guard(game_id=game_id)
+    if denied:
+        return denied
     # Upsert - covers both a fresh cash-out (quickEnd/leave) and the edit-pencil on an
     # already-cashed-out player's amount. `chips` is optional and, when given, updates
     # live_chips in the same transaction (editCashout/quickEnd/leave all do this together
@@ -2017,6 +2172,9 @@ def v2_set_cashout(game_id, player_id):
 
 @app.route("/api/v2/games/<game_id>/cashouts/<player_id>", methods=["DELETE"])
 def v2_delete_cashout(game_id, player_id):
+    denied = _guard(game_id=game_id, need="table_admin", players=[player_id])
+    if denied:
+        return denied
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM cashouts WHERE game_id = %s AND player_id = %s", (game_id, player_id))
@@ -2035,6 +2193,9 @@ def v2_update_live_chips(game_id):
     player_id, chips = body.get("playerId"), body.get("chips")
     if not _valid_id(player_id) or chips is None:
         return jsonify({"error": "playerId and chips required"}), 400
+    denied = _guard(game_id=game_id, need="table_admin", players=[player_id])
+    if denied:
+        return denied
     if not _valid_amount(chips, allow_zero=True):
         return jsonify({"error": "chips must be a number >= 0"}), 400
     with get_db() as conn:
@@ -2067,6 +2228,9 @@ def v2_update_live_chips(game_id):
 
 @app.route("/api/v2/games/<game_id>/paybox-payments", methods=["POST"])
 def v2_add_paybox_payment(game_id):
+    denied = _guard(game_id=game_id)
+    if denied:
+        return denied
     body = request.get_json(silent=True) or {}
     payment_id, player_id, amount = body.get("id"), body.get("playerId"), body.get("amount")
     if not payment_id or not player_id or amount is None:
@@ -2087,6 +2251,9 @@ def v2_add_paybox_payment(game_id):
 
 @app.route("/api/v2/games/<game_id>/paybox-payments/<payment_id>", methods=["DELETE"])
 def v2_delete_paybox_payment(game_id, payment_id):
+    denied = _guard(game_id=game_id)
+    if denied:
+        return denied
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -2103,6 +2270,9 @@ def v2_delete_paybox_payment(game_id, payment_id):
 
 @app.route("/api/v2/games/<game_id>/player-payments", methods=["POST"])
 def v2_add_player_payment(game_id):
+    denied = _guard(game_id=game_id)
+    if denied:
+        return denied
     body = request.get_json(silent=True) or {}
     payment_id = body.get("id")
     from_player_id, to_player_id, amount = body.get("fromPlayerId"), body.get("toPlayerId"), body.get("amount")
@@ -2124,6 +2294,9 @@ def v2_add_player_payment(game_id):
 
 @app.route("/api/v2/games/<game_id>/player-payments/<payment_id>", methods=["DELETE"])
 def v2_delete_player_payment(game_id, payment_id):
+    denied = _guard(game_id=game_id)
+    if denied:
+        return denied
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -2140,6 +2313,9 @@ def v2_delete_player_payment(game_id, payment_id):
 
 @app.route("/api/v2/games/<game_id>/payments/player/<player_id>", methods=["DELETE"])
 def v2_reset_player_payments(game_id, player_id):
+    denied = _guard(game_id=game_id, need="table_admin", players=[player_id])
+    if denied:
+        return denied
     # The "return to game after cashout, reset payment" flow - clears every paybox
     # payment FROM this player and every player-payment where they're either side
     # (fromPlayerId or toPlayerId), matching data-confirm-return-reset-payment exactly
