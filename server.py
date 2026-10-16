@@ -139,6 +139,10 @@ _INIT_STATEMENTS = (
     # on the phone (signalCurrentUserDetails) when the name changes. NULL on rows from
     # before this column; see _passkey_handles.
     "ALTER TABLE passkeys ADD COLUMN IF NOT EXISTS user_handle TEXT",
+    # Who opened the table, by id (the creator's player/client id) - table-admin rights go
+    # by this, not by created_by_name, which is just a display name anyone could copy.
+    # NULL on tables from before this column (those fall back to the name client-side).
+    "ALTER TABLE games ADD COLUMN IF NOT EXISTS created_by TEXT",
     # One-time, short-lived WebAuthn challenges (register or login), deleted when used.
     "CREATE TABLE IF NOT EXISTS passkey_challenges ("
     "  id TEXT PRIMARY KEY,"
@@ -867,7 +871,7 @@ def v2_list_all_game_summaries():
         with conn.cursor() as cur:
             visible = _visible_community_ids(cur, caller)
             cur.execute(
-                "SELECT id, community_id, name, date, created_by_name, closed, updated_at "
+                "SELECT id, community_id, name, date, created_by_name, closed, updated_at, created_by "
                 "FROM games ORDER BY date DESC"
             )
             games = [_row_to_game_summary(r) for r in cur.fetchall()]
@@ -887,7 +891,7 @@ def v2_list_games(community_id):
             if not _can_see_community(cur, caller, community_id):
                 return jsonify({"error": "not found"}), 404
             cur.execute(
-                "SELECT id, community_id, name, date, created_by_name, closed, updated_at "
+                "SELECT id, community_id, name, date, created_by_name, closed, updated_at, created_by "
                 "FROM games WHERE community_id = %s ORDER BY date DESC",
                 (community_id,),
             )
@@ -910,14 +914,14 @@ def v2_get_game(game_id):
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at "
+                "SELECT id, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at, created_by "
                 "FROM games WHERE id = %s",
                 (game_id,),
             )
             row = cur.fetchone()
             if not row:
                 return jsonify({"error": "not found"}), 404
-            gid, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at = row
+            gid, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at, created_by = row
             if not _can_see_community(cur, caller, community_id):
                 return jsonify({"error": "not found"}), 404
 
@@ -977,7 +981,7 @@ def v2_get_game(game_id):
     return jsonify({
         "id": gid, "communityId": community_id, "name": name,
         "date": date.isoformat() if date else None,
-        "createdByName": created_by_name, "closed": closed,
+        "createdByName": created_by_name, "createdBy": created_by, "closed": closed,
         "updatedAt": updated_at.isoformat() if updated_at else None,
         "seats": seats, "liveChips": live_chips,
         "players": players, "buyins": buyins, "cashouts": cashouts,
@@ -1000,14 +1004,14 @@ def v2_get_game_summary(game_id):
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, community_id, name, date, created_by_name, closed, updated_at "
+                "SELECT id, community_id, name, date, created_by_name, closed, updated_at, created_by "
                 "FROM games WHERE id = %s",
                 (game_id,),
             )
             row = cur.fetchone()
             if not row:
                 return jsonify({"error": "not found"}), 404
-            gid, community_id, name, date, created_by_name, closed, updated_at = row
+            gid, community_id, name, date, created_by_name, closed, updated_at, created_by = row
             if not _can_see_community(cur, caller, community_id):
                 return jsonify({"error": "not found"}), 404
 
@@ -1053,7 +1057,7 @@ def v2_get_game_summary(game_id):
     return jsonify({
         "id": gid, "communityId": community_id, "name": name,
         "date": date.isoformat() if date else None,
-        "createdByName": created_by_name, "closed": closed,
+        "createdByName": created_by_name, "createdBy": created_by, "closed": closed,
         "updatedAt": updated_at.isoformat() if updated_at else None,
         "players": players, "buyinTotals": buyin_totals, "cashouts": cashouts,
         "payboxPayments": paybox_payments, "playerPayments": player_payments,
@@ -1596,6 +1600,7 @@ def _row_to_game_summary(row):
         "date": row[3].isoformat() if row[3] else None,
         "createdByName": row[4], "closed": row[5],
         "updatedAt": row[6].isoformat() if row[6] else None,
+        "createdBy": row[7] if len(row) > 7 else None,
     }
 
 
@@ -1607,15 +1612,20 @@ def v2_create_game():
         return jsonify({"error": "id and communityId required"}), 400
     name, date, created_by_name = body.get("name"), body.get("date"), body.get("createdByName")
     creator_player_id, creator_player_name = body.get("creatorPlayerId"), body.get("creatorPlayerName")
+    # Only an id this caller actually is (see _caller) - else this device's own id.
+    caller = _caller()
+    created_by = body.get("createdBy")
+    if created_by not in caller["ids"]:
+        created_by = request.headers.get("X-Client-Id", "").strip()[:128] or None
     with get_db() as conn:
         with conn.cursor() as cur:
             seats = [None] * 9
             if creator_player_id:
                 seats[0] = creator_player_id
             cur.execute(
-                "INSERT INTO games (id, community_id, name, date, created_by_name, seats, live_chips) "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
-                (gid, community_id, name, date, created_by_name, Json(seats),
+                "INSERT INTO games (id, community_id, name, date, created_by_name, created_by, seats, live_chips) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
+                (gid, community_id, name, date, created_by_name, created_by, Json(seats),
                  Json({creator_player_id: 0} if creator_player_id else {})),
             )
             if creator_player_id:
