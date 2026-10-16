@@ -761,6 +761,11 @@ html.theme-light.theme-blue .overlay-fullscreen .modal{--gold:#a86a12;--gold-tex
 html.theme-light .mode-panel{background:rgba(255,255,255,.55);box-shadow:0 2px 10px rgba(0,0,0,.08);}
 html.theme-light.theme-sand .mode-panel{background:#fbf6ee;}
 html.theme-light.theme-blue .mode-panel{background:#dcebf3;}
+/* Blue theme: the full-screen setup / end-of-evening windows get the blue felt of the
+   table screen they open from (a near-white window was a jarring jump), with white text
+   around the panel; the panel itself stays light with dark text. */
+html.theme-light.theme-blue .overlay-fullscreen .modal{background:linear-gradient(#5f9ab8,#4d89a8 60%,#3d7595);--text:#fff;--muted:#e3f1f7;--gold:#f2c14e;--gold-text:#2a1d05;color:#fff;}
+html.theme-light.theme-blue .overlay-fullscreen .mode-panel{--text:#111;--muted:#1a1a1a;--gold:#a86a12;--gold-text:#fff;color:#111;}
 /* "מחשבון סיכויי פוקר" on the table screen */
 html.theme-light .odds-label{color:#0f4c6b!important;}
 html.theme-light.theme-sand .odds-label{color:#6b4a1f!important;}
