@@ -5507,7 +5507,7 @@ function renderPlayerScreen(gameId){
   // An admin taps a tile to see that player's screen; for everyone else they're a roster.
   const tilesHtml = (() => {
     // Everyone but the player in the big box. Each keeps a fixed slot (tonight's entry
-    // order, without me); while I'm looking at someone else, MY tile (⭐ אני) takes that
+    // order, without me); while I'm looking at someone else, MY tile ("אני") takes that
     // player's slot - tapping it is how I get back to my own screen.
     let entered = g.players.filter(pl => pl.id !== myPlayerId && ((g.seats||[]).includes(pl.id) || pl.id in (g.cashouts||{}))).map(pl => pl.id);
     const meEntered = !!myPlayerId && g.players.some(pl => pl.id === myPlayerId && ((g.seats||[]).includes(pl.id) || pl.id in (g.cashouts||{})));
@@ -5517,7 +5517,7 @@ function renderPlayerScreen(gameId){
     const tile = id => {
       const pl = g.players.find(x => x.id === id);
       const out = id in (g.cashouts||{});
-      if (id === myPlayerId) return `<button type="button" class="pp-tile pp-tile-me${out?' out':''}" data-pp-view="${id}" title="חזרה למסך שלי"><bdi>${esc(pl.name)}</bdi><small>⭐ אני</small></button>`;
+      if (id === myPlayerId) return `<button type="button" class="pp-tile pp-tile-me${out?' out':''}" data-pp-view="${id}" title="חזרה למסך שלי"><bdi>${esc(pl.name)}</bdi><small>אני</small></button>`;
       return `<button type="button" class="pp-tile${id===pid?' on':''}${out?' out':''}" data-pp-view="${id}"><bdi>${esc(pl.name)}</bdi>${out?'<small>יצא</small>':''}</button>`;
     };
     const inviteTile = `<button type="button" class="pp-tile pp-tile-invite${aloneAtTable?' tile-hint':''}" data-invite-game="${g.id}">${icon('share')}<span>הזמן שחקן</span></button>`;
