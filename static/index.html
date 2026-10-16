@@ -905,6 +905,7 @@ html.theme-light.theme-sand .rb-confirm{background:linear-gradient(180deg,#bf8a4
 .gender-seg button{width:34px;border:none;background:var(--input);color:var(--muted);font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;padding:0;}
 .gender-seg button + button{border-right:1px solid var(--input-b);}
 .gender-seg button.on{background:var(--gold);color:var(--gold-text);}
+.custom-alert-box span.one-line{white-space:nowrap;overflow:hidden;min-width:0;flex:1;}
 </style>
 </head>
 <body>
@@ -5113,17 +5114,26 @@ function returnToMyScreenAfter(gameId, pid, what){
   const mine = g && myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
   if (!g || !pid || pid === mine || playerViewTarget !== pid) return;
   const name = (g.players.find(pl => pl.id === pid) || {}).name || "השחקן";
-  const base = `${what} ${/^[\u0590-\u05FF]/.test(name) ? "ל" : "ל-"}${name} ✓ - חוזרים למסך שלך`;
+  const base = `${what} ${/^[\u0590-\u05FF]/.test(name) ? "ל" : "ל-"}${name} - חוזרים למסך שלך`;
   const inText = n => n === 1 ? "בעוד שנייה" : `בעוד ${n} שניות`;
   let left = 10;
   const el = showAlert(`${base} ${inText(left)}`, (left + 1) * 1000);
   const span = el.querySelector(".custom-alert-box span");
+  // One line only: no wrapping, and the font steps down until the whole text fits.
+  if (span) span.classList.add("one-line");
+  const fit = () => {
+    if (!span) return;
+    let size = 13;
+    span.style.fontSize = size + "px";
+    while (span.scrollWidth > span.clientWidth && size > 9) { size -= 0.5; span.style.fontSize = size + "px"; }
+  };
+  fit();
   // Counts down in the toast; stops (and clears the toast) if I already moved to another
   // screen myself.
   const timer = setInterval(() => {
     if (playerViewTarget !== pid) { clearInterval(timer); el.remove(); return; }
     left--;
-    if (left > 0) { if (span) span.textContent = `${base} ${inText(left)}`; return; }
+    if (left > 0) { if (span) { span.textContent = `${base} ${inText(left)}`; fit(); } return; }
     clearInterval(timer);
     el.remove();
     playerViewTarget = null;
