@@ -894,10 +894,9 @@ html.theme-light.theme-blue .setup-frame,html.theme-light.theme-blue .stats-fram
 html.theme-light .rb-confirm{background:linear-gradient(180deg,#3654c4,#1c2c78);color:#fde68a;}
 html.theme-light.theme-blue .rb-confirm{background:linear-gradient(180deg,#ffe58a,#f5b82e 45%,#c4831a);color:#2a1d05;border-color:#fff3c4;box-shadow:0 0 0 1px rgba(255,243,196,.6),0 6px 16px rgba(10,30,50,.45);}
 html.theme-light.theme-sand .rb-confirm{background:linear-gradient(180deg,#bf8a45,#8f5d24);color:#fffaf0;border-color:#7a4a17;box-shadow:0 6px 16px rgba(90,55,20,.4);}
-.pp-name-row{position:relative;}
-.pp-name-row .pp-name-box{max-width:70%;}
-.pp-back-me{position:absolute;left:6px;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;border:2px solid #93c5fd;background:#1d4ed8;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.35);padding:0;}
-.pp-back-me svg{width:24px;height:24px;stroke-width:2.6;}
+.pp-name-row{display:flex;align-items:center;justify-content:center;gap:8px;padding:0 4%;}
+.pp-name-row .pp-name-box{flex:1 1 auto;min-width:0;max-width:62%;}
+.pp-back-me{flex:0 1 auto;max-width:36%;min-height:44px;padding:6px 14px;border-radius:12px;border:2px solid #93c5fd;background:#1d4ed8;color:#fff;font-family:inherit;font-size:16px;font-weight:800;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.35);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 </style>
 </head>
 <body>
@@ -5599,9 +5598,11 @@ function renderPlayerScreen(gameId){
     const len = nm.length + (cashedOut ? 6 : 0);
     const font = len > 24 ? 17 : len > 18 ? 20 : null;
     const box = `<div class="pp-name-box" dir="rtl"${font ? ` style="font-size:${font}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut ? ' · יצא' : ''}</div>`;
-    // Looking at someone else: a U-turn button beside the name takes me back to my own screen.
-    return viewingOther
-      ? `<div class="pp-name-row">${box}<button type="button" class="pp-back-me" data-pp-back-me title="חזרה למסך שלי" aria-label="חזרה למסך שלי">${icon('undo')}</button></div>`
+    // Looking at someone else: my own name, as a button beside theirs, takes me back to my
+    // own screen.
+    const me = myPlayerId && g.players.find(x => x.id === myPlayerId);
+    return viewingOther && me
+      ? `<div class="pp-name-row">${box}<button type="button" class="pp-back-me" data-pp-back-me title="חזרה למסך שלי"><bdi>${esc(me.name)}</bdi></button></div>`
       : box;
   })();
   // Tiles above the name: everyone who entered tonight, in order, then a "הזמן שחקן" tile
