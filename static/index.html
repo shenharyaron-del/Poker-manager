@@ -6107,16 +6107,18 @@ function renderTableTimeline(g, c, myPlayerId){
   const fem = id => playerIsFemale(g, c, id);
   const cashouts = g.cashouts || {};
   const events = g.events || [];
-  // Chart: one stepped series per player, in tonight's entry order.
+  // Chart: one stepped series per player, in tonight's entry order - each player's
+  // running balance: the entry buy-in takes it below zero, every rebuy deeper, and the
+  // chips left at the end bring it back up to tonight's result.
   const order = [];
   buyins.forEach(b => { if (!order.includes(b.playerId)) order.push(b.playerId); });
   const lastTs = Math.max(...buyins.map(b => b.ts || 0), ...Object.values(cashouts).map(co => co.ts || 0), ...events.map(e => e.ts || 0));
   const end = g.closed ? lastTs : Math.max(lastTs, Date.now());
   const span = Math.max(end - t0, 60000);
   const series = order.map(pid => {
-    const steps = buyins.filter(b => b.playerId === pid).map(b => ({ts: b.ts || t0, d: b.amount}));
+    const steps = buyins.filter(b => b.playerId === pid).map(b => ({ts: b.ts || t0, d: -b.amount}));
     const co = cashouts[pid];
-    if (co) steps.push({ts: co.ts || end, d: -(co.amount || 0)});
+    if (co) steps.push({ts: co.ts || end, d: co.amount || 0});
     steps.sort((a, b) => a.ts - b.ts);
     let v = 0;
     const pts = [];
@@ -6147,8 +6149,9 @@ function renderTableTimeline(g, c, myPlayerId){
     const cls = s.pid === myPlayerId ? "ttl-me" : "ttl-sel";
     const [ex, ey] = s.pts[s.pts.length - 1];
     svg += `<path class="${cls}" d="${pathOf(s)}"/><circle class="${cls}-dot" cx="${X(ex)}" cy="${Y(ey)}" r="4"/>`;
-    // \u2066…\u2069 keeps the signed amount left-to-right beside a Hebrew name.
-    svg += `<text class="ttl-label" x="${Math.max(pl + 4, X(ex) - 6)}" y="${Y(ey) - 7}" text-anchor="end">${esc(name(s.pid))} \u2066${money(ey)}\u2069</text>`;
+    // A left-to-right mark before the amount keeps "-₪200" with its minus in front beside
+    // a Hebrew name (bidi isolate characters aren't honored in SVG text).
+    svg += `<text class="ttl-label" x="${Math.max(pl + 4, X(ex) - 6)}" y="${Y(ey) - 7}" text-anchor="start" direction="rtl">${esc(name(s.pid))} \u200E${money(ey)}</text>`;
   });
   const chips = order.map(pid => `<button type="button" class="ttl-chip${pid === myPlayerId ? ' me' : ''}${pid === sel && pid !== myPlayerId ? ' sel' : ''}" data-timeline-pick="${pid}"><bdi>${esc(name(pid))}</bdi></button>`).join("");
 
