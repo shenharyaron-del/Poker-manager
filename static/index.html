@@ -898,6 +898,13 @@ html.theme-light.theme-sand .rb-confirm{background:linear-gradient(180deg,#bf8a4
 .pp-name-row .pp-name-box{grid-column:2 / span 2;min-width:0;max-width:none;width:100%;padding:6px 8px;display:flex;align-items:center;justify-content:center;}
 .pp-name-row .pp-name-box bdi{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .pp-back-me{grid-column:4;min-width:0;min-height:44px;padding:6px 6px;border-radius:12px;border:2px solid #93c5fd;background:#1d4ed8;color:#fff;font-family:inherit;font-size:16px;font-weight:800;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.35);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* Name field + a small ז / נ (male / female) pick on the same row. */
+.gender-name-row{display:flex;align-items:stretch;gap:6px;}
+.gender-name-row input{flex:1;min-width:0;width:auto;}
+.gender-seg{display:flex;flex-shrink:0;border:1px solid var(--input-b);border-radius:10px;overflow:hidden;}
+.gender-seg button{width:34px;border:none;background:var(--input);color:var(--muted);font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;padding:0;}
+.gender-seg button + button{border-right:1px solid var(--input-b);}
+.gender-seg button.on{background:var(--gold);color:var(--gold-text);}
 </style>
 </head>
 <body>
@@ -1579,9 +1586,10 @@ async function v2Fetch(method, path, body){
   }
 }
 
-async function v2AddRosterPlayer(communityId, id, name){
-  await v2Fetch("POST", `/communities/${communityId}/roster`, {id, name});
-  getCommunity(communityId).roster.push({id, name});
+async function v2AddRosterPlayer(communityId, id, name, gender){
+  const g = gender === "female" ? "female" : "male";
+  await v2Fetch("POST", `/communities/${communityId}/roster`, {id, name, gender: g});
+  getCommunity(communityId).roster.push({id, name, gender: g});
 }
 
 async function v2RemoveRosterPlayer(communityId, playerId){
@@ -1636,7 +1644,7 @@ function setGenderEverywhere(clientId, gender){
 // Three calls, not one - the server side deliberately stays three small, already-existing
 // pieces (account pre-registration, roster insert, roster/account link) rather than one
 // new endpoint that duplicates what v2AddRosterPlayer/v2LinkRosterPlayer already do.
-async function v2PreRegisterPlayer(communityId, name, email){
+async function v2PreRegisterPlayer(communityId, name, email, gender){
   const playerId = uid();
   const res = await fetch("/api/auth/pre-register", {
     method: "POST", headers: {"Content-Type":"application/json"},
@@ -1648,7 +1656,7 @@ async function v2PreRegisterPlayer(communityId, name, email){
     err.status = res.status;
     throw err;
   }
-  await v2AddRosterPlayer(communityId, playerId, name);
+  await v2AddRosterPlayer(communityId, playerId, name, gender);
   await v2LinkRosterPlayer(communityId, playerId, playerId);
   return playerId;
 }
@@ -7285,7 +7293,10 @@ function renderModal(m){
       </div>
       <div class="section-title" style="padding:0;margin:0 0 8px;">או הוסיפו שחקן קבוע למועדון</div>
       <p style="color:var(--muted);font-size:11px;margin:0 0 8px;">יתווסף לרשימת השחקנים הקבועה, ויוכל להתחבר בעתיד עם האימייל הזה.</p>
-      <div class="field"><input type="text" id="pick-seat-permanent-name" placeholder="שם השחקן"></div>
+      <div class="field gender-name-row">
+        <input type="text" id="pick-seat-permanent-name" placeholder="שם השחקן">
+        <div class="gender-seg" role="group" aria-label="מין"><button type="button" class="on" data-perm-gender="male" title="זכר">ז</button><button type="button" data-perm-gender="female" title="נקבה">נ</button></div>
+      </div>
       <div class="field"><input type="email" id="pick-seat-permanent-email" placeholder="אימייל" dir="ltr"></div>
       ${m.permanentError ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.permanentError)}</p>` : ""}
       <button class="btn btn-primary btn-block" data-add-permanent-seat>${icon('plus')} הוסף שחקן קבוע</button>
@@ -10397,17 +10408,23 @@ function attachHandlers(){
       });
       closeModal();
     };
+    // ז / נ next to the name - toggled in place (a re-render would wipe what's typed).
+    app.querySelectorAll("[data-perm-gender]").forEach(el => el.onclick = () => {
+      app.querySelectorAll("[data-perm-gender]").forEach(b => b.classList.toggle("on", b === el));
+    });
     const addPermanentBtn = app.querySelector("[data-add-permanent-seat]");
     if (addPermanentBtn) addPermanentBtn.onclick = async () => {
       const name = document.getElementById("pick-seat-permanent-name").value.trim();
       const email = document.getElementById("pick-seat-permanent-email").value.trim().toLowerCase();
+      const genderBtn = app.querySelector("[data-perm-gender].on");
+      const gender = genderBtn ? genderBtn.dataset.permGender : "male";
       if (!name) { showAlert("צריך להזין שם."); return; }
       if (!email || !email.includes("@")) { showAlert("כתובת אימייל לא תקינה."); return; }
       addPermanentBtn.disabled = true;
       showButtonLoading(addPermanentBtn);
       if (!USE_RELATIONAL_API) { showAlert("לא זמין במצב הזה."); addPermanentBtn.disabled = false; return; }
       try {
-        const playerId = await v2PreRegisterPlayer(getGame(modal.gameId).communityId, name, email);
+        const playerId = await v2PreRegisterPlayer(getGame(modal.gameId).communityId, name, email, gender);
         const ok = await v2ClaimSeat(modal.gameId, modal.seatIndex, playerId, name);
         if (!ok) showAlert("המושב הזה כבר תפוס - בחרו מושב אחר.");
         closeModal();
