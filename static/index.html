@@ -8,6 +8,10 @@
 <link rel="apple-touch-icon" href="/static/icon-192.png">
 <link rel="manifest" href="/static/manifest.json">
 <meta name="theme-color" content="#022c22">
+<!-- Tells in-app browsers (WhatsApp's on Android in dark mode) that this page handles its
+     own light and dark colors - otherwise they "auto-darken" it, and the sand / blue
+     themes came out very dark when opened from an invite link. -->
+<meta name="color-scheme" content="dark light">
 <script>try{var t=localStorage.getItem("poker-theme");if(t==="light")t="blue";if(t==="blue"||t==="sand"){document.documentElement.classList.add("theme-light","theme-"+t);document.querySelector('meta[name="theme-color"]').content=t==="blue"?"#4d89a8":"#dfcaa9";}}catch(e){}</script>
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -672,7 +676,7 @@ html.theme-light .stats-net .pot-label{color:inherit;opacity:.8;}
    Same layout, a daylight palette: pale blue felt (matches static/table-felt-blue.webp),
    white cards, dark text, deeper gold for anything gold that has to read on a light page. */
 html.theme-light{
-  color-scheme: light;
+  color-scheme: only light;
   --bg1:#e4f1f7; --bg2:#b8d8e6;
   --card:#ffffff; --card-b:#b3d0de;
   --input:#ffffff; --input-b:#8dbbcf;
