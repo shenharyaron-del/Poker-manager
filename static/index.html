@@ -873,6 +873,8 @@ html.theme-light.theme-blue .chat-bubble{--text:#0e2633;color:#0e2633;}
 .passkey-offer .po-text span{font-size:11px;color:var(--muted);}
 .passkey-offer .po-btns{display:flex;gap:6px;}
 .login-or{text-align:center;color:var(--muted);font-size:12px;margin:10px 0 8px;}
+.login-link{display:block;margin:12px auto 0;background:none;border:none;color:var(--muted);font:inherit;font-size:13px;cursor:pointer;}
+.login-link u{color:var(--gold);text-underline-offset:3px;}
 </style>
 </head>
 <body>
@@ -2463,6 +2465,38 @@ async function loginWithPasskey(){
   }});
   passkeyHas = true;
   return account;
+}
+// Phase 2: a brand-new account with no email at all - see passkey_signup_options.
+async function signupWithPasskey(){
+  const {challengeId, options: o} = await passkeyPost("signup-options");
+  const cred = await navigator.credentials.create({publicKey: {
+    ...o,
+    challenge: b64urlToBuf(o.challenge),
+    user: {...o.user, id: b64urlToBuf(o.user.id)},
+    excludeCredentials: [],
+  }});
+  const account = await passkeyPost("signup-verify", {clientId: getClientId(), localId: myIdentity.id, challengeId, credential: {
+    id: cred.id, rawId: bufToB64url(cred.rawId), type: cred.type,
+    response: {
+      clientDataJSON: bufToB64url(cred.response.clientDataJSON),
+      attestationObject: bufToB64url(cred.response.attestationObject),
+      transports: cred.response.getTransports ? cred.response.getTransports() : [],
+    },
+    clientExtensionResults: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {},
+    authenticatorAttachment: cred.authenticatorAttachment || undefined,
+  }});
+  passkeyHas = true;
+  return account;
+}
+// A passkey-only account's internal key has no "@" (see _is_passkey_only server-side).
+function isRealEmail(e){ return !!e && e.includes("@"); }
+async function addEmailPost(path, body){
+  const res = await fetch("/api/auth/add-email/" + path, {
+    method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({clientId: getClientId(), ...body})
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { const err = new Error(data.error || "failed"); err.status = res.status; throw err; }
+  return data;
 }
 function passkeyOfferSnoozed(){
   try { return Date.now() - Number(localStorage.getItem("poker-passkey-offer-snoozed") || 0) < PASSKEY_OFFER_SNOOZE_DAYS * 864e5; } catch(e) { return false; }
@@ -6136,9 +6170,14 @@ function renderModal(m){
       <button class="btn btn-primary btn-block" data-confirm-login-code style="margin-bottom:8px;">אשר קוד</button>
       <button class="btn btn-ghost btn-block" data-resend-login-code>שלח קוד שוב</button>
     ` : `
+      ${passkeySupported() ? `
+      <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">משתמשים חדשים יכולים להירשם עם טביעת אצבע - בלי אימייל.</p>
+      <button class="btn btn-primary btn-block" data-passkey-signup>👆 משתמש חדש? הירשם עם טביעת אצבע</button>
+      <div class="login-or">או התחברו עם אימייל</div>
+      ` : `
       <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">${authSettings.requireVerifyExistingEmail
         ? "כדי להשתמש באפליקציה, התחברו עם האימייל שלכם - משתמשים חדשים ייכנסו ישר, ולחשבון קיים נשלח קוד בן 6 ספרות."
-        : "כדי להשתמש באפליקציה, התחברו עם האימייל שלכם."}</p>
+        : "כדי להשתמש באפליקציה, התחברו עם האימייל שלכם."}</p>`}
       <!-- A real <form> with name="email" + autocomplete="email" is what makes phone
            browsers (Chrome/Samsung Internet on Android, Safari on iOS) offer the device's
            saved email in the keyboard bar - a bare input outside a form often gets only
@@ -6147,9 +6186,24 @@ function renderModal(m){
       <form data-login-form action="#" autocomplete="on" onsubmit="return false;">
         <input type="email" id="login-email-input" name="email" placeholder="האימייל שלך" dir="ltr" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" style="width:100%;text-align:center;margin-bottom:8px;" value="${esc(m.loginEmail || (() => { try { return localStorage.getItem("poker-last-email") || ""; } catch(e) { return ""; } })())}" autofocus>
         ${m.loginError ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.loginError)}</p>` : ""}
-        <button type="submit" class="btn btn-primary btn-block" data-send-login-code>${authSettings.requireVerifyExistingEmail ? `${icon('share')} שלח קוד כניסה` : "כנס ל-Poker Manager"}</button>
+        <button type="submit" class="btn ${passkeySupported() ? 'btn-ghost' : 'btn-primary'} btn-block" data-send-login-code>${authSettings.requireVerifyExistingEmail ? `${icon('share')} שלח קוד כניסה` : "כנס ל-Poker Manager"}</button>
       </form>
-      ${passkeySupported() ? `<div class="login-or">או</div><button class="btn btn-ghost btn-block" data-passkey-login>👆 התחבר עם טביעת אצבע</button>` : ""}
+      ${passkeySupported() ? `<button class="login-link" data-passkey-login>כבר שמרת טביעת אצבע? <u>התחבר איתה</u></button>` : ""}
+    `;
+  } else if (m.type === "addEmail") {
+    title = "הוספת אימייל כגיבוי";
+    body = m.step === "code" ? `
+      <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">שלחנו קוד בן 6 ספרות ל-<span dir="ltr">${esc(m.email)}</span></p>
+      <input type="text" inputmode="numeric" id="add-email-code" placeholder="קוד בן 6 ספרות" autocomplete="one-time-code" style="width:100%;text-align:center;letter-spacing:4px;font-size:18px;margin-bottom:8px;" autofocus>
+      ${m.error ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.error)}</p>` : ""}
+      <button class="btn btn-primary btn-block" data-add-email-verify>אשר</button>
+    ` : `
+      <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">נשלח קוד לאימות. אחרי האימות תוכל להתחבר גם עם האימייל, וטביעת האצבע תמשיך לעבוד.</p>
+      <form action="#" autocomplete="on" onsubmit="return false;">
+        <input type="email" id="add-email-input" name="email" placeholder="האימייל שלך" dir="ltr" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" value="${esc(m.email || "")}" style="width:100%;text-align:center;margin-bottom:8px;" autofocus>
+        ${m.error ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.error)}</p>` : ""}
+        <button type="submit" class="btn btn-primary btn-block" data-add-email-send>שלח קוד</button>
+      </form>
     `;
   } else if (m.type === "identityName") {
     // Same screen whether this is the mandatory post-login step or an editor-opened
@@ -6162,8 +6216,14 @@ function renderModal(m){
     // myIdentity.email is always already set, so this is just a confirmation line, never
     // an entry form.
     const loginSection = `
+      ${isRealEmail(myIdentity.email) ? `
       <p style="color:var(--muted);font-size:12px;text-align:center;margin:18px 0 0;padding-top:14px;border-top:1px solid var(--card-b);">מחוברים כ-<span dir="ltr">${esc(myIdentity.email)}</span></p>
-      ${!passkeySupported() ? "" : passkeyHas
+      ` : `
+      <p style="color:var(--muted);font-size:12px;text-align:center;margin:18px 0 0;padding-top:14px;border-top:1px solid var(--card-b);">👆 מחוברים עם טביעת אצבע (בלי אימייל)</p>
+      <button class="btn btn-ghost btn-sm" style="display:block;margin:8px auto 0;" data-add-email>✉️ הוסף אימייל כגיבוי</button>
+      <p style="color:var(--muted);font-size:11px;text-align:center;margin:4px 0 0;">אם תאבד את הטלפון ואת חשבון הגוגל, האימייל יחזיר אותך לחשבון.</p>
+      `}
+      ${!passkeySupported() || !isRealEmail(myIdentity.email) ? "" : passkeyHas
         ? `<p style="color:var(--muted);font-size:12px;text-align:center;margin:6px 0 0;">👆 כניסה עם טביעת אצבע שמורה ✓</p>`
         : `<button class="btn btn-ghost btn-sm" style="display:block;margin:8px auto 0;" data-passkey-register>👆 שמור כניסה עם טביעת אצבע</button>`}
     `;
@@ -6365,7 +6425,7 @@ function renderModal(m){
                 <span style="color:var(--muted);font-size:12px;font-weight:700;flex-shrink:0;width:18px;">${i+1}</span>
                 <div style="min-width:0;">
                   <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.name || "(ללא שם)")}</div>
-                  <div style="color:var(--muted);font-size:11px;" dir="ltr">${esc(r.email)}</div>
+                  <div style="color:var(--muted);font-size:11px;" ${isRealEmail(r.email) ? 'dir="ltr"' : ''}>${isRealEmail(r.email) ? esc(r.email) : "👆 ללא אימייל (טביעת אצבע)"}</div>
                 </div>
               </div>
               <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
@@ -8728,6 +8788,9 @@ function attachHandlers(){
       await saveState();
       if (account.name) { await retryInviteJoinIfNeeded(); closeModal(); }
       else openModal({type:"identityName", forced:true});
+      // This device couldn't see the person's clubs while it was logged out - fetch them
+      // now instead of waiting for the next periodic refresh.
+      doRefreshNow("login");
     };
     const sendLoginCodeFor = async (email) => {
       // Always tries the no-code path first and lets the server decide eligibility (a
@@ -8800,6 +8863,18 @@ function attachHandlers(){
         updateModal({loginError: e.message});
       }
     };
+    const passkeySignupBtn = app.querySelector("[data-passkey-signup]");
+    if (passkeySignupBtn) passkeySignupBtn.onclick = async () => {
+      passkeySignupBtn.disabled = true;
+      showButtonLoading(passkeySignupBtn);
+      try {
+        const account = await signupWithPasskey();
+        await afterLogin(account);
+      } catch(e) {
+        if (e && e.name === "NotAllowedError") { render(); return; } // cancelled
+        updateModal({loginError: "ההרשמה עם טביעת אצבע נכשלה - נסו שוב או התחברו עם האימייל."});
+      }
+    };
     const passkeyLoginBtn = app.querySelector("[data-passkey-login]");
     if (passkeyLoginBtn) passkeyLoginBtn.onclick = async () => {
       passkeyLoginBtn.disabled = true;
@@ -8808,7 +8883,8 @@ function attachHandlers(){
         const account = await loginWithPasskey();
         await afterLogin(account);
       } catch(e) {
-        if (e && e.name === "NotAllowedError") { render(); return; } // cancelled
+        // Cancelled - or no saved passkey on this phone (the browser doesn't say which).
+        if (e && e.name === "NotAllowedError") { updateModal({loginError: "לא נמצאה טביעת אצבע שמורה? משתמש חדש - הירשם עם טביעת אצבע, או התחבר עם האימייל."}); return; }
         updateModal({loginError: e && e.status === 404
           ? "טביעת האצבע הזאת לא שמורה אצלנו - התחברו עם האימייל."
           : "הכניסה עם טביעת אצבע נכשלה - נסו שוב או התחברו עם האימייל."});
@@ -8848,6 +8924,36 @@ function attachHandlers(){
   }
 
   app.querySelectorAll("[data-passkey-register]").forEach(el => el.onclick = () => doRegisterPasskey(el));
+  app.querySelectorAll("[data-add-email]").forEach(el => el.onclick = () => openModal({type:"addEmail", step:"email"}));
+  if (modal && modal.type === "addEmail") {
+    const sendBtn = app.querySelector("[data-add-email-send]");
+    if (sendBtn) sendBtn.onclick = async () => {
+      const email = document.getElementById("add-email-input").value.trim().toLowerCase();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { updateModal({email, error: "כתובת אימייל לא תקינה"}); return; }
+      sendBtn.disabled = true; showButtonLoading(sendBtn);
+      try {
+        await addEmailPost("request", {email});
+        updateModal({step: "code", email, error: null});
+      } catch(e) {
+        updateModal({email, error: e.status === 409 ? "האימייל הזה כבר רשום לחשבון אחר - אי אפשר לחבר אותו לחשבון הזה." : "שליחת הקוד נכשלה - נסו שוב."});
+      }
+    };
+    const verifyBtn = app.querySelector("[data-add-email-verify]");
+    if (verifyBtn) verifyBtn.onclick = async () => {
+      const code = document.getElementById("add-email-code").value.trim();
+      if (!code) { updateModal({error: "צריך להזין קוד."}); return; }
+      verifyBtn.disabled = true; showButtonLoading(verifyBtn);
+      try {
+        const account = await addEmailPost("verify", {email: modal.email, code});
+        applyAccountToIdentity(account);
+        saveIdentity();
+        closeModal();
+        showAlert("האימייל נוסף לחשבון ✓");
+      } catch(e) {
+        updateModal({error: e.status === 409 ? "האימייל הזה כבר רשום לחשבון אחר." : "הקוד שגוי או פג תוקף."});
+      }
+    };
+  }
   app.querySelectorAll("[data-passkey-snooze]").forEach(el => el.onclick = () => {
     try { localStorage.setItem("poker-passkey-offer-snoozed", String(Date.now())); } catch(e) {}
     render();
