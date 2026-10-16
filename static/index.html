@@ -91,6 +91,9 @@ h1.sm{font-size:20px;}
 .btn{border:none;border-radius:12px;font-weight:700;font-size:14px;padding:11px 16px;cursor:pointer;font-family:inherit;}
 .btn:active{transform:scale(0.96);}
 .btn-primary{background:var(--gold);color:var(--gold-text);}
+/* Paybox / pot-fix actions: one shared light-blue button everywhere (navy on the blue
+   theme - see below). */
+.btn-blue{background:#0891b2;color:#fff;}
 .btn-primary:disabled{opacity:.4;cursor:not-allowed;}
 .btn-ghost{background:#065f46;color:var(--text);border:1px solid var(--card-b);}
 .btn-block{width:100%;}
@@ -814,7 +817,7 @@ html.theme-light .tp-row{border-color:var(--card-b)!important;}
 @keyframes pot-hand{0%,100%{transform:translate(0,-50%)}50%{transform:translate(-10px,-50%)}}
 /* Blue theme: the paybox-blue (#0891b2) buttons - pay to paybox, סידור קופה - blend into
    the blue page; give them a deep navy fill and a light rim instead. */
-html.theme-light.theme-blue [style*="background:#0891b2"]{background:#0b2f4a!important;border:1.5px solid rgba(255,255,255,.75)!important;box-shadow:0 3px 10px rgba(0,20,40,.35);}
+html.theme-light.theme-blue .btn-blue{background:#0b2f4a!important;border:1.5px solid rgba(255,255,255,.75)!important;box-shadow:0 3px 10px rgba(0,20,40,.35);}
 /* Alone at a new table: pointing hands at "הזמנת שחקן" and at an empty seat. */
 .invite-hint{position:relative;overflow:visible;}
 .invite-hint::after{content:"👈";position:absolute;right:-32px;top:50%;font-size:22px;line-height:1;transform:translateY(-50%);animation:pot-hand 1.1s ease-in-out infinite;pointer-events:none;}
@@ -5389,7 +5392,7 @@ function renderPlayerScreen(gameId){
       statusHtml = profitForInfo >= 0
         ? `<div style="font-size:13px;color:var(--muted);margin-top:10px;">הרווח יחולק אחרי שכולם ישלמו לקבוצה</div>`
         : (activePayboxLink
-            ? `<a href="${esc(activePayboxLink)}" class="btn btn-block" style="margin-top:10px;background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> העברה לקבוצת פייבוקס</a>`
+            ? `<a href="${esc(activePayboxLink)}" class="btn btn-blue btn-block" style="margin-top:10px;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> העברה לקבוצת פייבוקס</a>`
             : `<div style="font-size:12px;color:var(--muted);margin-top:10px;">לא הוגדרה קבוצת פייבוקס</div>`);
     } else if (c.settlementDefault === 'bit') {
       statusHtml = profitForInfo >= 0
@@ -5403,7 +5406,7 @@ function renderPlayerScreen(gameId){
           <div style="font-weight:700;color:#fda4af;">${t.amount} שח מעביר ל-${esc(t.toName)}</div>
           <div style="display:flex;gap:8px;margin-top:8px;">
             <button class="btn flex1" data-open-bit-generic style="background:#0070E0;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;"> ביט</button>
-            <a href="https://links.payboxapp.com" class="btn flex1" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</a>
+            <a href="https://links.payboxapp.com" class="btn btn-blue flex1" style="display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</a>
           </div>
         </div>
       ` : `<div style="margin-top:10px;font-weight:700;color:#6ee7b7;">מקבל מ-${esc(t.fromName)} ${t.amount} שח</div>`).join("");
@@ -5415,7 +5418,7 @@ function renderPlayerScreen(gameId){
     // Lost, mid-game, not closed: no inline status text - the "who do I pay" modal
     // auto-opens itself instead (see attachHandlers/autoOpenedDirectPay).
     cashedOutInfoHtml = breakdownHtml + paymentNotesHtml + statusHtml + exitHighlightsHtml
-      + ((isAdminView && allCashedOutForSettlement && !potBalancedForSettlement) ? `<div class="pot-fix-cta"><button class="btn btn-primary co-act" data-open-pot-fix style="background:#0891b2;color:#fff;">${icon('coins')} סידור קופה</button><span class="pot-fix-hand">👈</span></div>` : "")
+      + ((isAdminView && allCashedOutForSettlement && !potBalancedForSettlement) ? `<div class="pot-fix-cta"><button class="btn btn-blue co-act" data-open-pot-fix>${icon('coins')} סידור קופה</button><span class="pot-fix-hand">👈</span></div>` : "")
       + (viewingOther ? "" : `<button class="btn btn-ghost co-act" data-open-my-stats>${icon('bar')} הביצועים שלי</button>`);
   }
   const canDeleteBuyins = true; // viewing/editing your own history here, always allowed
@@ -5707,7 +5710,7 @@ function renderGameResultsScreen(gameId){
     if (c.settlementDefault === 'paybox') {
       const activeLink = getActivePayboxLink(c);
       topButtonHtml = activeLink
-        ? `<a href="${esc(activeLink)}" class="btn btn-primary btn-block" style="margin-top:8px;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;">פתיחת פייבוקס קבוצתי</a>`
+        ? `<a href="${esc(activeLink)}" class="btn btn-blue btn-block" style="margin-top:8px;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;">פתיחת פייבוקס קבוצתי</a>`
         : `<div style="font-size:12px;color:var(--muted);margin-top:8px;margin-bottom:16px;text-align:center;">לא הוגדרה קבוצת פייבוקס</div>`;
     } else {
       topButtonHtml = `<button class="btn btn-primary btn-block" data-open-bit-generic style="margin-top:8px;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:6px;background:#0070E0;color:#fff;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;">פתיחת ביט קבוצתי</button>`;
@@ -5928,7 +5931,7 @@ function renderAdminScreen(gameId, embedded){
       <div style="text-align:center;color:var(--muted);font-size:12px;margin:6px 0;">${selectedIds.length
         ? `${perPlayer>=0?'כל שחקן מסומן יקבל':'מכל שחקן מסומן יילקח'} ₪${Math.abs(perPlayer)}`
         : (taking ? `סמנו מאילו שחקנים להחסיר את ₪${Math.abs(Math.round(diff))}` : `סמנו לאילו שחקנים להעביר את ₪${Math.abs(Math.round(diff))}`)}</div>
-      <button class="btn btn-primary btn-block" data-admin-fix-pot-balance style="background:#0891b2;color:#fff;" ${selectedIds.length?"":"disabled"}>${icon('coins')} סדר קופה</button>
+      <button class="btn btn-blue btn-block" data-admin-fix-pot-balance ${selectedIds.length?"":"disabled"}>${icon('coins')} סדר קופה</button>
     `;
   }
 
@@ -7118,7 +7121,7 @@ function renderModal(m){
       ${isForSelf ? `
       <div style="display:flex;gap:8px;margin-bottom:14px;">
         <button class="btn flex1" data-open-bit-generic style="background:#0070E0;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;"> ביט</button>
-        <a href="https://links.payboxapp.com" class="btn flex1" style="background:#0891b2;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</a>
+        <a href="https://links.payboxapp.com" class="btn btn-blue flex1" style="display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</a>
       </div>` : ""}
       ${(() => {
         // Spells out exactly what confirming will record (who it's for, who the money
