@@ -11537,13 +11537,15 @@ window.addEventListener("popstate", async () => {
 })();
 
 // Opened inside another app's built-in browser (WhatsApp's, Facebook's... - an Android
-// WebView, marked "; wv)" in its user agent): those keep their own separate storage (log in
+// WebView, marked "; wv)" in its user agent) or in Samsung Internet: those keep their own separate storage (log in
 // again, no fingerprint, forgotten later) and some force-darken pages. A slim bar on top of
 // every screen - an invite link usually lands on a table, not the home screen - offers to
 // open the same link in Chrome (or in the installed app, if Android routes it there).
 (function inAppBrowserBar(){
   const ua = navigator.userAgent || "";
-  const inApp = /Android/.test(ua) && (/; wv\)/.test(ua) || /WhatsApp|FBAN|FBAV|Instagram/.test(ua));
+  // Samsung Internet too: on Samsung phones WhatsApp opens links in it, and its own
+  // "dark mode for websites" darkens the light themes (Chrome showed them right).
+  const inApp = /Android/.test(ua) && (/; wv\)/.test(ua) || /WhatsApp|FBAN|FBAV|Instagram|SamsungBrowser/i.test(ua));
   if (!inApp) return;
   try { if (sessionStorage.getItem("poker-inapp-bar-closed")) return; } catch(e) {}
   const here = location.host + location.pathname + location.search + location.hash;
