@@ -851,7 +851,9 @@ html.theme-light.theme-blue .chat-bubble{--text:#0e2633;color:#0e2633;}
 .btn-2line{line-height:1.25;}
 .btn-2line small{display:block;font-weight:400;font-size:12px;opacity:.75;margin-top:2px;}
 #signup-name-input.input-error{border-color:#dc2626;}
-html.theme-light.theme-blue .login-frame{border:1.5px solid rgba(168,106,18,.8);}
+/* Blue theme: the pale-gold frame line is made for the blue page itself; on the light
+   cards and windows it all but disappears - a stronger, darker gold line there. */
+html.theme-light.theme-blue :is(.card,.modal) .leave-frame{border:1.5px solid rgba(168,106,18,.8);}
 /* Club profile setup sections: no fill of their own - the same color inside as around
    them, so the title sitting on the frame line isn't cut in two by a lighter panel. The
    blue theme gets a stronger gold line, the pale one there barely showed. */
