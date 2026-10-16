@@ -928,6 +928,12 @@ html.theme-light.theme-sand .rb-confirm{background:linear-gradient(180deg,#bf8a4
 .ttl-chip{font-family:inherit;font-size:11px;padding:3px 9px;border-radius:999px;border:1px solid var(--card-b);background:transparent;color:var(--muted);cursor:pointer;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .ttl-chip.me{border-color:var(--gold);color:var(--gold);font-weight:700;}
 .ttl-chip.sel{border-color:#3b82f6;color:#3b82f6;font-weight:700;}
+/* The table screen is sized to the phone (no page scroll), so the timeline view fills what's
+   left under the header and "מה קרה בערב" takes the rest, scrolling inside its own box -
+   it always ends at the bottom of the screen, whatever the phone's height. */
+body.table-screen .ttl-wrap{flex:1;min-height:0;display:flex;flex-direction:column;padding-bottom:10px;}
+body.table-screen .ttl-list-frame{flex:1;min-height:140px;display:flex;flex-direction:column;}
+body.table-screen .ttl-list-frame .ttl-list{flex:1;min-height:0;max-height:none;}
 .ttl-list{display:flex;flex-direction:column;max-height:330px;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding-left:2px;}
 .ttl-row{display:flex;gap:10px;align-items:baseline;padding:6px 2px;border-bottom:1px solid var(--card-b);font-size:13px;color:var(--text);}
 .ttl-row:last-child{border-bottom:none;}
@@ -6473,13 +6479,13 @@ function renderTableTimeline(g, c, myPlayerId){
   // The player tapped in the chips row (see timelineHighlight) - their rows' times light up.
   const list = rows.map(r => `<div class="ttl-row"><span class="ttl-time${sel && r.pid === sel ? ' hl' : ''}">${fmtElapsed((r.ts || t0) - t0)}</span><span class="ttl-text">${r.text}</span></div>`).join("");
   return `
-    <div class="px5">
+    <div class="px5 ttl-wrap">
       <fieldset class="leave-frame stats-frame" style="margin-top:0;"><legend>קניות לאורך הערב</legend>
         <div class="ttl-chart"><svg viewBox="0 0 ${W} ${H}" width="100%" direction="ltr">${svg}</svg></div>
         <div class="ttl-chips">${chips}</div>
         <div class="stats-frame-note">הקו עולה בכל קנייה ויורד בסכום שהוחזר לקופה ביציאה. מתחת ל-0 = ברווח.</div>
       </fieldset>
-      <fieldset class="leave-frame stats-frame"><legend>מה קרה בערב</legend>
+      <fieldset class="leave-frame stats-frame ttl-list-frame"><legend>מה קרה בערב</legend>
         <div class="ttl-list" data-ttl-list="${g.id}">${list}</div>
       </fieldset>
     </div>`;
