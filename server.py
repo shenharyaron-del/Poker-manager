@@ -2858,6 +2858,11 @@ def add_email_request():
         return jsonify({"error": "invalid email"}), 400
     if _email_taken(email):
         return jsonify({"error": "email taken"}), 409
+    # Same switch as quick-login: with "חייב קוד אימות" turned off in the admin setup, the
+    # address is attached right away with no code (it's unused by anyone - checked above).
+    if email != SUPER_ADMIN_EMAIL and not _get_setting("require_verify_existing_email", True):
+        client_id = str(body.get("clientId", "")).strip()
+        return _rekey_account(key, email, client_id)
     return request_login_code()
 
 
@@ -2882,8 +2887,15 @@ def add_email_verify():
                 conn.commit()
                 return jsonify({"error": "invalid or expired code"}), 400
             cur.execute("DELETE FROM login_codes WHERE email = %s", (email,))
-            # Re-key in place, all in one transaction: same account data, devices and
-            # passkeys, now under the real address.
+        conn.commit()
+    return _rekey_account(key, email, client_id)
+
+
+def _rekey_account(key, email, client_id):
+    # Re-key in place, all in one transaction: same account data, devices and passkeys,
+    # now under the real address.
+    with get_db() as conn:
+        with conn.cursor() as cur:
             cur.execute("UPDATE accounts SET email = %s WHERE email = %s", (email, key))
             cur.execute("UPDATE trusted_devices SET email = %s WHERE email = %s", (email, key))
             cur.execute("UPDATE passkeys SET email = %s WHERE email = %s", (email, key))
