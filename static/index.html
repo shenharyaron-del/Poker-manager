@@ -934,6 +934,13 @@ html.theme-light.theme-sand .rb-confirm{background:linear-gradient(180deg,#bf8a4
 .ttl-time{flex-shrink:0;min-width:34px;color:var(--gold);font-weight:700;font-variant-numeric:tabular-nums;direction:ltr;text-align:right;}
 .ttl-text{flex:1;min-width:0;}
 .ttl-by{color:var(--muted);font-size:11px;}
+/* "פתח בכרום" bar, only inside another app's built-in browser (see inAppBrowserBar). */
+.inapp-bar{position:fixed;top:0;left:0;right:0;z-index:400;display:flex;align-items:center;gap:8px;padding:8px 10px;padding-top:max(8px, env(safe-area-inset-top));background:#1d4ed8;color:#fff;font-size:12px;box-shadow:0 2px 10px rgba(0,0,0,.35);}
+.inapp-bar span{flex:1;min-width:0;}
+.inapp-open{flex-shrink:0;background:#fff;color:#1d4ed8;font-weight:800;text-decoration:none;border-radius:999px;padding:6px 12px;font-size:13px;}
+.inapp-x{flex-shrink:0;background:none;border:none;color:#fff;font-size:16px;cursor:pointer;padding:2px 4px;}
+html.has-inapp-bar body{padding-top:48px;}
+html.has-inapp-bar .overlay{top:48px;}
 </style>
 </head>
 <body>
@@ -11527,6 +11534,30 @@ window.addEventListener("popstate", async () => {
   // least one tab is open somewhere - it can't prevent the very first cold open after
   // everyone's been away for a while.
   setInterval(() => { fetch("/api/version").catch(()=>{}); }, 5*60*1000);
+})();
+
+// Opened inside another app's built-in browser (WhatsApp's, Facebook's... - an Android
+// WebView, marked "; wv)" in its user agent): those keep their own separate storage (log in
+// again, no fingerprint, forgotten later) and some force-darken pages. A slim bar on top of
+// every screen - an invite link usually lands on a table, not the home screen - offers to
+// open the same link in Chrome (or in the installed app, if Android routes it there).
+(function inAppBrowserBar(){
+  const ua = navigator.userAgent || "";
+  const inApp = /Android/.test(ua) && (/; wv\)/.test(ua) || /WhatsApp|FBAN|FBAV|Instagram/.test(ua));
+  if (!inApp) return;
+  try { if (sessionStorage.getItem("poker-inapp-bar-closed")) return; } catch(e) {}
+  const here = location.host + location.pathname + location.search + location.hash;
+  const intent = `intent://${here}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(location.href)};end`;
+  const bar = document.createElement("div");
+  bar.className = "inapp-bar";
+  bar.innerHTML = `<span>לחוויה מלאה (צבעים, התחברות, טביעת אצבע)</span><a class="inapp-open" href="${intent}">פתח בכרום</a><button type="button" class="inapp-x" aria-label="סגור">✕</button>`;
+  document.body.appendChild(bar);
+  document.documentElement.classList.add("has-inapp-bar");
+  bar.querySelector(".inapp-x").onclick = () => {
+    bar.remove();
+    document.documentElement.classList.remove("has-inapp-bar");
+    try { sessionStorage.setItem("poker-inapp-bar-closed", "1"); } catch(e) {}
+  };
 })();
 
 if ("serviceWorker" in navigator) {
