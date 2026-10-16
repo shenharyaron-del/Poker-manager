@@ -6939,15 +6939,6 @@ function renderModal(m){
       <p style="color:var(--muted);font-size:12px;margin-top:-6px;">אחרי היצירה תוכלו להושיב שחקנים סביב השולחן.</p>
       <button class="btn btn-primary btn-block" data-create-game>פתח שולחן</button>
     `;
-  } else if (m.type === "editCashout") {
-    const g = getGame(m.gameId);
-    const p = g.players.find(pl=>pl.id===m.playerId);
-    const co = g.cashouts[m.playerId];
-    title = `תיקון סכום — ${esc(p.name)}`;
-    body = `
-      <div class="field"><label>סכום סופי מתוקן בשקלים</label><input type="number" inputmode="decimal" id="edit-cashout-amount" value="${co.amount}" autofocus></div>
-      <button class="btn btn-primary btn-block" data-confirm-edit-cashout>שמור תיקון</button>
-    `;
   } else if (m.type === "deleteGame") {
     const g = getGame(m.gameId);
     title = "מחיקת ערב משחק";
@@ -6963,47 +6954,6 @@ function renderModal(m){
     body = `
       <p style="color:#6ee7b7;font-size:13px;">לבטל את התשלום של <b>${esc(p.name)}</b> על סך <b>₪${b?b.amount:""}</b>? התשלום יימחק לגמרי מהרישום.</p>
       <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-delete-buyin>בטל תשלום</button>
-    `;
-  } else if (m.type === "deletePaybox") {
-    const g = getGame(m.gameId);
-    const p = g.players.find(pl=>pl.id===m.playerId);
-    const b = (g.payboxPayments||[]).find(bi=>bi.id===m.paymentId);
-    title = "ביטול העברה לפייבוקס";
-    body = `
-      <p style="color:#6ee7b7;font-size:13px;">לבטל את ההעברה של <b>${esc(p.name)}</b> לקבוצת פייבוקס על סך <b>₪${b?b.amount:""}</b>? ההעברה תימחק לגמרי מהרישום.</p>
-      <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-delete-paybox>בטל העברה</button>
-    `;
-  } else if (m.type === "deletePlayerPayment") {
-    const g = getGame(m.gameId);
-    const p = g.players.find(pl=>pl.id===m.playerId);
-    const b = (g.playerPayments||[]).find(bi=>bi.id===m.paymentId);
-    const toName = b ? (g.players.find(pl=>pl.id===b.toPlayerId)||{}).name || "?" : "";
-    title = "ביטול העברה";
-    body = `
-      <p style="color:#6ee7b7;font-size:13px;">לבטל את ההעברה של <b>${esc(p.name)}</b> ל-<b>${esc(toName)}</b> על סך <b>₪${b?b.amount:""}</b>? ההעברה תימחק לגמרי מהרישום.</p>
-      <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-delete-player-payment>בטל העברה</button>
-    `;
-  } else if (m.type === "paybox") {
-    const g = getGame(m.gameId);
-    const c = getCommunity(g.communityId);
-    const activeLink = getActivePayboxLink(c);
-    title = "העברה לקבוצת פייבוקס";
-    body = `
-      ${activeLink ? `
-        <a href="${esc(activeLink)}" class="btn btn-primary btn-block" style="margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('share')} פתח את פייבוקס</a>
-      ` : `
-        <p style="color:var(--muted);font-size:12px;margin-bottom:16px;">לא הוגדרה קבוצת פייבוקס - בקשו מיוצר המועדון להגדיר אחת ממסך המועדון.</p>
-      `}
-      <div class="field"><label>מי העביר?</label>
-        <select id="paybox-player" class="select-input">
-          ${g.players.map(p=>`<option value="${p.id}" ${m.playerId===p.id?"selected":""}>${esc(p.name)}</option>`).join("")}
-        </select>
-      </div>
-      <div class="field"><label>סכום בשקלים</label><input type="number" inputmode="decimal" id="paybox-amount" value="${m.amount||''}" placeholder="50" autofocus></div>
-      <div class="chip-row">
-        ${[50,80,100,200].map(v=>`<button class="chip-btn" data-paybox-chip="${v}">₪${v}</button>`).join("")}
-      </div>
-      <button class="btn btn-primary btn-block" data-confirm-paybox>שמור העברה</button>
     `;
   } else if (m.type === "watchOrJoin") {
     const g = getGame(m.gameId);
@@ -7477,50 +7427,6 @@ function renderModal(m){
       <button class="btn btn-block" style="background:#be123c;color:#fff;margin-bottom:8px;" data-confirm-return-reset-payment>אפס תשלום וחזור למשחק</button>
       <button class="btn btn-ghost btn-block" data-confirm-return-keep-payment>השאר תשלום וחזור למשחק</button>
     `;
-  } else if (m.type === "summary") {
-    const g = getGame(m.gameId);
-    const finalBalances = computeFinalBalances(g);
-    const alreadyPaid = {};
-    (g.payboxPayments||[]).forEach(pp => { alreadyPaid[pp.playerId] = (alreadyPaid[pp.playerId]||0) + pp.amount; });
-    const buyinTotals = {};
-    g.buyins.forEach(b => { buyinTotals[b.playerId] = (buyinTotals[b.playerId]||0) + b.amount; });
-    const rows = Object.entries(finalBalances)
-      .map(([id,b]) => ({ id, name: (g.players.find(pl=>pl.id===id)||{}).name || "?", remaining: b.profit + (alreadyPaid[id]||0), buyin: buyinTotals[id]||0, paid: alreadyPaid[id]||0 }))
-      .filter(r => Math.abs(r.remaining) > 0.005)
-      .sort((a,b) => b.remaining - a.remaining);
-    title = "סיכום תשלומים לקבוצת פייבוקס";
-    body = "";
-    if (rows.length === 0) {
-      body += `<div class="empty" style="padding:20px 0;">✓ הכל מאוזן — אין תשלומים נדרשים.</div>`;
-    } else {
-      body += rows.map(r => `
-        <div class="roster-row">
-          <span><span style="font-weight:700;">${esc(r.name)}</span> <span style="color:var(--muted);font-size:11px;">קנה ₪${r.buyin}${r.paid?` · העביר ₪${r.paid}`:""}</span></span>
-          <span style="display:flex;align-items:center;gap:8px;">
-            <span style="font-weight:700;color:${r.remaining>0?'#6ee7b7':'#fda4af'};">${r.remaining>0?"+":"-"}₪${Math.round(Math.abs(r.remaining)*100)/100}</span>
-            ${r.remaining < -0.005 ? `<button class="icon-btn gold" data-open-paybox-row="${r.id}" data-paybox-amount="${Math.round(Math.abs(r.remaining)*100)/100}" title="פתח פייבוקס עם הסכום">${icon('share')}</button>` : ""}
-          </span>
-        </div>
-      `).join("");
-    }
-    body += `<div class="note">* ירוק = מקבל מקבוצת פייבוקס, אדום = מעביר לקבוצת פייבוקס.${Object.keys(alreadyPaid).length ? " הסכומים שכבר הועברו לפייבוקס במהלך הערב כבר נלקחו בחשבון." : ""}</div>`;
-    if (rows.length) {
-      body += `<button class="btn btn-primary btn-block" data-open-paybox-from-summary style="margin-top:14px;">${icon('share')} פייבוקס</button>`;
-    }
-    // The rows above are about what's still owed via paybox (arranged direct payments
-    // already netted out, balanced players filtered out) - this recap is the plain,
-    // complete picture: what every player actually won or lost tonight, buy-ins vs. what
-    // they cashed out with.
-    const profitRows = g.players.map(p => {
-      const co = g.cashouts[p.id];
-      if (!co) return null;
-      const profit = co.amount - (buyinTotals[p.id] || 0);
-      return {name: p.name, profit};
-    }).filter(Boolean).sort((a,b) => b.profit - a.profit);
-    if (profitRows.length) {
-      body += `<div class="section-title" style="padding:0;margin:16px 0 8px;">סה"כ רווח / הפסד</div>`;
-      body += profitRows.map(r => `<div class="roster-row"><span>${esc(r.name)}</span><span style="font-weight:700;color:${r.profit>0.005?'#6ee7b7':(r.profit<-0.005?'#fda4af':'inherit')};">${r.profit>0?'+':''}₪${Math.round(r.profit*100)/100}</span></div>`).join("");
-    }
   }
 
   // directPay (item 15): closes only by picking a recipient or tapping "הערב נגמר",
@@ -8079,7 +7985,6 @@ function attachHandlers(){
     maybeOpenDirectPayAfterCashout(gameId, pid, 0);
   };
 
-  app.querySelectorAll("[data-edit-cashout]").forEach(el => el.onclick = () => openModal({type:"editCashout", gameId: nav.gameId, playerId: el.dataset.editCashout}));
   const performReturnToGame = async (el, playerId) => {
     const g = getGame(nav.gameId);
     const paidPaybox = (g.payboxPayments||[]).filter(pp=>pp.playerId===playerId).reduce((s,pp)=>s+pp.amount,0);
@@ -8232,14 +8137,6 @@ function attachHandlers(){
     if (modal && modal.type === "potFix") closeModal(); else render();
   };
 
-  const viewSummaryBtn = app.querySelector("[data-view-summary]");
-  if (viewSummaryBtn) viewSummaryBtn.onclick = () => openModal({type:"summary", gameId: nav.gameId});
-  const payboxBtn = app.querySelector("[data-paybox-transfer]");
-  if (payboxBtn) payboxBtn.onclick = () => {
-    const g = getGame(nav.gameId);
-    const active = g.players.filter(p => !(p.id in g.cashouts));
-    openModal({type:"paybox", gameId: nav.gameId, playerId: (active[0]||g.players[0]||{}).id, amount:""});
-  };
 
   app.querySelectorAll("[data-open-poker-odds]").forEach(el => el.onclick = () => openModal({type:"pokerOdds", gameType: "holdem", imageSrc: null, reading: false, error: null, results: null, hands: null, board: null}));
 
@@ -9127,31 +9024,6 @@ function attachHandlers(){
     };
   }
 
-  if (modal && modal.type === "editCashout") {
-    const confirmEdit = app.querySelector("[data-confirm-edit-cashout]");
-    if (confirmEdit) confirmEdit.onclick = async () => {
-      const amt = parseFloat(document.getElementById("edit-cashout-amount").value);
-      if (isNaN(amt) || amt < 0) return;
-      confirmEdit.disabled = true;
-      showButtonLoading(confirmEdit);
-      if (USE_RELATIONAL_API) {
-        const g = getGame(modal.gameId);
-        try { await v2SetCashout(modal.gameId, modal.playerId, amt, (g.cashouts[modal.playerId]||{}).arrangedWith, amt); }
-        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmEdit.disabled = false; return; }
-      } else {
-        await mutateAndSave(() => {
-          const g = getGame(modal.gameId);
-          g.cashouts[modal.playerId].amount = amt;
-          // liveChips backs the pot-balance total shown at the table - keep it in sync with
-          // the corrected cashout so the imbalance check reflects the fix.
-          if (!g.liveChips) g.liveChips = {};
-          g.liveChips[modal.playerId] = amt;
-        });
-      }
-      closeModal();
-    };
-  }
-
   if (modal && modal.type === "pokerOdds") {
     app.querySelectorAll("[data-odds-game-type]").forEach(el => el.onclick = () => updateModal({gameType: el.dataset.oddsGameType}));
     const CARD_READ_PROMPT = "בתמונה יש קלפי פוקר. למעלה יש קלפי יד של שחקנים - 2 קלפים לכל שחקן, יכולים להיות 2 שחקנים או יותר. למטה (אם יש) יש קלפי קהילה משותפים (פלופ/טרן) - 3 או 4 קלפים, ששייכים לכולם ולא לשחקן ספציפי. זהה את כל הקלפים בבירור והחזירו רק JSON בפורמט הבא, בלי טקסט נוסף ובלי markdown: {\"hands\": [[\"Kd\",\"Ks\"], [\"8c\",\"Th\"]], \"board\": [\"9h\",\"7s\",\"8d\"]} - כל קלף מיוצג כדרגה (2-9,T,J,Q,K,A) ואות צבע קטנה (c=תלתן, d=יהלום, h=לב, s=עלה), למשל Kd=מלך יהלום, Th=עשר לב.";
@@ -9641,37 +9513,6 @@ function attachHandlers(){
     };
   }
 
-  if (modal && modal.type === "summary") {
-    const g = getGame(modal.gameId);
-    const c = getCommunity(g.communityId);
-    // Guessing "amount" as the query param name - PayBox's link format gives no confirmed
-    // way to pre-fill a sum, so this is untested; if PayBox ignores it the link still opens
-    // fine, just without a pre-filled amount.
-    const openPaybox = (amount) => {
-      const link = getActivePayboxLink(c);
-      if (!link) return false;
-      const url = amount ? link + (link.includes("?") ? "&" : "?") + "amount=" + amount : link;
-      window.open(url, "_blank", "noopener");
-      return true;
-    };
-    app.querySelectorAll("[data-open-paybox-row]").forEach(el => el.onclick = () => {
-      if (openPaybox(el.dataset.payboxAmount)) return;
-      openModal({type:"paybox", gameId: modal.gameId, playerId: el.dataset.openPayboxRow, amount:""});
-    });
-    const openPayboxBtn = app.querySelector("[data-open-paybox-from-summary]");
-    if (openPayboxBtn) openPayboxBtn.onclick = () => {
-      if (openPaybox(null)) return;
-      // no link saved for this community yet - go set one up first
-      const alreadyPaid = {};
-      (g.payboxPayments||[]).forEach(pp => { alreadyPaid[pp.playerId] = (alreadyPaid[pp.playerId]||0) + pp.amount; });
-      const finalBalances = computeFinalBalances(g);
-      const owing = Object.entries(finalBalances)
-        .map(([id,b]) => ({ id, remaining: b.profit + (alreadyPaid[id]||0) }))
-        .find(r => r.remaining < -0.005);
-      openModal({type:"paybox", gameId: modal.gameId, playerId: owing ? owing.id : (g.players[0]||{}).id, amount:""});
-    };
-  }
-
   if (modal && modal.type === "deleteBuyin") {
     const confirmDelBuyin = app.querySelector("[data-confirm-delete-buyin]");
     if (confirmDelBuyin) confirmDelBuyin.onclick = async () => {
@@ -9696,67 +9537,6 @@ function attachHandlers(){
     };
   }
 
-  if (modal && modal.type === "deletePaybox") {
-    const confirmDelPaybox = app.querySelector("[data-confirm-delete-paybox]");
-    if (confirmDelPaybox) confirmDelPaybox.onclick = async () => {
-      confirmDelPaybox.disabled = true;
-      showButtonLoading(confirmDelPaybox);
-      const paymentId = modal.paymentId, returnTo = modal.returnTo;
-      if (USE_RELATIONAL_API) {
-        try { await v2DeletePayboxPayment(modal.gameId, paymentId); }
-        catch(e) { showAlert("מחיקה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
-      } else {
-        await mutateAndSave(() => {
-          const g = getGame(modal.gameId);
-          g.payboxPayments = (g.payboxPayments||[]).filter(b => b.id !== paymentId);
-        });
-      }
-      openModal(returnTo);
-    };
-  }
-
-  if (modal && modal.type === "deletePlayerPayment") {
-    const confirmDelPP = app.querySelector("[data-confirm-delete-player-payment]");
-    if (confirmDelPP) confirmDelPP.onclick = async () => {
-      confirmDelPP.disabled = true;
-      showButtonLoading(confirmDelPP);
-      const paymentId = modal.paymentId, returnTo = modal.returnTo;
-      if (USE_RELATIONAL_API) {
-        try { await v2DeletePlayerPayment(modal.gameId, paymentId); }
-        catch(e) { showAlert("מחיקה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
-      } else {
-        await mutateAndSave(() => {
-          const g = getGame(modal.gameId);
-          g.playerPayments = (g.playerPayments||[]).filter(b => b.id !== paymentId);
-        });
-      }
-      openModal(returnTo);
-    };
-  }
-
-
-  if (modal && modal.type === "paybox") {
-    app.querySelectorAll("[data-paybox-chip]").forEach(el => el.onclick = () => { document.getElementById("paybox-amount").value = el.dataset.payboxChip; });
-    const confirmPaybox = app.querySelector("[data-confirm-paybox]");
-    if (confirmPaybox) confirmPaybox.onclick = async () => {
-      const amt = parseFloat(document.getElementById("paybox-amount").value);
-      const playerId = document.getElementById("paybox-player").value;
-      if (!amt || amt <= 0 || !playerId) return;
-      confirmPaybox.disabled = true;
-      showButtonLoading(confirmPaybox);
-      if (USE_RELATIONAL_API) {
-        try { await v2AddPayboxPayment(modal.gameId, uid(), playerId, amt); }
-        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmPaybox.disabled = false; return; }
-      } else {
-        await mutateAndSave(() => {
-          const g = getGame(modal.gameId);
-          if (!g.payboxPayments) g.payboxPayments = [];
-          g.payboxPayments.push({id:uid(), playerId, amount: amt, ts: Date.now()});
-        });
-      }
-      closeModal();
-    };
-  }
 
   app.querySelectorAll("[data-watch-view]").forEach(el => el.onclick = () => { watchView = el.dataset.watchView; render(); });
   app.querySelectorAll("[data-stop-watch-only]").forEach(el => el.onclick = () => {
