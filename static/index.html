@@ -398,13 +398,11 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
   background:linear-gradient(180deg,#2f7a58 0%,#1c5a40 48%,#134832 52%,#0f3d2b 100%);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -2px 0 rgba(0,0,0,.35),0 4px 8px rgba(0,0,0,.45);text-shadow:0 1px 1px rgba(0,0,0,.5);}
 .lux-page .chip-btn:active{transform:translateY(2px) scale(.97);}
-.lux-page .icon-btn.ok[data-admin-buyin-toggle]{background:linear-gradient(180deg,#34a06f 0%,#1f7a52 50%,#145c3c 100%)!important;color:#ecfdf5!important;border:1px solid rgba(0,0,0,.25)!important;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.35),inset 0 -3px 0 rgba(0,40,20,.45),0 5px 10px rgba(0,0,0,.45);text-shadow:0 1px 1px rgba(0,0,0,.4);}
 .lux-page .icon-btn.lux-gold,.icon-btn.lux-gold{background:linear-gradient(180deg,#fde68a 0%,#f2c14e 45%,#c8922a 100%)!important;color:#2a1d05!important;border:1px solid rgba(0,0,0,.25)!important;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.7),inset 0 -3px 0 rgba(120,70,0,.45),0 5px 10px rgba(0,0,0,.45);}
 .lux-page .icon-btn.danger[data-admin-remove-seat]{background:linear-gradient(180deg,#e0605a 0%,#c13a35 50%,#94221f 100%)!important;color:#fff!important;border:1px solid rgba(0,0,0,.25)!important;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.35),inset 0 -3px 0 rgba(70,0,0,.45),0 5px 10px rgba(0,0,0,.45);text-shadow:0 1px 1px rgba(0,0,0,.4);}
-.lux-page .icon-btn[data-admin-buyin-toggle]:active,.lux-page .icon-btn[data-admin-end-night]:active,.lux-page .icon-btn[data-admin-remove-seat]:active{transform:translateY(2px);}
+.lux-page .icon-btn[data-admin-remove-seat]:active{transform:translateY(2px);}
 .lux-page .btn-ghost{background:linear-gradient(180deg,#2f7a58 0%,#1a5a3f 50%,#0f3d2b 100%);border:1px solid rgba(110,231,183,.25);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -2px 0 rgba(0,0,0,.35),0 4px 8px rgba(0,0,0,.4);}
 .lux-page .lux-pill{background:linear-gradient(180deg,rgba(16,64,45,.95),rgba(7,38,26,.95))!important;border:1px solid rgba(233,196,106,.4)!important;border-radius:999px!important;padding:8px 12px!important;
@@ -1407,7 +1405,7 @@ async function syncLegacyOnlyFields(){
 async function refreshLegacyOnlyFields(){
   if (!USE_RELATIONAL_API) return; // loadState() already refreshes these every tick
   const changed = await syncLegacyOnlyFields();
-  if (changed && !modal && !playerScreenCustomOpen && !Object.keys(adminBuyinUi).length && !seatDragInProgress && !shouldShowGameWelcome()) render();
+  if (changed && !modal && !playerScreenCustomOpen && !seatDragInProgress && !shouldShowGameWelcome()) render();
 }
 
 // Temporary diagnostic overlay for tracking down a reported sync-flicker bug.
@@ -2119,7 +2117,7 @@ let refreshQueued = false;
 async function doRefreshNow(source){
   const callId = DEBUG_SYNC ? Math.random().toString(36).slice(2,6) : "";
   logSync(`refresh[${callId}] triggered by ${source}, modal=${!!modal}`);
-  if (modal || playerScreenCustomOpen || Object.keys(adminBuyinUi).length || seatDragInProgress) { logSync(`refresh[${callId}] SKIPPED - modal or custom-amount input open`); return; }
+  if (modal || playerScreenCustomOpen || seatDragInProgress) { logSync(`refresh[${callId}] SKIPPED - modal or custom-amount input open`); return; }
   if (refreshInProgress) {
     // Another refresh is already running its own GET - don't start a second one
     // concurrently (two in-flight GETs can resolve out of order, and the one that
@@ -2208,7 +2206,7 @@ async function doRefreshNow(source){
         // next attempt once the refresh had already finished. The fetched state is still
         // applied either way - only the render is skipped - so the next render (the modal
         // closing, or the next refresh with neither open) already reflects it.
-        if (modal || playerScreenCustomOpen || Object.keys(adminBuyinUi).length || seatDragInProgress || clubSwipeDragging || shouldShowGameWelcome()) {
+        if (modal || playerScreenCustomOpen || seatDragInProgress || clubSwipeDragging || shouldShowGameWelcome()) {
           logSync(`refresh[${callId}] applied but SKIPPED render - modal, custom-amount input, or game-welcome screen open`);
         } else {
           const scrollY = window.scrollY;
@@ -2687,14 +2685,9 @@ let playerScreenCustomOpen = false;
 // Which of the player screen's two tabs (own purchase history vs the table's whole
 // activity feed) is currently showing in the shared panel - see .player-history-feed.
 let playerHistoryTab = "history";
-// Admin screen's own inline ריביי row per active-player card (replaces the old "buyin"
-// modal) - not persisted/per-device like getAdminCollapsed, just ephemeral UI state reset
-// on nav like playerScreenCustomOpen above. Keyed by playerId: "presets" shows the amount
-// chips, "custom" shows the "אחר" input instead; absent/undefined means closed.
-let adminBuyinUi = {};
 // True between a seat's pointerdown and its pointerup/pointercancel on the table screen
 // (see the [data-seat] drag handlers) - checked by doRefreshNow below, same reasoning as
-// playerScreenCustomOpen/adminBuyinUi above: a mid-gesture render() would replace the very
+// playerScreenCustomOpen above: a mid-gesture render() would replace the very
 // DOM node being dragged.
 let seatDragInProgress = false;
 // This device's own running record of every buy-in it has personally seen in g.buyins,
@@ -2805,35 +2798,6 @@ function tryUnlockAudioForIOS(){
 document.addEventListener("pointerdown", tryUnlockAudioForIOS, {once: true});
 function getBuyinAmounts(c){
   return (c && Array.isArray(c.buyinAmounts) && c.buyinAmounts.length === 3) ? c.buyinAmounts : DEFAULT_BUYIN_AMOUNTS;
-}
-// The admin screen's own "sent to the bottom" set of active players - deliberately
-// per-device (localStorage, never saved to the DB/synced) since every admin can tuck away
-// players they don't need to interact with right now without affecting what other admins
-// see. Stores pids whose collapsed state has been manually toggled AWAY from its default
-// (see defaultAdminCollapsed) - not the absolute collapsed state itself, so a player who
-// defaults to collapsed and one who defaults to open share the same override list; the
-// effective state (see renderAdminScreen) flips the default whenever a pid is in here.
-function getAdminCollapseOverrides(gameId){
-  try { return JSON.parse(localStorage.getItem(`poker-admin-collapsed-${gameId}`)) || []; }
-  catch(e) { return []; }
-}
-function toggleAdminCollapseOverride(gameId, pid){
-  const cur = getAdminCollapseOverrides(gameId);
-  const idx = cur.indexOf(pid);
-  if (idx === -1) cur.push(pid); else cur.splice(idx, 1);
-  try { localStorage.setItem(`poker-admin-collapsed-${gameId}`, JSON.stringify(cur)); } catch(e) { /* storage full/blocked - just stays at its default */ }
-}
-// Default collapse state for an active player's card, before any manual per-device
-// override above - a player who claimed their own seat (their entry buy-in has no
-// actorName - see v2ClaimSeat/performBuyin's actorName===playerName self-buy check)
-// doesn't need the viewing admin's attention and starts collapsed; the viewing admin's
-// own seat and anyone an admin actually seated themselves (their entry buy-in DOES carry
-// an actorName, since it differs from the player's own name) start open instead.
-function defaultAdminCollapsed(g, pid){
-  const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
-  if (pid === myPlayerId) return false;
-  const entryBuyin = g.buyins.filter(b => b.playerId === pid).sort((a,b)=>(a.ts||0)-(b.ts||0))[0];
-  return !!(entryBuyin && !entryBuyin.actorName);
 }
 // Community-level admin (the admin screen's own gate, and full table-admin rights in
 // every game under this community - see isTableAdmin below) - the community's creator
@@ -3179,7 +3143,6 @@ function go(screen, extra){
   openHistorySeatPlayerId = null;
   tableSubView = "player";
   playerScreenCustomOpen = false;
-  adminBuyinUi = {};
   adminBalanceFixSelected = {};
   lastSeenFeedEventKey = null;
   lastSeenHistoryKey = null;
@@ -4613,7 +4576,7 @@ function render(){
       // to the default face instead of rendering nothing/crashing on a page lookup miss.
       if (!pageOrder.includes(tableSubView)) tableSubView = "player";
       const N = pageOrder.length;
-      const RENDERERS = { player: () => renderPlayerScreen(nav.gameId), table: () => renderTable(nav.gameId), admin: () => renderAdminScreen(nav.gameId) };
+      const RENDERERS = { player: () => renderPlayerScreen(nav.gameId), table: () => renderTable(nav.gameId) };
       // Every page in the carousel is mounted at once (not just the active one) - lets the
       // swipe drag actually slide real content under the finger like a phone home screen,
       // instead of an invisible gesture that only silently swaps views on release (that
@@ -4697,17 +4660,8 @@ function render(){
   // to the top - reported live as "now it jumps to the top every few seconds instead".
   const prevHistoryScrollTop = (() => { const el = app.querySelector("[data-player-history]"); return el ? el.scrollTop : null; })();
   const prevFeedScrollTop = (() => { const el = app.querySelector("[data-player-feed]"); return el ? el.scrollTop : null; })();
-  // Same reasoning as the history/feed frames above, for the admin screen's own scrollable
-  // body - nothing here has "scroll to the newest item" chat semantics, so it's a plain
-  // restore with no latest-key tracking needed (reported live as "scrolling the admin
-  // screen jumps back to the top every few seconds").
-  const prevAdminScrollTop = (() => { const el = app.querySelector("[data-admin-scroll]"); return el ? el.scrollTop : null; })();
   app.innerHTML = html;
   attachHandlers();
-  if (prevAdminScrollTop !== null) {
-    const adminEl = app.querySelector("[data-admin-scroll]");
-    if (adminEl) adminEl.scrollTop = prevAdminScrollTop;
-  }
   // Runs whenever .poker-table-wrap exists at all now, not just when it's the visible
   // face - with both panes always mounted while seated, the circles view's own DOM (and
   // its sizing) exists even while the player screen is the one on screen.
@@ -5370,7 +5324,6 @@ function renderPlayerScreen(gameId){
   // between players - paybox/bit groups close through their own payment flow. On the
   // player screen since that's where the admin spends the night.
   const showClosedToggle = isAdminView && !(c.settlementDefault === "paybox" || c.settlementDefault === "bit");
-  const toolsView = false;
   // Any player can work on another player's screen (rebuy / end of night for them) - only
   // removing someone from the table or bringing them back stays admin-only (see
   // adminPlayerActions).
@@ -5655,7 +5608,6 @@ function renderPlayerScreen(gameId){
       <div style="text-align:center;padding:6px 0 ${cashedOut?16:4}px;flex-shrink:0;">
         ${tilesHtml}
         ${nameHtml}
-        ${toolsView ? "" : `
         ${cashedOut ? "" : `<div class="pp-total-wrap"><div class="pp-total" data-player-total>₪${buyinTotal}</div><img class="pp-chips" src="/static/player-chips.webp" alt="" draggable="false"></div>${paymentNotesHtml}`}
         ${(() => {
           // Direct-settlement arrangement(s) involving this player (either side - see
@@ -5664,14 +5616,12 @@ function renderPlayerScreen(gameId){
           if (!notes.length) return "";
           return `<div style="font-size:12px;color:var(--muted);margin-top:4px;">${notes.map(n => `${n.received?'קיבל':'העביר'} ₪${n.amount} ${n.received?'מ-':'ל-'}${esc(n.name)}`).join(' · ')}</div>`;
         })()}
-        ${cashedOutInfoHtml}`}
+        ${cashedOutInfoHtml}
       </div>
-      ${toolsView ? `<div style="padding:4px 0 16px;">${renderAdminScreen(gameId, true)}</div>` : `
       ${(cashedOut || armed) ? "" : `<fieldset class="leave-frame rb-frame" style="margin-bottom:14px;">${rebuyHtml}</fieldset>`}
       ${cashedOut ? "" : `<fieldset class="leave-frame lv-frame${armed?' lv-frame-top':''}">${leaveHtml}</fieldset>`}
       ${adminPlayerActions}
       ${showClosedToggle ? `<div style="display:flex;justify-content:center;margin-top:12px;flex-shrink:0;"><label class="night-closed-toggle" data-toggle-end-night="${g.id}"><input type="checkbox" ${g.closed?'checked':''} onclick="return false;"><span>ערב סגור</span></label></div>` : ""}
-`}
     </div>
   `;
 }
@@ -5832,7 +5782,9 @@ function renderGameResultsScreen(gameId){
 // building parallel ones - they were already generic on m.playerId, just never had a
 // trigger left pointing at someone OTHER than the viewer's own seat after that panel was
 // removed.
-function renderAdminScreen(gameId, embedded){
+// The "סידור קופה" window: once everyone is out and the counted chips don't match the
+// buy-ins, pick who absorbs the difference.
+function renderPotFix(gameId){
   const g = getGame(gameId);
   if (!g) return `<div class="empty">משחק לא נמצא</div>`;
   const c = getCommunity(g.communityId) || {name:"מועדון", roster:[]};
@@ -5842,9 +5794,6 @@ function renderAdminScreen(gameId, embedded){
   const liveChips = g.liveChips || {};
   const seatedIds = seats.filter(Boolean);
   const stillActiveIds = seatedIds.filter(pid => !(pid in g.cashouts));
-  const collapseOverrides = getAdminCollapseOverrides(gameId);
-  const collapsedIds = stillActiveIds.filter(pid => defaultAdminCollapsed(g, pid) !== collapseOverrides.includes(pid));
-  const activeIds = stillActiveIds.filter(pid => !collapsedIds.includes(pid));
   const cashedOutIds = seatedIds.filter(pid => pid in g.cashouts);
   const allCashedOut = seatedIds.length > 0 && cashedOutIds.length === seatedIds.length;
   const totalBuyinAll = seatedIds.reduce((s,pid)=>s+(buyinTotals[pid]||0),0);
@@ -5852,101 +5801,6 @@ function renderAdminScreen(gameId, embedded){
   const diff = totalChipsAll - totalBuyinAll;
   const potUnbalanced = allCashedOut && Math.abs(diff) > 5;
   const nameOf = pid => (g.players.find(pl=>pl.id===pid)||{}).name || "?";
-  // Small "קיבל/העביר ₪X מ-/ל-Y" line for a player's own direct-settlement arrangement(s)
-  // (either side - see getArrangementNotes) - shown under their name wherever this screen
-  // already shows them.
-  const notesHtml = pid => {
-    const notes = getArrangementNotes(g, pid);
-    if (!notes.length) return "";
-    return `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${notes.map(n => `${n.received?'קיבל':'העביר'} ₪${n.amount} ${n.received?'מ-':'ל-'}${esc(n.name)}`).join(' · ')}</div>`;
-  };
-
-  const activeRows = activeIds.map((pid, idx) => {
-    // A still-active player can already be the OTHER side of someone else's arrangement
-    // (that someone already cashed out and named them) even before they themselves cash
-    // out - lighting up their own "סיים ערב" button is a heads-up not to lose track of it
-    // once they do.
-    const hasArrangement = getArrangementNotes(g, pid).length > 0;
-    // Inline ריביי row (replaces the old "buyin" modal) - "presets" shows the group's
-    // configured amounts + "אחר" like the player screen's own one-tap row (see
-    // buyinButtonsHtml), "custom" swaps that for a plain amount input, same two-level
-    // toggle as playerScreenCustomOpen there. Disabling the other two buttons while open
-    // avoids starting a conflicting action (end-night/remove-seat) mid-buy-in.
-    const buyinUi = adminBuyinUi[pid] || "closed";
-    const buyinOpen = buyinUi !== "closed";
-    const buyinRowHtml = buyinUi === "custom" ? `
-      <div style="display:flex;gap:6px;padding:0 10px 12px;">
-        <input type="number" inputmode="decimal" id="admin-buyin-custom-${pid}" placeholder="סכום" autofocus ${pendingBuyinRequest?'disabled':''} style="flex:1;padding:10px 8px;font-size:15px;text-align:center;border-radius:9px;border:1px solid var(--gold);background:var(--input);color:var(--text);">
-        <button class="chip-btn" data-admin-buyin-custom-confirm="${pid}" ${pendingBuyinRequest?'disabled':''} style="flex:0 0 auto;padding:10px 16px;font-size:14px;font-weight:700;">${icon('coinsPlus')}</button>
-      </div>
-    ` : buyinUi === "presets" ? `
-      <div style="display:flex;gap:6px;padding:0 10px 12px;">
-        ${getBuyinAmounts(c).map(v=>`<button class="chip-btn" data-admin-instant-buyin="${pid}" data-amount="${v}" ${pendingBuyinRequest?'disabled':''} style="flex:1;padding:10px 2px;font-size:13px;">₪${v}</button>`).join("")}
-        <button class="chip-btn" data-admin-buyin-other="${pid}" ${pendingBuyinRequest?'disabled':''} style="flex:1;padding:10px 2px;font-size:13px;">אחר</button>
-      </div>
-    ` : "";
-    return `
-    <div class="roster-row" style="display:block;padding:0;overflow:hidden;">
-      <div style="padding:12px 14px 8px;">
-        <div class="row" style="justify-content:space-between;">
-          <span style="font-weight:700;font-size:16px;">${esc(nameOf(pid))}</span>
-          <span style="display:flex;align-items:center;gap:8px;">
-            <span style="color:var(--gold);font-weight:800;font-size:20px;">₪${buyinTotals[pid]||0}</span>
-            <button data-admin-collapse="${pid}" title="העבר למטה" style="background:none;border:none;color:var(--muted);padding:3px;cursor:pointer;line-height:0;">${icon('collapseDown')}</button>
-          </span>
-        </div>
-        ${notesHtml(pid)}
-      </div>
-      <div style="display:flex;gap:5px;padding:0 10px 12px;">
-        <button class="icon-btn ok" data-admin-buyin-toggle="${pid}" title="${buyinOpen?'בטל ריביי':'הוסף ריביי'}" ${pendingBuyinRequest?'disabled':''} style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 1px;font-size:12px;font-weight:700;border-radius:10px;white-space:nowrap;">${buyinOpen?'':icon('coinsPlus')}${buyinOpen?'ביטול ריביי':'ריביי'}</button>
-        <button class="icon-btn${hasArrangement?'':' lux-gold'}" style="flex:1;background:${hasArrangement?'#78350f':'#57534e'};color:${hasArrangement?'#fde68a':'#f5f5f4'};display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 1px;font-size:12px;font-weight:700;border-radius:10px;white-space:nowrap;opacity:${buyinOpen?.4:1};" data-admin-end-night="${pid}" ${buyinOpen?'disabled':''} title="${hasArrangement?'יש סידור תשלום ישיר עם השחקן הזה - ':''}סיים ערב">${icon('out')}סיום ערב</button>
-        <button class="icon-btn danger" data-admin-remove-seat="${pid}" title="הסר מושב" ${buyinOpen?'disabled':''} style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 1px;font-size:12px;font-weight:700;border-radius:10px;white-space:nowrap;opacity:${buyinOpen?.4:1};">${icon('trash')}הסרה מהשולחן</button>
-      </div>
-      ${buyinRowHtml}
-    </div>
-  `;
-  }).join("") || `<div class="empty" style="padding:10px 0;font-size:13px;">אין שחקנים פעילים</div>`;
-
-  const collapsedRowsHtml = collapsedIds.length ? `
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px;">
-      ${collapsedIds.map(pid => `
-        <div class="lux-pill" data-admin-restore="${pid}" title="החזר לרשימה" style="display:flex;align-items:center;gap:4px;background:var(--card);border:1px solid var(--card-b);border-radius:10px;padding:6px 8px;min-width:0;cursor:pointer;">
-          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:600;">${esc(nameOf(pid))}</span>
-          <span style="color:var(--muted);padding:2px;line-height:0;flex-shrink:0;">${icon('undo')}</span>
-        </div>
-      `).join("")}
-    </div>
-  ` : "";
-
-  const cashedOutRows = cashedOutIds.map(pid => {
-    const profit = (liveChips[pid]||0) - (buyinTotals[pid]||0);
-    return `<div class="roster-row">
-      <div>
-        <div class="row" style="gap:8px;"><span>${esc(nameOf(pid))}</span><span style="font-weight:700;color:${profitColor(profit)};">${profit>0?'+':''}₪${Math.round(profit)}</span></div>
-        ${notesHtml(pid)}
-      </div>
-      <button class="btn btn-ghost btn-sm" data-admin-return-to-game="${pid}">${icon('undo')} החזר לשולחן</button>
-    </div>`;
-  }).join("");
-
-  // Only the 9 real seats - index 9 is a vestigial "extra player" overflow slot from
-  // elsewhere in the app (renderTable's own seatsHtml skips its empty state the same way,
-  // see "if (i === 9) return \"\"") that isn't actually meant to be used - 9 players is the
-  // real cap.
-  const emptySeatIndices = seats.map((pid,i) => (pid===null && i<9) ? i : -1).filter(i=>i>=0);
-  // One summary row instead of one per empty seat - any of them works identically for
-  // seating a new player, so listing each by number added nothing but length.
-  const emptySeatRows = emptySeatIndices.length ? `
-    <div class="roster-row">
-      <span style="color:var(--muted);">${emptySeatIndices.length} מקומות פנויים</span>
-      <button class="btn btn-ghost btn-sm" data-admin-add-seat="${emptySeatIndices[0]}">${icon('plus')} הוסף שחקן</button>
-    </div>
-  ` : "";
-
-  // Once everyone's cashed out but the declared chips don't match what was bought in by
-  // more than ₪5, settling up between players off those numbers would just be wrong - an
-  // equal-split correction across whichever players are checked, same as the old panel's
-  // own pot-balance fix.
   let potFixHtml = "";
   if (potUnbalanced) {
     const direction = diff > 0.5 ? "חוסר" : "עודף";
@@ -5992,62 +5846,7 @@ function renderAdminScreen(gameId, embedded){
     `;
   }
 
-  // Read-only ("מידע בלבד", not a payment-recording UI) - who still needs to pay whom,
-  // once the pot itself is balanced. Reuses the existing (previously orphaned)
-  // settleTransactions/computeFinalBalances min-transfer calculation.
-  let settlementHtml = "";
-  if (allCashedOut && !potUnbalanced) {
-    const txns = settlementWithPayments(g);
-    settlementHtml = `
-      <div class="section-title" style="padding:0;margin:16px 0 8px;">מי מעביר למי</div>
-      ${txns.length ? txns.map(t => `<div class="roster-row"${t.paid?' style="opacity:.6;"':''}><span>${esc(t.fromName)} ← ${esc(t.toName)}</span><span style="font-weight:700;color:${t.paid?'var(--muted)':'var(--gold)'};">₪${t.amount}${t.paid?' ✓ עבר':''}</span></div>`).join("") : `<div class="empty" style="padding:10px 0;font-size:13px;">אין תשלומים נדרשים</div>`}
-    `;
-  }
-
-  // Embedded in the player screen's "כלי השולחן" view (the admin's player dropdown) - just
-  // the table-wide tools; per-player actions live on each player's own view there.
-  // Just the pot-balance fix, for the "סידור קופה" window (see data-open-pot-fix).
-  if (embedded === "potFix") {
-    return potFixHtml || `<div class="empty" style="padding:14px 0;font-size:14px;">הקופה מאוזנת ✓</div>`;
-  }
-  if (embedded) {
-    return `
-      ${(c.settlementDefault === 'paybox' || c.settlementDefault === 'bit') ? "" : `
-      <div class="checkbox-row" style="cursor:pointer;margin-bottom:16px;" data-toggle-end-night="${g.id}">
-        <input type="checkbox" ${g.closed?'checked':''} onclick="return false;">
-        <span class="flex1">סיום ערב לכולם</span>
-      </div>`}
-      ${emptySeatRows ? `<div class="section-title" style="padding:0;margin:0 0 8px;">מושבים פנויים</div>${emptySeatRows}` : ""}
-      ${potFixHtml}
-      ${settlementHtml}
-      ${!emptySeatRows && !potFixHtml && !settlementHtml ? `<div class="empty" style="padding:10px 0;font-size:13px;">אין כרגע מה לסדר בשולחן</div>` : ""}
-    `;
-  }
-
-  return `
-    <div class="top row" style="padding-top:14px;padding-bottom:16px;flex-shrink:0;">
-      <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
-      <div class="flex1" style="min-width:0;">
-        <h1 class="serif sm" style="color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g.name || c.name)}</h1>
-        <div class="meta" style="color:#6ee7b7;font-size:11px;display:flex;align-items:center;gap:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${icon('cal')}${esc(g.date)}${g.createdByName ? ` · נוצר ע"י ${esc(g.createdByName)}` : ""}</div>
-      </div>
-      <button class="icon-btn gold" data-invite-game="${g.id}" title="הזמנת שחקנים" style="flex-shrink:0;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;white-space:nowrap;padding:5px 7px;">${icon('share')}הזמנת שחקנים</button>
-    </div>
-    <div data-admin-scroll style="flex:1;min-height:0;overflow-y:auto;padding:0 20px 20px;touch-action:pan-y;">
-      ${(c.settlementDefault === 'paybox' || c.settlementDefault === 'bit') ? "" : `
-      <div class="checkbox-row" style="cursor:pointer;margin-bottom:16px;" data-toggle-end-night="${g.id}">
-        <input type="checkbox" ${g.closed?'checked':''} onclick="return false;">
-        <span class="flex1">סיום ערב</span>
-      </div>`}
-      <div class="section-title" style="padding:0;margin:0 0 8px;">שחקנים פעילים</div>
-      ${activeRows}
-      ${collapsedRowsHtml}
-      ${cashedOutIds.length ? `<div class="section-title" style="padding:0;margin:16px 0 8px;">יצאו מהשולחן</div>${cashedOutRows}` : ""}
-      ${emptySeatRows ? `<div class="section-title" style="padding:0;margin:16px 0 8px;">מושבים פנויים</div>${emptySeatRows}` : ""}
-      ${potFixHtml}
-      ${settlementHtml}
-    </div>
-  `;
+  return potFixHtml || `<div class="empty" style="padding:14px 0;font-size:14px;">הקופה מאוזנת ✓</div>`;
 }
 // Super admin watching a table they don't sit at: "שולחן" / "פעילות בשולחן" switch (the
 // feed page is the activity feed alone, full height), plus the watch-only join button
@@ -7251,7 +7050,7 @@ function renderModal(m){
     `;
   } else if (m.type === "potFix") {
     title = "סידור קופה";
-    body = renderAdminScreen(m.gameId, "potFix");
+    body = renderPotFix(m.gameId);
   } else if (m.type === "themePicker") {
     title = "עיצוב";
     const cur = currentTheme();
@@ -8494,7 +8293,7 @@ function attachHandlers(){
     closeModal();
   };
   app.querySelectorAll("[data-return-to-game]").forEach(el => el.onclick = () => performReturnToGame(el, el.dataset.returnToGame));
-  // Admin screen only (renderAdminScreen's own "החזר לשולחן" row) - a confirm step first,
+  // Player screen's "החזרה לשולחן" for another player - a confirm step first,
   // since this is the one place an admin can send a DIFFERENT player back into an active
   // table on their behalf, not something to do with a stray tap.
   app.querySelectorAll("[data-admin-return-to-game]").forEach(el => el.onclick = async () => {
@@ -8506,41 +8305,8 @@ function attachHandlers(){
   });
   app.querySelectorAll("[data-remove-from-game]").forEach(el => el.onclick = () => openModal({type:"removeFromGame", gameId: nav.gameId, playerId: el.dataset.removeFromGame}));
 
-  // Admin screen (renderAdminScreen) - return-to-game reuses [data-return-to-game] above
-  // as-is (already generic on playerId); these are the ones with no existing generic
-  // trigger left after the old table-screen panel (which read a single
-  // selectedSeatPlayerId instead of carrying playerId per button) was removed.
-  app.querySelectorAll("[data-admin-end-night]").forEach(el => el.onclick = () => openModal({type:"seatChips", gameId: nav.gameId, playerId: el.dataset.adminEndNight}));
+  // Player screen's "הסרת X מהשולחן" (viewing another player).
   app.querySelectorAll("[data-admin-remove-seat]").forEach(el => el.onclick = () => openModal({type:"removeSeat", gameId: nav.gameId, playerId: el.dataset.adminRemoveSeat}));
-  app.querySelectorAll("[data-admin-add-seat]").forEach(el => el.onclick = () => openModal({type:"pickSeat", gameId: nav.gameId, seatIndex: parseInt(el.dataset.adminAddSeat)}));
-  // Admin screen's own inline ריביי row (replaces the old "buyin" modal - see
-  // adminBuyinUi's own comment). Mirrors the player screen's one-tap buy-in row
-  // (doPlayerBuyin/playerScreenCustomOpen below) but keyed per playerId since several of
-  // these cards can exist on screen at once.
-  app.querySelectorAll("[data-admin-buyin-toggle]").forEach(el => el.onclick = () => {
-    const pid = el.dataset.adminBuyinToggle;
-    if (adminBuyinUi[pid]) delete adminBuyinUi[pid]; else adminBuyinUi[pid] = "presets";
-    render();
-  });
-  const doAdminBuyin = async (pid, amt) => {
-    if (!amt || amt <= 0 || pendingBuyinRequest) return;
-    delete adminBuyinUi[pid];
-    await performBuyin(nav.gameId, pid, amt, {actorName: myIdentity.name});
-  };
-  app.querySelectorAll("[data-admin-instant-buyin]").forEach(el => el.onclick = () => doAdminBuyin(el.dataset.adminInstantBuyin, parseFloat(el.dataset.amount)));
-  app.querySelectorAll("[data-admin-buyin-other]").forEach(el => el.onclick = () => { adminBuyinUi[el.dataset.adminBuyinOther] = "custom"; render(); });
-  app.querySelectorAll("[data-admin-buyin-custom-confirm]").forEach(el => el.onclick = () => {
-    const pid = el.dataset.adminBuyinCustomConfirm;
-    const amt = parseFloat(document.getElementById(`admin-buyin-custom-${pid}`).value);
-    doAdminBuyin(pid, amt);
-  });
-  // Sending an active-player card down to the collapsed tray and back - purely local to
-  // this device (see getAdminCollapseOverrides/toggleAdminCollapseOverride's own comment),
-  // so no save-to-server/render conflict handling needed. Both buttons only ever appear on
-  // a card already at the opposite effective state, so a plain toggle always lands on the
-  // state the tap asked for.
-  app.querySelectorAll("[data-admin-collapse]").forEach(el => el.onclick = () => { toggleAdminCollapseOverride(nav.gameId, el.dataset.adminCollapse); render(); });
-  app.querySelectorAll("[data-admin-restore]").forEach(el => el.onclick = () => { toggleAdminCollapseOverride(nav.gameId, el.dataset.adminRestore); render(); });
   // "סיום ערב" checkbox - a plain manual toggle of g.closed (also settable from the
   // directPay modal's own "הערב נגמר" button, see data-confirm-end-night-button below).
   app.querySelectorAll("[data-toggle-end-night]").forEach(el => el.onclick = async () => {
@@ -8725,7 +8491,7 @@ function attachHandlers(){
       // drag swaps out the very element being dragged for a fresh one with no transform
       // applied, which is what made the dragged player visibly snap back to their old
       // seat even on an otherwise precise drop. Same skip-while-mid-interaction pattern
-      // already used for an open modal/playerScreenCustomOpen/adminBuyinUi below. Set
+      // already used for an open modal/playerScreenCustomOpen below. Set
       // before setPointerCapture (which can throw on some browsers/synthetic events) so
       // the guard is in place regardless of whether capture itself succeeds.
       seatDragInProgress = true;
