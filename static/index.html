@@ -1280,6 +1280,31 @@ function applyFreshState(fresh){
   } else {
     state = fresh;
   }
+  healMyPlayerLinks();
+}
+// Which roster player is "me" in each club (myIdentity.myPlayers) used to live only on the
+// device, so a wiped or new device lost it - seen live: back in via fingerprint, my own
+// seat at the table counted as someone else's and the table offered "צפייה בלבד". Fills in
+// a missing link from what identifies me across devices: the roster row already linked to
+// my player id (account.playerId), else a single exact name match (the same self-heal
+// autoSeatSelf already does). Never overrides an existing link. Logged-in people only.
+function healMyPlayerLinks(){
+  if (!myIdentity.email) return false;
+  let changed = false;
+  (state.communities || []).forEach(c => {
+    if (myIdentity.myPlayers && myIdentity.myPlayers[c.id]) return;
+    const roster = c.roster || [];
+    let p = roster.find(r => r.clientId && r.clientId === myIdentity.id);
+    // Not for a super admin: they see every club, where a same-named roster row may well
+    // be somebody else.
+    if (!p && myIdentity.name && !isSuperAdmin()) {
+      const byName = roster.filter(r => r.name === myIdentity.name);
+      if (byName.length === 1) p = byName[0];
+    }
+    if (p) { myIdentity.myPlayers = {...(myIdentity.myPlayers || {}), [c.id]: p.id}; changed = true; }
+  });
+  if (changed) saveIdentity();
+  return changed;
 }
 // globalPlayers/customAvatars/hiddenAvatarKeys/the avatar-category overrides never got a
 // v2 table (see applyFreshState's own comment) - they're still written as a POST of the
@@ -2240,7 +2265,15 @@ async function loadAuthSettings(){
   } catch(e) { /* keep the safe defaults */ }
   return null;
 }
+let lastPushedMyPlayers = null;
 async function saveIdentity(){
+  // The club -> my-player links also go to the account, so another device (or this one
+  // after its storage is wiped) gets them back on login - see applyAccountToIdentity.
+  const mp = JSON.stringify(myIdentity.myPlayers || {});
+  if (myIdentity.email && mp !== "{}" && mp !== lastPushedMyPlayers) {
+    lastPushedMyPlayers = mp;
+    updateAccount({myPlayers: myIdentity.myPlayers});
+  }
   try {
     await fetch("/api/identity?clientId=" + encodeURIComponent(getClientId()), {
       method: "POST",
@@ -2319,6 +2352,12 @@ function applyAccountToIdentity(account){
   // canonical one, BEFORE writing photo/phone below, so they land on the right
   // globalPlayers record instead of one about to be abandoned.
   if (account.playerId) myIdentity.id = account.playerId;
+  // Links saved from another device fill in clubs this device doesn't know yet; a link
+  // this device already has always wins.
+  if (account.myPlayers && typeof account.myPlayers === "object") {
+    myIdentity.myPlayers = {...account.myPlayers, ...(myIdentity.myPlayers || {})};
+    lastPushedMyPlayers = JSON.stringify(account.myPlayers);
+  }
   if (account.photo || account.phone) setGlobalPlayer(myIdentity.id, {
     ...(account.photo ? {photo: account.photo} : {}),
     ...(account.phone ? {phone: account.phone} : {}),
@@ -8841,8 +8880,8 @@ function attachHandlers(){
       if (account.name) { await retryInviteJoinIfNeeded(); closeModal(); }
       else openModal({type:"identityName", forced:true});
       // This device couldn't see the person's clubs while it was logged out - fetch them
-      // now instead of waiting for the next periodic refresh.
-      doRefreshNow("login");
+      // now instead of waiting for the next periodic refresh, then re-link my players.
+      doRefreshNow("login").then(() => { if (healMyPlayerLinks()) render(); });
     };
     const sendLoginCodeFor = async (email) => {
       // Always tries the no-code path first and lets the server decide eligibility (a
@@ -11146,6 +11185,7 @@ window.addEventListener("popstate", async () => {
       }
       if (myIdentity.id !== localIdBeforeSync || (!hadName && myIdentity.name)) saveIdentity();
       if (!hadPhoto && getGlobalPlayer(myIdentity.id).photo) saveState();
+      healMyPlayerLinks();
     }
   }
   // One-time cleanup: remove legacy communities that weren't created via the "new community"
