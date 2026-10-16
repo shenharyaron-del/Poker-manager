@@ -906,6 +906,30 @@ html.theme-light.theme-sand .rb-confirm{background:linear-gradient(180deg,#bf8a4
 .gender-seg button + button{border-right:1px solid var(--input-b);}
 .gender-seg button.on{background:var(--gold);color:var(--gold-text);}
 .custom-alert-box span.one-line{white-space:nowrap;overflow:hidden;min-width:0;flex:1;}
+/* Table screen: שולחן / ציר זמן toggle and the timeline view */
+.tv-seg{display:flex;border:1px solid rgba(212,175,55,.55);border-radius:10px;overflow:hidden;flex-shrink:0;}
+.tv-seg button{background:transparent;border:none;color:var(--text);font-family:inherit;font-size:13px;padding:6px 12px;cursor:pointer;}
+.tv-seg button.on{background:var(--gold);color:var(--gold-text);font-weight:700;}
+.ttl-chart svg{display:block;height:auto;overflow:visible;}
+.ttl-grid{stroke:var(--card-b);stroke-width:1;opacity:.6;}
+.ttl-zero{stroke:var(--muted);stroke-width:1;opacity:.7;}
+.ttl-ax{fill:var(--muted);font-size:9px;font-family:inherit;}
+.ttl-other{fill:none;stroke:var(--text);stroke-opacity:.28;stroke-width:1.3;}
+.ttl-me{fill:none;stroke:var(--gold);stroke-width:2.6;stroke-linejoin:round;}
+.ttl-sel{fill:none;stroke:#3b82f6;stroke-width:2.6;stroke-linejoin:round;}
+.ttl-me-dot{fill:var(--gold);stroke:var(--bg2);stroke-width:2;}
+.ttl-sel-dot{fill:#3b82f6;stroke:var(--bg2);stroke-width:2;}
+.ttl-label{fill:var(--text);font-size:10px;font-weight:700;font-family:inherit;}
+.ttl-chips{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 4px;}
+.ttl-chip{font-family:inherit;font-size:11px;padding:3px 9px;border-radius:999px;border:1px solid var(--card-b);background:transparent;color:var(--muted);cursor:pointer;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ttl-chip.me{border-color:var(--gold);color:var(--gold);font-weight:700;}
+.ttl-chip.sel{border-color:#3b82f6;color:#3b82f6;font-weight:700;}
+.ttl-list{display:flex;flex-direction:column;}
+.ttl-row{display:flex;gap:10px;align-items:baseline;padding:6px 2px;border-bottom:1px solid var(--card-b);font-size:13px;color:var(--text);}
+.ttl-row:last-child{border-bottom:none;}
+.ttl-time{flex-shrink:0;min-width:34px;color:var(--gold);font-weight:700;font-variant-numeric:tabular-nums;direction:ltr;text-align:right;}
+.ttl-text{flex:1;min-width:0;}
+.ttl-by{color:var(--muted);font-size:11px;}
 </style>
 </head>
 <body>
@@ -6286,14 +6310,16 @@ function renderTable(gameId){
       <button class="icon-btn gold${aloneAtTable?' invite-hint':''}" data-invite-game="${g.id}" title="הזמנת שחקנים" style="flex-shrink:0;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;white-space:nowrap;padding:5px 7px;">${icon('share')}הזמנת שחקנים</button>
     </div>
     ${watchStripHtml(g)}
-    ${!allCashedOut ? `
-    <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:0 20px 10px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:0 20px 10px;">
+      <div class="tv-seg" role="tablist"><button type="button" class="${tableTimelineOn() ? '' : 'on'}" data-table-view="table">שולחן</button><button type="button" class="${tableTimelineOn() ? 'on' : ''}" data-table-view="timeline">ציר זמן</button></div>
+    ${!allCashedOut ? `<div style="display:flex;align-items:center;gap:8px;">
       <span data-open-poker-odds class="odds-label" style="color:#C8902F;font-size:12px;text-align:center;line-height:1.3;cursor:pointer;">מחשבון<br>סיכויי פוקר</span>
       <button class="icon-btn" data-open-poker-odds title="מה הסיכויים שלי" style="flex-shrink:0;width:48px;height:auto;background:none;border:none;padding:0;display:inline-flex;align-items:center;justify-content:center;">
         <img src="/static/odds-coin.png" style="width:48px;height:auto;display:block;">
       </button>
     </div>` : ""}
-    <div class="poker-table-wrap">
+    </div>
+    ${tableTimelineOn() ? renderTableTimeline(g, c, myPlayerId) : `<div class="poker-table-wrap">
       <div class="poker-table-inner ${cropClass}">
         <div class="poker-table-felt"></div>
         ${seatsHtml}
@@ -6305,8 +6331,121 @@ function renderTable(gameId){
           <div style="color:${diffColor};font-weight:700;font-size:13px;margin-top:4px;">${diffLabel}${Math.abs(diff)>=0.5?` ₪${Math.abs(Math.round(diff))}`:""}</div>
         </div>
       </div>
-    </div>
+    </div>`}
   `;
+}
+
+// ---------- Table screen: timeline view ("ציר זמן") ----------
+// Instead of the table: a chart of everyone's buy-ins over the night (each player one
+// stepped line - up on every buy-in, down by what they returned to the pot on leaving),
+// and below it, the night's activity in order from 0:00 (the first player's entry).
+// Which view is open is remembered per device.
+function tableTimelineOn(){ try { return localStorage.getItem("poker-table-view") === "timeline"; } catch(e) { return false; } }
+function setTableView(v){ try { localStorage.setItem("poker-table-view", v); } catch(e) {} }
+let timelineHighlight = {}; // gameId -> the player tapped in the chips row (shown in blue)
+function fmtElapsed(ms){
+  const m = Math.max(0, Math.round(ms / 60000));
+  return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`;
+}
+function renderTableTimeline(g, c, myPlayerId){
+  const buyins = (g.buyins || []).slice().sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  if (!buyins.length) return `<div class="empty" style="padding:30px 20px;">אין עדיין קניות בערב הזה.</div>`;
+  const t0 = buyins[0].ts || 0;
+  const name = id => { const p = g.players.find(x => x.id === id); return p ? p.name : "שחקן"; };
+  const fem = id => playerIsFemale(g, c, id);
+  const cashouts = g.cashouts || {};
+  const events = g.events || [];
+  // Chart: one stepped series per player, in tonight's entry order.
+  const order = [];
+  buyins.forEach(b => { if (!order.includes(b.playerId)) order.push(b.playerId); });
+  const lastTs = Math.max(...buyins.map(b => b.ts || 0), ...Object.values(cashouts).map(co => co.ts || 0), ...events.map(e => e.ts || 0));
+  const end = g.closed ? lastTs : Math.max(lastTs, Date.now());
+  const span = Math.max(end - t0, 60000);
+  const series = order.map(pid => {
+    const steps = buyins.filter(b => b.playerId === pid).map(b => ({ts: b.ts || t0, d: b.amount}));
+    const co = cashouts[pid];
+    if (co) steps.push({ts: co.ts || end, d: -(co.amount || 0)});
+    steps.sort((a, b) => a.ts - b.ts);
+    let v = 0;
+    const pts = [];
+    steps.forEach(st => { pts.push([st.ts, v]); v += st.d; pts.push([st.ts, v]); });
+    if (!co) pts.push([end, v]);
+    return {pid, pts, last: v, out: !!co};
+  });
+  const vals = series.flatMap(s => s.pts.map(p => p[1]));
+  const hi = Math.max(0, ...vals), lo = Math.min(0, ...vals);
+  const W = 360, H = 200, pl = 40, pr = 10, pt = 10, pb = 22;
+  const X = ts => pl + (W - pl - pr) * (ts - t0) / span;
+  const Y = v => pt + (H - pt - pb) * (hi - v) / ((hi - lo) || 1);
+  const money = v => `${v < 0 ? "-" : ""}₪${Math.abs(Math.round(v))}`;
+  let svg = "";
+  [hi, 0, lo].filter((v, i, a) => a.indexOf(v) === i).forEach(v => {
+    svg += `<line class="${v === 0 ? 'ttl-zero' : 'ttl-grid'}" x1="${pl}" x2="${W - pr}" y1="${Y(v)}" y2="${Y(v)}"/><text class="ttl-ax" x="${pl - 4}" y="${Y(v) + 3}" text-anchor="end">${money(v)}</text>`;
+  });
+  const tickStep = [15, 30, 60, 120].find(st => span / 60000 / st <= 6) || 180;
+  for (let m = 0; m * 60000 <= span; m += tickStep) {
+    svg += `<text class="ttl-ax" x="${X(t0 + m * 60000)}" y="${H - 6}" text-anchor="middle">${fmtElapsed(m * 60000)}</text>`;
+  }
+  const sel = timelineHighlight[g.id];
+  const pathOf = s => s.pts.map((p, i) => `${i ? "L" : "M"}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(" ");
+  // Everyone thin and gray in the background; me (gold) and the tapped player (blue)
+  // drawn on top with their current figure at the end of the line.
+  series.forEach(s => { if (s.pid !== myPlayerId && s.pid !== sel) svg += `<path class="ttl-other" d="${pathOf(s)}"><title>${esc(name(s.pid))}</title></path>`; });
+  series.filter(s => s.pid === sel && s.pid !== myPlayerId).concat(series.filter(s => s.pid === myPlayerId)).forEach(s => {
+    const cls = s.pid === myPlayerId ? "ttl-me" : "ttl-sel";
+    const [ex, ey] = s.pts[s.pts.length - 1];
+    svg += `<path class="${cls}" d="${pathOf(s)}"/><circle class="${cls}-dot" cx="${X(ex)}" cy="${Y(ey)}" r="4"/>`;
+    // \u2066…\u2069 keeps the signed amount left-to-right beside a Hebrew name.
+    svg += `<text class="ttl-label" x="${Math.max(pl + 4, X(ex) - 6)}" y="${Y(ey) - 7}" text-anchor="end">${esc(name(s.pid))} \u2066${money(ey)}\u2069</text>`;
+  });
+  const chips = order.map(pid => `<button type="button" class="ttl-chip${pid === myPlayerId ? ' me' : ''}${pid === sel && pid !== myPlayerId ? ' sel' : ''}" data-timeline-pick="${pid}"><bdi>${esc(name(pid))}</bdi></button>`).join("");
+
+  // Activity list, from 0:00 down. A cancelled buy-in is simply gone from g.buyins, and
+  // its cancellation event is skipped - neither shows. The pot fix shows as one line
+  // (its own buy-ins, by the same person within a minute of it, are folded into it).
+  const potFixes = events.filter(e => e.type === "pot_fixed");
+  const isPotFixBuyin = b => potFixes.some(e => b.actorName && b.actorName === e.actorName && Math.abs((b.ts || 0) - (e.ts || 0)) < 60000);
+  const by = (pid, actor) => actor && actor !== name(pid) ? ` <span class="ttl-by">ע"י ${esc(actor)}</span>` : "";
+  const rows = [];
+  const seen = {}, totals = {}, entryTs = {};
+  buyins.forEach(b => {
+    totals[b.playerId] = (totals[b.playerId] || 0) + b.amount;
+    if (isPotFixBuyin(b)) return;
+    const first = !seen[b.playerId];
+    seen[b.playerId] = true;
+    if (first) entryTs[b.playerId] = b.ts;
+    rows.push({ts: b.ts, text: first
+      ? `<b>${esc(name(b.playerId))}</b> ${fem(b.playerId) ? "נכנסה" : "נכנס"} עם ₪${b.amount}${by(b.playerId, b.actorName)}`
+      : `<b>${esc(name(b.playerId))}</b> ריביי ₪${b.amount}${by(b.playerId, b.actorName)}`});
+  });
+  Object.keys(cashouts).forEach(pid => {
+    const co = cashouts[pid];
+    const profit = (co.amount || 0) - (totals[pid] || 0);
+    const res = Math.abs(profit) < 0.5 ? "מאוזן" : profit > 0 ? `+₪${Math.round(profit)}` : `-₪${Math.abs(Math.round(profit))}`;
+    const dur = entryTs[pid] && co.ts ? ` אחרי ${fmtElapsed(co.ts - entryTs[pid])}` : "";
+    rows.push({ts: co.ts, text: `<b>${esc(name(pid))}</b> ${fem(pid) ? "יצאה" : "יצא"} עם ₪${co.amount} <span class="${profit >= 0 ? 'stats-win' : 'stats-loss'}">(<bdi dir="ltr">${res}</bdi>)</span>${dur}`});
+  });
+  events.forEach(e => {
+    if (e.type === "returned_to_table") rows.push({ts: e.ts, text: `<b>${esc(name(e.playerId))}</b> ${fem(e.playerId) ? "חזרה" : "חזר"} לשולחן${by(e.playerId, e.actorName)}`});
+    else if (e.type === "seat_removed") rows.push({ts: e.ts, text: `<b>${esc(name(e.playerId))}</b> ${fem(e.playerId) ? "הוצאה" : "הוצא"} מהשולחן${by(e.playerId, e.actorName)}`});
+    else if (e.type === "pot_fixed") rows.push({ts: e.ts, text: `סידור קופה${e.actorName ? ` <span class="ttl-by">ע"י ${esc(e.actorName)}</span>` : ""}`});
+    else if (e.type === "night_closed") rows.push({ts: e.ts, text: `הערב נסגר${e.actorName ? ` <span class="ttl-by">ע"י ${esc(e.actorName)}</span>` : ""}`});
+    else if (e.type === "night_declared_over") rows.push({ts: e.ts, text: `הוכרז על סיום הערב${e.actorName ? ` <span class="ttl-by">ע"י ${esc(e.actorName)}</span>` : ""}`});
+    else if (e.type === "night_reopened") rows.push({ts: e.ts, text: `הערב נפתח מחדש${e.actorName ? ` <span class="ttl-by">ע"י ${esc(e.actorName)}</span>` : ""}`});
+  });
+  rows.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  const list = rows.map(r => `<div class="ttl-row"><span class="ttl-time">${fmtElapsed((r.ts || t0) - t0)}</span><span class="ttl-text">${r.text}</span></div>`).join("");
+  return `
+    <div class="px5">
+      <fieldset class="leave-frame stats-frame" style="margin-top:0;"><legend>קניות לאורך הערב</legend>
+        <div class="ttl-chart"><svg viewBox="0 0 ${W} ${H}" width="100%" direction="ltr">${svg}</svg></div>
+        <div class="ttl-chips">${chips}</div>
+        <div class="stats-frame-note">הקו עולה בכל קנייה ויורד בסכום שהוחזר לקופה ביציאה. מתחת ל-0 = ברווח.</div>
+      </fieldset>
+      <fieldset class="leave-frame stats-frame"><legend>מה קרה בערב</legend>
+        <div class="ttl-list">${list}</div>
+      </fieldset>
+    </div>`;
 }
 
 // End-of-evening window's opening tab: counting from a photo when the group has chip values
@@ -8344,6 +8483,12 @@ function attachHandlers(){
     return (playerViewTarget && playerViewTarget !== "__tools__" && g.players.some(pl => pl.id === playerViewTarget)) ? playerViewTarget : mine;
   };
   app.querySelectorAll("[data-pp-back-me]").forEach(el => el.onclick = () => { playerViewTarget = null; render(); });
+  app.querySelectorAll("[data-table-view]").forEach(el => el.onclick = () => { setTableView(el.dataset.tableView); render(); });
+  app.querySelectorAll("[data-timeline-pick]").forEach(el => el.onclick = () => {
+    const gid = nav.gameId, pid = el.dataset.timelinePick;
+    timelineHighlight[gid] = timelineHighlight[gid] === pid ? null : pid;
+    render();
+  });
   app.querySelectorAll("[data-pp-view]").forEach(el => el.onclick = () => {
     const g = getGame(nav.gameId);
     const mine = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
@@ -8642,6 +8787,8 @@ function attachHandlers(){
       });
     }
     adminBalanceFixSelected = {};
+    // One "סידור קופה" line in the table's timeline instead of a run of look-alike rebuys.
+    if (USE_RELATIONAL_API) v2AddGameEvent(nav.gameId, "pot_fixed", null, myIdentity.name, null);
     if (modal && modal.type === "potFix") closeModal(); else render();
   };
 
