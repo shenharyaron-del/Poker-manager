@@ -3890,7 +3890,7 @@ async function openInChromeForInstall(){
   location.href = `intent://${u.host}${u.pathname}${u.search}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(u.href)};end`;
 }
 
-function showAlert(message){
+function showAlert(message, durationMs){
   const el = document.createElement("div");
   el.className = "custom-alert";
   el.innerHTML = `<div class="custom-alert-box">
@@ -3901,7 +3901,8 @@ function showAlert(message){
   const remove = () => el.remove();
   el.onclick = (e) => { if (e.target === el) remove(); };
   el.querySelector(".custom-alert-close").onclick = remove;
-  setTimeout(remove, 6000);
+  setTimeout(remove, durationMs || 6000);
+  return el;
 }
 // showConfirm() - custom stand-in for the browser's native confirm(), same reasoning as
 // showAlert() above. Async since it has to wait for a click instead of blocking the thread.
@@ -5098,8 +5099,22 @@ function returnToMyScreenAfter(gameId, pid, what){
   const mine = g && myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
   if (!g || !pid || pid === mine || playerViewTarget !== pid) return;
   const name = (g.players.find(pl => pl.id === pid) || {}).name || "השחקן";
-  showAlert(`${what} ${/^[\u0590-\u05FF]/.test(name) ? "ל" : "ל-"}${name} ✓ - חוזרים למסך שלך`);
-  setTimeout(() => { if (playerViewTarget === pid) { playerViewTarget = null; render(); } }, 10000);
+  const base = `${what} ${/^[\u0590-\u05FF]/.test(name) ? "ל" : "ל-"}${name} ✓ - חוזרים למסך שלך`;
+  const inText = n => n === 1 ? "בעוד שנייה" : `בעוד ${n} שניות`;
+  let left = 10;
+  const el = showAlert(`${base} ${inText(left)}`, (left + 1) * 1000);
+  const span = el.querySelector(".custom-alert-box span");
+  // Counts down in the toast; stops (and clears the toast) if I already moved to another
+  // screen myself.
+  const timer = setInterval(() => {
+    if (playerViewTarget !== pid) { clearInterval(timer); el.remove(); return; }
+    left--;
+    if (left > 0) { if (span) span.textContent = `${base} ${inText(left)}`; return; }
+    clearInterval(timer);
+    el.remove();
+    playerViewTarget = null;
+    render();
+  }, 1000);
 }
 
 function renderCommunity(communityId){
