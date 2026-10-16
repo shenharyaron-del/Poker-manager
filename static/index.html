@@ -1297,11 +1297,11 @@ function healMyPlayerLinks(){
   (state.communities || []).forEach(c => {
     if (myIdentity.myPlayers && myIdentity.myPlayers[c.id]) return;
     const roster = c.roster || [];
-    let p = roster.find(r => r.clientId && r.clientId === myIdentity.id);
-    // Not for a super admin: they see every club, where a same-named roster row may well
-    // be somebody else.
+    // By id; by name only for an unlinked row, and never for a super admin (they see
+    // every club, where a same-named row may well be somebody else).
+    let p = findMyRosterRow(c, true);
     if (!p && myIdentity.name && !isSuperAdmin()) {
-      const byName = roster.filter(r => r.name === myIdentity.name);
+      const byName = roster.filter(r => r.name === myIdentity.name && rosterRowIsClaimable(r));
       if (byName.length === 1) p = byName[0];
     }
     if (p) { myIdentity.myPlayers = {...(myIdentity.myPlayers || {}), [c.id]: p.id}; changed = true; }
@@ -1802,8 +1802,8 @@ async function ensureGameLoadedForView(gameId){
   return getGame(gameId);
 }
 
-async function v2CreateGame(id, communityId, name, date, createdByName, creatorPlayerId, creatorPlayerName){
-  await v2Fetch("POST", "/games", {id, communityId, name, date, createdByName, creatorPlayerId, creatorPlayerName});
+async function v2CreateGame(id, communityId, name, date, createdByName, creatorPlayerId, creatorPlayerName, createdBy){
+  await v2Fetch("POST", "/games", {id, communityId, name, date, createdByName, createdBy, creatorPlayerId, creatorPlayerName});
   return v2LoadGameFull(id);
 }
 
@@ -2775,9 +2775,44 @@ function defaultAdminCollapsed(g, pid){
 // long-standing "creator" check; a roster row's own isAdmin flag (toggled from the
 // community's players screen, see data-toggle-roster-admin) grants it to whoever that row
 // is linked to (via myIdentity.myPlayers), on top of that.
+// ---------- "Is this me?" - by id, never by display name ----------
+// A name is just a label anyone can type into their profile, so rights (club/table admin,
+// Setup, delete) and "which roster player is me" go by ids. The ids that are me: the
+// account's player id and this device's own id.
+function myIdSet(){ return new Set([myIdentity.id, getClientId()].filter(Boolean)); }
+// A creator id (club's createdBy / table's createdBy) is me - directly, or through my own
+// linked roster row in that club (its clientId is the id I had when I joined/created it).
+function isMeById(createdBy, communityId){
+  if (!createdBy) return false;
+  if (myIdSet().has(createdBy)) return true;
+  const c = getCommunity(communityId);
+  const mine = myIdentity.myPlayers && myIdentity.myPlayers[communityId];
+  const row = c && mine && (c.roster || []).find(r => r.id === mine);
+  return !!(row && row.clientId && row.clientId === createdBy);
+}
+function isClubCreator(c){ return !!c && isMeById(c.createdBy, c.id); }
+// Tables from before games.created_by existed have no createdBy - only those still go by
+// the creator's name.
+function isGameCreator(g){
+  if (!g) return false;
+  if (g.createdBy) return isMeById(g.createdBy, g.communityId);
+  return !!(myIdentity.name && myIdentity.name === g.createdByName);
+}
+// A roster row I may take as "me": one already linked to one of my ids, or one nobody is
+// linked to yet. A row linked to someone else is never mine just because the name matches.
+function rosterRowIsClaimable(r){ return !r.clientId || myIdSet().has(r.clientId); }
+// My roster row in club c when this device has no link for it: by id first, then (unless
+// noNameMatch) a same-named row nobody else is linked to.
+function findMyRosterRow(c, noNameMatch){
+  const roster = (c && c.roster) || [];
+  const ids = myIdSet();
+  const byId = roster.find(r => r.clientId && ids.has(r.clientId));
+  if (byId || noNameMatch || !myIdentity.name) return byId || null;
+  return roster.find(r => r.name === myIdentity.name && rosterRowIsClaimable(r)) || null;
+}
 function isCommunityAdmin(c){
   if (!c) return false;
-  if (myIdentity.name && myIdentity.name === c.createdByName) return true;
+  if (isClubCreator(c)) return true;
   const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[c.id];
   if (!myPlayerId) return false;
   const p = (c.roster||[]).find(pl => pl.id === myPlayerId);
@@ -2815,7 +2850,7 @@ function computePotFixChanges(g, selectedIds, diff){
   return {changes, unassigned: 0};
 }
 function isTableAdmin(g, c){
-  return !!(myIdentity.name && g && myIdentity.name === g.createdByName) || isCommunityAdmin(c);
+  return isGameCreator(g) || isCommunityAdmin(c);
 }
 // The table screen's swipe carousel, in fixed circular order - "player" (the default
 // face) always exists; "admin" (the new admin screen) only exists for a table admin (see
@@ -3315,7 +3350,7 @@ function canSelfSeat(g){
   const c = g && getCommunity(g.communityId);
   if (!c) return false;
   const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[c.id];
-  return (c.roster||[]).some(pl => pl.id === myPlayerId || (myIdentity.name && pl.name === myIdentity.name));
+  return (c.roster||[]).some(pl => pl.id === myPlayerId) || !!findMyRosterRow(c);
 }
 function shouldAskWatchOrJoin(g){
   if (!g || g.closed || watchOnlyGameIds.has(g.id) || isSeatedInGame(g) || !canSelfSeat(g)) return false;
@@ -3331,19 +3366,18 @@ function autoSeatSelf(gameId){
   // Cheap pre-check against whatever state is already in memory, purely to skip the
   // network round trip in the overwhelmingly common case (already seated correctly) -
   // the real, authoritative check runs inside mutateAndSave below either way.
-  if (p && p.name === myIdentity.name && p.clientId && g.seats && g.seats.includes(p.id)) return;
+  if (p && p.clientId && g.seats && g.seats.includes(p.id)) return;
   if (USE_RELATIONAL_API) {
     (async () => {
       let p2 = p;
-      if (myIdentity.name && (!p2 || p2.name !== myIdentity.name)) {
-        const byName = c.roster.find(pl => pl.name === myIdentity.name);
-        if (byName) {
-          p2 = byName;
+      // No link on this device for this club yet - find my row by id (or an unlinked
+      // same-named one). An existing link is never replaced just because a name differs.
+      if (!p2) {
+        p2 = findMyRosterRow(c);
+        if (p2) {
           if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
-          myIdentity.myPlayers[g.communityId] = byName.id;
+          myIdentity.myPlayers[g.communityId] = p2.id;
           saveIdentity();
-        } else {
-          p2 = null;
         }
       }
       if (!p2) return;
@@ -3363,20 +3397,12 @@ function autoSeatSelf(gameId){
     const c = getCommunity(g.communityId);
     if (!c) return;
     let p = playerId ? c.roster.find(pl => pl.id === playerId) : null;
-    // Self-healing for devices that got mis-linked by an earlier bug (assigning someone
-    // else to a seat used to overwrite this device's own remembered player): if the
-    // remembered player's name doesn't match this device's own identity name, it's
-    // wrong - look up the right one by name instead of trusting a stale link, and fix
-    // it going forward.
-    if (myIdentity.name && (!p || p.name !== myIdentity.name)) {
-      const byName = c.roster.find(pl => pl.name === myIdentity.name);
-      if (byName) {
-        p = byName;
+    if (!p) {
+      p = findMyRosterRow(c);
+      if (p) {
         if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
-        myIdentity.myPlayers[g.communityId] = byName.id;
+        myIdentity.myPlayers[g.communityId] = p.id;
         saveIdentity();
-      } else {
-        p = null;
       }
     }
     if (!p) return;
@@ -3408,7 +3434,7 @@ async function autoJoinViaInvite(gameId){
     try {
       if (!p) {
         if (!myIdentity.name) { render(); return; } // no name yet - forced onboarding will ask, then retry
-        p = c.roster.find(pl => pl.name === myIdentity.name);
+        p = findMyRosterRow(c);
         if (!p) { p = {id: uid(), name: myIdentity.name}; await v2AddRosterPlayer(g.communityId, p.id, p.name); }
         await v2LinkRosterPlayer(g.communityId, p.id, myIdentity.id);
         if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
@@ -3431,7 +3457,7 @@ async function autoJoinViaInvite(gameId){
     let p = playerId ? c.roster.find(pl => pl.id === playerId) : null;
     if (!p) {
       if (!myIdentity.name) return; // no name yet to identify/create with (forced onboarding will ask, then retry)
-      p = c.roster.find(pl => pl.name === myIdentity.name);
+      p = findMyRosterRow(c);
       if (!p) { p = {id: uid(), name: myIdentity.name}; c.roster.push(p); }
       linkToGlobalPlayer(p);
       if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
@@ -3458,7 +3484,7 @@ async function autoJoinViaCommunityInvite(communityId){
     try {
       if (!p) {
         if (!myIdentity.name) { render(); return; }
-        p = c.roster.find(pl => pl.name === myIdentity.name);
+        p = findMyRosterRow(c);
         if (!p) { p = {id: uid(), name: myIdentity.name}; await v2AddRosterPlayer(communityId, p.id, p.name); }
         await v2LinkRosterPlayer(communityId, p.id, myIdentity.id);
         if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
@@ -3478,7 +3504,7 @@ async function autoJoinViaCommunityInvite(communityId){
     let p = playerId ? c.roster.find(pl => pl.id === playerId) : null;
     if (!p) {
       if (!myIdentity.name) return; // no name yet to identify/create with (forced onboarding will ask, then retry)
-      p = c.roster.find(pl => pl.name === myIdentity.name);
+      p = findMyRosterRow(c);
       if (!p) { p = {id: uid(), name: myIdentity.name}; c.roster.push(p); }
       linkToGlobalPlayer(p);
       if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
@@ -4899,10 +4925,10 @@ function attachClubSwipe(){
     }, true);
   });
 }
-// "Created by me" - by this device's id or by name (a club opened from another device, or
-// before the current id existed, only matches by name - same rule as the Setup button).
+// "Created by me" - by id (see isClubCreator), so a club opened from another device of
+// mine still counts, and someone who just shares my name doesn't.
 function isMyClub(c){
-  return c.createdBy === myIdentity.id || !!(myIdentity.name && c.createdByName === myIdentity.name);
+  return isClubCreator(c);
 }
 function clubCreatedKey(c){
   let key = c.createdAt ? String(c.createdAt).slice(0, 10) : "9999-99-99";
@@ -4924,7 +4950,7 @@ function renderHome(){
   let hintShown = false;
   let cards = myCommunities.map(c => {
     const canDelete = isSuperAdmin() || (c.createdBy && c.createdBy === myIdentity.id);
-    const canSetup = isSuperAdmin() || (c.createdByName && myIdentity.name && c.createdByName === myIdentity.name);
+    const canSetup = isSuperAdmin() || isClubCreator(c);
     const front = `
     <div class="card club-front" data-open-community="${c.id}" style="gap:6px;">
       <div class="flex1" style="min-width:0;">
@@ -5087,7 +5113,7 @@ function renderCommunity(communityId){
     // Invite / delete sit behind the card - swipe it left to reveal them, same as the
     // club cards on the home screen (see attachClubSwipe). Visible: name, date, status.
     const canInvite = !g.closed;
-    const canDelete = !!(myIdentity.name && (myIdentity.name === g.createdByName || myIdentity.name === c.createdByName));
+    const canDelete = isGameCreator(g) || isClubCreator(c);
     const front = `
     <div class="card club-front ${g.closed?"":"card-open"}" data-open-game="${g.id}">
       <div class="row flex1"><span style="color:#6ee7b7">${icon('cal')}</span><div class="flex1"><div style="font-weight:600">${esc(g.name || g.date)}</div>${g.name ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${esc(g.date)}</div>` : ""}${gameAlert ? `<div style="font-size:11px;color:#fdba74;margin-top:2px;">${gameAlert.text}</div>` : ""}</div>${gameStatusBadge(g)}</div>
@@ -9392,14 +9418,15 @@ function attachHandlers(){
         const gid = uid();
         let creatorPlayer = null;
         if (myIdentity.name) {
-          creatorPlayer = c.roster.find(pl => pl.name === myIdentity.name);
+          const linked = myIdentity.myPlayers && myIdentity.myPlayers[c.id];
+          creatorPlayer = (linked && c.roster.find(pl => pl.id === linked)) || findMyRosterRow(c);
           try {
             if (!creatorPlayer) {
               creatorPlayer = {id: uid(), name: myIdentity.name};
               await v2AddRosterPlayer(c.id, creatorPlayer.id, creatorPlayer.name);
             }
             await v2LinkRosterPlayer(c.id, creatorPlayer.id, myIdentity.id);
-            await v2CreateGame(gid, c.id, name || null, modal.date, myIdentity.name, creatorPlayer.id, creatorPlayer.name);
+            await v2CreateGame(gid, c.id, name || null, modal.date, myIdentity.name, creatorPlayer.id, creatorPlayer.name, myIdentity.id);
             // The server seats the creator directly as part of creating the game (so the
             // table never exists with an empty seat 0 even for an instant) - that bypasses
             // v2ClaimSeat entirely, which is the only place the "first time seated here ->
@@ -9416,7 +9443,7 @@ function attachHandlers(){
             return;
           }
         } else {
-          try { await v2CreateGame(gid, c.id, name || null, modal.date, myIdentity.name, null, null); }
+          try { await v2CreateGame(gid, c.id, name || null, modal.date, myIdentity.name, null, null, myIdentity.id); }
           catch(e) {
             showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב.");
             createBtn.disabled = false; nameInput.disabled = false; createBtn.textContent = "פתח שולחן";
@@ -9431,14 +9458,15 @@ function attachHandlers(){
       }
       // The date is kept only for sort order, defaulting to today - there's no picker
       // for it, the table's identity is its name (or falls back to the community name).
-      const g = {id:uid(), communityId:c.id, date:modal.date, players: [], buyins:[], cashouts:{}, payboxPayments:[], playerPayments:[], seats:new Array(9).fill(null), liveChips:{}, closed:false, createdByName: myIdentity.name};
+      const g = {id:uid(), communityId:c.id, date:modal.date, players: [], buyins:[], cashouts:{}, payboxPayments:[], playerPayments:[], seats:new Array(9).fill(null), liveChips:{}, closed:false, createdByName: myIdentity.name, createdBy: myIdentity.id};
       if (name) g.name = name;
       // Explicitly seat whoever's creating the table, by name - independent of whatever
       // this device's remembered-player link happens to be, so opening a new table
       // reliably seats its actual creator rather than depending on that link being right.
       let creatorPlayer = null;
       if (myIdentity.name) {
-        creatorPlayer = c.roster.find(pl => pl.name === myIdentity.name);
+        const linked = myIdentity.myPlayers && myIdentity.myPlayers[c.id];
+        creatorPlayer = (linked && c.roster.find(pl => pl.id === linked)) || findMyRosterRow(c);
         if (!creatorPlayer) { creatorPlayer = {id: uid(), name: myIdentity.name}; c.roster.push(creatorPlayer); }
         linkToGlobalPlayer(creatorPlayer);
         seatPlayerIfRoom(g, creatorPlayer.id, creatorPlayer);
