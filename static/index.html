@@ -2343,6 +2343,7 @@ async function updateAccount(updates){
     await fetch("/api/auth/account?clientId=" + encodeURIComponent(getClientId()), {
       method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(updates)
     });
+    if (updates && updates.name) { rememberHadAccount(); signalPasskeyName(); }
   } catch(e) { console.error("account update failed", e); }
 }
 // Read-only - lets the login screen offer "add this device" vs "replace the existing
@@ -2401,6 +2402,33 @@ async function quickLogin(email, replace){
 // synced by the phone's Google/iCloud account, and usable after the device's own storage
 // and cookie are gone. passkeyHas: true/false from the server, null = not known yet.
 let passkeyHas = null;
+let passkeyUserIds = []; // WebAuthn user handles of this account's passkeys (relabeling)
+function applyPasskeyFields(o){
+  if (!o) return;
+  if (typeof o.hasPasskey === "boolean") passkeyHas = o.hasPasskey;
+  if (Array.isArray(o.passkeyUserIds)) passkeyUserIds = o.passkeyUserIds;
+}
+// Relabels this account's passkeys in the phone's account picker after a name/email
+// change (newer Chrome only - a silent no-op elsewhere).
+function signalPasskeyName(){
+  if (!window.PublicKeyCredential || !PublicKeyCredential.signalCurrentUserDetails || !passkeyUserIds.length || !myIdentity.name) return;
+  const name = isRealEmail(myIdentity.email) ? myIdentity.email : myIdentity.name;
+  passkeyUserIds.forEach(userId => {
+    try { PublicKeyCredential.signalCurrentUserDetails({rpId: location.hostname, userId, name, displayName: myIdentity.name}).catch(() => {}); } catch(e) {}
+  });
+}
+// "mediation: immediate" - asks the phone for a saved passkey and, when there's none,
+// fails at once with no UI at all. Only where the browser says it supports it.
+async function supportsImmediatePasskey(){
+  try {
+    if (!window.PublicKeyCredential || !PublicKeyCredential.getClientCapabilities) return false;
+    const caps = await PublicKeyCredential.getClientCapabilities();
+    return !!(caps && caps.immediateGet);
+  } catch(e) { return false; }
+}
+function rememberHadAccount(){
+  try { localStorage.setItem("poker-had-account", myIdentity.name || "1"); } catch(e) {}
+}
 const PASSKEY_OFFER_SNOOZE_DAYS = 30;
 function passkeySupported(){
   return !!(window.PublicKeyCredential && navigator.credentials && window.isSecureContext);
@@ -2432,7 +2460,7 @@ async function registerPasskey(){
     user: {...o.user, id: b64urlToBuf(o.user.id)},
     excludeCredentials: (o.excludeCredentials || []).map(c => ({...c, id: b64urlToBuf(c.id)})),
   }});
-  await passkeyPost("register-verify", {clientId: getClientId(), challengeId, credential: {
+  const done = await passkeyPost("register-verify", {clientId: getClientId(), challengeId, credential: {
     id: cred.id, rawId: bufToB64url(cred.rawId), type: cred.type,
     response: {
       clientDataJSON: bufToB64url(cred.response.clientDataJSON),
@@ -2443,14 +2471,15 @@ async function registerPasskey(){
     authenticatorAttachment: cred.authenticatorAttachment || undefined,
   }});
   passkeyHas = true;
+  applyPasskeyFields(done);
 }
-async function loginWithPasskey(){
+async function loginWithPasskey(immediate){
   const {challengeId, options: o} = await passkeyPost("login-options");
   const cred = await navigator.credentials.get({publicKey: {
     ...o,
     challenge: b64urlToBuf(o.challenge),
     allowCredentials: (o.allowCredentials || []).map(c => ({...c, id: b64urlToBuf(c.id)})),
-  }});
+  }, ...(immediate ? {mediation: "immediate"} : {})});
   const r = cred.response;
   const account = await passkeyPost("login-verify", {clientId: getClientId(), localId: myIdentity.id, challengeId, credential: {
     id: cred.id, rawId: bufToB64url(cred.rawId), type: cred.type,
@@ -2467,8 +2496,8 @@ async function loginWithPasskey(){
   return account;
 }
 // Phase 2: a brand-new account with no email at all - see passkey_signup_options.
-async function signupWithPasskey(){
-  const {challengeId, options: o} = await passkeyPost("signup-options");
+async function signupWithPasskey(name){
+  const {challengeId, options: o} = await passkeyPost("signup-options", {name});
   const cred = await navigator.credentials.create({publicKey: {
     ...o,
     challenge: b64urlToBuf(o.challenge),
@@ -6159,7 +6188,15 @@ function renderModal(m){
   let title = "";
   if (m.type === "loginRequired") {
     title = "ברוכים הבאים";
-    body = m.loginStep === "deviceChoice" ? `
+    body = m.loginStep === "signupName" ? `
+      <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">איך קוראים לך? השם יופיע גם בטלפון ליד טביעת האצבע.</p>
+      <form action="#" onsubmit="return false;">
+        <input type="text" id="signup-name-input" placeholder="השם שלך" value="${esc(m.signupName || "")}" maxlength="40" style="width:100%;text-align:center;margin-bottom:8px;" autofocus>
+        ${m.loginError ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.loginError)}</p>` : ""}
+        <button type="submit" class="btn btn-primary btn-block" data-passkey-signup-go>👆 המשך עם טביעת אצבע</button>
+      </form>
+      <button class="login-link" data-signup-back>חזרה</button>
+    ` : m.loginStep === "deviceChoice" ? `
       <p style="color:var(--muted);font-size:13px;margin-bottom:14px;">הכתובת <span dir="ltr">${esc(m.loginEmail)}</span> כבר רשומה במערכת עם מכשיר מחובר. האם להתחבר ממכשיר זה?</p>
       <button class="btn btn-primary btn-block" style="margin-bottom:8px;" data-device-choice="replace">המשך</button>
       <button class="btn btn-ghost btn-block" data-device-choice-cancel>ביטול</button>
@@ -8782,8 +8819,9 @@ function attachHandlers(){
     // no need to make them pass through that screen again every time; only a genuinely
     // new account (no name yet) gets sent there.
     const afterLogin = async (account) => {
-      if (typeof account.hasPasskey === "boolean") passkeyHas = account.hasPasskey;
+      applyPasskeyFields(account);
       applyAccountToIdentity(account);
+      rememberHadAccount();
       saveIdentity();
       await saveState();
       if (account.name) { await retryInviteJoinIfNeeded(); closeModal(); }
@@ -8863,16 +8901,45 @@ function attachHandlers(){
         updateModal({loginError: e.message});
       }
     };
+    // "משתמש חדש": first make sure this isn't someone who already has an account here.
     const passkeySignupBtn = app.querySelector("[data-passkey-signup]");
     if (passkeySignupBtn) passkeySignupBtn.onclick = async () => {
+      let had = null;
+      try { had = localStorage.getItem("poker-had-account"); } catch(e) {}
+      if (had) {
+        const ok = await showConfirm(`נראה שכבר נכנסת מהטלפון הזה בעבר${had !== "1" ? ` (${had})` : ""}. להירשם בכל זאת כמשתמש חדש? משתמש חדש מתחיל בלי מועדונים והיסטוריה.`, {okLabel: "הרשמה חדשה", cancelLabel: "חזרה"});
+        if (!ok) return;
+      }
       passkeySignupBtn.disabled = true;
       showButtonLoading(passkeySignupBtn);
+      // A fingerprint already saved for this site means an existing account - log into it
+      // instead of opening a second, empty one. Without UI when there's none (immediate).
+      if (await supportsImmediatePasskey()) {
+        try {
+          const account = await loginWithPasskey(true);
+          await afterLogin(account);
+          showAlert("נמצא חשבון קיים עם טביעת האצבע הזאת - נכנסת אליו ✓");
+          return;
+        } catch(e) { /* none saved (or declined) - go on to sign up */ }
+      }
+      updateModal({loginStep: "signupName", loginError: null});
+    };
+    const signupBack = app.querySelector("[data-signup-back]");
+    if (signupBack) signupBack.onclick = () => updateModal({loginStep: null, loginError: null});
+    const signupGoBtn = app.querySelector("[data-passkey-signup-go]");
+    if (signupGoBtn) signupGoBtn.onclick = async () => {
+      const name = document.getElementById("signup-name-input").value.trim();
+      if (!name) { updateModal({loginError: "צריך להזין שם."}); return; }
+      signupGoBtn.disabled = true;
+      showButtonLoading(signupGoBtn);
       try {
-        const account = await signupWithPasskey();
+        const account = await signupWithPasskey(name);
+        // Prefills the profile screen that follows (afterLogin opens it - no name yet).
+        myIdentity.name = name;
         await afterLogin(account);
       } catch(e) {
-        if (e && e.name === "NotAllowedError") { render(); return; } // cancelled
-        updateModal({loginError: "ההרשמה עם טביעת אצבע נכשלה - נסו שוב או התחברו עם האימייל."});
+        if (e && e.name === "NotAllowedError") { updateModal({signupName: name, loginError: null}); return; } // cancelled
+        updateModal({signupName: name, loginError: "ההרשמה עם טביעת אצבע נכשלה - נסו שוב או התחברו עם האימייל."});
       }
     };
     const passkeyLoginBtn = app.querySelector("[data-passkey-login]");
@@ -8936,6 +9003,8 @@ function attachHandlers(){
         if (res.email) {
           // Verification codes are off (admin setup) - attached right away.
           applyAccountToIdentity(res);
+          applyPasskeyFields(res);
+          signalPasskeyName();
           saveIdentity();
           closeModal();
           showAlert("האימייל נוסף לחשבון ✓");
@@ -8954,6 +9023,8 @@ function attachHandlers(){
       try {
         const account = await addEmailPost("verify", {email: modal.email, code});
         applyAccountToIdentity(account);
+        applyPasskeyFields(account);
+        signalPasskeyName();
         saveIdentity();
         closeModal();
         showAlert("האימייל נוסף לחשבון ✓");
@@ -11044,7 +11115,8 @@ window.addEventListener("popstate", async () => {
     // locally, so a normal reload with nothing new to apply doesn't write on every load.
     const account = sessionResult.status === "fulfilled" ? sessionResult.value : null;
     hasVerifiedSession = !!account;
-    if (account && typeof account.hasPasskey === "boolean") passkeyHas = account.hasPasskey;
+    applyPasskeyFields(account);
+    if (account) rememberHadAccount();
     if (account) {
       const hadName = !!myIdentity.name, hadPhoto = !!getGlobalPlayer(myIdentity.id).photo;
       const localIdBeforeSync = myIdentity.id;

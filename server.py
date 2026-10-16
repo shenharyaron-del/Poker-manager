@@ -135,6 +135,10 @@ _INIT_STATEMENTS = (
     "  sign_count BIGINT NOT NULL DEFAULT 0,"
     "  created_at TIMESTAMP NOT NULL DEFAULT now()"
     ")",
+    # The WebAuthn user handle the passkey was created with - lets the client relabel it
+    # on the phone (signalCurrentUserDetails) when the name changes. NULL on rows from
+    # before this column; see _passkey_handles.
+    "ALTER TABLE passkeys ADD COLUMN IF NOT EXISTS user_handle TEXT",
     # One-time, short-lived WebAuthn challenges (register or login), deleted when used.
     "CREATE TABLE IF NOT EXISTS passkey_challenges ("
     "  id TEXT PRIMARY KEY,"
@@ -2436,7 +2440,7 @@ def verify_login_code():
     _claim_player_id(account, local_id)
     _save_account(email, account)
     _forget_caller(client_id)
-    return _with_device_cookie(jsonify({"email": email, **account, "hasPasskey": _has_passkey(email)}), client_id)
+    return _with_device_cookie(jsonify({"email": email, **account, **_passkey_fields(email)}), client_id)
 
 
 @app.route("/api/auth/quick-login", methods=["POST"])
@@ -2476,7 +2480,7 @@ def quick_login():
     _claim_player_id(account, local_id)
     _save_account(email, account)
     _forget_caller(client_id)
-    return _with_device_cookie(jsonify({"email": email, **account, "hasPasskey": _has_passkey(email)}), client_id)
+    return _with_device_cookie(jsonify({"email": email, **account, **_passkey_fields(email)}), client_id)
 
 
 @app.route("/api/auth/settings")
@@ -2566,7 +2570,7 @@ def auth_session():
     if not email:
         return jsonify({"loggedIn": False})
     account = _get_account(email) or _default_account(email)
-    body = {"loggedIn": True, "email": email, **account, "hasPasskey": _has_passkey(email)}
+    body = {"loggedIn": True, "email": email, **account, **_passkey_fields(email)}
     if restored_client_id:
         body["restoredClientId"] = restored_client_id
     # Refreshes the cookie for devices that logged in before it existed.
@@ -2587,13 +2591,23 @@ def _passkey_rp():
     return host, f"{proto}://{request.host}"
 
 
-def _has_passkey(email):
+def _user_handle(key):
+    return hashlib.sha256(("pm-user:" + key).encode()).digest()
+
+
+def _passkey_handles(email):
     with get_db() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT 1 FROM passkeys WHERE email = %s LIMIT 1", (email,))
-            row = cur.fetchone()
+            cur.execute("SELECT user_handle FROM passkeys WHERE email = %s", (email,))
+            rows = cur.fetchall()
         conn.commit()
-    return row is not None
+    # Rows from before user_handle was stored were all registered under this same key.
+    return sorted({r[0] or bytes_to_base64url(_user_handle(email)) for r in rows}) if webauthn else []
+
+
+def _passkey_fields(email):
+    handles = _passkey_handles(email)
+    return {"hasPasskey": bool(handles), "passkeyUserIds": handles}
 
 
 def _store_challenge(challenge, email=None):
@@ -2648,7 +2662,7 @@ def passkey_register_options():
         rp_id=rp_id,
         rp_name="Poker Manager",
         # An opaque, stable handle per account - not the email itself.
-        user_id=hashlib.sha256(("pm-user:" + email).encode()).digest(),
+        user_id=_user_handle(email),
         user_name=email,
         user_display_name=account.get("name") or email,
         authenticator_selection=AuthenticatorSelectionCriteria(
@@ -2685,14 +2699,15 @@ def passkey_register_verify():
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO passkeys (credential_id, email, public_key, sign_count) VALUES (%s, %s, %s, %s) "
+                "INSERT INTO passkeys (credential_id, email, public_key, sign_count, user_handle) VALUES (%s, %s, %s, %s, %s) "
                 "ON CONFLICT (credential_id) DO UPDATE SET email = EXCLUDED.email, "
-                "public_key = EXCLUDED.public_key, sign_count = EXCLUDED.sign_count",
+                "public_key = EXCLUDED.public_key, sign_count = EXCLUDED.sign_count, user_handle = EXCLUDED.user_handle",
                 (bytes_to_base64url(verified.credential_id), email,
-                 bytes_to_base64url(verified.credential_public_key), verified.sign_count),
+                 bytes_to_base64url(verified.credential_public_key), verified.sign_count,
+                 bytes_to_base64url(_user_handle(email))),
             )
         conn.commit()
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, **_passkey_fields(email)})
 
 
 @app.route("/api/auth/passkey/login-options", methods=["POST"])
@@ -2757,7 +2772,7 @@ def passkey_login_verify():
     _claim_player_id(account, local_id)
     _save_account(email, account)
     _forget_caller(client_id)
-    return _with_device_cookie(jsonify({"email": email, **account, "hasPasskey": True}), client_id)
+    return _with_device_cookie(jsonify({"email": email, **account, **_passkey_fields(email)}), client_id)
 
 
 # ---------- Passkey-only accounts (phase 2) ----------
@@ -2774,14 +2789,18 @@ def _is_passkey_only(key):
 def passkey_signup_options():
     if webauthn is None:
         return _passkey_unavailable()
+    body = request.get_json(silent=True) or {}
+    # The name the phone shows for this passkey in its account picker - asked for before
+    # the fingerprint so two accounts on one phone aren't both just "Poker Manager".
+    label = " ".join(str(body.get("name", "")).split())[:40] or "Poker Manager"
     key = "pk:" + secrets.token_hex(12)
     rp_id, _ = _passkey_rp()
     options = webauthn.generate_registration_options(
         rp_id=rp_id,
         rp_name="Poker Manager",
-        user_id=hashlib.sha256(("pm-user:" + key).encode()).digest(),
-        user_name="Poker Manager",
-        user_display_name="Poker Manager",
+        user_id=_user_handle(key),
+        user_name=label,
+        user_display_name=label,
         authenticator_selection=AuthenticatorSelectionCriteria(
             resident_key=ResidentKeyRequirement.REQUIRED,
             user_verification=UserVerificationRequirement.PREFERRED,
@@ -2816,9 +2835,10 @@ def passkey_signup_verify():
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO passkeys (credential_id, email, public_key, sign_count) VALUES (%s, %s, %s, %s)",
+                "INSERT INTO passkeys (credential_id, email, public_key, sign_count, user_handle) VALUES (%s, %s, %s, %s, %s)",
                 (bytes_to_base64url(verified.credential_id), key,
-                 bytes_to_base64url(verified.credential_public_key), verified.sign_count),
+                 bytes_to_base64url(verified.credential_public_key), verified.sign_count,
+                 bytes_to_base64url(_user_handle(key))),
             )
             cur.execute(
                 "INSERT INTO trusted_devices (client_id, email) VALUES (%s, %s) "
@@ -2830,7 +2850,7 @@ def passkey_signup_verify():
     _claim_player_id(account, local_id)
     _save_account(key, account)
     _forget_caller(client_id)
-    return _with_device_cookie(jsonify({"email": key, **account, "hasPasskey": True}), client_id)
+    return _with_device_cookie(jsonify({"email": key, **account, **_passkey_fields(key)}), client_id)
 
 
 def _email_taken(email):
@@ -2905,7 +2925,7 @@ def _rekey_account(key, email, client_id):
         account["role"] = "superAdmin"
         _save_account(email, account)
     _forget_caller(client_id)
-    return jsonify({"email": email, **account, "hasPasskey": True})
+    return jsonify({"email": email, **account, **_passkey_fields(email)})
 
 
 @app.route("/api/auth/claim-player-id", methods=["POST"])
