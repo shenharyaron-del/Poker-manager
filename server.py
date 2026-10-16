@@ -3194,6 +3194,10 @@ def update_account():
     for key in ("name", "photo", "phone", "myPlayers"):
         if key in updates:
             account[key] = updates[key]
+    # The chosen look (כהה / חול / כחול) follows the person to every browser they log in
+    # from - an invite link opens in WhatsApp's or another browser with its own storage.
+    if updates.get("theme") in ("dark", "sand", "blue"):
+        account["theme"] = updates["theme"]
     _save_account(email, account)
     return jsonify({"email": email, **account})
 
