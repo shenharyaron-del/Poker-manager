@@ -6948,19 +6948,6 @@ function renderModal(m){
       <div class="field"><label>סכום סופי מתוקן בשקלים</label><input type="number" inputmode="decimal" id="edit-cashout-amount" value="${co.amount}" autofocus></div>
       <button class="btn btn-primary btn-block" data-confirm-edit-cashout>שמור תיקון</button>
     `;
-  } else if (m.type === "removeFromGame") {
-    const g = getGame(m.gameId);
-    const p = g.players.find(pl=>pl.id===m.playerId);
-    const buyins = g.buyins.filter(b=>b.playerId===m.playerId);
-    const hasCashout = m.playerId in g.cashouts;
-    const referencedBy = Object.entries(g.cashouts).filter(([id,co]) => id !== m.playerId && co.arrangedWith && co.arrangedWith.includes(m.playerId)).map(([id]) => (g.players.find(pl=>pl.id===id)||{}).name).filter(Boolean);
-    title = `הסרת ${esc(p.name)} מהערב`;
-    body = `
-      <p style="color:#6ee7b7;font-size:13px;">${esc(p.name)} יוסר לגמרי מהערב הזה. ${buyins.length ? `${buyins.length} התשלומים שהכניס ${hasCashout ? "והיציאה שלו " : ""}יימחקו.` : ""}</p>
-      ${referencedBy.length ? `<p style="color:#fda4af;font-size:12px;">שים לב: ${referencedBy.map(esc).join(", ")} סידרו תשלום מולו — הסידור הזה יימחק גם הוא.</p>` : ""}
-      <p style="color:#fda4af;font-size:12px;">הפעולה הזאת בלתי הפיכה.</p>
-      <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-remove-from-game>הסר מהערב</button>
-    `;
   } else if (m.type === "deleteGame") {
     const g = getGame(m.gameId);
     title = "מחיקת ערב משחק";
@@ -6995,28 +6982,6 @@ function renderModal(m){
     body = `
       <p style="color:#6ee7b7;font-size:13px;">לבטל את ההעברה של <b>${esc(p.name)}</b> ל-<b>${esc(toName)}</b> על סך <b>₪${b?b.amount:""}</b>? ההעברה תימחק לגמרי מהרישום.</p>
       <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-delete-player-payment>בטל העברה</button>
-    `;
-  } else if (m.type === "addExisting") {
-    const g = getGame(m.gameId);
-    const c = getCommunity(g.communityId);
-    const avail = c.roster.filter(p => !g.players.some(gp=>gp.id===p.id)).sort((a,b) => a.name.localeCompare(b.name, 'he'));
-    title = "הוספת שחקן למשחק";
-    body = avail.map(p => `<div class="card" data-add-to-game="${p.id}"><span class="flex1">${esc(p.name)}</span>${netBadge(playerNetProfit(c.id, p.id))}<span style="color:var(--gold)">${icon('plus')}</span></div>`).join("");
-  } else if (m.type === "bulkBuyin") {
-    const g = getGame(m.gameId);
-    const active = g.players.filter(p => !(p.id in g.cashouts));
-    title = "תשלום קבוצתי";
-    body = `
-      <div class="field"><label>סכום בשקלים לכל שחקן שנבחר</label><input type="number" inputmode="decimal" id="bulk-buyin-amount" value="${m.amount||''}" placeholder="50" autofocus></div>
-      <div class="chip-row">
-        ${[50,80,100,200].map(v=>`<button class="chip-btn" data-bulk-chip="${v}">₪${v}</button>`).join("")}
-      </div>
-      <div class="field"><label>למי מהשחקנים הפעילים?</label>
-        <div class="scroll-list">
-          ${active.map(p => `<div class="checkbox-row"><input type="checkbox" data-bulk-select="${p.id}" ${m.selected[p.id]?"checked":""}><span class="flex1">${esc(p.name)}</span>${netBadge(playerNetProfit(g.communityId, p.id))}</div>`).join("")}
-        </div>
-      </div>
-      <button class="btn btn-primary btn-block" data-confirm-bulk-buyin ${Object.values(m.selected).every(v=>!v)?"disabled":""}>הוסף תשלום לכולם</button>
     `;
   } else if (m.type === "paybox") {
     const g = getGame(m.gameId);
@@ -7213,25 +7178,6 @@ function renderModal(m){
       <div class="field"><input type="email" id="pick-seat-permanent-email" placeholder="אימייל" dir="ltr"></div>
       ${m.permanentError ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.permanentError)}</p>` : ""}
       <button class="btn btn-primary btn-block" data-add-permanent-seat>${icon('plus')} הוסף שחקן קבוע</button>
-    `;
-  } else if (m.type === "seatBuyins") {
-    const g = getGame(m.gameId);
-    const p = g.players.find(pl=>pl.id===m.playerId);
-    const buyinTotal = g.buyins.filter(b=>b.playerId===m.playerId).reduce((s,b)=>s+b.amount,0);
-    title = esc(p ? p.name : "שחקן");
-    body = `
-      <div class="roster-row"><span>סה"כ קנייה</span><span style="font-weight:700;">₪${buyinTotal}</span></div>
-      <label style="display:block;color:#059669;font-size:11px;margin-bottom:4px;">סכום קנייה</label>
-      ${!m.otherOpen ? `
-        <div class="chip-row">
-          ${[50,80,100,200].map(v=>`<button class="chip-btn" data-seat-instant-chip="${v}">₪${v}</button>`).join("")}
-          <button class="chip-btn" data-seat-other-toggle>אחר</button>
-        </div>
-      ` : `
-        <div class="field"><input type="number" inputmode="decimal" id="seat-buyin-amount" placeholder="הסכום" autofocus></div>
-        <button class="btn btn-ghost btn-block" data-confirm-seat-buyin style="margin-bottom:14px;">${icon('plus')} הוסף קנייה</button>
-      `}
-      <button class="btn btn-ghost btn-block" data-seat-history style="margin-bottom:14px;">${icon('bar')} היסטוריית קניות הערב</button>
     `;
   } else if (m.type === "seatChips") {
     const g = getGame(m.gameId);
@@ -7531,55 +7477,6 @@ function renderModal(m){
       <button class="btn btn-block" style="background:#be123c;color:#fff;margin-bottom:8px;" data-confirm-return-reset-payment>אפס תשלום וחזור למשחק</button>
       <button class="btn btn-ghost btn-block" data-confirm-return-keep-payment>השאר תשלום וחזור למשחק</button>
     `;
-  } else if (m.type === "leave") {
-    const g = getGame(m.gameId);
-    const p = g.players.find(pl=>pl.id===m.playerId);
-    title = `${esc(p.name)} יוצא מהמשחק`;
-    body = `
-      <p style="color:#6ee7b7;font-size:13px;margin-top:0;">כמה כסף יש ביד עכשיו?</p>
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-        <label style="font-size:13px;font-weight:600;color:var(--muted);margin:0;">מכפיל ז'יטונים</label>
-        <input type="number" inputmode="numeric" id="leave-multiplier" min="1" max="99" maxlength="2" step="1" value="${m.multiplier || 1}" style="width:52px;flex:none;text-align:center;padding:8px;">
-      </div>
-      <div class="field"><label>סכום ביציאה בשקלים</label><input type="number" inputmode="decimal" id="leave-amount" value="${m.amount||''}" placeholder="0" autofocus></div>
-      <button class="btn btn-primary btn-block" data-confirm-leave>אישור יציאה</button>
-    `;
-  } else if (m.type === "endNight") {
-    const g = getGame(m.gameId);
-    const active = g.players.filter(p => !(p.id in g.cashouts));
-    title = "סיום ערב";
-    if (active.length === 0) {
-      const balances = computeBalances(g);
-      const totalBuyins = g.buyins.reduce((s,b)=>s+b.amount,0);
-      const totalCashouts = Object.values(g.cashouts).reduce((s,co)=>s+co.amount,0);
-      const balanced = Math.abs(totalBuyins-totalCashouts) < 0.5;
-      body = `
-        <div class="stats-net ${balanced?'pos':'neg'}" style="text-align:right;padding:12px 16px;font-size:13px;font-weight:700;">${balanced?"הסכומים מאוזנים ✓":"שימו לב: הסכומים לא מאוזנים במדויק — כדאי לבדוק לפני הסיום"}</div>
-        <button class="btn btn-primary btn-block" data-confirm-end style="margin-top:14px;">סיים ערב וחשב סיכום</button>
-      `;
-    } else {
-      const totalBuyins = g.buyins.reduce((s,b)=>s+b.amount,0);
-      const alreadyOut = Object.values(g.cashouts).reduce((s,co)=>s+co.amount,0);
-      const buyinTotals = {};
-      g.buyins.forEach(b => { buyinTotals[b.playerId] = (buyinTotals[b.playerId]||0) + b.amount; });
-      const paidTotals = {};
-      (g.payboxPayments||[]).forEach(pp => { paidTotals[pp.playerId] = (paidTotals[pp.playerId]||0) + pp.amount; });
-      body = `
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-          <label style="font-size:13px;font-weight:600;color:var(--muted);margin:0;">מכפיל ז'יטונים</label>
-          <input type="number" inputmode="numeric" id="chip-multiplier" min="1" max="99" maxlength="2" step="1" value="${m.multiplier || 1}" style="width:52px;flex:none;text-align:center;padding:8px;">
-        </div>
-        <div id="live-balance-box" class="pot-box" style="margin:0 0 14px;" data-total-buyins="${totalBuyins}" data-already-out="${alreadyOut}"></div>
-        ${active.map(p => `
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-            <b style="white-space:nowrap;font-size:13px;">${esc(p.name)}</b>
-            <input type="number" inputmode="decimal" data-end-amount="${p.id}" placeholder="0" style="width:80px;flex:none;text-align:center;" value="${m.amounts && m.amounts[p.id] !== undefined ? m.amounts[p.id] : ''}">
-            <span style="color:var(--muted);font-size:11px;flex:1;min-width:0;">· קנה ₪${buyinTotals[p.id]||0}${paidTotals[p.id]?` · העביר ₪${paidTotals[p.id]}`:""}</span>
-          </div>
-        `).join("")}
-        <button class="btn btn-primary btn-block" style="margin-top:6px;" data-confirm-end-bulk>סיים ערב וחשב סיכום</button>
-      `;
-    }
   } else if (m.type === "summary") {
     const g = getGame(m.gameId);
     const finalBalances = computeFinalBalances(g);
@@ -7624,82 +7521,6 @@ function renderModal(m){
       body += `<div class="section-title" style="padding:0;margin:16px 0 8px;">סה"כ רווח / הפסד</div>`;
       body += profitRows.map(r => `<div class="roster-row"><span>${esc(r.name)}</span><span style="font-weight:700;color:${r.profit>0.005?'#6ee7b7':(r.profit<-0.005?'#fda4af':'inherit')};">${r.profit>0?'+':''}₪${Math.round(r.profit*100)/100}</span></div>`).join("");
     }
-  } else if (m.type === "history") {
-    const g = getGame(m.gameId);
-    const p = g.players.find(pl=>pl.id===m.playerId);
-    title = `היסטוריה — ${esc(p.name)}`;
-    const buyins = g.buyins.filter(b=>b.playerId===m.playerId);
-    const totalBuyin = buyins.reduce((s,b)=>s+b.amount,0);
-    let rows = `<div class="roster-row"><span>מספר תשלומים שהכניס</span><span style="font-weight:700;">${buyins.length}</span></div>`;
-    rows += `<div class="roster-row"><span>סה"כ הכניס</span><span style="font-weight:700;">₪${totalBuyin}</span></div>`;
-    if (buyins.length) {
-      rows += `<div class="section-title" style="padding:0;margin:10px 0 6px;">פירוט התשלומים</div>`;
-      rows += buyins.map((b,i) => `<div class="roster-row"><span>תשלום ${i+1}${b.ts?` · ${fmtTime(b.ts)}`:""}</span><span style="display:flex;align-items:center;gap:10px;">₪${b.amount}<button class="icon-btn" style="color:#fda4af;" data-delete-buyin="${b.id}" title="ביטול תשלום">${icon('trash')}</button></span></div>`).join("");
-    }
-    const paybox = (g.payboxPayments||[]).filter(b=>b.playerId===m.playerId);
-    if (paybox.length) {
-      rows += `<div class="section-title" style="padding:0;margin:14px 0 6px;">העברות לקבוצת פייבוקס</div>`;
-      rows += paybox.map((b,i) => `<div class="roster-row"><span>העברה ${i+1}${b.ts?` · ${fmtTime(b.ts)}`:""}</span><span style="display:flex;align-items:center;gap:10px;">₪${b.amount}<button class="icon-btn" style="color:#fda4af;" data-delete-paybox="${b.id}" title="ביטול העברה">${icon('trash')}</button></span></div>`).join("");
-    }
-    const directPayments = (g.playerPayments||[]).filter(b=>b.fromPlayerId===m.playerId);
-    if (directPayments.length) {
-      rows += `<div class="section-title" style="padding:0;margin:14px 0 6px;">העברות ישירות לשחקנים</div>`;
-      rows += directPayments.map(b => {
-        const toName = (g.players.find(pl=>pl.id===b.toPlayerId)||{}).name || "?";
-        return `<div class="roster-row"><span>העביר ל-${esc(toName)}${b.ts?` · ${fmtTime(b.ts)}`:""}</span><span style="display:flex;align-items:center;gap:10px;">₪${b.amount}<button class="icon-btn" style="color:#fda4af;" data-delete-player-payment="${b.id}" title="ביטול העברה">${icon('trash')}</button></span></div>`;
-      }).join("");
-    }
-    const myOut = g.cashouts[m.playerId];
-    if (myOut) {
-      const myProfitTotal = myOut.amount - totalBuyin;
-      rows += `<div class="section-title" style="padding:0;margin:14px 0 6px;">יציאה מהמשחק</div>`;
-      // The pencil edits the cashout amount itself - reachable from the regular "סיכום
-      // ערב" summary button a player sees after cashing out.
-      rows += `<div class="roster-row"><span>יצא עם${myOut.ts?` (בשעה ${fmtTime(myOut.ts)})`:""}</span><span style="display:flex;align-items:center;gap:8px;"><b>₪${myOut.amount}</b><button class="icon-btn" data-check-balance-edit-chips title="עדכן סכום ז'יטונים">${icon('pencil')}</button></span></div>`;
-      rows += `<div class="roster-row"><span>סה"כ רווח / הפסד</span><span style="font-weight:700;color:${myProfitTotal>0.005?'#6ee7b7':(myProfitTotal<-0.005?'#fda4af':'inherit')};">${myProfitTotal>0?'+':''}₪${Math.round(myProfitTotal*100)/100}</span></div>`;
-      if (myOut.arrangedWith && myOut.arrangedWith.length) {
-        const myProfit = computeArrangementAdjustments(g).adjusted[m.playerId];
-        const share = Math.round((myProfit / myOut.arrangedWith.length) * 100) / 100;
-        rows += myOut.arrangedWith.map(id => {
-          const name = (g.players.find(pl=>pl.id===id)||{}).name || "?";
-          return `<div class="roster-row"><span>${share>=0 ? "קיבל מ-" : "העביר ל-"}${esc(name)}</span><span style="font-weight:700;">₪${Math.abs(share)}</span></div>`;
-        }).join("");
-      }
-    }
-    // incoming arrangements: other players who left and named this player as their counterpart
-    const adj = computeArrangementAdjustments(g).adjusted;
-    const incoming = [];
-    Object.entries(g.cashouts).forEach(([otherId, co]) => {
-      if (otherId === m.playerId) return;
-      if (!co.arrangedWith || !co.arrangedWith.includes(m.playerId)) return;
-      const otherName = (g.players.find(pl=>pl.id===otherId)||{}).name || "?";
-      const otherProfit = adj[otherId];
-      const share = Math.round((Math.abs(otherProfit) / co.arrangedWith.length) * 100) / 100;
-      incoming.push({ otherName, received: otherProfit < 0, share }); // if the other player owed money, this player received from them
-    });
-    if (incoming.length) {
-      rows += `<div class="section-title" style="padding:0;margin:14px 0 6px;">סידורים עם שחקנים שיצאו</div>`;
-      rows += incoming.map(x => `<div class="roster-row"><span>${x.received ? "קיבל מ-" : "העביר ל-"}${esc(x.otherName)}</span><span style="font-weight:700;">₪${x.share}</span></div>`).join("");
-    }
-    if (g.closed) {
-      const finalBalances = computeFinalBalances(g);
-      const alreadyPaidPaybox = (g.payboxPayments||[]).filter(pp=>pp.playerId===m.playerId).reduce((s,pp)=>s+pp.amount,0);
-      const alreadyPaidDirect = directPayments.reduce((s,dp)=>s+dp.amount,0);
-      const fb = finalBalances[m.playerId];
-      rows += `<div class="section-title" style="padding:0;margin:14px 0 6px;">חלק בסיכום הסופי</div>`;
-      if (!fb) {
-        rows += `<div class="roster-row"><span>לא נכלל בסיכום הסופי (סודר ישירות עם שחקן אחר)</span></div>`;
-      } else {
-        const remaining = fb.profit + alreadyPaidPaybox + alreadyPaidDirect;
-        if (Math.abs(remaining) < 0.005) {
-          rows += `<div class="roster-row"><span>מאוזן — אין תשלום נוסף נדרש</span></div>`;
-        } else {
-          const label = remaining>0 ? "מקבל מקבוצת פייבוקס" : "מעביר לקבוצת פייבוקס";
-          rows += `<div class="roster-row"><span>${label}</span><span style="font-weight:700;color:${remaining>0?'#6ee7b7':'#fda4af'};">₪${Math.round(Math.abs(remaining)*100)/100}</span></div>`;
-        }
-      }
-    }
-    body = rows;
   }
 
   // directPay (item 15): closes only by picking a recipient or tapping "הערב נגמר",
@@ -8258,8 +8079,6 @@ function attachHandlers(){
     maybeOpenDirectPayAfterCashout(gameId, pid, 0);
   };
 
-  app.querySelectorAll("[data-leave]").forEach(el => el.onclick = () => openModal({type:"leave", gameId: nav.gameId, playerId: el.dataset.leave, amount:""}));
-  app.querySelectorAll("[data-history]").forEach(el => el.onclick = () => openModal({type:"history", gameId: nav.gameId, playerId: el.dataset.history}));
   app.querySelectorAll("[data-edit-cashout]").forEach(el => el.onclick = () => openModal({type:"editCashout", gameId: nav.gameId, playerId: el.dataset.editCashout}));
   const performReturnToGame = async (el, playerId) => {
     const g = getGame(nav.gameId);
@@ -8303,7 +8122,6 @@ function attachHandlers(){
     if (!(await showConfirm(`האם אתה בטוח ש${name} חוזר לשולחן?`))) return;
     await performReturnToGame(el, playerId);
   });
-  app.querySelectorAll("[data-remove-from-game]").forEach(el => el.onclick = () => openModal({type:"removeFromGame", gameId: nav.gameId, playerId: el.dataset.removeFromGame}));
 
   // Player screen's "הסרת X מהשולחן" (viewing another player).
   app.querySelectorAll("[data-admin-remove-seat]").forEach(el => el.onclick = () => openModal({type:"removeSeat", gameId: nav.gameId, playerId: el.dataset.adminRemoveSeat}));
@@ -8416,16 +8234,6 @@ function attachHandlers(){
 
   const viewSummaryBtn = app.querySelector("[data-view-summary]");
   if (viewSummaryBtn) viewSummaryBtn.onclick = () => openModal({type:"summary", gameId: nav.gameId});
-  const addExistingBtn = app.querySelector("[data-add-existing]");
-  if (addExistingBtn) addExistingBtn.onclick = () => openModal({type:"addExisting", gameId: nav.gameId});
-  const bulkBuyinBtn = app.querySelector("[data-bulk-buyin]");
-  if (bulkBuyinBtn) bulkBuyinBtn.onclick = () => {
-    const g = getGame(nav.gameId);
-    const active = g.players.filter(p => !(p.id in g.cashouts));
-    const selected = {};
-    active.forEach(p => { selected[p.id] = true; });
-    openModal({type:"bulkBuyin", gameId: nav.gameId, amount:"", selected});
-  };
   const payboxBtn = app.querySelector("[data-paybox-transfer]");
   if (payboxBtn) payboxBtn.onclick = () => {
     const g = getGame(nav.gameId);
@@ -9344,33 +9152,6 @@ function attachHandlers(){
     };
   }
 
-  if (modal && modal.type === "removeFromGame") {
-    const confirmRemove = app.querySelector("[data-confirm-remove-from-game]");
-    if (confirmRemove) confirmRemove.onclick = async () => {
-      if (USE_RELATIONAL_API) {
-        try { await v2RemoveGamePlayer(modal.gameId, modal.playerId); }
-        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
-        closeModal();
-        return;
-      }
-      const g = getGame(modal.gameId);
-      g.players = g.players.filter(p => p.id !== modal.playerId);
-      g.buyins = g.buyins.filter(b => b.playerId !== modal.playerId);
-      if (g.payboxPayments) g.payboxPayments = g.payboxPayments.filter(b => b.playerId !== modal.playerId);
-      delete g.cashouts[modal.playerId];
-      if (g.seats) { const si = g.seats.indexOf(modal.playerId); if (si !== -1) g.seats[si] = null; }
-      if (g.liveChips) delete g.liveChips[modal.playerId];
-      // clean up any other player's arrangement that pointed at this player
-      Object.values(g.cashouts).forEach(co => {
-        if (co.arrangedWith) co.arrangedWith = co.arrangedWith.filter(id => id !== modal.playerId);
-      });
-      if (g.closed && g.players.some(p => !(p.id in g.cashouts))) g.closed = false;
-      maybeAutoCloseNight(g);
-      saveState();
-      closeModal();
-    };
-  }
-
   if (modal && modal.type === "pokerOdds") {
     app.querySelectorAll("[data-odds-game-type]").forEach(el => el.onclick = () => updateModal({gameType: el.dataset.oddsGameType}));
     const CARD_READ_PROMPT = "בתמונה יש קלפי פוקר. למעלה יש קלפי יד של שחקנים - 2 קלפים לכל שחקן, יכולים להיות 2 שחקנים או יותר. למטה (אם יש) יש קלפי קהילה משותפים (פלופ/טרן) - 3 או 4 קלפים, ששייכים לכולם ולא לשחקן ספציפי. זהה את כל הקלפים בבירור והחזירו רק JSON בפורמט הבא, בלי טקסט נוסף ובלי markdown: {\"hands\": [[\"Kd\",\"Ks\"], [\"8c\",\"Th\"]], \"board\": [\"9h\",\"7s\",\"8d\"]} - כל קלף מיוצג כדרגה (2-9,T,J,Q,K,A) ואות צבע קטנה (c=תלתן, d=יהלום, h=לב, s=עלה), למשל Kd=מלך יהלום, Th=עשר לב.";
@@ -9891,22 +9672,6 @@ function attachHandlers(){
     };
   }
 
-  if (modal && modal.type === "history") {
-    app.querySelectorAll("[data-delete-buyin]").forEach(el => el.onclick = () => {
-      openModal({type:"deleteBuyin", gameId: modal.gameId, playerId: modal.playerId, buyinId: el.dataset.deleteBuyin, returnTo: modal});
-    });
-    app.querySelectorAll("[data-delete-paybox]").forEach(el => el.onclick = () => {
-      openModal({type:"deletePaybox", gameId: modal.gameId, playerId: modal.playerId, paymentId: el.dataset.deletePaybox, returnTo: modal});
-    });
-    app.querySelectorAll("[data-delete-player-payment]").forEach(el => el.onclick = () => {
-      openModal({type:"deletePlayerPayment", gameId: modal.gameId, playerId: modal.playerId, paymentId: el.dataset.deletePlayerPayment, returnTo: modal});
-    });
-    const editChipsBtn = app.querySelector("[data-check-balance-edit-chips]");
-    if (editChipsBtn) editChipsBtn.onclick = () => {
-      openModal({type:"editCashout", gameId: modal.gameId, playerId: modal.playerId});
-    };
-  }
-
   if (modal && modal.type === "deleteBuyin") {
     const confirmDelBuyin = app.querySelector("[data-confirm-delete-buyin]");
     if (confirmDelBuyin) confirmDelBuyin.onclick = async () => {
@@ -9967,26 +9732,6 @@ function attachHandlers(){
       }
       openModal(returnTo);
     };
-  }
-
-  if (modal && modal.type === "addExisting") {
-    app.querySelectorAll("[data-add-to-game]").forEach(el => el.onclick = async () => {
-      const g = getGame(modal.gameId);
-      const c = getCommunity(g.communityId);
-      const p = c.roster.find(pl=>pl.id===el.dataset.addToGame);
-      if (!p || g.players.some(gp=>gp.id===p.id)) { closeModal(); return; }
-      if (USE_RELATIONAL_API) {
-        try { await v2SeatPlayerIfRoom(modal.gameId, p.id, p.name); }
-        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
-      } else {
-        g.players.push({id:p.id, name:p.name});
-        if (!g.seats) g.seats = new Array(9).fill(null);
-        while (g.seats.length < 10) g.seats.push(null);
-        if (g.seats[9] == null) g.seats[9] = p.id;
-        saveState();
-      }
-      closeModal();
-    });
   }
 
 
@@ -10295,49 +10040,6 @@ function attachHandlers(){
     if (keepPaymentBtn) keepPaymentBtn.onclick = () => doReturn(false);
   }
 
-  if (modal && modal.type === "seatBuyins") {
-    app.querySelectorAll("[data-seat-instant-chip]").forEach(el => el.onclick = async () => {
-      const amt = parseFloat(el.dataset.seatInstantChip);
-      el.disabled = true;
-      showButtonLoading(el);
-      if (USE_RELATIONAL_API) {
-        try { await v2AddBuyin(modal.gameId, uid(), modal.playerId, amt); }
-        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
-      } else {
-        await mutateAndSave(() => {
-          const g = getGame(modal.gameId);
-          g.buyins.push({id:uid(), playerId: modal.playerId, amount: amt, ts: Date.now()});
-        });
-      }
-      closeModal();
-    });
-    const otherToggle = app.querySelector("[data-seat-other-toggle]");
-    if (otherToggle) otherToggle.onclick = () => {
-      updateModal({otherOpen: true});
-      const inp = document.getElementById("seat-buyin-amount");
-      if (inp) inp.focus();
-    };
-    const confirmSeatBuyin = app.querySelector("[data-confirm-seat-buyin]");
-    if (confirmSeatBuyin) confirmSeatBuyin.onclick = async () => {
-      const amt = parseFloat(document.getElementById("seat-buyin-amount").value);
-      if (!amt || amt <= 0) return;
-      confirmSeatBuyin.disabled = true;
-      showButtonLoading(confirmSeatBuyin);
-      if (USE_RELATIONAL_API) {
-        try { await v2AddBuyin(modal.gameId, uid(), modal.playerId, amt); }
-        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmSeatBuyin.disabled = false; return; }
-      } else {
-        await mutateAndSave(() => {
-          const g = getGame(modal.gameId);
-          g.buyins.push({id:uid(), playerId: modal.playerId, amount: amt, ts: Date.now()});
-        });
-      }
-      closeModal();
-    };
-    const seatHistoryBtn = app.querySelector("[data-seat-history]");
-    if (seatHistoryBtn) seatHistoryBtn.onclick = () => openModal({type:"history", gameId: modal.gameId, playerId: modal.playerId});
-  }
-
   if (modal && modal.type === "seatChips") {
     const g = getGame(modal.gameId);
     const buyinTotal = g.buyins.filter(b=>b.playerId===modal.playerId).reduce((s,b)=>s+b.amount,0);
@@ -10627,180 +10329,6 @@ function attachHandlers(){
     };
   }
 
-  if (modal && modal.type === "bulkBuyin") {
-    app.querySelectorAll("[data-bulk-chip]").forEach(el => el.onclick = () => { document.getElementById("bulk-buyin-amount").value = el.dataset.bulkChip; });
-    app.querySelectorAll("[data-bulk-select]").forEach(el => el.onclick = () => {
-      const sel = Object.assign({}, modal.selected);
-      sel[el.dataset.bulkSelect] = !sel[el.dataset.bulkSelect];
-      updateModal({selected: sel});
-    });
-    const confirmBulkBuyin = app.querySelector("[data-confirm-bulk-buyin]");
-    if (confirmBulkBuyin) confirmBulkBuyin.onclick = async () => {
-      const amt = parseFloat(document.getElementById("bulk-buyin-amount").value);
-      if (!amt || amt <= 0) return;
-      confirmBulkBuyin.disabled = true;
-      showButtonLoading(confirmBulkBuyin);
-      const ids = Object.keys(modal.selected).filter(k => modal.selected[k]);
-      if (USE_RELATIONAL_API) {
-        try { await v2AddBuyinsBulk(modal.gameId, ids.map(pid => ({id: uid(), playerId: pid, amount: amt}))); }
-        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmBulkBuyin.disabled = false; return; }
-      } else {
-        await mutateAndSave(() => {
-          const g = getGame(modal.gameId);
-          const now = Date.now();
-          ids.forEach(pid => { g.buyins.push({id:uid(), playerId: pid, amount: amt, ts: now}); });
-        });
-      }
-      closeModal();
-    };
-  }
-
-  if (modal && modal.type === "leave") {
-    const confirmBtn = app.querySelector("[data-confirm-leave]");
-    if (confirmBtn) confirmBtn.onclick = async () => {
-      const raw = parseFloat(document.getElementById("leave-amount").value);
-      if (isNaN(raw) || raw < 0) return;
-      const multEl = document.getElementById("leave-multiplier");
-      const multRaw = multEl ? parseInt(multEl.value) : 1;
-      const multiplier = (!multRaw || multRaw < 1) ? 1 : (multRaw > 99 ? 99 : multRaw);
-      const amt = Math.round((raw / multiplier) * 100) / 100;
-      confirmBtn.disabled = true;
-      showButtonLoading(confirmBtn);
-      if (USE_RELATIONAL_API) {
-        try {
-          await v2SetCashout(modal.gameId, modal.playerId, amt, [], amt);
-          await v2MaybeAutoCloseNight(modal.gameId);
-        } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmBtn.disabled = false; return; }
-      } else {
-        await mutateAndSave(() => {
-          const g = getGame(modal.gameId);
-          g.cashouts[modal.playerId] = {amount: amt, ts: Date.now(), arrangedWith: []};
-          if (!g.liveChips) g.liveChips = {};
-          g.liveChips[modal.playerId] = amt;
-          maybeAutoCloseNight(g);
-        });
-      }
-      closeModal();
-    };
-  }
-
-  if (modal && modal.type === "endNight") {
-    function getMultiplier(){
-      const el = document.getElementById("chip-multiplier");
-      const v = el ? parseInt(el.value) : 1;
-      return (!v || v < 1) ? 1 : (v > 99 ? 99 : v);
-    }
-    function updateLiveBalance(){
-      const box = document.getElementById("live-balance-box");
-      if (!box) return;
-      const totalBuyins = parseFloat(box.dataset.totalBuyins) || 0;
-      const alreadyOut = parseFloat(box.dataset.alreadyOut) || 0;
-      const multiplier = getMultiplier();
-      let enteredSum = 0, allFilled = true;
-      app.querySelectorAll("[data-end-amount]").forEach(inp => {
-        const v = parseFloat(inp.value);
-        if (isNaN(v)) allFilled = false; else enteredSum += v / multiplier;
-      });
-      const totalOut = alreadyOut + enteredSum;
-      const diff = Math.round((totalBuyins - totalOut) * 100) / 100;
-      const balancedNow = allFilled && Math.abs(diff) < 0.5;
-      box.innerHTML = `
-        <div class="row-between" style="flex-wrap:wrap;gap:10px 16px;">
-          <div><div class="pot-label">סה"כ הכנסות</div><div class="pot-val">₪${totalBuyins}</div></div>
-          <div style="text-align:center;"><div class="pot-label">סה"כ ז'יטונים בשולחן</div><div class="pot-val">₪${Math.round(totalOut*100)/100}</div></div>
-          <div style="text-align:left;"><div class="pot-label">נשאר לשלם</div><div class="pot-val">₪${diff}</div></div>
-          ${allFilled ? `<div class="badge ${balancedNow?'badge-ok':'badge-bad'}" style="width:100%;text-align:center;">${balancedNow?'מאוזן ✓':'לא מאוזן'}</div>` : ""}
-        </div>
-      `;
-    }
-    const multiplierInput = document.getElementById("chip-multiplier");
-    if (multiplierInput) multiplierInput.oninput = () => { modal.multiplier = getMultiplier(); updateLiveBalance(); };
-    app.querySelectorAll("[data-end-amount]").forEach(el => el.oninput = (e) => {
-      modal.amounts = modal.amounts || {};
-      modal.amounts[el.dataset.endAmount] = e.target.value;
-      updateLiveBalance();
-    });
-    updateLiveBalance();
-    const confirmBulkBtn = app.querySelector("[data-confirm-end-bulk]");
-    if (confirmBulkBtn) confirmBulkBtn.onclick = async () => {
-      const multiplier = getMultiplier();
-      const inputs = app.querySelectorAll("[data-end-amount]");
-      let allFilled = true;
-      const values = {};
-      inputs.forEach(inp => {
-        const v = parseFloat(inp.value);
-        if (isNaN(v) || v < 0) allFilled = false;
-        values[inp.dataset.endAmount] = v / multiplier;
-      });
-      if (!allFilled) { showAlert("צריך למלא סכום תקין לכל שחקן פעיל."); return; }
-      const gameId = modal.gameId;
-      confirmBulkBtn.disabled = true;
-      showButtonLoading(confirmBulkBtn);
-      if (USE_RELATIONAL_API) {
-        const g = getGame(gameId);
-        try {
-          // Re-check against the FRESH state, not the (possibly stale) snapshot the form
-          // was built from - same reasoning as the non-relational path below.
-          const fresh = await v2LoadGameFull(gameId);
-          for (const p of fresh.players) {
-            if (p.id in fresh.cashouts) continue;
-            if (!(p.id in values)) continue;
-            const amt = Math.round(values[p.id]*100)/100;
-            await v2SetCashout(gameId, p.id, amt, [], amt);
-          }
-          await v2UpdateGame(gameId, {closed: true});
-          await v2UpdateCommunity(g.communityId, {lastParticipants: fresh.players.map(p=>p.id)});
-          v2AddGameEvent(gameId, "night_declared_over", null, myIdentity.name, undefined);
-        } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmBulkBtn.disabled = false; return; }
-        openModal({type:"summary", gameId});
-        return;
-      }
-      await mutateAndSave(() => {
-        const g = getGame(gameId);
-        if (!g.liveChips) g.liveChips = {};
-        // Re-check against the FRESH state, not the (possibly stale) snapshot the form was
-        // built from: someone may have cashed themselves out via their own seat while this
-        // bulk screen was open - never clobber an already-saved entry with a guessed one.
-        g.players.forEach(p => {
-          if (p.id in g.cashouts) return;
-          if (!(p.id in values)) return;
-          const amt = Math.round(values[p.id]*100)/100;
-          g.cashouts[p.id] = {amount: amt, ts: Date.now(), arrangedWith: []};
-          g.liveChips[p.id] = amt;
-        });
-        g.closed = true;
-        const c = getCommunity(g.communityId);
-        c.lastParticipants = g.players.map(p=>p.id);
-        logGameEvent(g, "night_declared_over", null, myIdentity.name, undefined);
-      });
-      openModal({type:"summary", gameId});
-    };
-    const confirmBtn = app.querySelector("[data-confirm-end]");
-    if (confirmBtn) confirmBtn.onclick = async () => {
-      const gameId = modal.gameId;
-      confirmBtn.disabled = true;
-      showButtonLoading(confirmBtn);
-      if (USE_RELATIONAL_API) {
-        const g = getGame(gameId);
-        try {
-          await v2UpdateGame(gameId, {closed: true});
-          await v2UpdateCommunity(g.communityId, {lastParticipants: g.players.map(p=>p.id)});
-          v2AddGameEvent(gameId, "night_declared_over", null, myIdentity.name, undefined);
-        } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmBtn.disabled = false; return; }
-        openModal({type:"summary", gameId});
-        return;
-      }
-      await mutateAndSave(() => {
-        const g = getGame(gameId);
-        g.closed = true;
-        const c = getCommunity(g.communityId);
-        c.lastParticipants = g.players.map(p=>p.id);
-        logGameEvent(g, "night_declared_over", null, myIdentity.name, undefined);
-        return true;
-      });
-      openModal({type:"summary", gameId});
-    };
-  }
 }
 
 // ---------- Guard against accidentally leaving the app via the browser/device back button ----------
