@@ -683,7 +683,7 @@ html.theme-light .badge-ok{background:#2c6f88;}
 html.theme-light .modal{background:#eef6fa;}
 html.theme-light .overlay{background:rgba(20,48,61,.55);}
 html.theme-light .card-open{background:#fff8e6;}
-html.theme-light .leave-frame{border-color:rgba(168,106,18,.45);background:rgba(255,255,255,.45);}
+html.theme-light .leave-frame{border-color:rgba(168,106,18,.45);background:transparent;}
 html.theme-light .rb-chip{color:#14303d;background:radial-gradient(circle at 50% 50%,#ffffff 0 52%,#d6e9f1 53% 60%,#ffffff 61% 100%);
   border-color:rgba(168,106,18,.4);box-shadow:inset 0 0 0 4px #c6dfea,0 3px 8px rgba(20,48,61,.2);}
 html.theme-light .rb-chip.on{color:#7a4a08;border-color:var(--gold);box-shadow:inset 0 0 0 4px #c6dfea,0 0 0 2px rgba(168,106,18,.45),0 0 14px rgba(232,170,40,.55);}
@@ -711,7 +711,7 @@ html.theme-light.theme-blue .card,html.theme-light.theme-blue .modal,html.theme-
 html.theme-light.theme-blue .lv-arm,html.theme-light.theme-blue .top .meta{color:#fff!important;}
 html.theme-light.theme-blue .top .meta [style*="color"],html.theme-light.theme-blue .top .meta{color:#e3f1f7!important;}
 html.theme-light.theme-blue .player-page .pp-total{background:linear-gradient(180deg,#fff3c4,#fcd34d 45%,#e0a42a);-webkit-background-clip:text;background-clip:text;}
-html.theme-light.theme-blue .leave-frame{background:rgba(255,255,255,.18);border-color:rgba(255,230,160,.6);}
+html.theme-light.theme-blue .leave-frame{background:transparent;border-color:rgba(255,230,160,.6);}
 html.theme-light.theme-blue .rb-chip{color:#0e2633;background:radial-gradient(circle,#eef5f8 0 52%,#b9d4e1 53% 60%,#eef5f8 61% 100%);box-shadow:inset 0 0 0 4px #a8c8d7,0 3px 8px rgba(0,30,50,.35);}
 html.theme-light.theme-blue .rb-confirm{background:linear-gradient(180deg,#fde68a,#f2c14e 45%,#c8922a);color:#2a1d05;border-color:#fff3c4;}
 html.theme-light.theme-blue .lv-pot{background:rgba(255,255,255,.75);}
@@ -728,7 +728,7 @@ html.theme-light.theme-sand{--bg1:#e9dcc6;--bg2:#d9c5a5;--card:#fbf6ee;--card-b:
 html.theme-light.theme-sand .lux-page{background:radial-gradient(120% 55% at 50% 0%,rgba(255,255,255,.35),transparent 70%),radial-gradient(150% 110% at 50% 45%,transparent 60%,rgba(90,55,20,.2) 100%),linear-gradient(#eadcc4,#dfcaa9 60%,#d2b993);}
 html.theme-light.theme-sand .modal{background:#f6eee1;}
 html.theme-light.theme-sand .icon-btn{background:#efe3cf;}
-html.theme-light.theme-sand .leave-frame{background:rgba(255,250,240,.45);border-color:rgba(110,65,25,.4);}
+html.theme-light.theme-sand .leave-frame{background:transparent;border-color:rgba(110,65,25,.4);}
 html.theme-light.theme-sand .rb-chip{color:#3a2614;background:radial-gradient(circle,#fffaf2 0 52%,#e7d6bb 53% 60%,#fffaf2 61% 100%);box-shadow:inset 0 0 0 4px #dcc7a5,0 3px 8px rgba(90,55,20,.25);border-color:rgba(110,65,25,.4);}
 html.theme-light.theme-sand .rb-chip.on{box-shadow:inset 0 0 0 4px #dcc7a5,0 0 0 2px rgba(154,95,18,.45),0 0 14px rgba(232,170,40,.55);}
 html.theme-light.theme-sand .rb-confirm{background:linear-gradient(180deg,#c9a274,#a9804f);color:#fffaf0;border-color:#b98a3e;text-shadow:0 1px 2px rgba(70,40,10,.35);}
@@ -844,11 +844,14 @@ html.theme-light.theme-blue .chat-bubble{--text:#0e2633;color:#0e2633;}
 .passkey-offer .po-text{flex:1;min-width:180px;display:flex;flex-direction:column;gap:2px;font-size:13px;}
 .passkey-offer .po-text span{font-size:11px;color:var(--muted);}
 .passkey-offer .po-btns{display:flex;gap:6px;}
-.login-or{text-align:center;color:var(--muted);font-size:12px;margin:10px 0 8px;}
-.login-link{display:block;margin:12px auto 0;background:none;border:none;color:var(--muted);font:inherit;font-size:13px;cursor:pointer;}
-.login-link u{color:var(--gold);text-underline-offset:3px;}
-.signup-existing{margin-top:14px;padding-top:12px;border-top:1px solid var(--card-b);text-align:center;color:var(--muted);font-size:12px;}
-.signup-existing .btn{margin-top:8px;}
+/* Login screen: three frames (new with fingerprint / has an account / email). */
+.login-frame{margin:0 0 14px;padding:6px 12px 12px;}
+.login-frame:last-child{margin-bottom:0;}
+.login-label{display:block;color:var(--muted);font-size:13px;margin:0 2px 6px;}
+.btn-2line{line-height:1.25;}
+.btn-2line small{display:block;font-weight:400;font-size:12px;opacity:.75;margin-top:2px;}
+#signup-name-input.input-error{border-color:#dc2626;}
+html.theme-light.theme-blue .login-frame{border:1.5px solid rgba(168,106,18,.8);}
 /* Club profile setup sections: no fill of their own - the same color inside as around
    them, so the title sitting on the frame line isn't cut in two by a lighter panel. The
    blue theme gets a stronger gold line, the pale one there barely showed. */
@@ -6398,18 +6401,21 @@ function renderModal(m){
   let title = "";
   if (m.type === "loginRequired") {
     title = "ברוכים הבאים";
-    body = m.loginStep === "signupName" ? `
-      <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">איך קוראים לך? השם יופיע גם בטלפון ליד טביעת האצבע.</p>
-      <form action="#" onsubmit="return false;">
-        <input type="text" id="signup-name-input" placeholder="השם שלך" value="${esc(m.signupName || "")}" maxlength="40" style="width:100%;text-align:center;margin-bottom:8px;" autofocus>
-        ${m.loginError ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.loginError)}</p>` : ""}
-        <button type="submit" class="btn btn-primary btn-block" data-passkey-signup-go>👆 המשך עם טביעת אצבע</button>
-      </form>
-      <div class="signup-existing">כבר יש לך חשבון? לא צריך להירשם שוב:
-        <button class="btn btn-ghost btn-block" data-passkey-login>👆 התחבר עם טביעת אצבע</button>
-      </div>
-      <button class="login-link" data-signup-back>חזרה</button>
-    ` : m.loginStep === "deviceChoice" ? `
+    // Each frame shows its own errors; email errors are the default (the code/device
+    // steps share sendLoginCodeFor with the email form).
+    const loginErr = (at) => m.loginError && (m.loginErrorAt || "email") === at
+      ? `<p style="color:#fda4af;font-size:12px;margin:6px 0 8px;">${esc(m.loginError)}</p>` : "";
+    // A real <form> with name="email" + autocomplete="email" is what makes phone browsers
+    // offer the device's saved email in the keyboard bar - a bare input outside a form
+    // often gets only the generic password-manager chip. It never actually submits:
+    // Enter / the button run the click handler.
+    const emailForm = (btnClass, label) => `
+      <form data-login-form action="#" autocomplete="on" onsubmit="return false;">
+        <input type="email" id="login-email-input" name="email" placeholder="האימייל שלך" dir="ltr" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" style="width:100%;text-align:center;margin-bottom:8px;" value="${esc(m.loginEmail || (() => { try { return localStorage.getItem("poker-last-email") || ""; } catch(e) { return ""; } })())}">
+        ${loginErr("email")}
+        <button type="submit" class="btn ${btnClass} btn-block" data-send-login-code>${label}</button>
+      </form>`;
+    body = m.loginStep === "deviceChoice" ? `
       <p style="color:var(--muted);font-size:13px;margin-bottom:14px;">הכתובת <span dir="ltr">${esc(m.loginEmail)}</span> כבר רשומה במערכת עם מכשיר מחובר. האם להתחבר ממכשיר זה?</p>
       <button class="btn btn-primary btn-block" style="margin-bottom:8px;" data-device-choice="replace">המשך</button>
       <button class="btn btn-ghost btn-block" data-device-choice-cancel>ביטול</button>
@@ -6419,26 +6425,30 @@ function renderModal(m){
       ${m.loginError ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.loginError)}</p>` : ""}
       <button class="btn btn-primary btn-block" data-confirm-login-code style="margin-bottom:8px;">אשר קוד</button>
       <button class="btn btn-ghost btn-block" data-resend-login-code>שלח קוד שוב</button>
+    ` : passkeySupported() ? `
+      <!-- Three frames, one per kind of person: new with a fingerprint (the name is asked
+           right here, so there's no second screen before the fingerprint), already has an
+           account, or email - which both logs in and signs up (a new email just enters). -->
+      <fieldset class="leave-frame login-frame"><legend>חדש כאן? הרשמה עם טביעת אצבע</legend>
+        <form action="#" onsubmit="return false;">
+          <label class="login-label" for="signup-name-input">מה השם שלך?</label>
+          <input type="text" id="signup-name-input" class="${m.nameMissing ? "input-error" : ""}" value="${esc(m.signupName || "")}" maxlength="40" autocomplete="name" style="width:100%;margin-bottom:8px;">
+          ${loginErr("signup")}
+          <button type="submit" class="btn btn-primary btn-block btn-2line" data-passkey-signup>👆 הירשם עם טביעת אצבע<small>אימייל לא חובה</small></button>
+        </form>
+      </fieldset>
+      <fieldset class="leave-frame login-frame"><legend>כבר יש לי חשבון</legend>
+        <button class="btn btn-primary btn-block" data-passkey-login>👆 כניסה עם טביעת אצבע</button>
+        ${loginErr("passkey")}
+      </fieldset>
+      <fieldset class="leave-frame login-frame"><legend>כניסה או הרשמה עם אימייל</legend>
+        ${emailForm("btn-ghost", "המשך עם אימייל")}
+      </fieldset>
     ` : `
-      ${passkeySupported() ? `
-      <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">משתמשים חדשים יכולים להירשם עם טביעת אצבע - בלי אימייל.</p>
-      <button class="btn btn-primary btn-block" data-passkey-signup>👆 משתמש חדש? הירשם עם טביעת אצבע</button>
-      <div class="login-or">או התחברו עם אימייל</div>
-      ` : `
       <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">${authSettings.requireVerifyExistingEmail
         ? "כדי להשתמש באפליקציה, התחברו עם האימייל שלכם - משתמשים חדשים ייכנסו ישר, ולחשבון קיים נשלח קוד בן 6 ספרות."
-        : "כדי להשתמש באפליקציה, התחברו עם האימייל שלכם."}</p>`}
-      <!-- A real <form> with name="email" + autocomplete="email" is what makes phone
-           browsers (Chrome/Samsung Internet on Android, Safari on iOS) offer the device's
-           saved email in the keyboard bar - a bare input outside a form often gets only
-           the generic password-manager chip. The form never actually submits anywhere:
-           Enter / the button run the same click handler as before. -->
-      <form data-login-form action="#" autocomplete="on" onsubmit="return false;">
-        <input type="email" id="login-email-input" name="email" placeholder="האימייל שלך" dir="ltr" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" style="width:100%;text-align:center;margin-bottom:8px;" value="${esc(m.loginEmail || (() => { try { return localStorage.getItem("poker-last-email") || ""; } catch(e) { return ""; } })())}" autofocus>
-        ${m.loginError ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.loginError)}</p>` : ""}
-        <button type="submit" class="btn ${passkeySupported() ? 'btn-ghost' : 'btn-primary'} btn-block" data-send-login-code>${authSettings.requireVerifyExistingEmail ? `${icon('share')} שלח קוד כניסה` : "כנס ל-Poker Manager"}</button>
-      </form>
-      ${passkeySupported() ? `<button class="login-link" data-passkey-login>כבר שמרת טביעת אצבע? <u>התחבר איתה</u></button>` : ""}
+        : "כדי להשתמש באפליקציה, התחברו עם האימייל שלכם."}</p>
+      ${emailForm("btn-primary", authSettings.requireVerifyExistingEmail ? `${icon('share')} שלח קוד כניסה` : "כנס ל-Poker Manager")}
     `;
   } else if (m.type === "addEmail") {
     title = "הוספת אימייל כגיבוי";
@@ -9075,19 +9085,20 @@ function attachHandlers(){
         await afterLogin(account);
         return;
       } catch(e) {
-        if (e.status !== 409) { updateModal({loginError: "החיבור לשרת נכשל - נסו שוב."}); return; }
+        if (e.status !== 409) { updateModal({loginError: "החיבור לשרת נכשל - נסו שוב.", loginErrorAt: "email"}); return; }
       }
       try {
         await requestLoginCode(email);
         updateModal({loginStep: "code", loginEmail: email, loginError: null});
       } catch(e) {
-        updateModal({loginError: e.message});
+        updateModal({loginError: e.message, loginErrorAt: "email"});
       }
     };
+    const signupNameNow = () => { const el = document.getElementById("signup-name-input"); return el ? el.value.trim() : (modal.signupName || ""); };
     const sendLoginBtn = app.querySelector("[data-send-login-code]");
     if (sendLoginBtn) sendLoginBtn.onclick = async () => {
       const email = document.getElementById("login-email-input").value.trim().toLowerCase();
-      if (!email || !email.includes("@")) { updateModal({loginError: "כתובת אימייל לא תקינה"}); return; }
+      if (!email || !email.includes("@")) { updateModal({loginError: "כתובת אימייל לא תקינה", loginErrorAt: "email", loginEmail: email, signupName: signupNameNow()}); return; }
       sendLoginBtn.disabled = true;
       showButtonLoading(sendLoginBtn);
       // No "this email already has a device" step anymore - logging in here no longer
@@ -9133,9 +9144,19 @@ function attachHandlers(){
         updateModal({loginError: e.message});
       }
     };
-    // "משתמש חדש": first make sure this isn't someone who already has an account here.
+    // "חדש כאן": the name comes from the field right above the button; then make sure
+    // this isn't someone who already has an account here before creating a new one.
     const passkeySignupBtn = app.querySelector("[data-passkey-signup]");
     if (passkeySignupBtn) passkeySignupBtn.onclick = async () => {
+      const name = signupNameNow();
+      const emailEl = document.getElementById("login-email-input");
+      const keep = {signupName: name, loginEmail: emailEl ? emailEl.value.trim() : modal.loginEmail};
+      if (!name) {
+        updateModal({...keep, nameMissing: true, loginError: "רשום את השם שלך כדי להירשם", loginErrorAt: "signup"});
+        const el = document.getElementById("signup-name-input");
+        if (el) el.focus();
+        return;
+      }
       let had = null;
       try { had = localStorage.getItem("poker-had-account"); } catch(e) {}
       if (had) {
@@ -9154,24 +9175,14 @@ function attachHandlers(){
           return;
         } catch(e) { /* none saved (or declined) - go on to sign up */ }
       }
-      updateModal({loginStep: "signupName", loginError: null});
-    };
-    const signupBack = app.querySelector("[data-signup-back]");
-    if (signupBack) signupBack.onclick = () => updateModal({loginStep: null, loginError: null});
-    const signupGoBtn = app.querySelector("[data-passkey-signup-go]");
-    if (signupGoBtn) signupGoBtn.onclick = async () => {
-      const name = document.getElementById("signup-name-input").value.trim();
-      if (!name) { updateModal({loginError: "צריך להזין שם."}); return; }
-      signupGoBtn.disabled = true;
-      showButtonLoading(signupGoBtn);
       try {
         const account = await signupWithPasskey(name);
         // Prefills the profile screen that follows (afterLogin opens it - no name yet).
         myIdentity.name = name;
         await afterLogin(account);
       } catch(e) {
-        if (e && e.name === "NotAllowedError") { updateModal({signupName: name, loginError: null}); return; } // cancelled
-        updateModal({signupName: name, loginError: "ההרשמה עם טביעת אצבע נכשלה - נסו שוב או התחברו עם האימייל."});
+        if (e && e.name === "NotAllowedError") { updateModal({...keep, nameMissing: false, loginError: null}); return; } // cancelled
+        updateModal({...keep, nameMissing: false, loginError: "ההרשמה עם טביעת אצבע נכשלה - נסו שוב או התחברו עם האימייל.", loginErrorAt: "signup"});
       }
     };
     const passkeyLoginBtn = app.querySelector("[data-passkey-login]");
@@ -9183,8 +9194,9 @@ function attachHandlers(){
         await afterLogin(account);
       } catch(e) {
         // Cancelled - or no saved passkey on this phone (the browser doesn't say which).
-        if (e && e.name === "NotAllowedError") { updateModal({loginError: "לא נמצאה טביעת אצבע שמורה? משתמש חדש - הירשם עם טביעת אצבע, או התחבר עם האימייל."}); return; }
-        updateModal({loginError: e && e.status === 404
+        const keep = {signupName: signupNameNow(), loginErrorAt: "passkey", nameMissing: false};
+        if (e && e.name === "NotAllowedError") { updateModal({...keep, loginError: "לא נמצאה טביעת אצבע שמורה? משתמש חדש - הירשם עם טביעת אצבע, או התחבר עם האימייל."}); return; }
+        updateModal({...keep, loginError: e && e.status === 404
           ? "טביעת האצבע הזאת לא שמורה אצלנו - התחברו עם האימייל."
           : "הכניסה עם טביעת אצבע נכשלה - נסו שוב או התחברו עם האימייל."});
       }
