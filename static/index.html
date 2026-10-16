@@ -2404,6 +2404,11 @@ function applyAccountToIdentity(account){
   // canonical one, BEFORE writing photo/phone below, so they land on the right
   // globalPlayers record instead of one about to be abandoned.
   if (account.playerId) myIdentity.id = account.playerId;
+  // The look chosen on any other device / browser of this account.
+  if (account.theme && account.theme !== currentTheme()) {
+    setTheme.fromAccount = true;
+    try { setTheme(account.theme, true); } finally { setTheme.fromAccount = false; }
+  }
   // Links saved from another device fill in clubs this device doesn't know yet; a link
   // this device already has always wins.
   if (account.myPlayers && typeof account.myPlayers === "object") {
@@ -3879,6 +3884,9 @@ function setTheme(key, noRender){
   cl.remove("theme-light", "theme-blue", "theme-sand");
   if (key === "blue" || key === "sand") cl.add("theme-light", "theme-" + key);
   try { localStorage.setItem("poker-theme", key); } catch(e) {}
+  // Saved on the account too (see applyAccountToIdentity) - only for a real choice, not
+  // when applying the account's own saved value.
+  if (!setTheme.fromAccount && myIdentity && myIdentity.email) updateAccount({theme: key});
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.content = key === "blue" ? "#4d89a8" : key === "sand" ? "#dfcaa9" : "#022c22";
   if (!noRender) render();
