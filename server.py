@@ -20,6 +20,18 @@ import psycopg2.pool
 from psycopg2.extras import Json
 from flask import Flask, Response, jsonify, request, send_from_directory
 
+# Passkeys ("כניסה עם טביעת אצבע") - optional: if the library is missing the rest of the
+# app still runs, the passkey endpoints just answer 503.
+try:
+    import webauthn
+    from webauthn.helpers import base64url_to_bytes, bytes_to_base64url
+    from webauthn.helpers.structs import (
+        AuthenticatorSelectionCriteria, PublicKeyCredentialDescriptor,
+        ResidentKeyRequirement, UserVerificationRequirement,
+    )
+except ImportError:
+    webauthn = None
+
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -113,6 +125,23 @@ _INIT_STATEMENTS = (
     ")",
     # One outstanding login code per email at a time - requesting a new one replaces
     # whatever was there before, and a used or expired code is deleted outright.
+    # Passkeys: a fingerprint/face login saved by the phone (synced by Google/iCloud), tied
+    # to an email account - a backup way back in when the device's own storage and cookie
+    # are gone, without a code by email. See /api/auth/passkey/*.
+    "CREATE TABLE IF NOT EXISTS passkeys ("
+    "  credential_id TEXT PRIMARY KEY,"
+    "  email TEXT NOT NULL,"
+    "  public_key TEXT NOT NULL,"
+    "  sign_count BIGINT NOT NULL DEFAULT 0,"
+    "  created_at TIMESTAMP NOT NULL DEFAULT now()"
+    ")",
+    # One-time, short-lived WebAuthn challenges (register or login), deleted when used.
+    "CREATE TABLE IF NOT EXISTS passkey_challenges ("
+    "  id TEXT PRIMARY KEY,"
+    "  challenge TEXT NOT NULL,"
+    "  email TEXT,"
+    "  expires_at TIMESTAMP NOT NULL"
+    ")",
     "CREATE TABLE IF NOT EXISTS login_codes ("
     "  email TEXT PRIMARY KEY,"
     "  code TEXT NOT NULL,"
@@ -2398,7 +2427,7 @@ def verify_login_code():
     account = _get_account(email) or _default_account(email)
     _claim_player_id(account, local_id)
     _save_account(email, account)
-    return _with_device_cookie(jsonify({"email": email, **account}), client_id)
+    return _with_device_cookie(jsonify({"email": email, **account, "hasPasskey": _has_passkey(email)}), client_id)
 
 
 @app.route("/api/auth/quick-login", methods=["POST"])
@@ -2437,7 +2466,7 @@ def quick_login():
     account = _get_account(email) or _default_account(email)
     _claim_player_id(account, local_id)
     _save_account(email, account)
-    return _with_device_cookie(jsonify({"email": email, **account}), client_id)
+    return _with_device_cookie(jsonify({"email": email, **account, "hasPasskey": _has_passkey(email)}), client_id)
 
 
 @app.route("/api/auth/settings")
@@ -2527,11 +2556,197 @@ def auth_session():
     if not email:
         return jsonify({"loggedIn": False})
     account = _get_account(email) or _default_account(email)
-    body = {"loggedIn": True, "email": email, **account}
+    body = {"loggedIn": True, "email": email, **account, "hasPasskey": _has_passkey(email)}
     if restored_client_id:
         body["restoredClientId"] = restored_client_id
     # Refreshes the cookie for devices that logged in before it existed.
     return _with_device_cookie(jsonify(body), restored_client_id or client_id)
+
+
+# ---------- Passkeys ----------
+# Phase 1: a backup login for an existing (email) account. Registering needs a device that
+# is already logged in; logging in with one does exactly what a verified email code does
+# (trusts this device for that account). The passkey is bound to the hostname it was
+# created on (the RP ID), so it only works on that same address.
+PASSKEY_CHALLENGE_TTL_SECONDS = 300
+
+
+def _passkey_rp():
+    host = request.host.split(":")[0]
+    proto = request.headers.get("X-Forwarded-Proto", "").split(",")[0].strip() or request.scheme
+    return host, f"{proto}://{request.host}"
+
+
+def _has_passkey(email):
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM passkeys WHERE email = %s LIMIT 1", (email,))
+            row = cur.fetchone()
+        conn.commit()
+    return row is not None
+
+
+def _store_challenge(challenge, email=None):
+    challenge_id = secrets.token_urlsafe(18)
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM passkey_challenges WHERE expires_at < %s", (datetime.utcnow(),))
+            cur.execute(
+                "INSERT INTO passkey_challenges (id, challenge, email, expires_at) VALUES (%s, %s, %s, %s)",
+                (challenge_id, bytes_to_base64url(challenge), email,
+                 datetime.utcnow() + timedelta(seconds=PASSKEY_CHALLENGE_TTL_SECONDS)),
+            )
+        conn.commit()
+    return challenge_id
+
+
+def _take_challenge(challenge_id):
+    # Single use: deleted on read whether or not the verification that follows succeeds.
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM passkey_challenges WHERE id = %s RETURNING challenge, email, expires_at",
+                (challenge_id or "",),
+            )
+            row = cur.fetchone()
+        conn.commit()
+    if not row or row[2] < datetime.utcnow():
+        return None, None
+    return base64url_to_bytes(row[0]), row[1]
+
+
+def _passkey_unavailable():
+    return jsonify({"error": "passkeys unavailable"}), 503
+
+
+@app.route("/api/auth/passkey/register-options", methods=["POST"])
+def passkey_register_options():
+    if webauthn is None:
+        return _passkey_unavailable()
+    body = request.get_json(silent=True) or {}
+    email = _trusted_email(str(body.get("clientId", "")).strip())
+    if not email:
+        return jsonify({"error": "not logged in"}), 403
+    account = _get_account(email) or {}
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT credential_id FROM passkeys WHERE email = %s", (email,))
+            existing = [r[0] for r in cur.fetchall()]
+        conn.commit()
+    rp_id, _ = _passkey_rp()
+    options = webauthn.generate_registration_options(
+        rp_id=rp_id,
+        rp_name="Poker Manager",
+        # An opaque, stable handle per account - not the email itself.
+        user_id=hashlib.sha256(("pm-user:" + email).encode()).digest(),
+        user_name=email,
+        user_display_name=account.get("name") or email,
+        authenticator_selection=AuthenticatorSelectionCriteria(
+            resident_key=ResidentKeyRequirement.REQUIRED,
+            user_verification=UserVerificationRequirement.PREFERRED,
+        ),
+        exclude_credentials=[PublicKeyCredentialDescriptor(id=base64url_to_bytes(c)) for c in existing],
+    )
+    challenge_id = _store_challenge(options.challenge, email)
+    return jsonify({"challengeId": challenge_id, "options": json.loads(webauthn.options_to_json(options))})
+
+
+@app.route("/api/auth/passkey/register-verify", methods=["POST"])
+def passkey_register_verify():
+    if webauthn is None:
+        return _passkey_unavailable()
+    body = request.get_json(silent=True) or {}
+    email = _trusted_email(str(body.get("clientId", "")).strip())
+    if not email:
+        return jsonify({"error": "not logged in"}), 403
+    challenge, challenge_email = _take_challenge(body.get("challengeId"))
+    if not challenge or challenge_email != email:
+        return jsonify({"error": "expired"}), 400
+    rp_id, origin = _passkey_rp()
+    try:
+        verified = webauthn.verify_registration_response(
+            credential=body.get("credential"),
+            expected_challenge=challenge,
+            expected_rp_id=rp_id,
+            expected_origin=origin,
+        )
+    except Exception as e:
+        return jsonify({"error": "verification failed", "detail": str(e)}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO passkeys (credential_id, email, public_key, sign_count) VALUES (%s, %s, %s, %s) "
+                "ON CONFLICT (credential_id) DO UPDATE SET email = EXCLUDED.email, "
+                "public_key = EXCLUDED.public_key, sign_count = EXCLUDED.sign_count",
+                (bytes_to_base64url(verified.credential_id), email,
+                 bytes_to_base64url(verified.credential_public_key), verified.sign_count),
+            )
+        conn.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/auth/passkey/login-options", methods=["POST"])
+def passkey_login_options():
+    if webauthn is None:
+        return _passkey_unavailable()
+    rp_id, _ = _passkey_rp()
+    # No allowCredentials: the phone offers whichever passkey it holds for this site.
+    options = webauthn.generate_authentication_options(
+        rp_id=rp_id, user_verification=UserVerificationRequirement.PREFERRED,
+    )
+    challenge_id = _store_challenge(options.challenge)
+    return jsonify({"challengeId": challenge_id, "options": json.loads(webauthn.options_to_json(options))})
+
+
+@app.route("/api/auth/passkey/login-verify", methods=["POST"])
+def passkey_login_verify():
+    if webauthn is None:
+        return _passkey_unavailable()
+    body = request.get_json(silent=True) or {}
+    client_id = str(body.get("clientId", "")).strip()
+    local_id = str(body.get("localId", "")).strip()
+    credential = body.get("credential") or {}
+    if not client_id or not isinstance(credential, dict):
+        return jsonify({"error": "missing clientId/credential"}), 400
+    challenge, _ = _take_challenge(body.get("challengeId"))
+    if not challenge:
+        return jsonify({"error": "expired"}), 400
+    credential_id = str(credential.get("id", ""))
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT email, public_key, sign_count FROM passkeys WHERE credential_id = %s", (credential_id,))
+            row = cur.fetchone()
+        conn.commit()
+    if not row:
+        return jsonify({"error": "unknown passkey"}), 404
+    email, public_key, sign_count = row
+    rp_id, origin = _passkey_rp()
+    try:
+        verified = webauthn.verify_authentication_response(
+            credential=credential,
+            expected_challenge=challenge,
+            expected_rp_id=rp_id,
+            expected_origin=origin,
+            credential_public_key=base64url_to_bytes(public_key),
+            credential_current_sign_count=sign_count,
+        )
+    except Exception as e:
+        return jsonify({"error": "verification failed", "detail": str(e)}), 400
+    # Same outcome as a verified email code (see verify_login_code).
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE passkeys SET sign_count = %s WHERE credential_id = %s",
+                        (verified.new_sign_count, credential_id))
+            cur.execute(
+                "INSERT INTO trusted_devices (client_id, email) VALUES (%s, %s) "
+                "ON CONFLICT (client_id) DO UPDATE SET email = EXCLUDED.email",
+                (client_id, email),
+            )
+        conn.commit()
+    account = _get_account(email) or _default_account(email)
+    _claim_player_id(account, local_id)
+    _save_account(email, account)
+    return _with_device_cookie(jsonify({"email": email, **account, "hasPasskey": True}), client_id)
 
 
 @app.route("/api/auth/claim-player-id", methods=["POST"])
@@ -2619,6 +2834,7 @@ def delete_account():
         with conn.cursor() as cur:
             cur.execute("DELETE FROM accounts WHERE email = %s", (target_email,))
             cur.execute("DELETE FROM trusted_devices WHERE email = %s", (target_email,))
+            cur.execute("DELETE FROM passkeys WHERE email = %s", (target_email,))
         conn.commit()
     return jsonify({"ok": True})
 

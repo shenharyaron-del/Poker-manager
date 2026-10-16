@@ -868,6 +868,11 @@ html.theme-light.theme-blue .chat-bubble{--text:#0e2633;color:#0e2633;}
 .tl-win{fill:#22a55a;} .tl-loss{fill:var(--rose-b);}
 .tl-line{fill:none;stroke:var(--gold);stroke-width:2;stroke-linejoin:round;stroke-linecap:round;}
 .tl-miss{stroke:var(--muted);stroke-width:1;stroke-dasharray:2 2;opacity:.5;}
+.passkey-offer{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--input);border:1px solid var(--gold);border-radius:14px;padding:10px 12px;margin-bottom:12px;}
+.passkey-offer .po-text{flex:1;min-width:180px;display:flex;flex-direction:column;gap:2px;font-size:13px;}
+.passkey-offer .po-text span{font-size:11px;color:var(--muted);}
+.passkey-offer .po-btns{display:flex;gap:6px;}
+.login-or{text-align:center;color:var(--muted);font-size:12px;margin:10px 0 8px;}
 </style>
 </head>
 <body>
@@ -2387,6 +2392,99 @@ async function quickLogin(email, replace){
     throw err;
   }
   return body;
+}
+
+// ---------- Passkeys ("כניסה עם טביעת אצבע") ----------
+// A backup way back into an existing (email) account: saved once from a logged-in device,
+// synced by the phone's Google/iCloud account, and usable after the device's own storage
+// and cookie are gone. passkeyHas: true/false from the server, null = not known yet.
+let passkeyHas = null;
+const PASSKEY_OFFER_SNOOZE_DAYS = 30;
+function passkeySupported(){
+  return !!(window.PublicKeyCredential && navigator.credentials && window.isSecureContext);
+}
+function b64urlToBuf(s){
+  s = s.replace(/-/g, "+").replace(/_/g, "/");
+  const bin = atob(s + "===".slice((s.length + 3) % 4));
+  return Uint8Array.from(bin, c => c.charCodeAt(0)).buffer;
+}
+function bufToB64url(buf){
+  let bin = "";
+  new Uint8Array(buf).forEach(b => { bin += String.fromCharCode(b); });
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+async function passkeyPost(path, body){
+  const res = await fetch("/api/auth/passkey/" + path, {
+    method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body || {})
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { const err = new Error(data.error || "passkey failed"); err.status = res.status; throw err; }
+  return data;
+}
+// Throws NotAllowedError (a DOMException) when the person cancels the phone's prompt.
+async function registerPasskey(){
+  const {challengeId, options: o} = await passkeyPost("register-options", {clientId: getClientId()});
+  const cred = await navigator.credentials.create({publicKey: {
+    ...o,
+    challenge: b64urlToBuf(o.challenge),
+    user: {...o.user, id: b64urlToBuf(o.user.id)},
+    excludeCredentials: (o.excludeCredentials || []).map(c => ({...c, id: b64urlToBuf(c.id)})),
+  }});
+  await passkeyPost("register-verify", {clientId: getClientId(), challengeId, credential: {
+    id: cred.id, rawId: bufToB64url(cred.rawId), type: cred.type,
+    response: {
+      clientDataJSON: bufToB64url(cred.response.clientDataJSON),
+      attestationObject: bufToB64url(cred.response.attestationObject),
+      transports: cred.response.getTransports ? cred.response.getTransports() : [],
+    },
+    clientExtensionResults: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {},
+    authenticatorAttachment: cred.authenticatorAttachment || undefined,
+  }});
+  passkeyHas = true;
+}
+async function loginWithPasskey(){
+  const {challengeId, options: o} = await passkeyPost("login-options");
+  const cred = await navigator.credentials.get({publicKey: {
+    ...o,
+    challenge: b64urlToBuf(o.challenge),
+    allowCredentials: (o.allowCredentials || []).map(c => ({...c, id: b64urlToBuf(c.id)})),
+  }});
+  const r = cred.response;
+  const account = await passkeyPost("login-verify", {clientId: getClientId(), localId: myIdentity.id, challengeId, credential: {
+    id: cred.id, rawId: bufToB64url(cred.rawId), type: cred.type,
+    response: {
+      clientDataJSON: bufToB64url(r.clientDataJSON),
+      authenticatorData: bufToB64url(r.authenticatorData),
+      signature: bufToB64url(r.signature),
+      userHandle: r.userHandle ? bufToB64url(r.userHandle) : undefined,
+    },
+    clientExtensionResults: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {},
+    authenticatorAttachment: cred.authenticatorAttachment || undefined,
+  }});
+  passkeyHas = true;
+  return account;
+}
+function passkeyOfferSnoozed(){
+  try { return Date.now() - Number(localStorage.getItem("poker-passkey-offer-snoozed") || 0) < PASSKEY_OFFER_SNOOZE_DAYS * 864e5; } catch(e) { return false; }
+}
+// Only on the home screen - never on the way into a game from an invite link.
+function passkeyOfferHtml(){
+  if (passkeyHas !== false || !myIdentity.email || !passkeySupported() || passkeyOfferSnoozed()) return "";
+  return `<div class="passkey-offer">
+    <div class="po-text"><b>👆 שמירת כניסה עם טביעת אצבע</b><span>כדי לחזור לחשבון שלך גם אם הנתונים בטלפון יימחקו או בטלפון חדש.</span></div>
+    <div class="po-btns"><button class="btn btn-primary btn-sm" data-passkey-register>שמור</button><button class="btn btn-ghost btn-sm" data-passkey-snooze>לא עכשיו</button></div>
+  </div>`;
+}
+async function doRegisterPasskey(btn){
+  if (btn) { btn.disabled = true; showButtonLoading(btn); }
+  try {
+    await registerPasskey();
+    showAlert("טביעת האצבע נשמרה ✓ - מעכשיו אפשר להתחבר איתה גם אם הנתונים בטלפון יימחקו");
+  } catch(e) {
+    if (!(e && e.name === "NotAllowedError")) showAlert(e && e.name === "InvalidStateError" ? "טביעת אצבע כבר שמורה בטלפון הזה ✓" : "שמירת טביעת האצבע נכשלה - נסו שוב");
+    if (e && e.name === "InvalidStateError") passkeyHas = true;
+  }
+  render();
 }
 
 let state = defaultState();
@@ -4762,7 +4860,7 @@ function renderHome(){
         מועדון מאגד את כל חברי המועדון שלכם - ותחתיו נפתחים ערבי המשחק (השולחנות) שלהם.
       </div>
     </div>
-    <div class="px5" style="margin-bottom:80px;">${cards}</div>
+    <div class="px5" style="margin-bottom:80px;">${passkeyOfferHtml()}${cards}</div>
   `;
 }
 
@@ -6051,6 +6149,7 @@ function renderModal(m){
         ${m.loginError ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.loginError)}</p>` : ""}
         <button type="submit" class="btn btn-primary btn-block" data-send-login-code>${authSettings.requireVerifyExistingEmail ? `${icon('share')} שלח קוד כניסה` : "כנס ל-Poker Manager"}</button>
       </form>
+      ${passkeySupported() ? `<div class="login-or">או</div><button class="btn btn-ghost btn-block" data-passkey-login>👆 התחבר עם טביעת אצבע</button>` : ""}
     `;
   } else if (m.type === "identityName") {
     // Same screen whether this is the mandatory post-login step or an editor-opened
@@ -6064,6 +6163,9 @@ function renderModal(m){
     // an entry form.
     const loginSection = `
       <p style="color:var(--muted);font-size:12px;text-align:center;margin:18px 0 0;padding-top:14px;border-top:1px solid var(--card-b);">מחוברים כ-<span dir="ltr">${esc(myIdentity.email)}</span></p>
+      ${!passkeySupported() ? "" : passkeyHas
+        ? `<p style="color:var(--muted);font-size:12px;text-align:center;margin:6px 0 0;">👆 כניסה עם טביעת אצבע שמורה ✓</p>`
+        : `<button class="btn btn-ghost btn-sm" style="display:block;margin:8px auto 0;" data-passkey-register>👆 שמור כניסה עם טביעת אצבע</button>`}
     `;
     // A tap on any of the 9 seats sets it immediately (setGlobalPlayer + saveState in the
     // handler below) - a low-stakes, instantly-visible visual preference, not something
@@ -8620,6 +8722,7 @@ function attachHandlers(){
     // no need to make them pass through that screen again every time; only a genuinely
     // new account (no name yet) gets sent there.
     const afterLogin = async (account) => {
+      if (typeof account.hasPasskey === "boolean") passkeyHas = account.hasPasskey;
       applyAccountToIdentity(account);
       saveIdentity();
       await saveState();
@@ -8697,6 +8800,20 @@ function attachHandlers(){
         updateModal({loginError: e.message});
       }
     };
+    const passkeyLoginBtn = app.querySelector("[data-passkey-login]");
+    if (passkeyLoginBtn) passkeyLoginBtn.onclick = async () => {
+      passkeyLoginBtn.disabled = true;
+      showButtonLoading(passkeyLoginBtn);
+      try {
+        const account = await loginWithPasskey();
+        await afterLogin(account);
+      } catch(e) {
+        if (e && e.name === "NotAllowedError") { render(); return; } // cancelled
+        updateModal({loginError: e && e.status === 404
+          ? "טביעת האצבע הזאת לא שמורה אצלנו - התחברו עם האימייל."
+          : "הכניסה עם טביעת אצבע נכשלה - נסו שוב או התחברו עם האימייל."});
+      }
+    };
   }
 
   if (modal && modal.type === "photoSource") {
@@ -8729,6 +8846,12 @@ function attachHandlers(){
       closeModal();
     });
   }
+
+  app.querySelectorAll("[data-passkey-register]").forEach(el => el.onclick = () => doRegisterPasskey(el));
+  app.querySelectorAll("[data-passkey-snooze]").forEach(el => el.onclick = () => {
+    try { localStorage.setItem("poker-passkey-offer-snoozed", String(Date.now())); } catch(e) {}
+    render();
+  });
 
   if (modal && modal.type === "stats") {
     app.querySelectorAll("[data-stats-select-community]").forEach(el => el.onclick = () => {
@@ -10807,6 +10930,7 @@ window.addEventListener("popstate", async () => {
     // locally, so a normal reload with nothing new to apply doesn't write on every load.
     const account = sessionResult.status === "fulfilled" ? sessionResult.value : null;
     hasVerifiedSession = !!account;
+    if (account && typeof account.hasPasskey === "boolean") passkeyHas = account.hasPasskey;
     if (account) {
       const hadName = !!myIdentity.name, hadPhoto = !!getGlobalPlayer(myIdentity.id).photo;
       const localIdBeforeSync = myIdentity.id;
