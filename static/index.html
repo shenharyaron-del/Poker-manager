@@ -5021,7 +5021,7 @@ function returnToMyScreenAfter(gameId, pid, what){
   if (!g || !pid || pid === mine || playerViewTarget !== pid) return;
   const name = (g.players.find(pl => pl.id === pid) || {}).name || "השחקן";
   showAlert(`${what} ${/^[\u0590-\u05FF]/.test(name) ? "ל" : "ל-"}${name} ✓ - חוזרים למסך שלך`);
-  setTimeout(() => { if (playerViewTarget === pid) { playerViewTarget = null; render(); } }, 3000);
+  setTimeout(() => { if (playerViewTarget === pid) { playerViewTarget = null; render(); } }, 10000);
 }
 
 function renderCommunity(communityId){
