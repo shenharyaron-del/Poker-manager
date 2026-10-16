@@ -941,6 +941,14 @@ html.theme-light.theme-sand .rb-confirm{background:linear-gradient(180deg,#bf8a4
 .inapp-x{flex-shrink:0;background:none;border:none;color:#fff;font-size:16px;cursor:pointer;padding:2px 4px;}
 html.has-inapp-bar body{padding-top:48px;}
 html.has-inapp-bar .overlay{top:48px;}
+/* Samsung Internet (where WhatsApp opens links on Samsung phones) force-darkens any site
+   that doesn't show it has its own dark styling - and it looks for exactly this media
+   query. The app sets its own colors per theme either way; this just says so, so the
+   sand / blue themes aren't darkened. */
+@media (prefers-color-scheme: dark){
+  html{color-scheme:dark light;}
+  html.theme-light{color-scheme:only light;}
+}
 </style>
 </head>
 <body>
