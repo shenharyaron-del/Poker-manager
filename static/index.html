@@ -5543,7 +5543,7 @@ function renderPlayerScreen(gameId){
   const leaveHtml = `
     <label class="lv-arm">
       <input type="checkbox" data-leave-arm ${armed?'checked':''} ${nightClosedLock?'disabled':''}>
-      <span>סיימתי את הערב</span>
+      <span>${viewingOther && p ? `<bdi>${esc(p.name)}</bdi> ${((c && c.roster) || []).some(r => r.id === pid && r.gender === "female") ? "סיימה" : "סיים"} את הערב` : "סיימתי את הערב"}</span>
       <span class="lv-line"></span>
     </label>
     <div class="lv-body${armed?'':' off'}">
