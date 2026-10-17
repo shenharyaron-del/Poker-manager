@@ -87,6 +87,7 @@ h1.sm{font-size:20px;}
 @keyframes pokerChipSpin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
 .card:active{transform:scale(0.98);}
 .card .name{font-weight:700;font-size:16px;}
+.club-front .name{font-size:18px;}
 .card .meta{color:var(--muted);font-size:12px;margin-top:4px;display:flex;align-items:center;gap:5px;}
 .chev{color:#059669;flex-shrink:0;}
 .row{display:flex;align-items:center;gap:12px;}
@@ -4943,12 +4944,12 @@ function renderHome(){
     <div class="top">
       <div class="row" style="gap:8px;align-items:center;">
         <img src="${getGlobalPlayer(myIdentity.id).photo || '/static/logo-watermark.png'}" data-edit-identity-name style="width:28px;height:28px;border-radius:50%;object-fit:cover;cursor:pointer;flex-shrink:0;border:1px solid var(--card-b);">
-        <div class="hello-name" style="color:var(--muted);font-size:12px;margin-bottom:4px;">שלום, <span data-edit-identity-name style="cursor:pointer;text-decoration:underline;text-underline-offset:3px;">${esc(myIdentity.name || '')}</span></div>
+        <div class="hello-name" style="color:var(--muted);font-size:14px;margin-bottom:4px;">שלום, <span data-edit-identity-name style="cursor:pointer;text-decoration:underline;text-underline-offset:3px;">${esc(myIdentity.name || '')}</span></div>
         ${isSuperAdmin() ? `<button class="icon-btn" data-open-admin-settings title="הגדרות">${icon('gear')}</button>` : ""}
       </div>
       <h1 class="serif" style="margin-top:14px;">המועדונים שלי</h1>
-      <div class="sub">צרו מועדון כדי לנהל שחקנים וערבי משחק</div>
-      <div style="color:var(--muted);font-size:12px;margin-top:6px;line-height:1.6;">
+      <div class="sub" style="color:var(--text);font-size:15px;">צרו מועדון כדי לנהל שחקנים וערבי משחק</div>
+      <div style="color:var(--text);font-size:14px;margin-top:6px;line-height:1.6;">
         מועדון מאגד את כל חברי המועדון שלכם - ותחתיו נפתחים ערבי המשחק (השולחנות) שלהם.
       </div>
     </div>
