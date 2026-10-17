@@ -95,6 +95,7 @@ h1.sm{font-size:20px;}
 .card:active{transform:scale(0.98);}
 .card .name{font-weight:700;font-size:16px;}
 .club-front .name,.card[data-new-community] .name,.card[data-new-game] .name{font-size:24px;}
+.card.club-front .meta,.card[data-new-community] .meta,.card[data-new-game] .meta{font-size:16px;}
 .card .meta{color:var(--muted);font-size:12px;margin-top:4px;display:flex;align-items:center;gap:5px;}
 .chev{color:#059669;flex-shrink:0;}
 .row{display:flex;align-items:center;gap:12px;}
@@ -5104,7 +5105,7 @@ function renderCommunity(communityId){
     const canDelete = isGameCreator(g) || isClubCreator(c);
     const front = `
     <div class="card club-front ${g.closed?"":"card-open"}" data-open-game="${g.id}">
-      <div class="row flex1"><span style="color:#6ee7b7">${icon('cal')}</span><div class="flex1"><div class="name serif">${esc(g.name || g.date)}</div>${g.name ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${esc(g.date)}</div>` : ""}${gameAlert ? `<div style="font-size:11px;color:#fdba74;margin-top:2px;">${gameAlert.text}</div>` : ""}</div>${gameStatusBadge(g)}</div>
+      <div class="row flex1"><span style="color:#6ee7b7">${icon('cal')}</span><div class="flex1"><div class="name serif">${esc(g.name || g.date)}</div>${g.name ? `<div style="font-size:15px;color:var(--muted);margin-top:2px;">${esc(g.date)}</div>` : ""}${gameAlert ? `<div style="font-size:11px;color:#fdba74;margin-top:2px;">${gameAlert.text}</div>` : ""}</div>${gameStatusBadge(g)}</div>
       <div class="chev">${icon('chev')}</div>
     </div>`;
     if (!canInvite && !canDelete) return front.replace('class="card club-front ', 'class="card ');
