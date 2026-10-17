@@ -7171,7 +7171,7 @@ function renderModal(m){
         total += Math.abs((rawBalances[id]||{}).profit || 0);
         if (pl) names.push(pl.name);
       });
-      arrangedNoteHtml = `<p style="color:var(--text);font-size:12px;margin:0 0 12px;text-align:center;">כולל ₪${Math.round(total)} שהועברו ע"י ${names.map(esc).join(', ')} שעזב/ו את השולחן</p>`;
+      arrangedNoteHtml = `<p style="color:var(--text);font-size:16px;margin:0 0 12px;text-align:center;">כולל ₪${Math.round(total)} שהועברו ע"י ${names.map(esc).join(', ')} שעזב/ו את השולחן</p>`;
     }
     // Separate from arrangedNoteHtml above - this is a direct player-to-player payment,
     // not a cash handoff folded into the group settlement math. Without this, a player
@@ -7185,7 +7185,7 @@ function renderModal(m){
         const pl = g.players.find(pp2 => pp2.id === pp.fromPlayerId);
         return pl ? pl.name : "?";
       });
-      directPaymentsNoteHtml = `<p style="color:var(--text);font-size:12px;margin:0 0 12px;text-align:center;">קיבלת ₪${Math.round(total)} מ-${names.map(esc).join(', ')}</p>`;
+      directPaymentsNoteHtml = `<p style="color:var(--text);font-size:16px;margin:0 0 12px;text-align:center;">קיבלת ₪${Math.round(total)} מ-${names.map(esc).join(', ')}</p>`;
     }
     let modeBody;
     const byColorUnavailable = mode === "byColor" && !chipValues.length;
@@ -7193,8 +7193,8 @@ function renderModal(m){
       modeBody = `
         <div style="text-align:center;padding:10px 6px 16px;">
           <div style="color:#c4a8ee;margin-bottom:8px;display:flex;justify-content:center;">${icon('camera')}</div>
-          <div style="font-size:14px;font-weight:700;margin-bottom:6px;">ספירה לפי צבע/תמונה עדיין לא זמינה</div>
-          <div style="font-size:13px;color:var(--muted);line-height:1.5;">כדי שהצילום יעבוד, צריך להגדיר את הז'יטונים של המועדון ב"הגדרת פרופיל מועדון" ← לשונית "ז'יטונים".<br>בינתיים אפשר להזין את הסכום ידנית במסך השחקן.</div>
+          <div style="font-size:18px;font-weight:700;margin-bottom:6px;">ספירה לפי צבע/תמונה עדיין לא זמינה</div>
+          <div style="font-size:17px;color:var(--muted);line-height:1.5;">כדי שהצילום יעבוד, צריך להגדיר את הז'יטונים של המועדון ב"הגדרת פרופיל מועדון" ← לשונית "ז'יטונים".<br>בינתיים אפשר להזין את הסכום ידנית במסך השחקן.</div>
         </div>
       `;
     } else if (mode === "byColor") {
@@ -7373,20 +7373,20 @@ function renderModal(m){
       };
       const photoAreaHtml = chipPhotos.length ? `
         ${chipPhotos.map((photo,i) => renderPhotoBlock(photo, m.analyzingChipCount && i === chipPhotos.length-1)).join("")}
-        ${!m.analyzingChipCount && chipPhotos.some(ph => (ph.stacks||[]).some(st => st.mixed && !st.ignored)) ? `<p style="color:#fca5a5;font-size:12px;font-weight:700;margin:0 0 6px;">בערמה המסומנת "mix color" יש ז'יטון בצבע אחר והיא לא נספרת - הקישו עליה ובחרו את הערך הנכון, או סדרו את הערמה וצלמו שוב.</p>` : ""}
-        <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">${m.analyzingChipCount ? "סופר ז'יטונים אוטומטית..." : "טעות בזיהוי? הקישו על המסגרת כדי לשנות את סוג הז'יטון, ועל העיגול שבצד כדי לשנות את הכמות בשורה. ז'יטונים של מישהו אחר בתמונה? בחרו \"לא שלי\"."}</p>
+        ${!m.analyzingChipCount && chipPhotos.some(ph => (ph.stacks||[]).some(st => st.mixed && !st.ignored)) ? `<p style="color:#fca5a5;font-size:16px;font-weight:700;margin:0 0 6px;">בערמה המסומנת "mix color" יש ז'יטון בצבע אחר והיא לא נספרת - הקישו עליה ובחרו את הערך הנכון, או סדרו את הערמה וצלמו שוב.</p>` : ""}
+        <p style="color:var(--muted);font-size:16px;margin:0 0 10px;">${m.analyzingChipCount ? "סופר ז'יטונים אוטומטית..." : "טעות בזיהוי? הקישו על המסגרת כדי לשנות את סוג הז'יטון, ועל העיגול שבצד כדי לשנות את הכמות בשורה. ז'יטונים של מישהו אחר בתמונה? בחרו \"לא שלי\"."}</p>
         ${chipPhotos.length < 2 ? `
         <div style="position:relative;margin-bottom:8px;">
-          <button type="button" class="btn btn-ghost btn-block" style="pointer-events:none;display:flex;align-items:center;justify-content:center;gap:6px;" ${m.analyzingChipCount?"disabled":""}>${icon('plus')} עוד תמונה (ערמות שלא נכנסו לפריים)</button>
+          <button type="button" class="btn btn-ghost btn-block" style="font-size:18px;pointer-events:none;display:flex;align-items:center;justify-content:center;gap:6px;" ${m.analyzingChipCount?"disabled":""}>${icon('plus')} עוד תמונה (ערמות שלא נכנסו לפריים)</button>
           <input type="file" accept="image/*" capture="environment" id="chip-count-camera-input-add" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;" ${m.analyzingChipCount?"disabled":""}>
         </div>` : ""}
-        <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-retake-chip-count-photo ${m.analyzingChipCount?"disabled":""}>${icon('plus')} התחל מחדש</button>
+        <button class="btn btn-ghost btn-block" style="font-size:18px;margin-bottom:10px;" data-retake-chip-count-photo ${m.analyzingChipCount?"disabled":""}>${icon('plus')} התחל מחדש</button>
       ` : `
         <div style="position:relative;width:78%;margin:0 auto 10px;">
-          <button type="button" class="btn btn-ghost btn-block" style="pointer-events:none;display:flex;align-items:center;justify-content:center;gap:8px;">${icon('camera')} פתח מצלמה לספירה</button>
+          <button type="button" class="btn btn-ghost btn-block" style="font-size:18px;pointer-events:none;display:flex;align-items:center;justify-content:center;gap:8px;">${icon('camera')} פתח מצלמה לספירה</button>
           <input type="file" accept="image/*" capture="environment" id="chip-count-camera-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
         </div>
-        <ul style="color:var(--muted);font-size:12px;margin:-4px 0 14px;padding:0 18px 0 0;line-height:1.7;">
+        <ul style="color:var(--muted);font-size:16px;margin:-4px 0 14px;padding:0 18px 0 0;line-height:1.7;">
           <li>סדרו את הערמות בשורות (עד 5 שורות) - בכל שורה ערמות באותו גובה.</li>
           <li>כל ערמה מסוג אחד של ז'יטונים בלבד.</li>
           <li>צלמו לרוחב, בזווית של כ-30 מעלות. <a href="/static/chip_count_example.webp" target="_blank" rel="noopener" style="color:var(--gold);">דוגמה לתמונה טובה</a></li>
@@ -7400,11 +7400,11 @@ function renderModal(m){
             <div class="roster-row">
               <div class="row" style="gap:4px;">
                 ${cv.image ? `<img src="${cv.image}" style="width:28px;height:28px;object-fit:cover;border-radius:6px;border:1px solid rgba(255,255,255,.3);flex-shrink:0;margin-left:6px;">` : ""}
-                <input type="number" data-color-count="${cv.id}" data-color-value="${cv.value}" value="${cnt}" onfocus="this.select()" style="width:52px;height:34px;font-size:13px;text-align:center;">
-                <span>ז'יטונים × ₪${cv.value}</span>
+                <input type="number" data-color-count="${cv.id}" data-color-value="${cv.value}" value="${cnt}" onfocus="this.select()" style="width:64px;height:40px;font-size:17px;text-align:center;">
+                <span style="font-size:18px;">ז'יטונים × ₪${cv.value}</span>
               </div>
               <span class="badge badge-ok" style="display:flex;flex-direction:column;align-items:center;line-height:1.25;flex-shrink:0;">
-                <span data-color-count-value="${cv.id}">= ₪${Math.round(cnt*cv.value*100)/100}</span>
+                <span data-color-count-value="${cv.id}" style="font-size:15px;">= ₪${Math.round(cnt*cv.value*100)/100}</span>
               </span>
             </div>
           `; }).join("")}
@@ -7416,10 +7416,10 @@ function renderModal(m){
       ${directPaymentsNoteHtml}
       <div style="margin-bottom:16px;">${modeBody}</div>
       ${cashedOut ? `
-        <p style="color:var(--muted);font-size:12px;">השחקן כבר יצא מהמשחק.</p>
+        <p style="color:var(--muted);font-size:16px;">השחקן כבר יצא מהמשחק.</p>
         <button class="btn btn-ghost btn-block" data-return-to-game="${m.playerId}" style="margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('undo')} החזר למשחק</button>
       ` : `
-        <button class="icon-btn lux-gold" style="width:100%;display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 1px;font-size:12px;font-weight:700;border-radius:10px;white-space:nowrap;${byColorUnavailable?'opacity:.4;cursor:not-allowed;':''}" data-quick-end="${m.playerId}" ${byColorUnavailable?'disabled':''}>${icon('out')}סיום ערב</button>
+        <button class="icon-btn lux-gold" style="width:100%;display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 1px;font-size:16px;font-weight:700;border-radius:10px;white-space:nowrap;${byColorUnavailable?'opacity:.4;cursor:not-allowed;':''}" data-quick-end="${m.playerId}" ${byColorUnavailable?'disabled':''}>${icon('out')}סיום ערב</button>
       `}
     `;
   } else if (m.type === "removeSeat") {
