@@ -5513,7 +5513,7 @@ function renderPlayerScreen(gameId){
       <div style="display:flex;gap:10px;align-items:flex-end;">
         <button class="lv-photo" data-leave-photo ${armed?'':'disabled'}><span><b>ספירה</b><small>באמצעות צילום</small></span>${icon('camera')}</button>
         <div style="flex:1;min-width:0;">
-          <div style="color:var(--muted);font-size:16px;margin-bottom:4px;">סכום הז'יטונים שנשארו</div>
+          <div class="lv-amount-label" style="color:var(--muted);font-size:16px;margin-bottom:4px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">סכום הז'יטונים שנשארו</div>
           <div style="position:relative;">
             <input type="number" inputmode="decimal" id="lv-amount" value="${esc(leaveAmountDraft[pickKey] || '')}" ${armed?'':'disabled'} style="width:100%;box-sizing:border-box;padding:12px 30px 12px 8px;font-size:22px;border-radius:12px;border:1px solid var(--gold);background:var(--input);color:var(--text);">
             <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--gold);font-size:20px;">₪</span>
@@ -6080,9 +6080,9 @@ function renderTable(gameId){
 // and below it, the night's activity in order from 0:00 (the first player's entry).
 // Which view is open is remembered per device.
 // A name too long for its box steps its font down (to 11px) before it ever gets "…" -
-// the timeline's name chips and the player screen's player boxes.
+// the timeline's name chips, the player screen's player boxes and the chips-left label.
 function fitNameBoxes(){
-  document.querySelectorAll(".ttl-chip, .pp-tile bdi, .pp-tile-invite span").forEach(el => {
+  document.querySelectorAll(".ttl-chip, .pp-tile bdi, .pp-tile-invite span, .lv-amount-label").forEach(el => {
     let fs = parseFloat(getComputedStyle(el).fontSize);
     while (el.scrollWidth > el.clientWidth + 1 && fs > 11) { fs -= 1; el.style.fontSize = fs + "px"; }
   });
