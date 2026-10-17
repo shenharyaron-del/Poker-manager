@@ -821,7 +821,11 @@ html.theme-light .tp-row{border-color:var(--card-b)!important;}
    the blue page; give them a deep navy fill and a light rim instead. */
 html.theme-light.theme-blue .btn-blue{background:#0b2f4a!important;border:1.5px solid rgba(255,255,255,.75)!important;box-shadow:0 3px 10px rgba(0,20,40,.35);}
 /* Alone at a new table: pointing hands at "הזמנת שחקן" and at an empty seat. */
-.alone-hint{flex-shrink:0;text-align:center;font-size:13px;font-weight:700;color:var(--gold);margin:-8px 20px 4px;cursor:pointer;}
+.alone-hint{flex-shrink:0;text-align:center;font-size:18px;font-weight:700;color:var(--gold);margin:4px 20px 10px;cursor:pointer;line-height:1.4;}
+.alone-hint-arrow{font-size:26px;vertical-align:middle;margin-left:8px;}
+.pp-tiles.pp-tiles-alone{grid-template-columns:repeat(4,1fr);font-size:24px;margin-bottom:12px;}
+.pp-tiles-alone .pp-tile-invite{grid-column:2 / span 2;font-size:1em;padding:6px 8px;}
+.pp-tiles-alone .tile-hint::after{font-size:28px;left:-40px;}
 .alone-hint-arrow{display:inline-block;animation:alone-arrow 1.1s ease-in-out infinite;}
 @keyframes alone-arrow{0%,100%{transform:translateX(0)}50%{transform:translateX(-8px)}}
 .seat-hint::after{content:"👇";position:absolute;left:50%;top:-30px;font-size:22px;line-height:1;transform:translateX(-50%);animation:seat-hand 1s ease-in-out infinite;pointer-events:none;}
@@ -5600,6 +5604,9 @@ function renderPlayerScreen(gameId){
     const n = entered.length + (canInvite ? 1 : 0);
     const cols = n <= 4 ? Math.max(n, 1) : n <= 6 ? 3 : 4;
     const fs = cols <= 2 ? 20 : cols === 3 ? 18 : 16;
+    // Alone at the table: "הזמן שחקן" alone in the row, the same size as my name box under
+    // it (columns 2-3 of 4), with room beside it for the pointing hand.
+    if (!entered.length) return `<div class="pp-tiles pp-tiles-alone">${out}</div>`;
     return `<div class="pp-tiles" style="grid-template-columns:repeat(${cols},1fr);font-size:${fs}px;">${out}</div>`;
   })();
   // Order (top to bottom): name/total, ריביי buttons, the shared history/feed panel
