@@ -917,7 +917,7 @@ html.theme-light.theme-sand .rb-confirm{background:linear-gradient(180deg,#bf8a4
 /* Name chips fill the row: up to 4 players in one row; 5-6 in rows of 3; 7-8 in rows of
    4; 9 in rows of 3 (columns set inline by player count). */
 .ttl-chips{display:grid;gap:6px;margin:8px 0 4px;}
-.ttl-chip{font-family:inherit;font-size:14px;padding:6px 6px;text-align:center;border-radius:999px;border:1px solid var(--card-b);background:transparent;color:var(--muted);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ttl-chip{font-family:inherit;font-size:inherit;padding:8px 6px;text-align:center;border-radius:999px;border:1px solid var(--card-b);background:transparent;color:var(--muted);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .ttl-chip.me{border-color:var(--gold);color:var(--gold);font-weight:700;}
 .ttl-chip.sel{border-color:#3b82f6;color:#3b82f6;font-weight:700;}
 /* The table screen is sized to the phone (no page scroll), so the timeline view fills what's
@@ -6085,6 +6085,13 @@ function renderTable(gameId){
 // stepped line - up on every buy-in, down by what they returned to the pot on leaving),
 // and below it, the night's activity in order from 0:00 (the first player's entry).
 // Which view is open is remembered per device.
+// A name too long for its box steps its font down (to 11px) before it ever gets "…".
+function fitTimelineChips(){
+  document.querySelectorAll(".ttl-chip").forEach(el => {
+    let fs = parseFloat(getComputedStyle(el).fontSize);
+    while (el.scrollWidth > el.clientWidth + 1 && fs > 11) { fs -= 1; el.style.fontSize = fs + "px"; }
+  });
+}
 function tableTimelineOn(){ try { return localStorage.getItem("poker-table-view") === "timeline"; } catch(e) { return false; } }
 function setTableView(v){ try { localStorage.setItem("poker-table-view", v); } catch(e) {} }
 let timelineHighlight = {}; // gameId -> the player tapped in the chips row (shown in blue)
@@ -6191,7 +6198,13 @@ function renderTableTimeline(g, c, myPlayerId){
     <div class="px5 ttl-wrap">
       <fieldset class="leave-frame stats-frame" style="margin-top:0;"><legend>קניות לאורך הערב</legend>
         <div class="ttl-chart"><svg viewBox="0 0 ${W} ${H}" width="100%" direction="ltr" data-ttl-lines="${esc(JSON.stringify(shown.map(s => [s.pid, s.pts.map(p => [Math.round(X(p[0])), Math.round(Y(p[1]))])])))}">${svg}</svg></div>
-        <div class="ttl-chips" style="grid-template-columns:repeat(${order.length <= 4 ? Math.max(order.length, 1) : order.length <= 6 ? 3 : order.length <= 8 ? 4 : 3},1fr);">${chips}</div>
+        ${(() => {
+          const cols = order.length <= 4 ? Math.max(order.length, 1) : order.length <= 6 ? 3 : order.length <= 8 ? 4 : 3;
+          // The wider each name's box, the bigger its name (long ones shrink to fit - see
+          // fitTimelineChips).
+          const fs = cols <= 2 ? 20 : cols === 3 ? 18 : 16;
+          return `<div class="ttl-chips" style="grid-template-columns:repeat(${cols},1fr);font-size:${fs}px;">${chips}</div>`;
+        })()}
       </fieldset>
       <fieldset class="leave-frame stats-frame ttl-list-frame"><legend>מה קרה בערב</legend>
         <div class="ttl-list" data-ttl-list="${g.id}">${list}</div>
@@ -7889,6 +7902,7 @@ function attachHandlers(){
     timelineHighlight[gid] = timelineHighlight[gid] === pid ? null : pid;
     render();
   });
+  fitTimelineChips();
   // Tapping a line in the chart picks that player, same as their chip below it. Lines
   // that share the tapped spot (several players at the same amount) - the first one in
   // tonight's entry order wins.
