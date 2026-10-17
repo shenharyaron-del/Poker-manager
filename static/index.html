@@ -286,7 +286,7 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
      it actually read as a raised pill sitting on top of the flat inactive strip rather
      than a flush rectangle - without it, that inner corner stayed square too. */
 .player-history-feed-tabs{display:flex;flex-shrink:0;border-radius:10px 10px 0 0;overflow:hidden;}
-.player-history-feed-tab{flex:1;padding:10px 4px;text-align:center;font-size:12px;font-weight:700;letter-spacing:.04em;background:none;border:none;color:rgba(255,255,255,.45);cursor:pointer;font-family:inherit;}
+.player-history-feed-tab{flex:1;padding:10px 4px;text-align:center;font-size:16px;font-weight:700;letter-spacing:.04em;background:none;border:none;color:rgba(255,255,255,.45);cursor:pointer;font-family:inherit;}
 .player-history-feed-tab.active{border-radius:10px 10px 0 0;color:var(--gold);background-repeat:repeat;background-size:auto,220px;}
 .player-history-feed.mode-history .player-history-feed-tab.active{background-image:linear-gradient(rgba(10,25,55,.85),rgba(10,25,55,.85)),url('/static/chat-bg.png');}
 .player-history-feed.mode-feed .player-history-feed-tab.active{background-image:linear-gradient(rgba(20,20,24,.85),rgba(20,20,24,.85)),url('/static/chat-bg.png');}
@@ -303,15 +303,15 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
 /* Time sits tucked in the bubble's own bottom-left corner instead of a separate full-width
    row underneath - floating it lets the message text wrap around it exactly like a real
    chat bubble, landing beside the last line when there's room and below it otherwise. */
-.chat-bubble{background:rgba(0,0,0,.3);border-radius:10px;padding:6px 10px;margin-bottom:6px;font-size:13px;color:var(--text);overflow:hidden;}
+.chat-bubble{background:rgba(0,0,0,.3);border-radius:10px;padding:6px 10px;margin-bottom:6px;font-size:17px;color:var(--text);overflow:hidden;}
 .chat-bubble:last-child{margin-bottom:0;}
-.chat-bubble .bubble-time{float:left;font-size:10px;color:var(--muted);margin:3px 0 0 6px;}
+.chat-bubble .bubble-time{float:left;font-size:13px;color:var(--muted);margin:3px 0 0 6px;}
 /* Table-activity rows only (not the plain chat-bubble ones elsewhere, which rely on
    .bubble-time's float) - an icon ahead of the time+text block, which keeps its own float
    layout since it's still a plain block, just no longer the bubble's only child. */
 .chat-bubble.with-icon{display:flex;gap:6px;align-items:flex-start;}
 .chat-bubble.with-icon>svg{flex-shrink:0;margin-top:2px;opacity:.85;}
-.empty{text-align:center;padding:50px 20px;color:#059669;font-size:14px;}
+.empty{text-align:center;padding:50px 20px;color:#059669;font-size:18px;}
 /* Table carousel's bottom switcher (see navBarFor in render()). */
 .nav-bar{position:relative;flex-shrink:0;display:flex;align-items:center;justify-content:center;min-height:72px;padding:8px 12px calc(8px + env(safe-area-inset-bottom,0px));
   background:radial-gradient(120% 140% at 50% 0%,#14513a 0%,#0b3426 55%,#07251b 100%);border-top:1px solid rgba(233,196,106,.55);box-shadow:0 -1px 0 rgba(0,0,0,.6),0 -6px 16px rgba(0,0,0,.35);}
@@ -473,7 +473,7 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
   .player-page .pp-total{font-size:42px;}
   .player-page .pp-chips{height:35px;margin-top:-10px;}
 }
-.section-title{color:var(--gold);font-size:11px;font-weight:700;letter-spacing:.05em;margin:0 0 8px;padding:0 20px;}
+.section-title{color:var(--gold);font-size:15px;font-weight:700;letter-spacing:.05em;margin:0 0 8px;padding:0 20px;}
 .field{display:block;margin-bottom:14px;}
 .field label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;}
 input[type=text],input[type=number],input[type=date],input[type=email],.select-input{
@@ -512,11 +512,11 @@ input:focus,.select-input:focus{border-color:var(--gold);}
    z-index:50). */
 .custom-alert{position:fixed;inset:0;pointer-events:none;display:flex;align-items:flex-end;justify-content:center;z-index:200;padding:16px;}
 @media(min-width:600px){.custom-alert{align-items:flex-start;}}
-.custom-alert-box{pointer-events:auto;background:#0c3d2e;border:1px solid var(--gold);border-radius:14px;padding:14px 16px;width:100%;max-width:440px;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:12px;box-shadow:0 8px 30px rgba(0,0,0,.5);animation:custom-alert-in .2s ease-out;}
+.custom-alert-box{pointer-events:auto;background:#0c3d2e;border:1px solid var(--gold);border-radius:14px;padding:14px 16px;width:100%;max-width:440px;color:var(--text);font-size:17px;display:flex;align-items:center;justify-content:space-between;gap:12px;box-shadow:0 8px 30px rgba(0,0,0,.5);animation:custom-alert-in .2s ease-out;}
 .custom-alert-close{background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;flex-shrink:0;}
 @keyframes custom-alert-in{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
 .custom-confirm{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:201;padding:16px;}
-.custom-confirm-box{background:#0c3d2e;border:1px solid var(--gold);border-radius:14px;padding:18px 16px;width:100%;max-width:400px;color:var(--text);font-size:14px;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.5);animation:custom-alert-in .2s ease-out;}
+.custom-confirm-box{background:#0c3d2e;border:1px solid var(--gold);border-radius:14px;padding:18px 16px;width:100%;max-width:400px;color:var(--text);font-size:18px;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.5);animation:custom-alert-in .2s ease-out;}
 .custom-confirm-actions{display:flex;gap:10px;margin-top:16px;}
 .buyin-confirm-overlay{position:fixed;inset:0;z-index:300;display:flex;align-items:center;justify-content:center;pointer-events:none;padding:16px;}
 .buyin-confirm-card{pointer-events:auto;background:#15803d;color:#fff;border-radius:18px;padding:28px 32px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.6);animation:buyin-confirm-pop 4s linear;max-width:300px;}
@@ -534,6 +534,16 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .game-welcome-card{background:#064e3b;border:1px solid var(--card-b);border-radius:20px;padding:30px 24px;width:100%;max-width:400px;text-align:center;box-shadow:0 16px 50px rgba(0,0,0,.55);}
 .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
 .modal-head h3{margin:0;font-size:18px;}
+/* The rest of the windows, a step larger like the screens already redone: title, body
+   text, fields, choices, rows and buttons (the inline sizes in them got +4 too). */
+.modal.modal-big{font-size:18px;}
+.modal.modal-big .modal-head h3{font-size:22px;}
+.modal.modal-big .btn{font-size:18px;}
+.modal.modal-big .btn-sm{font-size:16px;}
+.modal.modal-big .field label{font-size:16px;}
+.modal.modal-big input[type=text],.modal.modal-big input[type=number],.modal.modal-big input[type=date],.modal.modal-big input[type=email],.modal.modal-big .select-input{font-size:19px;}
+.modal.modal-big .checkbox-row,.modal.modal-big .roster-row{font-size:18px;}
+.modal.modal-big .badge{font-size:14px;}
 /* Club profile setup: the club's name rides in the title (one line, "…" when long), and
    the tabs' text is a step larger, like the rest of the screens. */
 .overlay-fullscreen .modal-head h3{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -626,7 +636,7 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .balance-neg{color:#fda4af;}
 .balance-neutral{color:#a8a29e;}
 .pot-box{margin:0 20px 16px;border-radius:16px;background:var(--card);border:1px solid var(--card-b);padding:14px 16px;display:flex;justify-content:space-between;align-items:center;font-size:14px;}
-.pot-label{color:#059669;font-size:11px;margin-bottom:2px;}
+.pot-label{color:#059669;font-size:15px;margin-bottom:2px;}
 .pot-val{font-weight:700;}
 .badge{font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;}
 .badge-ok{background:#065f46;color:#fff;}
@@ -644,7 +654,7 @@ html.theme-light .stats-net .pot-label{color:inherit;opacity:.8;}
 .stats-net .val{font-size:24px;font-weight:700;}
 .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
 .stats-grid .box{background:var(--input);border:1px solid var(--card-b);border-radius:12px;padding:10px 12px;}
-.stats-grid .box .l{color:#059669;font-size:11px;margin-bottom:2px;}
+.stats-grid .box .l{color:#059669;font-size:15px;margin-bottom:2px;}
 .stats-grid .box .v{font-weight:700;}
 .bar-chart-title{color:var(--gold);font-size:11px;font-weight:700;margin:14px 0 6px;}
 .bar-chart{display:flex;align-items:flex-end;justify-content:space-between;gap:3px;height:120px;padding:8px 2px 0;}
@@ -871,9 +881,9 @@ html.theme-light .chat-bubble{background:rgba(255,255,255,.95);border:1px solid 
 html.theme-light.theme-blue .chat-bubble{--text:#0e2633;color:#0e2633;}
 .tl-ctrl{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px;}
 .tl-seg{display:flex;border:1px solid var(--card-b);border-radius:10px;overflow:hidden;}
-.tl-seg button{background:transparent;border:none;color:var(--text);font:inherit;font-size:12px;padding:5px 10px;cursor:pointer;}
+.tl-seg button{background:transparent;border:none;color:var(--text);font:inherit;font-size:16px;padding:5px 10px;cursor:pointer;}
 .tl-seg button.on{background:var(--gold);color:#111;font-weight:700;}
-.tl-skip{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text);cursor:pointer;}
+.tl-skip{display:flex;align-items:center;gap:6px;font-size:16px;color:var(--text);cursor:pointer;}
 .tl-scroll{overflow-x:auto;direction:ltr;background:var(--input);border:1px solid var(--card-b);border-radius:12px;padding:6px 4px 2px;}
 .tl-scroll svg{display:block;}
 .tl-ax{fill:var(--muted);font-size:9px;font-family:inherit;}
@@ -904,7 +914,7 @@ html.theme-light.theme-blue :is(.card,.modal) .leave-frame{border:1.5px solid rg
 html.theme-light.theme-blue .setup-frame,html.theme-light.theme-blue .stats-frame{border:1.5px solid rgba(168,106,18,.8);}
 /* The two statistics charts, each in a frame with its title on the line. */
 .stats-frame{margin:16px 0 0;padding:6px 10px 10px;}
-.stats-frame .stats-frame-note{color:var(--muted);font-size:10px;margin:0 2px 2px;}
+.stats-frame .stats-frame-note{color:var(--muted);font-size:14px;margin:0 2px 2px;}
 .stats-frame .tl-scroll{background:transparent;border:none;padding:4px 0 0;}
 /* ריביי button: stronger colors. */
 .rb-confirm{position:relative;overflow:hidden;background:linear-gradient(180deg,#3654c4,#1c2c78);color:#fde68a;
@@ -5093,7 +5103,7 @@ function returnToMyScreenAfter(gameId, pid, what){
   if (span) span.classList.add("one-line");
   const fit = () => {
     if (!span) return;
-    let size = 13;
+    let size = 17;
     span.style.fontSize = size + "px";
     while (span.scrollWidth > span.clientWidth && size > 9) { size -= 0.5; span.style.fontSize = size + "px"; }
   };
@@ -5202,14 +5212,14 @@ function renderGameWelcomeOverlay(gameId, playerId){
     <div class="game-welcome-overlay">
       <div class="game-welcome-card">
         <h2 class="serif" style="color:var(--gold);margin:0 0 14px;font-size:21px;">שלום ${esc(name)}!</h2>
-        <p style="color:var(--text);font-size:15px;line-height:1.7;margin:0 0 16px;">
+        <p style="color:var(--text);font-size:19px;line-height:1.7;margin:0 0 16px;">
           נכנסת למשחק חדש עם <b style="color:var(--gold);">₪${buyinTotal}</b> בזיטונים.<br>
           כל ריביי (קנייה נוספת) במהלך הערב הוא באחריותך לדווח עליו באפליקציה.<br>
           כדי ש-Poker Manager ימשיך לעבוד כמו שצריך, ${careVerb} להישאר בתוך האפליקציה במהלך הערב ולשמור שהטלפון יהיה בהישג יד.
         </p>
-        <p style="color:var(--muted);font-size:13px;margin:0 0 20px;">שיהיה לך ערב מוצלח!</p>
+        <p style="color:var(--muted);font-size:17px;margin:0 0 20px;">שיהיה לך ערב מוצלח!</p>
         <button class="btn btn-primary btn-block" data-dismiss-game-welcome="${gameId}">הבנתי, נתחיל לשחק</button>
-        <button data-cancel-game-welcome="${gameId}" data-cancel-game-welcome-player="${playerId}" style="display:block;width:100%;background:none;border:none;color:var(--muted);font-size:12px;font-weight:600;margin-top:12px;padding:6px;cursor:pointer;font-family:inherit;text-decoration:underline;text-underline-offset:3px;">ביטול – נכנסתי בטעות</button>
+        <button data-cancel-game-welcome="${gameId}" data-cancel-game-welcome-player="${playerId}" style="display:block;width:100%;background:none;border:none;color:var(--muted);font-size:16px;font-weight:600;margin-top:12px;padding:6px;cursor:pointer;font-family:inherit;text-decoration:underline;text-underline-offset:3px;">ביטול – נכנסתי בטעות</button>
       </div>
     </div>
   `;
@@ -5436,16 +5446,16 @@ function renderPlayerScreen(gameId){
       statusHtml = "";
     } else if (c.settlementDefault === 'paybox') {
       statusHtml = profitForInfo >= 0
-        ? `<div style="font-size:13px;color:var(--muted);margin-top:10px;">הרווח יחולק אחרי שכולם ישלמו לקבוצה</div>`
+        ? `<div style="font-size:17px;color:var(--muted);margin-top:10px;">הרווח יחולק אחרי שכולם ישלמו לקבוצה</div>`
         : (activePayboxLink
             ? `<a href="${esc(activePayboxLink)}" class="btn btn-blue btn-block" style="margin-top:10px;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> העברה לקבוצת פייבוקס</a>`
-            : `<div style="font-size:12px;color:var(--muted);margin-top:10px;">לא הוגדרה קבוצת פייבוקס</div>`);
+            : `<div style="font-size:16px;color:var(--muted);margin-top:10px;">לא הוגדרה קבוצת פייבוקס</div>`);
     } else if (c.settlementDefault === 'bit') {
       statusHtml = profitForInfo >= 0
-        ? `<div style="font-size:13px;color:var(--muted);margin-top:10px;">הרווח יחולק אחרי שכולם ישלמו לקבוצה</div>`
+        ? `<div style="font-size:17px;color:var(--muted);margin-top:10px;">הרווח יחולק אחרי שכולם ישלמו לקבוצה</div>`
         : (activeBitLink
             ? `<a href="${esc(activeBitLink)}" class="btn btn-block" style="margin-top:10px;background:#0070E0;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;"> העברה לביט הקבוצתי</a>`
-            : `<div style="font-size:12px;color:var(--muted);margin-top:10px;">לא הוגדרה קבוצת ביט</div>`);
+            : `<div style="font-size:16px;color:var(--muted);margin-top:10px;">לא הוגדרה קבוצת ביט</div>`);
     } else if (allCashedOutForSettlement && potBalancedForSettlement) {
       statusHtml = mySettlementTxns.map(t => t.from === pid ? `
         <div style="margin-top:10px;">
@@ -5457,9 +5467,9 @@ function renderPlayerScreen(gameId){
         </div>
       ` : `<div style="margin-top:10px;font-weight:700;color:#6ee7b7;">מקבל מ-${esc(t.fromName)} ${t.amount} שח</div>`).join("");
     } else if (g.closed) {
-      statusHtml = `<div style="font-size:13px;color:var(--muted);margin-top:10px;">ממתין/ה שכולם יצאו מהשולחן</div>`;
+      statusHtml = `<div style="font-size:17px;color:var(--muted);margin-top:10px;">ממתין/ה שכולם יצאו מהשולחן</div>`;
     } else if (stillOpenForInfo >= -0.5) {
-      statusHtml = `<div style="font-size:13px;color:var(--muted);margin-top:10px;">הרווח יישלח אליך בסוף הערב</div>`;
+      statusHtml = `<div style="font-size:17px;color:var(--muted);margin-top:10px;">הרווח יישלח אליך בסוף הערב</div>`;
     }
     // Lost, mid-game, not closed: no inline status text - the "who do I pay" modal
     // auto-opens itself instead (see attachHandlers/autoOpenedDirectPay).
@@ -5580,7 +5590,7 @@ function renderPlayerScreen(gameId){
   // Admin, looking at someone: the per-player actions the old admin page had.
   const adminPlayerActions = (isAdminView && pid) ? (cashedOut
     ? `<button class="btn btn-ghost co-act" data-admin-return-to-game="${pid}">${icon('undo')} החזרה לשולחן</button>`
-    : ((viewingOther && !armed) ? `<button class="btn btn-ghost btn-block" style="margin-top:4px;font-size:13px;" data-admin-remove-seat="${pid}">הסרת ${esc(p ? p.name : "השחקן")} מהשולחן</button>` : "")) : "";
+    : ((viewingOther && !armed) ? `<button class="btn btn-ghost btn-block" style="margin-top:4px;font-size:17px;" data-admin-remove-seat="${pid}">הסרת ${esc(p ? p.name : "השחקן")} מהשולחן</button>` : "")) : "";
   // Name line: the viewed player's name in a frame (no dropdown any more - an admin picks
   // whose screen to see from the tiles above it).
   const nameHtml = (() => {
@@ -5639,7 +5649,7 @@ function renderPlayerScreen(gameId){
           // getArrangementNotes).
           const notes = pid ? getArrangementNotes(g, pid) : [];
           if (!notes.length) return "";
-          return `<div style="font-size:12px;color:var(--muted);margin-top:4px;">${notes.map(n => `${n.received?'קיבל':'העביר'} ₪${n.amount} ${n.received?'מ-':'ל-'}${esc(n.name)}`).join(' · ')}</div>`;
+          return `<div style="font-size:16px;color:var(--muted);margin-top:4px;">${notes.map(n => `${n.received?'קיבל':'העביר'} ₪${n.amount} ${n.received?'מ-':'ל-'}${esc(n.name)}`).join(' · ')}</div>`;
         })()}
         ${cashedOutInfoHtml}
       </div>
@@ -5727,7 +5737,7 @@ function renderGameResultsScreen(gameId){
       <div class="card" style="cursor:default;${isMe ? 'border:1.5px solid var(--gold);' : ''}">
         <div class="flex1" style="display:flex;align-items:center;gap:6px;min-width:0;">
           ${crownHtml}
-          <span style="font-weight:700;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.name)}${isMe ? ' <span style="color:var(--muted);font-weight:400;font-size:13px;">(את/ה)</span>' : ''}</span>
+          <span style="font-weight:700;font-size:20px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.name)}${isMe ? ' <span style="color:var(--muted);font-weight:400;font-size:17px;">(את/ה)</span>' : ''}</span>
         </div>
         <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
           <span style="font-weight:800;font-size:17px;color:${profitColor(r.profit)};${checked?'text-decoration:line-through;opacity:.5;':''}">₪${Math.abs(r.profit)}</span>
@@ -5742,10 +5752,10 @@ function renderGameResultsScreen(gameId){
     if (c.settlementDefault === 'paybox') {
       const activeLink = getActivePayboxLink(c);
       topButtonHtml = activeLink
-        ? `<a href="${esc(activeLink)}" class="btn btn-blue btn-block" style="margin-top:8px;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;">פתיחת פייבוקס קבוצתי</a>`
-        : `<div style="font-size:12px;color:var(--muted);margin-top:8px;margin-bottom:16px;text-align:center;">לא הוגדרה קבוצת פייבוקס</div>`;
+        ? `<a href="${esc(activeLink)}" class="btn btn-blue btn-block" style="font-size:18px;margin-top:8px;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;">פתיחת פייבוקס קבוצתי</a>`
+        : `<div style="font-size:16px;color:var(--muted);margin-top:8px;margin-bottom:16px;text-align:center;">לא הוגדרה קבוצת פייבוקס</div>`;
     } else {
-      topButtonHtml = `<button class="btn btn-primary btn-block" data-open-bit-generic style="margin-top:8px;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:6px;background:#0070E0;color:#fff;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;">פתיחת ביט קבוצתי</button>`;
+      topButtonHtml = `<button class="btn btn-primary btn-block" data-open-bit-generic style="font-size:18px;margin-top:8px;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:6px;background:#0070E0;color:#fff;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;">פתיחת ביט קבוצתי</button>`;
     }
   } else {
     const txns = settlementWithPayments({...synthGame, playerPayments, payboxPayments});
@@ -5761,7 +5771,7 @@ function renderGameResultsScreen(gameId){
             <span style="${paidStyle}">${esc(t.toName)}</span>
             <div style="display:flex;align-items:center;gap:8px;">
               <span style="font-weight:700;color:var(--gold);${paidStyle}">₪${t.amount}</span>
-              ${existing ? '<span style="font-size:12px;font-weight:700;color:#6ee7b7;">עבר</span>' : ''}
+              ${existing ? '<span style="font-size:16px;font-weight:700;color:#6ee7b7;">עבר</span>' : ''}
               <input type="checkbox" data-result-player-payment-toggle data-from="${fromId}" data-to="${t.to}" data-amount="${t.amount}" data-payment-id="${existing?existing.id:''}" ${existing?'checked':''} style="width:18px;height:18px;accent-color:var(--gold);">
             </div>
           </div>`;
@@ -5774,7 +5784,7 @@ function renderGameResultsScreen(gameId){
     }).join("");
     transfersHtml = `
       <div class="section-title" style="padding:0;margin:20px 0 8px;">מי מעביר למי</div>
-      ${payerCardsHtml || `<div class="empty" style="padding:10px 0;font-size:13px;">אין תשלומים נדרשים</div>`}
+      ${payerCardsHtml || `<div class="empty" style="padding:10px 0;font-size:17px;">אין תשלומים נדרשים</div>`}
     `;
   }
 
@@ -5782,16 +5792,16 @@ function renderGameResultsScreen(gameId){
     <div class="top row" style="padding-top:14px;padding-bottom:16px;flex-shrink:0;">
       <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
       <div class="flex1" style="min-width:0;">
-        <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;">המשחק הסתיים</div>
+        <div style="font-size:15px;font-weight:700;color:var(--muted);letter-spacing:.05em;">המשחק הסתיים</div>
         <h1 class="serif sm" style="color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:8px;"><span style="overflow:hidden;text-overflow:ellipsis;">${esc(g.name || c.name)}</span>${gameStatusBadge(g, true)}</h1>
-        <div class="meta" style="color:#6ee7b7;font-size:11px;display:flex;align-items:center;gap:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${icon('cal')}${esc(g.date)} · ${g.players.length} שחקנים</div>
+        <div class="meta" style="color:#6ee7b7;font-size:15px;display:flex;align-items:center;gap:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${icon('cal')}${esc(g.date)} · ${g.players.length} שחקנים</div>
       </div>
     </div>
     <div style="flex:1;min-height:0;overflow-y:auto;padding:0 20px 20px;touch-action:pan-y;">
       ${topButtonHtml}
       ${playerRowsHtml}
       ${transfersHtml}
-      <button class="btn btn-ghost btn-block" data-open-my-stats style="margin-top:16px;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('bar')} הביצועים שלי</button>
+      <button class="btn btn-ghost btn-block" data-open-my-stats style="font-size:18px;margin-top:16px;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('bar')} הביצועים שלי</button>
     </div>
   `;
 }
@@ -5847,11 +5857,11 @@ function renderPotFix(gameId){
       const ts = g.cashouts[pid] && g.cashouts[pid].ts;
       const t = ts ? new Date(ts).getTime() : 0;
       const mins = t ? Math.floor((Date.now() - t) / 60000) : 0;
-      return mins > 10 ? `<div style="color:var(--muted);font-size:11px;font-weight:400;">יצא לפני ${mins >= 60 ? `${Math.floor(mins/60)} ש' ו-${mins%60} דק'` : `${mins} דק'`}</div>` : "";
+      return mins > 10 ? `<div style="color:var(--muted);font-size:15px;font-weight:400;">יצא לפני ${mins >= 60 ? `${Math.floor(mins/60)} ש' ו-${mins%60} דק'` : `${mins} דק'`}</div>` : "";
     };
     potFixHtml = `
       <div class="section-title" style="padding:0;margin:16px 0 8px;">סדר קופה</div>
-      <div style="background:#450a0a;color:#fca5a5;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;text-align:center;font-weight:700;">הקופה לא מאוזנת - ${direction} של ₪${Math.abs(Math.round(diff))}</div>
+      <div style="background:#450a0a;color:#fca5a5;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:17px;text-align:center;font-weight:700;">הקופה לא מאוזנת - ${direction} של ₪${Math.abs(Math.round(diff))}</div>
       <div style="display:flex;gap:8px;margin-bottom:8px;">
         <label class="checkbox-row" style="cursor:pointer;flex:1;margin:0;"><input type="checkbox" data-pot-fix-select="all" ${allSel?'checked':''}><span class="flex1">סמן את כולם</span></label>
         ${groupIds.length ? `<label class="checkbox-row" style="cursor:pointer;flex:1;margin:0;"><input type="checkbox" data-pot-fix-select="group" ${groupSel?'checked':''}><span class="flex1">${taking ? 'סמן מורווחים' : 'סמן מופסדים'}</span></label>` : ""}
@@ -5861,17 +5871,17 @@ function renderPotFix(gameId){
         const change = potFix.changes[pid];
         return `<div class="checkbox-row" style="cursor:pointer;">
           <input type="checkbox" data-admin-balance-fix-toggle="${pid}" ${adminBalanceFixSelected[pid]?'checked':''}>
-          <span class="flex1"><bdi>${esc(nameOf(pid))}</bdi> <span style="color:${profitColor(playerProfit)};font-weight:700;">${playerProfit>0?'+':''}₪${Math.round(playerProfit)}</span>${change ? ` <span style="color:var(--muted);font-size:12px;">← ${change>0?'+':''}₪${Math.round(change*100)/100}</span>` : ''}${leftAgoNote(pid)}</span>
+          <span class="flex1"><bdi>${esc(nameOf(pid))}</bdi> <span style="color:${profitColor(playerProfit)};font-weight:700;">${playerProfit>0?'+':''}₪${Math.round(playerProfit)}</span>${change ? ` <span style="color:var(--muted);font-size:16px;">← ${change>0?'+':''}₪${Math.round(change*100)/100}</span>` : ''}${leftAgoNote(pid)}</span>
         </div>`;
       }).join("")}
-      <div style="text-align:center;color:var(--muted);font-size:12px;margin:6px 0;">${selectedIds.length
+      <div style="text-align:center;color:var(--muted);font-size:16px;margin:6px 0;">${selectedIds.length
         ? `${perPlayer>=0?'כל שחקן מסומן יקבל':'מכל שחקן מסומן יילקח'} ₪${Math.abs(perPlayer)}`
         : (taking ? `סמנו מאילו שחקנים להחסיר את ₪${Math.abs(Math.round(diff))}` : `סמנו לאילו שחקנים להעביר את ₪${Math.abs(Math.round(diff))}`)}</div>
       <button class="btn btn-blue btn-block" data-admin-fix-pot-balance ${selectedIds.length?"":"disabled"}>${icon('coins')} סדר קופה</button>
     `;
   }
 
-  return potFixHtml || `<div class="empty" style="padding:14px 0;font-size:14px;">הקופה מאוזנת ✓</div>`;
+  return potFixHtml || `<div class="empty" style="padding:14px 0;font-size:18px;">הקופה מאוזנת ✓</div>`;
 }
 // Super admin watching a table they don't sit at: "שולחן" / "פעילות בשולחן" switch (the
 // feed page is the activity feed alone, full height), plus the watch-only join button
@@ -5901,7 +5911,7 @@ function renderWatchFeed(gameId){
       <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
       <div class="flex1" style="min-width:0;">
         <h1 class="serif sm" style="color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g.name || c.name)}</h1>
-        <div class="meta" style="color:#6ee7b7;font-size:11px;display:flex;align-items:center;gap:4px;">${icon('cal')}${esc(g.date)}</div>
+        <div class="meta" style="color:#6ee7b7;font-size:15px;display:flex;align-items:center;gap:4px;">${icon('cal')}${esc(g.date)}</div>
       </div>
     </div>
     ${watchStripHtml(g)}
@@ -6261,7 +6271,7 @@ function renderModal(m){
     // Each frame shows its own errors; email errors are the default (the code/device
     // steps share sendLoginCodeFor with the email form).
     const loginErr = (at) => m.loginError && (m.loginErrorAt || "email") === at
-      ? `<p style="color:#fda4af;font-size:12px;margin:6px 0 8px;">${esc(m.loginError)}</p>` : "";
+      ? `<p style="color:#fda4af;font-size:16px;margin:6px 0 8px;">${esc(m.loginError)}</p>` : "";
     // A real <form> with name="email" + autocomplete="email" is what makes phone browsers
     // offer the device's saved email in the keyboard bar - a bare input outside a form
     // often gets only the generic password-manager chip. It never actually submits:
@@ -6273,13 +6283,13 @@ function renderModal(m){
         <button type="submit" class="btn ${btnClass} btn-block" data-send-login-code>${label}</button>
       </form>`;
     body = m.loginStep === "deviceChoice" ? `
-      <p style="color:var(--muted);font-size:13px;margin-bottom:14px;">הכתובת <span dir="ltr">${esc(m.loginEmail)}</span> כבר רשומה במערכת עם מכשיר מחובר. האם להתחבר ממכשיר זה?</p>
+      <p style="color:var(--muted);font-size:17px;margin-bottom:14px;">הכתובת <span dir="ltr">${esc(m.loginEmail)}</span> כבר רשומה במערכת עם מכשיר מחובר. האם להתחבר ממכשיר זה?</p>
       <button class="btn btn-primary btn-block" style="margin-bottom:8px;" data-device-choice="replace">המשך</button>
       <button class="btn btn-ghost btn-block" data-device-choice-cancel>ביטול</button>
     ` : m.loginStep === "code" ? `
-      <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">שלחנו קוד בן 6 ספרות ל-<span dir="ltr">${esc(m.loginEmail)}</span></p>
+      <p style="color:var(--muted);font-size:17px;margin-bottom:12px;">שלחנו קוד בן 6 ספרות ל-<span dir="ltr">${esc(m.loginEmail)}</span></p>
       <input type="text" inputmode="numeric" id="login-code-input" placeholder="קוד בן 6 ספרות" autocomplete="one-time-code" style="width:100%;text-align:center;letter-spacing:4px;font-size:18px;margin-bottom:8px;" autofocus>
-      ${m.loginError ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.loginError)}</p>` : ""}
+      ${m.loginError ? `<p style="color:#fda4af;font-size:16px;margin-bottom:8px;">${esc(m.loginError)}</p>` : ""}
       <button class="btn btn-primary btn-block" data-confirm-login-code style="margin-bottom:8px;">אשר קוד</button>
       <button class="btn btn-ghost btn-block" data-resend-login-code>שלח קוד שוב</button>
     ` : passkeySupported() ? `
@@ -6302,7 +6312,7 @@ function renderModal(m){
         ${emailForm("btn-ghost", "המשך עם אימייל")}
       </fieldset>
     ` : `
-      <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">${authSettings.requireVerifyExistingEmail
+      <p style="color:var(--muted);font-size:17px;margin-bottom:12px;">${authSettings.requireVerifyExistingEmail
         ? "כדי להשתמש באפליקציה, התחברו עם האימייל שלכם - משתמשים חדשים ייכנסו ישר, ולחשבון קיים נשלח קוד בן 6 ספרות."
         : "כדי להשתמש באפליקציה, התחברו עם האימייל שלכם."}</p>
       ${emailForm("btn-primary", authSettings.requireVerifyExistingEmail ? `${icon('share')} שלח קוד כניסה` : "כנס ל-Poker Manager")}
@@ -6310,15 +6320,15 @@ function renderModal(m){
   } else if (m.type === "addEmail") {
     title = "הוספת אימייל כגיבוי";
     body = m.step === "code" ? `
-      <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">שלחנו קוד בן 6 ספרות ל-<span dir="ltr">${esc(m.email)}</span></p>
+      <p style="color:var(--muted);font-size:17px;margin-bottom:12px;">שלחנו קוד בן 6 ספרות ל-<span dir="ltr">${esc(m.email)}</span></p>
       <input type="text" inputmode="numeric" id="add-email-code" placeholder="קוד בן 6 ספרות" autocomplete="one-time-code" style="width:100%;text-align:center;letter-spacing:4px;font-size:18px;margin-bottom:8px;" autofocus>
-      ${m.error ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.error)}</p>` : ""}
+      ${m.error ? `<p style="color:#fda4af;font-size:16px;margin-bottom:8px;">${esc(m.error)}</p>` : ""}
       <button class="btn btn-primary btn-block" data-add-email-verify>אשר</button>
     ` : `
-      <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">${authSettings.requireVerifyExistingEmail ? "נשלח קוד לאימות. אחרי האימות" : "אחרי ההוספה"} תוכל להתחבר גם עם האימייל, וטביעת האצבע תמשיך לעבוד.</p>
+      <p style="color:var(--muted);font-size:17px;margin-bottom:12px;">${authSettings.requireVerifyExistingEmail ? "נשלח קוד לאימות. אחרי האימות" : "אחרי ההוספה"} תוכל להתחבר גם עם האימייל, וטביעת האצבע תמשיך לעבוד.</p>
       <form action="#" autocomplete="on" onsubmit="return false;">
         <input type="email" id="add-email-input" name="email" placeholder="האימייל שלך" dir="ltr" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" value="${esc(m.email || "")}" style="width:100%;text-align:center;margin-bottom:8px;" autofocus>
-        ${m.error ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.error)}</p>` : ""}
+        ${m.error ? `<p style="color:#fda4af;font-size:16px;margin-bottom:8px;">${esc(m.error)}</p>` : ""}
         <button type="submit" class="btn btn-primary btn-block" data-add-email-send>${authSettings.requireVerifyExistingEmail ? "שלח קוד" : "הוסף אימייל"}</button>
       </form>
     `;
@@ -6334,14 +6344,14 @@ function renderModal(m){
     // an entry form.
     const loginSection = `
       ${isRealEmail(myIdentity.email) ? `
-      <p style="color:var(--muted);font-size:12px;text-align:center;margin:18px 0 0;padding-top:14px;border-top:1px solid var(--card-b);">מחוברים כ-<span dir="ltr">${esc(myIdentity.email)}</span></p>
+      <p style="color:var(--muted);font-size:16px;text-align:center;margin:18px 0 0;padding-top:14px;border-top:1px solid var(--card-b);">מחוברים כ-<span dir="ltr">${esc(myIdentity.email)}</span></p>
       ` : `
-      <p style="color:var(--muted);font-size:12px;text-align:center;margin:18px 0 0;padding-top:14px;border-top:1px solid var(--card-b);">👆 מחוברים עם טביעת אצבע (בלי אימייל)</p>
+      <p style="color:var(--muted);font-size:16px;text-align:center;margin:18px 0 0;padding-top:14px;border-top:1px solid var(--card-b);">👆 מחוברים עם טביעת אצבע (בלי אימייל)</p>
       <button class="btn btn-ghost btn-sm" style="display:block;margin:8px auto 0;" data-add-email>✉️ הוסף אימייל כגיבוי</button>
-      <p style="color:var(--muted);font-size:11px;text-align:center;margin:4px 0 0;">אם תאבד את הטלפון ואת חשבון הגוגל, האימייל יחזיר אותך לחשבון.</p>
+      <p style="color:var(--muted);font-size:15px;text-align:center;margin:4px 0 0;">אם תאבד את הטלפון ואת חשבון הגוגל, האימייל יחזיר אותך לחשבון.</p>
       `}
       ${!passkeySupported() || !isRealEmail(myIdentity.email) ? "" : passkeyHas
-        ? `<p style="color:var(--muted);font-size:12px;text-align:center;margin:6px 0 0;">👆 כניסה עם טביעת אצבע שמורה ✓</p>`
+        ? `<p style="color:var(--muted);font-size:16px;text-align:center;margin:6px 0 0;">👆 כניסה עם טביעת אצבע שמורה ✓</p>`
         : `<button class="btn btn-ghost btn-sm" style="display:block;margin:8px auto 0;" data-passkey-register>👆 שמור כניסה עם טביעת אצבע</button>`}
     `;
     // A tap on any of the 9 seats sets it immediately (setGlobalPlayer + saveState in the
@@ -6390,7 +6400,7 @@ function renderModal(m){
         <button class="btn ${myGender==='female'?'btn-primary':'btn-ghost'} flex1" data-identity-gender="female">נקבה</button>
       </div>
       <div class="section-title" style="padding:0;margin:0 0 6px;">המיקום שלי בשולחן</div>
-      <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">הקישו על מקום כדי לבחור איפה תופיעו תמיד סביב השולחן.</p>
+      <p style="color:var(--muted);font-size:16px;margin:0 0 10px;">הקישו על מקום כדי לבחור איפה תופיעו תמיד סביב השולחן.</p>
       ${seatPickerHtml}
       <div class="section-title" style="padding:0;margin:0 0 8px;">עיצוב האפליקציה</div>
       <div style="display:flex;gap:10px;margin-bottom:16px;">
@@ -6403,7 +6413,7 @@ function renderModal(m){
     `;
   } else if (m.type === "inviteGone") {
     title = "הקישור לא בתוקף";
-    body = `<p style="color:var(--muted);font-size:13px;">ערב המשחק שאליו הוזמנתם כבר לא קיים - כנראה שהמארגן מחק אותו. אפשר לבקש קישור עדכני.</p>`;
+    body = `<p style="color:var(--muted);font-size:17px;">ערב המשחק שאליו הוזמנתם כבר לא קיים - כנראה שהמארגן מחק אותו. אפשר לבקש קישור עדכני.</p>`;
   } else if (m.type === "photoSource") {
     title = "תמונת פרופיל";
     body = `
@@ -6417,7 +6427,7 @@ function renderModal(m){
         ${grp.items.map(it => `
           <div style="position:relative;text-align:center;">
             <img src="${it.src}" data-pick-avatar="${it.pickKey}" title="${esc(it.name)}" style="width:100%;aspect-ratio:1;border-radius:50%;cursor:pointer;border:2px solid transparent;object-fit:cover;display:block;">
-            <div style="font-size:10px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(it.name)}</div>
+            <div style="font-size:14px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(it.name)}</div>
           </div>
         `).join("")}
       </div>
@@ -6441,7 +6451,7 @@ function renderModal(m){
     // text itself ended up sitting further left than the row above it, not under it.
     const thirdPartyField = (label, valueHtml, hasValue, copyValue) => !hasValue ? "" : `
       <div class="row" style="gap:6px;align-items:center;">
-        <span style="color:var(--muted);font-size:12px;flex-shrink:0;width:68px;">${label}:</span>
+        <span style="color:var(--muted);font-size:16px;flex-shrink:0;width:68px;">${label}:</span>
         ${valueHtml}
         ${copyValue
           ? `<button class="icon-btn" data-copy-value="${esc(copyValue)}" title="העתק">${icon('copy')}</button>`
@@ -6459,15 +6469,15 @@ function renderModal(m){
         <div style="display:flex;align-items:center;">
           ${isOpen ? `<button class="icon-btn" data-edit-credentials="${s.id}" title="עריכת שם משתמש/סיסמה" style="margin-right:8px;flex-shrink:0;">${icon('pencil')}</button>` : ""}
           <button type="button" data-toggle-service="${s.id}" style="display:flex;align-items:center;justify-content:space-between;flex:1;min-width:0;background:none;border:none;cursor:pointer;color:inherit;font-family:inherit;padding:10px 12px;">
-            <span style="color:var(--text);font-size:12px;">${esc(s.name)}${s.category ? ` (${esc(s.category)})` : ""}</span>
+            <span style="color:var(--text);font-size:16px;">${esc(s.name)}${s.category ? ` (${esc(s.category)})` : ""}</span>
             ${icon(isOpen ? 'up' : 'down')}
           </button>
         </div>
         ${isOpen ? `
         <div style="padding:0 12px 12px;display:flex;flex-direction:column;gap:6px;">
-          ${thirdPartyField("URL", `<a href="${esc(s.url||'')}" target="_blank" rel="noopener" dir="ltr" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gold);font-size:12px;">${esc(s.url||'')}</a>`, s.url, s.url)}
-          ${thirdPartyField("משתמש", `<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;" dir="ltr">${esc(s.username||'')}</span>`, s.username, s.username)}
-          ${thirdPartyField("סיסמה (רמז)", `<span style="flex:1;min-width:0;font-size:12px;" dir="ltr">${esc(s.password||'')}</span>`, s.password)}
+          ${thirdPartyField("URL", `<a href="${esc(s.url||'')}" target="_blank" rel="noopener" dir="ltr" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gold);font-size:16px;">${esc(s.url||'')}</a>`, s.url, s.url)}
+          ${thirdPartyField("משתמש", `<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:16px;" dir="ltr">${esc(s.username||'')}</span>`, s.username, s.username)}
+          ${thirdPartyField("סיסמה (רמז)", `<span style="flex:1;min-width:0;font-size:16px;" dir="ltr">${esc(s.password||'')}</span>`, s.password)}
         </div>` : ""}
       </div>
     `;
@@ -6502,16 +6512,16 @@ function renderModal(m){
       </div>
       <div class="section-title" style="padding:0;margin:0 0 8px;">שירותי צד שלישי</div>
       <div class="scroll-list" style="margin-bottom:18px;">
-        ${m.thirdPartyServices === undefined ? `<p style="color:var(--muted);font-size:13px;">טוען...</p>` : (thirdPartyServicesHtml || `<p style="color:var(--muted);font-size:13px;">אין שירותים ברשימה.</p>`)}
+        ${m.thirdPartyServices === undefined ? `<p style="color:var(--muted);font-size:17px;">טוען...</p>` : (thirdPartyServicesHtml || `<p style="color:var(--muted);font-size:17px;">אין שירותים ברשימה.</p>`)}
       </div>
-      <a href="https://console.anthropic.com" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:18px;color:var(--muted);font-size:12px;text-decoration:underline;">console.anthropic.com</a>
-      <div style="text-align:center;margin-top:8px;color:var(--muted);font-size:11px;">גרסה: ${esc(appVersion || "לא ידוע")}</div>
+      <a href="https://console.anthropic.com" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:18px;color:var(--muted);font-size:16px;text-decoration:underline;">console.anthropic.com</a>
+      <div style="text-align:center;margin-top:8px;color:var(--muted);font-size:15px;">גרסה: ${esc(appVersion || "לא ידוע")}</div>
     `;
   } else if (m.type === "adminVerify") {
     title = "אימות לפני הגדרות מערכת";
     body = `
-      <p style="color:var(--muted);font-size:13px;">${m.sending ? "שולח קוד אימות..." : `שלחנו קוד אימות ל-<span dir="ltr">${esc(myIdentity.email)}</span>.`}</p>
-      ${m.error ? `<p style="color:#fda4af;font-size:13px;">${esc(m.error)}</p>` : ""}
+      <p style="color:var(--muted);font-size:17px;">${m.sending ? "שולח קוד אימות..." : `שלחנו קוד אימות ל-<span dir="ltr">${esc(myIdentity.email)}</span>.`}</p>
+      ${m.error ? `<p style="color:#fda4af;font-size:17px;">${esc(m.error)}</p>` : ""}
       ${!m.sending ? `
         <div style="margin:12px 0;">
           <input type="text" inputmode="numeric" id="admin-verify-code-input" placeholder="קוד בן 6 ספרות" dir="ltr" style="width:100%;text-align:center;letter-spacing:4px;font-size:20px;" autofocus>
@@ -6523,7 +6533,7 @@ function renderModal(m){
   } else if (m.type === "globalPlayers") {
     title = "משתמשים";
     if (m.accounts === null) {
-      body = `<p style="color:var(--muted);font-size:13px;">טוען...</p>`;
+      body = `<p style="color:var(--muted);font-size:17px;">טוען...</p>`;
     } else {
       const filter = m.roleFilter || "all";
       let rows = m.accounts || [];
@@ -6531,29 +6541,29 @@ function renderModal(m){
       rows = rows.slice().sort((a,b) => (a.name || a.email).localeCompare(b.name || b.email, 'he'));
       body = `
         <div class="row" style="gap:8px;margin-bottom:14px;">
-          <button class="btn ${filter==="all"?"btn-primary":"btn-ghost"} flex1" data-role-filter="all" style="padding:8px;font-size:12px;">הכל</button>
-          <button class="btn ${filter==="superAdmin"?"btn-primary":"btn-ghost"} flex1" data-role-filter="superAdmin" style="padding:8px;font-size:12px;">Super Admin</button>
-          <button class="btn ${filter==="user"?"btn-primary":"btn-ghost"} flex1" data-role-filter="user" style="padding:8px;font-size:12px;">User</button>
+          <button class="btn ${filter==="all"?"btn-primary":"btn-ghost"} flex1" data-role-filter="all" style="padding:8px;font-size:16px;">הכל</button>
+          <button class="btn ${filter==="superAdmin"?"btn-primary":"btn-ghost"} flex1" data-role-filter="superAdmin" style="padding:8px;font-size:16px;">Super Admin</button>
+          <button class="btn ${filter==="user"?"btn-primary":"btn-ghost"} flex1" data-role-filter="user" style="padding:8px;font-size:16px;">User</button>
         </div>
         ${rows.length ? `
           <div class="scroll-list">
             ${rows.map((r,i) => `<div class="roster-row" style="align-items:center;">
               <div class="row" style="gap:10px;flex:1;min-width:0;">
-                <span style="color:var(--muted);font-size:12px;font-weight:700;flex-shrink:0;width:18px;">${i+1}</span>
+                <span style="color:var(--muted);font-size:16px;font-weight:700;flex-shrink:0;width:18px;">${i+1}</span>
                 <div style="min-width:0;">
                   <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.name || "(ללא שם)")}</div>
-                  <div style="color:var(--muted);font-size:11px;" ${isRealEmail(r.email) ? 'dir="ltr"' : ''}>${isRealEmail(r.email) ? esc(r.email) : "👆 ללא אימייל (טביעת אצבע)"}</div>
+                  <div style="color:var(--muted);font-size:15px;" ${isRealEmail(r.email) ? 'dir="ltr"' : ''}>${isRealEmail(r.email) ? esc(r.email) : "👆 ללא אימייל (טביעת אצבע)"}</div>
                 </div>
               </div>
               <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
                 ${r.email === myIdentity.email
-                  ? `<span class="btn btn-ghost" style="padding:6px 10px;font-size:11px;white-space:nowrap;opacity:.6;cursor:default;">${r.role==="superAdmin"?"Super Admin":"User"} (אתה)</span>`
-                  : `<button class="btn btn-ghost" data-toggle-role="${esc(r.email)}" style="padding:6px 10px;font-size:11px;white-space:nowrap;">${r.role==="superAdmin"?"Super Admin":"User"}</button>`}
+                  ? `<span class="btn btn-ghost" style="padding:6px 10px;font-size:15px;white-space:nowrap;opacity:.6;cursor:default;">${r.role==="superAdmin"?"Super Admin":"User"} (אתה)</span>`
+                  : `<button class="btn btn-ghost" data-toggle-role="${esc(r.email)}" style="padding:6px 10px;font-size:15px;white-space:nowrap;">${r.role==="superAdmin"?"Super Admin":"User"}</button>`}
                 ${r.email !== myIdentity.email ? `<button class="icon-btn danger" data-delete-global-player="${esc(r.email)}" title="מחק משתמש">${icon('trash')}</button>` : ""}
               </div>
             </div>`).join("")}
           </div>
-        ` : `<p style="color:var(--muted);font-size:13px;">${(m.accounts||[]).length ? "אין משתמשים בסינון הזה." : "עדיין אין משתמשים שהתחברו."}</p>`}
+        ` : `<p style="color:var(--muted);font-size:17px;">${(m.accounts||[]).length ? "אין משתמשים בסינון הזה." : "עדיין אין משתמשים שהתחברו."}</p>`}
       `;
     }
   } else if (m.type === "thirdPartyCredentialsEdit") {
@@ -6589,7 +6599,7 @@ function renderModal(m){
                     <img src="${it.src}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;display:block;">
                     <button class="icon-btn danger" data-delete-avatar="${it.pickKey}" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;padding:0;display:flex;align-items:center;justify-content:center;border-radius:50%;">${icon('x')}</button>
                   </div>
-                  <input type="text" value="${esc(it.name)}" data-avatar-item-name="${it.pickKey}" style="width:100%;font-size:10px;text-align:center;padding:3px 2px;">
+                  <input type="text" value="${esc(it.name)}" data-avatar-item-name="${it.pickKey}" style="width:100%;font-size:14px;text-align:center;padding:3px 2px;">
                 </div>
               `).join("")}
             </div>
@@ -6608,7 +6618,7 @@ function renderModal(m){
     `;
     if (!m.imageSrc) {
       body = `
-        <p style="color:var(--muted);font-size:13px;">העלו תמונה עם כמה אווטרים (כמו הגליונות שכבר קיימים), ואז הקישו על כל אווטר כדי לסמן עיגול סביבו - אפשר לגרור למקם במדויק ולגרור את הנקודה כדי לשנות גודל.</p>
+        <p style="color:var(--muted);font-size:17px;">העלו תמונה עם כמה אווטרים (כמו הגליונות שכבר קיימים), ואז הקישו על כל אווטר כדי לסמן עיגול סביבו - אפשר לגרור למקם במדויק ולגרור את הנקודה כדי לשנות גודל.</p>
         ${pickButtons}
       `;
     } else {
@@ -6655,7 +6665,7 @@ function renderModal(m){
           <img src="${m.imageSrc}" data-avatar-photo style="width:100%;border-radius:12px;display:block;cursor:crosshair;">
           ${markers}
         </div>
-        <p style="color:var(--muted);font-size:12px;margin-top:0;">הקישו על אווטר בתמונה כדי לסמן עיגול - גררו למקם במדויק ואת הנקודה כדי לשנות גודל. תנו שם וקטגוריה לכל אווטר.</p>
+        <p style="color:var(--muted);font-size:16px;margin-top:0;">הקישו על אווטר בתמונה כדי לסמן עיגול - גררו למקם במדויק ואת הנקודה כדי לשנות גודל. תנו שם וקטגוריה לכל אווטר.</p>
         ${editableList}
         <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-retake-avatar-photo>${icon('plus')} תמונה אחרת</button>
         <button class="btn btn-primary btn-block" data-save-avatars ${m.points.length===0?"disabled":""}>שמור אווטרים</button>
@@ -6669,7 +6679,7 @@ function renderModal(m){
           <button class="btn ${m.gameType!=="omaha"?"btn-primary":"btn-ghost"} btn-block" data-odds-game-type="holdem">הולדם</button>
           <button class="btn ${m.gameType==="omaha"?"btn-primary":"btn-ghost"} btn-block" data-odds-game-type="omaha">Omaha Hi/Lo</button>
         </div>
-        <p style="color:var(--muted);font-size:13px;">${m.gameType==="omaha"
+        <p style="color:var(--muted);font-size:17px;">${m.gameType==="omaha"
           ? "צלמו תמונה של השולחן עם 4 קלפים לכל שחקן (רביעייה) וכל 5 קלפי הקהילה גלויים, ממבט על - ונחשב את חלוקת הקופה בין השחקנים."
           : "צלמו תמונה של מצב האול-אין על השולחן, ונחשב לכם את הסיכויים של כל יד."}</p>
         <div style="position:relative;">
@@ -6683,20 +6693,20 @@ function renderModal(m){
         const rank = cardStr[0].toUpperCase();
         const suit = cardStr[1].toLowerCase();
         const red = (suit==='d'||suit==='h');
-        return `<span style="display:inline-flex;align-items:center;justify-content:center;background:#fff;color:${red?'#dc2626':'#111827'};border-radius:5px;padding:2px 7px;margin-inline-end:4px;font-weight:800;font-size:14px;">${rank}${suitSymbols[suit]||''}</span>`;
+        return `<span style="display:inline-flex;align-items:center;justify-content:center;background:#fff;color:${red?'#dc2626':'#111827'};border-radius:5px;padding:2px 7px;margin-inline-end:4px;font-weight:800;font-size:18px;">${rank}${suitSymbols[suit]||''}</span>`;
       };
       body = `
         <img src="${m.imageSrc}" style="width:100%;aspect-ratio:16/9;object-fit:contain;background:rgba(255,255,255,.05);border-radius:12px;margin-bottom:12px;display:block;">
         ${m.reading ? `<p style="color:var(--muted);text-align:center;">קורא קלפים...</p>` : ""}
         ${m.error ? `<p style="color:#fda4af;text-align:center;">${esc(m.error)}</p>` : ""}
         ${m.results && m.gameType === "omaha" ? `
-          <div style="font-size:12px;color:var(--muted);margin-bottom:10px;text-align:center;">בורד: ${m.board.map(formatCard).join(" ")}</div>
+          <div style="font-size:16px;color:var(--muted);margin-bottom:10px;text-align:center;">בורד: ${m.board.map(formatCard).join(" ")}</div>
           <div class="scroll-list">
             ${m.results.map((r,i) => `
               <div style="background:rgba(255,255,255,.05);border-radius:10px;padding:10px 12px;margin-bottom:8px;">
                 <div style="margin-bottom:8px;">${m.hands[i].map(formatCard).join("")}</div>
                 <div style="font-size:22px;font-weight:800;color:${r.pct>0?'#6ee7b7':'var(--muted)'};text-align:center;margin-bottom:6px;">${(Math.round(r.pct*10)/10)}%</div>
-                <div style="font-size:12px;color:var(--muted2);">
+                <div style="font-size:16px;color:var(--muted2);">
                   <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-bottom:4px;">
                     <span>גבוה: ${HIGH_CATEGORY_NAMES[r.bestHigh[0]]}${r.wonHigh ? ' — זוכה' : ''}</span>
                     <span>${r.bestHighCards.map(formatCard).join("")}</span>
@@ -6711,20 +6721,20 @@ function renderModal(m){
           </div>
         ` : ""}
         ${m.results && m.gameType !== "omaha" ? `
-          <div style="font-size:12px;color:var(--muted);margin-bottom:10px;text-align:center;">
+          <div style="font-size:16px;color:var(--muted);margin-bottom:10px;text-align:center;">
             ${m.board.length ? `בורד: ${m.board.map(formatCard).join(" ")}` : "אין קלפי קהילה (פרה-פלופ)"}
           </div>
           <div class="scroll-list">
             ${m.results.map((r,i) => `
               <div style="background:rgba(255,255,255,.05);border-radius:10px;padding:10px 12px;margin-bottom:8px;">
                 <div style="margin-bottom:8px;">${m.hands[i].map(formatCard).join("")}</div>
-                <div style="font-size:11px;color:var(--muted);margin-bottom:3px;">ריצה אחת</div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;font-size:13px;color:var(--muted2);margin-bottom:6px;">
+                <div style="font-size:15px;color:var(--muted);margin-bottom:3px;">ריצה אחת</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;font-size:17px;color:var(--muted2);margin-bottom:6px;">
                   <div>ניצחון: <b>${r.winPct.toFixed(1)}%</b></div>
                   <div>תיקו: <b>${r.tiePct.toFixed(1)}%</b></div>
                 </div>
-                <div style="font-size:11px;color:var(--muted);margin-bottom:3px;">ריצה כפולה</div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;font-size:13px;color:var(--muted2);">
+                <div style="font-size:15px;color:var(--muted);margin-bottom:3px;">ריצה כפולה</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;font-size:17px;color:var(--muted2);">
                   <div>פעמיים ניצחון: <b>${r.bothRunsPct.toFixed(1)}%</b></div>
                   <div>חלוקה שווה: <b>${r.oneRunPct.toFixed(1)}%</b></div>
                 </div>
@@ -6818,7 +6828,7 @@ function renderModal(m){
     title = "מועדון חדש";
     body = `
       <div style="margin-bottom:12px;">
-        <label style="display:block;color:#059669;font-size:11px;margin-bottom:4px;">שם המועדון</label>
+        <label style="display:block;color:#059669;font-size:15px;margin-bottom:4px;">שם המועדון</label>
         <input type="text" id="new-community-name" style="width:100%;" autofocus>
       </div>
       <button class="btn btn-primary btn-block" data-confirm-new-community>צור מועדון</button>
@@ -6827,9 +6837,9 @@ function renderModal(m){
     const c = getCommunity(m.communityId);
     title = "שכפול מועדון";
     body = `
-      <p style="color:var(--muted);font-size:13px;">ייווצר מועדון חדש עם עותק של השחקנים וההגדרות של הז'יטונים מ-<b>${esc(c.name)}</b>. ערבי משחק לא ישוכפלו.</p>
+      <p style="color:var(--muted);font-size:17px;">ייווצר מועדון חדש עם עותק של השחקנים וההגדרות של הז'יטונים מ-<b>${esc(c.name)}</b>. ערבי משחק לא ישוכפלו.</p>
       <div style="margin-bottom:12px;">
-        <label style="display:block;color:#059669;font-size:11px;margin-bottom:4px;">שם המועדון החדש</label>
+        <label style="display:block;color:#059669;font-size:15px;margin-bottom:4px;">שם המועדון החדש</label>
         <input type="text" id="duplicate-community-name" value="${esc(c.name)} - עותק" style="width:100%;" autofocus>
       </div>
       <button class="btn btn-primary btn-block" data-confirm-duplicate-community>שכפל מועדון</button>
@@ -6839,7 +6849,7 @@ function renderModal(m){
     const gameCount = gamesForCommunity(m.communityId).length;
     title = "מחיקת מועדון";
     body = `
-      <p style="color:#6ee7b7;font-size:13px;">למחוק לגמרי את המועדון <b>${esc(c.name)}</b>?${gameCount ? ` יימחקו גם ${gameCount} ערבי המשחק שלו.` : ""} הפעולה בלתי הפיכה.</p>
+      <p style="color:#6ee7b7;font-size:17px;">למחוק לגמרי את המועדון <b>${esc(c.name)}</b>?${gameCount ? ` יימחקו גם ${gameCount} ערבי המשחק שלו.` : ""} הפעולה בלתי הפיכה.</p>
       <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-delete-community>מחק מועדון</button>
     `;
   } else if (m.type === "roster") {
@@ -6870,18 +6880,18 @@ function renderModal(m){
     // an old device id that no longer matches my account.
     const creatorHtml = isSuperAdmin() ? `
       <div class="roster-row" style="margin-bottom:12px;">
-        <span style="font-size:13px;">פתח את המועדון: <b>${esc(c.createdByName || "לא ידוע")}</b>${isClubCreator(c) ? " (אתה)" : ""}</span>
+        <span style="font-size:17px;">פתח את המועדון: <b>${esc(c.createdByName || "לא ידוע")}</b>${isClubCreator(c) ? " (אתה)" : ""}</span>
         ${isClubCreator(c) ? "" : `<button class="btn btn-ghost btn-sm" data-claim-club-creator="${c.id}">חבר אליי</button>`}
       </div>` : "";
     body = `
       ${creatorHtml}
-      <p style="color:var(--muted);font-size:12px;margin:0 0 14px;">כפתור המגן ${icon('shield')} הופך שחקן לאדמין - אדמין יכול לנהל שחקנים אחרים בשמם (ריביי, הושבה, יציאה מהשולחן ועוד).</p>
+      <p style="color:var(--muted);font-size:16px;margin:0 0 14px;">כפתור המגן ${icon('shield')} הופך שחקן לאדמין - אדמין יכול לנהל שחקנים אחרים בשמם (ריביי, הושבה, יציאה מהשולחן ועוד).</p>
       <div class="scroll-list" style="margin-bottom:16px;">${rows || '<div class="empty" style="padding:10px 0;">אין עדיין שחקנים ברשימה</div>'}</div>
     `;
   } else if (m.type === "confirmRestoreFromFile") {
     title = "שחזור מקובץ גיבוי";
     body = `
-      <p style="color:#6ee7b7;font-size:13px;">לשחזר מהקובץ <b>${esc(m.fileName)}</b> (${m.numCommunities} מועדונים, ${m.numGames} משחקים)? כל הנתונים הנוכחיים (המשותפים לכולם) יוחלפו בתוכן הקובץ. פעולה זו אינה הפיכה - אם תרצו לשמור על הנתונים הנוכחיים, הורידו גיבוי JSON שלהם קודם.</p>
+      <p style="color:#6ee7b7;font-size:17px;">לשחזר מהקובץ <b>${esc(m.fileName)}</b> (${m.numCommunities} מועדונים, ${m.numGames} משחקים)? כל הנתונים הנוכחיים (המשותפים לכולם) יוחלפו בתוכן הקובץ. פעולה זו אינה הפיכה - אם תרצו לשמור על הנתונים הנוכחיים, הורידו גיבוי JSON שלהם קודם.</p>
       <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-restore-from-file>שחזר מהקובץ</button>
     `;
   } else if (m.type === "stats") {
@@ -6953,7 +6963,7 @@ function renderModal(m){
           const ranked = all.filter(isRegular).sort((a, b) => b.net - a.net);
           const place = ranked.findIndex(x => x.id === me.id) + 1;
           if (place > 0) rankHtml = `<div class="roster-row"><span>המקום שלי במועדון</span><span style="font-weight:700;white-space:nowrap;">${place===1?'🏆 ':''}${place} מתוך ${ranked.length}</span></div>`;
-          else rankHtml = `<div class="roster-row"><span>המקום שלי במועדון</span><span style="font-size:12px;color:var(--muted);">הדירוג רק למי ששיחק ביותר מ-40% מהערבים</span></div>`;
+          else rankHtml = `<div class="roster-row"><span>המקום שלי במועדון</span><span style="font-size:16px;color:var(--muted);">הדירוג רק למי ששיחק ביותר מ-40% מהערבים</span></div>`;
         }
       }
       const tlType = ["bar","dot","line"].includes(tlPref("type","line")) ? tlPref("type","line") : "line";
@@ -6973,8 +6983,8 @@ function renderModal(m){
           </div>
           ${rankHtml}
           <div class="roster-row"><span>ממוצע כללי למשחק</span><span style="font-weight:700;">${avgOverall>=0?"+":""}₪${Math.round(avgOverall)}</span></div>
-          ${best?`<div class="roster-row"><span style="color:#059669;font-size:12px;">הערב הכי טוב (${esc(best.date)}${selected==='all'?` · ${esc(best.communityName)}`:''})</span><span class="stats-win" style="font-weight:700;">+₪${Math.round(best.profit)}</span></div>`:""}
-          ${worst?`<div class="roster-row"><span style="color:#059669;font-size:12px;">הערב הכי גרוע (${esc(worst.date)}${selected==='all'?` · ${esc(worst.communityName)}`:''})</span><span class="stats-loss" style="font-weight:700;">₪${Math.round(worst.profit)}</span></div>`:""}
+          ${best?`<div class="roster-row"><span style="color:#059669;font-size:16px;">הערב הכי טוב (${esc(best.date)}${selected==='all'?` · ${esc(best.communityName)}`:''})</span><span class="stats-win" style="font-weight:700;">+₪${Math.round(best.profit)}</span></div>`:""}
+          ${worst?`<div class="roster-row"><span style="color:#059669;font-size:16px;">הערב הכי גרוע (${esc(worst.date)}${selected==='all'?` · ${esc(worst.communityName)}`:''})</span><span class="stats-loss" style="font-weight:700;">₪${Math.round(worst.profit)}</span></div>`:""}
           ${renderBarChart(computeProfitBuckets(profits))}
           <fieldset class="leave-frame stats-frame"><legend>רווח/הפסד לפי תאריך</legend>
           <div class="tl-ctrl">
@@ -6991,14 +7001,14 @@ function renderModal(m){
     title = "שולחן חדש";
     body = `
       <div class="field"><label>שם השולחן</label><input type="text" id="new-game-name" value="${esc(defaultGameName(m.date))}" placeholder="${esc(c ? c.name : "")}" onfocus="this.select()" autofocus></div>
-      <p style="color:var(--muted);font-size:12px;margin-top:-6px;">אחרי היצירה תוכלו להושיב שחקנים סביב השולחן.</p>
+      <p style="color:var(--muted);font-size:16px;margin-top:-6px;">אחרי היצירה תוכלו להושיב שחקנים סביב השולחן.</p>
       <button class="btn btn-primary btn-block" data-create-game>פתח שולחן</button>
     `;
   } else if (m.type === "deleteGame") {
     const g = getGame(m.gameId);
     title = "מחיקת ערב משחק";
     body = `
-      <p style="color:#6ee7b7;font-size:13px;">למחוק לגמרי את הערב מתאריך <b>${esc(g.date)}</b>? כל התשלומים והנתונים שלו יימחקו. הפעולה בלתי הפיכה.</p>
+      <p style="color:#6ee7b7;font-size:17px;">למחוק לגמרי את הערב מתאריך <b>${esc(g.date)}</b>? כל התשלומים והנתונים שלו יימחקו. הפעולה בלתי הפיכה.</p>
       <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-delete-game>מחק ערב</button>
     `;
   } else if (m.type === "deleteBuyin") {
@@ -7007,7 +7017,7 @@ function renderModal(m){
     const b = g.buyins.find(bi=>bi.id===m.buyinId);
     title = "ביטול תשלום";
     body = `
-      <p style="color:#6ee7b7;font-size:13px;">לבטל את התשלום של <b>${esc(p.name)}</b> על סך <b>₪${b?b.amount:""}</b>? התשלום יימחק לגמרי מהרישום.</p>
+      <p style="color:#6ee7b7;font-size:17px;">לבטל את התשלום של <b>${esc(p.name)}</b> על סך <b>₪${b?b.amount:""}</b>? התשלום יימחק לגמרי מהרישום.</p>
       <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-delete-buyin>בטל תשלום</button>
     `;
   } else if (m.type === "watchOrJoin") {
@@ -7055,7 +7065,7 @@ function renderModal(m){
     const selectedToPlayerId = m.toPlayerId || (otherPlayers[0] && otherPlayers[0].id);
     title = `${esc(fromP ? fromP.name : "")} מעביר כסף`;
     body = `
-      <p style="color:var(--muted);font-size:12px;margin-top:0;">בחרו למי את/ה מעביר את הכסף במזומן${isForSelf ? ', או פתחו ביט/פייבוקס לתשלום' : ''}.</p>
+      <p style="color:var(--muted);font-size:16px;margin-top:0;">בחרו למי את/ה מעביר את הכסף במזומן${isForSelf ? ', או פתחו ביט/פייבוקס לתשלום' : ''}.</p>
       <div class="field"><label>למי?</label>
         <div class="scroll-list" style="max-height:200px;">
           ${otherPlayers.map(p => `<div class="checkbox-row" data-select-direct-pay-to="${p.id}" style="cursor:pointer;">
@@ -7082,7 +7092,7 @@ function renderModal(m){
         return `<button class="btn btn-primary btn-block" data-confirm-direct-pay>סיים ערב${forWhom}, הועבר ל${toName} ₪${amt}</button>`;
       })()}
       <button class="btn btn-ghost btn-block" style="margin-top:8px;" data-end-night-from-direct-pay="${m.gameId}">סגירת הערב לכולם</button>
-      <p style="color:var(--muted);font-size:11px;margin:6px 2px 0;text-align:center;">לחיצה כאן תסגור את הערב לכולם, והאפליקציה תחשב בעצמה מי מעביר למי</p>
+      <p style="color:var(--muted);font-size:15px;margin:6px 2px 0;text-align:center;">לחיצה כאן תסגור את הערב לכולם, והאפליקציה תחשב בעצמה מי מעביר למי</p>
     `;
   } else if (m.type === "payboxSettings") {
     const c = getCommunity(m.communityId);
@@ -7168,20 +7178,20 @@ function renderModal(m){
         </div>
       ` : `<div class="empty" style="padding:12px 0;">כל השחקנים במועדון כבר יושבים בשולחן.</div>`}
       <div class="section-title" style="padding:0;margin:10px 0 8px;">או הוסיפו שחקן אורח</div>
-      <p style="color:var(--muted);font-size:11px;margin:0 0 8px;">שחקן חד-פעמי למשחק הזה בלבד - לא יתווסף לרשימת השחקנים הקבועה של המועדון.</p>
+      <p style="color:var(--muted);font-size:15px;margin:0 0 8px;">שחקן חד-פעמי למשחק הזה בלבד - לא יתווסף לרשימת השחקנים הקבועה של המועדון.</p>
       <div class="gender-name-row" style="margin-bottom:14px;">
         <input type="text" id="pick-seat-guest-name" placeholder="שם האורח">
         <div class="gender-seg" role="group" aria-label="מין"><button type="button" class="on" data-guest-gender="male" title="זכר">ז</button><button type="button" data-guest-gender="female" title="נקבה">נ</button></div>
         <button class="btn btn-primary" data-add-guest-seat>${icon('plus')}</button>
       </div>
       <div class="section-title" style="padding:0;margin:0 0 8px;">או הוסיפו שחקן קבוע למועדון</div>
-      <p style="color:var(--muted);font-size:11px;margin:0 0 8px;">יתווסף לרשימת השחקנים הקבועה, ויוכל להתחבר בעתיד עם האימייל הזה.</p>
+      <p style="color:var(--muted);font-size:15px;margin:0 0 8px;">יתווסף לרשימת השחקנים הקבועה, ויוכל להתחבר בעתיד עם האימייל הזה.</p>
       <div class="field gender-name-row">
         <input type="text" id="pick-seat-permanent-name" placeholder="שם השחקן">
         <div class="gender-seg" role="group" aria-label="מין"><button type="button" class="on" data-perm-gender="male" title="זכר">ז</button><button type="button" data-perm-gender="female" title="נקבה">נ</button></div>
       </div>
       <div class="field"><input type="email" id="pick-seat-permanent-email" placeholder="אימייל" dir="ltr"></div>
-      ${m.permanentError ? `<p style="color:#fda4af;font-size:12px;margin-bottom:8px;">${esc(m.permanentError)}</p>` : ""}
+      ${m.permanentError ? `<p style="color:#fda4af;font-size:16px;margin-bottom:8px;">${esc(m.permanentError)}</p>` : ""}
       <button class="btn btn-primary btn-block" data-add-permanent-seat>${icon('plus')} הוסף שחקן קבוע</button>
     `;
   } else if (m.type === "seatChips") {
@@ -7469,8 +7479,8 @@ function renderModal(m){
     const hasChips = ((g.liveChips||{})[m.playerId] || 0) > 0;
     title = "הסרה מהשולחן";
     body = `
-      <p style="color:#6ee7b7;font-size:13px;">להסיר את <b>${esc(p?p.name:"")}</b> מהשולחן?</p>
-      ${(hasBuyins || hasChips) ? `<p style="color:#fbbf24;font-size:12px;">לשחקן יש קניות/ז'יטונים בשולחן - הם יאופסו, כאילו לא ישב בשולחן. אם יחזור, הכל יעמוד על אפס.</p>` : ""}
+      <p style="color:#6ee7b7;font-size:17px;">להסיר את <b>${esc(p?p.name:"")}</b> מהשולחן?</p>
+      ${(hasBuyins || hasChips) ? `<p style="color:#fbbf24;font-size:16px;">לשחקן יש קניות/ז'יטונים בשולחן - הם יאופסו, כאילו לא ישב בשולחן. אם יחזור, הכל יעמוד על אפס.</p>` : ""}
       <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-clear-seat>הסר מהשולחן</button>
     `;
   } else if (m.type === "returnToGamePayment") {
@@ -7478,7 +7488,7 @@ function renderModal(m){
     const p = g.players.find(pl=>pl.id===m.playerId);
     title = "כבר בוצע תשלום";
     body = `
-      <p style="color:#fbbf24;font-size:13px;">ל<b>${esc(p?p.name:"")}</b> כבר יש תשלום רשום מהיציאה הקודמת (₪${m.paidAmount}). לאפס את התשלום או להשאיר אותו?</p>
+      <p style="color:#fbbf24;font-size:17px;">ל<b>${esc(p?p.name:"")}</b> כבר יש תשלום רשום מהיציאה הקודמת (₪${m.paidAmount}). לאפס את התשלום או להשאיר אותו?</p>
       <button class="btn btn-block" style="background:#be123c;color:#fff;margin-bottom:8px;" data-confirm-return-reset-payment>אפס תשלום וחזור למשחק</button>
       <button class="btn btn-ghost btn-block" data-confirm-return-keep-payment>השאר תשלום וחזור למשחק</button>
     `;
@@ -7500,7 +7510,7 @@ function renderModal(m){
     })());
   return `
     <div class="overlay${topAnchored ? ' overlay-top' : ''}${isSetupFlow ? ' overlay-fullscreen' : ''}${m.type === "stats" ? ' overlay-full' : ''}">
-      <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal${["chipSetup","payboxSettings","buyinSetup","seatChips"].includes(m.type) ? "" : " modal-big"}" onclick="event.stopPropagation()">
         <div class="modal-head"><h3 class="serif">${title}</h3>${dismissable ? `<button class="close-x" data-close-modal>${icon('x')}</button>` : ""}</div>
         ${body}${body.includes('class="mode-panel ' + SETUP_PANEL_MARK) ? '</div></div>' + SETUP_FOOTER_HTML : ''}
       </div>
