@@ -259,18 +259,18 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
 .lv-line{flex:1;height:2px;background:linear-gradient(90deg,transparent,rgba(110,231,183,.6));}
 .lv-body.off{display:none;}
 .lv-arm:has(+ .lv-body.off){margin-bottom:0;}
-.lv-calc{display:flex;align-items:center;gap:8px;margin-top:12px;color:var(--text);font-size:14px;white-space:nowrap;}
-.lv-calc input{flex:0 0 90px;width:90px!important;min-width:0;padding:8px;font-size:16px;text-align:center;border-radius:10px;border:1px solid rgba(212,175,55,.6);background:var(--input);color:var(--text);}
-.lv-calc b{color:var(--gold);font-size:16px;}
+.lv-calc{display:flex;align-items:center;gap:8px;margin-top:12px;color:var(--text);font-size:18px;white-space:nowrap;}
+.lv-calc input{flex:0 0 90px;width:90px!important;min-width:0;padding:8px;font-size:20px;text-align:center;border-radius:10px;border:1px solid rgba(212,175,55,.6);background:var(--input);color:var(--text);}
+.lv-calc b{color:var(--gold);font-size:20px;}
 .lv-pot{margin-top:12px;padding:10px 12px;border-radius:12px;background:rgba(0,0,0,.3);border:1px solid rgba(212,175,55,.35);}
-.lv-pot > div:first-child{display:flex;justify-content:flex-start;align-items:baseline;gap:8px;color:var(--text);font-size:14px;}
-.lv-pot b{color:var(--gold);font-size:18px;}
-.lv-pot-sub{color:var(--muted);font-size:11px;margin-top:3px;}
+.lv-pot > div:first-child{display:flex;justify-content:flex-start;align-items:baseline;gap:8px;color:var(--text);font-size:18px;}
+.lv-pot b{color:var(--gold);font-size:22px;}
+.lv-pot-sub{color:var(--muted);font-size:15px;margin-top:3px;}
 .lv-photo{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 8px;border-radius:14px;cursor:pointer;font-family:inherit;color:#2a1d05;
   background:linear-gradient(180deg,#fde68a 0%,#f2c14e 45%,#c8922a 100%);border:1px solid rgba(0,0,0,.25);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 4px 10px rgba(0,0,0,.4);}
-.lv-photo span{display:flex;flex-direction:column;line-height:1.15;font-size:15px;}
-.lv-photo small{font-size:11px;font-weight:600;}
-.lv-confirm{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:12px;padding:13px 10px;border-radius:14px;font-family:inherit;font-size:19px;font-weight:800;color:#2a1d05;cursor:pointer;
+.lv-photo span{display:flex;flex-direction:column;line-height:1.15;font-size:19px;}
+.lv-photo small{font-size:15px;font-weight:600;}
+.lv-confirm{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:12px;padding:13px 10px;border-radius:14px;font-family:inherit;font-size:23px;font-weight:800;color:#2a1d05;cursor:pointer;
   background:linear-gradient(180deg,#fde68a 0%,#f2c14e 45%,#c8922a 100%);border:1px solid rgba(0,0,0,.25);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 5px 12px rgba(0,0,0,.45);}
 .lv-photo:disabled,.lv-confirm:disabled{cursor:not-allowed;}
 .pp-name-select{font-family:inherit;font-size:24px;font-weight:700;color:var(--text);background:transparent;border:1px solid rgba(212,175,55,.45);border-radius:12px;padding:4px 34px 4px 34px;max-width:90%;text-align:center;text-align-last:center;cursor:pointer;
@@ -5513,10 +5513,10 @@ function renderPlayerScreen(gameId){
       <div style="display:flex;gap:10px;align-items:flex-end;">
         <button class="lv-photo" data-leave-photo ${armed?'':'disabled'}><span><b>ספירה</b><small>באמצעות צילום</small></span>${icon('camera')}</button>
         <div style="flex:1;min-width:0;">
-          <div style="color:var(--muted);font-size:12px;margin-bottom:4px;">סכום הז'יטונים שנשארו</div>
+          <div style="color:var(--muted);font-size:16px;margin-bottom:4px;">סכום הז'יטונים שנשארו</div>
           <div style="position:relative;">
-            <input type="number" inputmode="decimal" id="lv-amount" value="${esc(leaveAmountDraft[pickKey] || '')}" ${armed?'':'disabled'} style="width:100%;box-sizing:border-box;padding:12px 30px 12px 8px;font-size:18px;border-radius:12px;border:1px solid var(--gold);background:var(--input);color:var(--text);">
-            <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--gold);">₪</span>
+            <input type="number" inputmode="decimal" id="lv-amount" value="${esc(leaveAmountDraft[pickKey] || '')}" ${armed?'':'disabled'} style="width:100%;box-sizing:border-box;padding:12px 30px 12px 8px;font-size:22px;border-radius:12px;border:1px solid var(--gold);background:var(--input);color:var(--text);">
+            <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--gold);font-size:20px;">₪</span>
           </div>
         </div>
       </div>
@@ -5532,7 +5532,7 @@ function renderPlayerScreen(gameId){
           <span>ז'יטונים =</span>
           <b id="lv-chips-result">₪${leaveChipsDraft[pickKey] ? Math.round((parseFloat(leaveChipsDraft[pickKey]) / ratio) * 100) / 100 : 0}</b>
         </div>
-        <div style="color:var(--muted);font-size:11px;margin-top:4px;">היחס במועדון: ₪1 = ${ratio} ז'יטונים</div>`;
+        <div style="color:var(--muted);font-size:15px;margin-top:4px;">היחס במועדון: ₪1 = ${ratio} ז'יטונים</div>`;
       })()}
       <button class="lv-confirm" data-leave-confirm ${armed?'':'disabled'}>${icon('out')}<span>אישור ספירה</span></button>
       ${(() => {
