@@ -757,7 +757,8 @@ html.theme-light.theme-sand .lux-page .icon-btn.gold[data-invite-game]{backgroun
 html.theme-light.theme-sand .lv-line{background:linear-gradient(90deg,transparent,rgba(110,65,25,.5));}
 /* Table nameplates - a very light tint of the theme color instead of plain white */
 html.theme-light.theme-blue .seat-info{background:rgba(226,239,245,.95);--gold:#a86a12;}
-html.theme-light.theme-sand .seat-info{background:rgba(244,234,218,.96);}
+html.theme-light.theme-sand .seat-info{background:rgba(74,46,20,.9);--text:#fbf3e6;--muted:#e9d8bd;--gold:#f2c14e;}
+html.theme-light.theme-sand .seat-circle.vacant{border-color:rgba(90,55,20,.55);color:#6b4a1f;background:rgba(90,55,20,.08);}
 /* Selected rebuy chip on the light themes - a filled gold chip with a solid rim and a lift,
    so the pick stands out clearly against the pale unselected chips. */
 html.theme-light .rb-chip.on,html.theme-light.theme-sand .rb-chip.on{color:#3a2208;border:3px solid #8a560c;
@@ -821,8 +822,11 @@ html.theme-light .tp-row{border-color:var(--card-b)!important;}
    the blue page; give them a deep navy fill and a light rim instead. */
 html.theme-light.theme-blue .btn-blue{background:#0b2f4a!important;border:1.5px solid rgba(255,255,255,.75)!important;box-shadow:0 3px 10px rgba(0,20,40,.35);}
 /* Alone at a new table: pointing hands at "הזמנת שחקן" and at an empty seat. */
-.alone-hint{flex-shrink:0;text-align:center;font-size:18px;font-weight:700;color:var(--gold);margin:4px 20px 10px;cursor:pointer;line-height:1.4;}
-.alone-hint-arrow{font-size:26px;vertical-align:middle;margin-left:8px;}
+.alone-hint{flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;font-size:18px;font-weight:700;color:var(--gold);margin:4px 20px 10px;cursor:pointer;line-height:1.4;}
+/* One line: the text shrinks to fit before it wraps (fitNameBoxes); the hand at its end
+   keeps room to swing. */
+.alone-hint-text{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.alone-hint-arrow{flex-shrink:0;font-size:26px;width:40px;text-align:left;}
 /* A line of text that must stay one line - shrinks to fit (fitNameBoxes) instead of wrapping. */
 .fit-line{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .pp-tiles.pp-tiles-alone{grid-template-columns:repeat(4,1fr);font-size:24px;margin-bottom:12px;}
@@ -918,7 +922,7 @@ html.theme-light.theme-sand .rb-confirm{background:linear-gradient(180deg,#bf8a4
 .custom-alert-box span.one-line{white-space:nowrap;overflow:hidden;min-width:0;flex:1;}
 /* Table screen: שולחן / ציר זמן toggle and the timeline view */
 .tv-seg{display:flex;border:1px solid rgba(212,175,55,.55);border-radius:10px;overflow:hidden;flex-shrink:0;}
-.tv-seg button{background:transparent;border:none;color:var(--text);font-family:inherit;font-size:13px;padding:6px 12px;cursor:pointer;}
+.tv-seg button{background:transparent;border:none;color:var(--text);font-family:inherit;font-size:17px;padding:7px 14px;cursor:pointer;}
 .tv-seg button.on{background:var(--gold);color:var(--gold-text);font-weight:700;}
 .ttl-chart svg{display:block;height:auto;overflow:visible;cursor:pointer;}
 .ttl-grid{stroke:var(--card-b);stroke-width:1;opacity:.6;}
@@ -5620,7 +5624,7 @@ function renderPlayerScreen(gameId){
   // on screen), leave-table box. Nothing on this screen scrolls as a page (see
   // .player-screen-scroll) - only the active .player-history-feed-body pane scrolls internally.
   return `
-    ${aloneAtTable ? `<div class="alone-hint" data-goto-table-view><span class="alone-hint-arrow">👈</span> אפשר להושיב שחקנים גם ממסך השולחן</div>` : ""}
+    ${aloneAtTable ? `<div class="alone-hint" data-goto-table-view><span class="alone-hint-text">אפשר להושיב שחקנים גם ממסך השולחן</span><span class="alone-hint-arrow">👈</span></div>` : ""}
     <div class="player-screen-scroll">
       <div style="text-align:center;padding:6px 0 ${cashedOut?16:4}px;flex-shrink:0;">
         ${tilesHtml}
@@ -6073,7 +6077,7 @@ function renderTable(gameId){
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:0 20px 10px;">
       <div class="tv-seg" role="tablist"><button type="button" class="${tableTimelineOn() ? '' : 'on'}" data-table-view="table">שולחן</button><button type="button" class="${tableTimelineOn() ? 'on' : ''}" data-table-view="timeline">ציר זמן</button></div>
     ${!allCashedOut ? `<div style="display:flex;align-items:center;gap:8px;">
-      <span data-open-poker-odds class="odds-label" style="color:#C8902F;font-size:12px;text-align:center;line-height:1.3;cursor:pointer;">מחשבון<br>סיכויי פוקר</span>
+      <span data-open-poker-odds class="odds-label" style="color:#C8902F;font-size:16px;text-align:center;line-height:1.3;cursor:pointer;">מחשבון<br>סיכויי פוקר</span>
       <button class="icon-btn" data-open-poker-odds title="מה הסיכויים שלי" style="flex-shrink:0;width:48px;height:auto;background:none;border:none;padding:0;display:inline-flex;align-items:center;justify-content:center;">
         <img src="/static/odds-coin.png" style="width:48px;height:auto;display:block;">
       </button>
@@ -6103,7 +6107,7 @@ function renderTable(gameId){
 // A name too long for its box steps its font down (to 11px) before it ever gets "…" -
 // the timeline's name chips, the player screen's player boxes and the chips-left label.
 function fitNameBoxes(){
-  document.querySelectorAll(".ttl-chip, .pp-tile bdi, .pp-tile-invite span, .lv-amount-label, .fit-line").forEach(el => {
+  document.querySelectorAll(".ttl-chip, .pp-tile bdi, .pp-tile-invite span, .lv-amount-label, .fit-line, .alone-hint-text").forEach(el => {
     let fs = parseFloat(getComputedStyle(el).fontSize);
     while (el.scrollWidth > el.clientWidth + 1 && fs > 11) { fs -= 1; el.style.fontSize = fs + "px"; }
   });
