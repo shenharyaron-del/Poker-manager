@@ -534,6 +534,16 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .game-welcome-card{background:#064e3b;border:1px solid var(--card-b);border-radius:20px;padding:30px 24px;width:100%;max-width:400px;text-align:center;box-shadow:0 16px 50px rgba(0,0,0,.55);}
 .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
 .modal-head h3{margin:0;font-size:18px;}
+/* Club profile setup: the club's name rides in the title (one line, "…" when long), and
+   the tabs' text is a step larger, like the rest of the screens. */
+.overlay-fullscreen .modal-head h3{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.mode-tab[class*="mode-tab-setup-"]{font-size:16px;}
+.setup-panel .leave-frame legend{font-size:15px;}
+.setup-panel .field label{font-size:16px;}
+.setup-panel input[type=text],.setup-panel input[type=number]{font-size:19px;}
+.setup-panel .checkbox-row{font-size:18px;}
+.setup-panel .btn,.setup-footer .btn{font-size:18px;}
+.setup-panel .btn.lux-paybox,.setup-panel .btn.lux-bit{font-size:16px;white-space:nowrap;}
 .close-x{background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;}
 .roster-row{display:flex;align-items:center;justify-content:space-between;background:var(--input);border:1px solid var(--card-b);border-radius:12px;padding:10px 14px;margin-bottom:8px;}
 .scroll-list{max-height:50vh;overflow-y:auto;padding-left:2px;}
@@ -3717,7 +3727,6 @@ function setupTabsHtml(communityId, activeTab){
   const TABS = [["chips", "ז'יטונים", 'chip'], ["payments", "תשלומים", 'payment'], ["buyins", "ריביי", 'coinsPlus']];
   const idx = TABS.findIndex(t => t[0] === activeTab);
   return `
-    <div style="text-align:center;color:var(--text);font-size:18px;margin-bottom:14px;">${esc(c ? c.name : "")}</div>
     <div class="mode-panel-wrap">
       <div class="mode-tabs">
         ${TABS.map(([key,label,ic]) => `<button class="mode-tab mode-tab-setup-${key}${activeTab===key?' active':''}" data-setup-tab="${key}" data-setup-community="${communityId}">${icon(ic)}<span>${label}</span></button>`).join("")}
@@ -6696,7 +6705,7 @@ function renderModal(m){
     }
   } else if (m.type === "chipSetup") {
     const c = getCommunity(m.communityId);
-    title = "הגדרת פרופיל מועדון";
+    title = `הגדרת פרופיל מועדון: ${esc((getCommunity(m.communityId) || {}).name || "")}`;
     const editableList = m.points.length ? `
       <div class="section-title" style="padding:0;margin:0 0 6px;">ז'יטונים וערכם בש"ח</div>
       <div class="scroll-list" style="margin-bottom:14px;">
@@ -6731,17 +6740,17 @@ function renderModal(m){
     if (!m.imageSrc) {
       body = `
         ${setupTabsHtml(m.communityId, "chips")}
-        <p style="color:var(--muted);font-size:12px;margin:0 0 14px;">ערכי הז'יטונים ויחס ההמרה (אופציונלי) - כלי עזר לספירת הז'יטונים בסוף הערב.</p>
+        <p style="color:var(--muted);font-size:16px;margin:0 0 14px;">ערכי הז'יטונים ויחס ההמרה (אופציונלי) - כלי עזר לספירת הז'יטונים בסוף הערב.</p>
         <fieldset class="leave-frame setup-frame">
         <legend>יחס ז'יטונים</legend>
         <div class="field">
           <label>1 שקל עבור <input type="number" inputmode="decimal" id="chip-ratio-input" value="${esc(String(shownRatio))}" style="width:70px;display:inline-block;text-align:center;"> ז'יטונים</label>
         </div>
-        <p style="color:var(--muted);font-size:12px;margin:-8px 0 0;">משמש לספירת ז'יטונים כוללת בסיום ערב.<br>יחס של 1 ל-<span id="chip-ratio-example-x">${esc(String(shownRatio))}</span> אומר שעבור 50 ש"ח תקבל <span id="chip-ratio-example-y">${isNaN(parseFloat(shownRatio)) ? 'Y' : esc(String(Math.round(parseFloat(shownRatio) * 50 * 100) / 100))}</span> ז'יטונים.</p>
+        <p style="color:var(--muted);font-size:16px;margin:-8px 0 0;">משמש לספירת ז'יטונים כוללת בסיום ערב.<br>יחס של 1 ל-<span id="chip-ratio-example-x">${esc(String(shownRatio))}</span> אומר שעבור 50 ש"ח תקבל <span id="chip-ratio-example-y">${isNaN(parseFloat(shownRatio)) ? 'Y' : esc(String(Math.round(parseFloat(shownRatio) * 50 * 100) / 100))}</span> ז'יטונים.</p>
         </fieldset>
         <fieldset class="leave-frame setup-frame">
         <legend>הוספת ויזואליות של הז'יטונים</legend>
-        <p style="color:var(--muted);font-size:13px;margin-top:0;">צלמו תמונה עם כל הז'יטונים פרוסים בנפרד על משטח, ממבט על (מלמעלה).<br>באמצעות הגדרה זו נוכל לספור ז'יטונים בסיום ערב.</p>
+        <p style="color:var(--muted);font-size:17px;margin-top:0;">צלמו תמונה עם כל הז'יטונים פרוסים בנפרד על משטח, ממבט על (מלמעלה).<br>באמצעות הגדרה זו נוכל לספור ז'יטונים בסיום ערב.</p>
         ${editableList}
         ${pickButtons}
         </fieldset>
@@ -6760,7 +6769,7 @@ function renderModal(m){
       }).join("") : "";
       body = `
         ${setupTabsHtml(m.communityId, "chips")}
-        <p style="color:var(--muted);font-size:12px;margin:0 0 14px;">ערכי הז'יטונים ויחס ההמרה (אופציונלי) - כלי עזר לספירת הז'יטונים בסוף הערב.</p>
+        <p style="color:var(--muted);font-size:16px;margin:0 0 14px;">ערכי הז'יטונים ויחס ההמרה (אופציונלי) - כלי עזר לספירת הז'יטונים בסוף הערב.</p>
         <fieldset class="leave-frame setup-frame">
         <legend>הוספת ויזואליות של הז'יטונים</legend>
         <div style="width:100%;margin-bottom:10px;position:relative;">
@@ -6768,7 +6777,7 @@ function renderModal(m){
           ${markers}
           ${m.analyzingChips ? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;"><span class="poker-loading-spin">${icon('chip')}</span></div>` : ""}
         </div>
-        <p style="color:var(--muted);font-size:12px;margin-top:0;">${m.analyzingChips ? "מזהה ז'יטונים אוטומטית..." : "הקישו על ז'יטון בתמונה כדי להוסיף מסגרת דוגמה - אפשר לגרור אותה למיקום מדויק, ולגרור את הנקודה הלבנה כדי לשנות את הגודל שיקיף בדיוק את הז'יטון. התמונה בטבלה מתעדכנת תוך כדי הגרירה."}</p>
+        <p style="color:var(--muted);font-size:16px;margin-top:0;">${m.analyzingChips ? "מזהה ז'יטונים אוטומטית..." : "הקישו על ז'יטון בתמונה כדי להוסיף מסגרת דוגמה - אפשר לגרור אותה למיקום מדויק, ולגרור את הנקודה הלבנה כדי לשנות את הגודל שיקיף בדיוק את הז'יטון. התמונה בטבלה מתעדכנת תוך כדי הגרירה."}</p>
         ${editableList}
         <button class="btn btn-ghost btn-block" data-retake-photo>${icon('plus')} תמונה אחרת</button>
         </fieldset>
@@ -7046,7 +7055,7 @@ function renderModal(m){
     `;
   } else if (m.type === "payboxSettings") {
     const c = getCommunity(m.communityId);
-    title = "הגדרת פרופיל מועדון";
+    title = `הגדרת פרופיל מועדון: ${esc((getCommunity(m.communityId) || {}).name || "")}`;
     // Only one link per group-payment app per community now (was a multi-entry list with
     // a "which one is active" radio - simplified since a second group never had a real use
     // case here). Same shape for Paybox and Bit, side by side.
@@ -7056,7 +7065,7 @@ function renderModal(m){
     const payDraft = (setupDraft && setupDraft.communityId === m.communityId && setupDraft.payments) || {paybox:{}, bit:{}};
     body = `
       ${setupTabsHtml(m.communityId, "payments")}
-      <p style="color:var(--muted);font-size:12px;margin:0 0 14px;">פתיחה מהירה לקבוצת הפייבוקס או הביט לטובת הסדר התשלומים.<br>אם אין, Poker Manager יציע העברות ישירות בין השחקנים.</p>
+      <p style="color:var(--muted);font-size:16px;margin:0 0 14px;">פתיחה מהירה לקבוצת הפייבוקס או הביט לטובת הסדר התשלומים.<br>אם אין, Poker Manager יציע העברות ישירות בין השחקנים.</p>
       <fieldset class="leave-frame setup-frame">
       <legend style="display:flex;align-items:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:14px;width:auto;display:block;">קבוצת פייבוקס</legend>
       ${link ? `
@@ -7085,17 +7094,17 @@ function renderModal(m){
       </fieldset>
       <fieldset class="leave-frame setup-frame">
       <legend>ברירת מחדל לסיום שולחן</legend>
-      <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">כשמישהו מסיים ערב, איזו אפשרות תוצע לו כברירת מחדל לתשלום.</p>
+      <p style="color:var(--muted);font-size:16px;margin:0 0 10px;">כשמישהו מסיים ערב, איזו אפשרות תוצע לו כברירת מחדל לתשלום.</p>
       <div class="checkbox-row" style="cursor:${link?'pointer':'not-allowed'};opacity:${link?'1':'.5'};" ${link?`data-select-settlement-default="paybox"`:''}>
         <input type="radio" name="settlement-default" ${settlementDefault==='paybox'?'checked':''} ${link?'':'disabled'}>
         <span class="flex1">תשלום לפייבוקס הקבוצתי</span>
       </div>
-      ${!link ? `<p style="color:var(--muted);font-size:11px;margin:-2px 0 10px;">דורש הגדרת קבוצת פייבוקס למעלה</p>` : ""}
+      ${!link ? `<p style="color:var(--muted);font-size:15px;margin:-2px 0 10px;">דורש הגדרת קבוצת פייבוקס למעלה</p>` : ""}
       <div class="checkbox-row" style="cursor:${bitLink?'pointer':'not-allowed'};opacity:${bitLink?'1':'.5'};" ${bitLink?`data-select-settlement-default="bit"`:''}>
         <input type="radio" name="settlement-default" ${settlementDefault==='bit'?'checked':''} ${bitLink?'':'disabled'}>
         <span class="flex1">תשלום לביט הקבוצתי</span>
       </div>
-      ${!bitLink ? `<p style="color:var(--muted);font-size:11px;margin:-2px 0 10px;">דורש הגדרת קבוצת ביט למעלה</p>` : ""}
+      ${!bitLink ? `<p style="color:var(--muted);font-size:15px;margin:-2px 0 10px;">דורש הגדרת קבוצת ביט למעלה</p>` : ""}
       <div class="checkbox-row" style="cursor:pointer;margin-bottom:0;" data-select-settlement-default="direct">
         <input type="radio" name="settlement-default" ${settlementDefault==='direct'?'checked':''}>
         <span class="flex1">העברה ישירות בין שחקנים</span>
@@ -7104,16 +7113,16 @@ function renderModal(m){
     `;
   } else if (m.type === "buyinSetup") {
     const c = getCommunity(m.communityId);
-    title = "הגדרת פרופיל מועדון";
+    title = `הגדרת פרופיל מועדון: ${esc((getCommunity(m.communityId) || {}).name || "")}`;
     body = `
       ${setupTabsHtml(m.communityId, "buyins")}
-      <p style="color:var(--muted);font-size:12px;margin:0 0 14px;">הגדרת סכומי הריביי וסכום הכניסה לשולחן.</p>
+      <p style="color:var(--muted);font-size:16px;margin:0 0 14px;">הגדרת סכומי הריביי וסכום הכניסה לשולחן.</p>
       <div class="section-title" style="padding:0;margin:0 0 6px;">ריביי</div>
-      <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">3 הסכומים שיוצגו בכל כפתורי הריביי באפליקציה - כל אחד חייב להיות גדול מהקודם לו.</p>
+      <p style="color:var(--muted);font-size:16px;margin:0 0 10px;">3 הסכומים שיוצגו בכל כפתורי הריביי באפליקציה - כל אחד חייב להיות גדול מהקודם לו.</p>
       <div style="display:flex;gap:8px;margin-bottom:6px;">
         ${getBuyinAmounts(c).map((v,i) => `<input type="number" inputmode="numeric" data-buyin-amount-input="${i}" value="${esc(String(setupDraft && setupDraft.communityId === m.communityId && setupDraft.buyins && setupDraft.buyins[i] !== undefined ? setupDraft.buyins[i] : v))}" style="flex:1;text-align:center;">`).join("")}
       </div>
-      <p style="color:var(--muted);font-size:11px;margin:0 0 18px;">סכום הכניסה לשולחן הוא הסכום הימני (הראשון).</p>
+      <p style="color:var(--muted);font-size:15px;margin:0 0 18px;">סכום הכניסה לשולחן הוא הסכום הימני (הראשון).</p>
     `;
   } else if (m.type === "pickSeat") {
     const g = getGame(m.gameId);
