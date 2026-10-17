@@ -67,6 +67,11 @@ body{
 .screen-tag{position:relative;}
 /* Home and club screens: the screen name / breadcrumbs at a readable size. */
 .screen-tag.screen-tag-lg{font-size:18px;letter-spacing:.03em;}
+/* Club screen breadcrumbs: one line, clear of the עיצוב button on the left - a long club
+   name ends in "…" instead of running under it. */
+.screen-tag.crumbs-row{display:flex;align-items:baseline;white-space:nowrap;padding-left:100px;}
+.crumbs-row .crumb-link,.crumbs-row .crumb-sep{flex-shrink:0;}
+.crumbs-row .crumb-club{color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;}
 @media (max-width:369px){.install-chip .chip-long{display:none;}}
 .theme-toggle{position:absolute;left:12px;top:9px;display:flex;align-items:center;gap:6px;height:32px;padding:0 12px 0 6px;border-radius:16px;border:1px solid rgba(212,175,55,.8);background:rgba(0,0,0,.28);color:var(--gold);font-family:inherit;font-size:13px;font-weight:700;letter-spacing:0;cursor:pointer;}
 .theme-toggle .tt-dot{width:22px;height:22px;border-radius:50%;border:1.5px solid rgba(255,255,255,.75);display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:0 1px 3px rgba(0,0,0,.35);}
@@ -4641,7 +4646,7 @@ function render(){
   const screenTag = crumbGame
     ? `<div class="screen-tag" style="text-align:right;"><button type="button" class="crumb-link" data-crumb-home>מסך הבית</button><span class="crumb-sep">/</span><button type="button" class="crumb-link" data-back-community="${crumbGame.communityId}">מסך המועדון</button><span class="crumb-sep">/</span><span style="color:var(--text);">${esc(screenLabel)}</span></div>`
     : nav.screen === "community"
-      ? `<div class="screen-tag screen-tag-lg" style="text-align:right;"><button type="button" class="crumb-link" data-crumb-home>מסך הבית</button><span class="crumb-sep">/</span><span style="color:var(--text);">מועדון: ${esc((getCommunity(nav.communityId) || {}).name || "")}</span></div>`
+      ? `<div class="screen-tag screen-tag-lg crumbs-row"><button type="button" class="crumb-link" data-crumb-home>מסך הבית</button><span class="crumb-sep">/</span><span class="crumb-club">מועדון: ${esc((getCommunity(nav.communityId) || {}).name || "")}</span></div>`
       : `<div class="screen-tag${nav.screen === "home" ? " screen-tag-lg" : ""}">${esc(screenLabel)}</div>`;
   // "התקן אפליקציה" sits under the עיצוב button (not beside the screen name, which it
   // covered); the header grows a little to make room for it.
