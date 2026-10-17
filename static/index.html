@@ -65,6 +65,8 @@ body{
 .screen-tag .crumb-link{background:none;border:none;padding:8px 2px;margin:-8px -2px;font:inherit;letter-spacing:inherit;color:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer;}
 .screen-tag .crumb-sep{margin:0 6px;opacity:.7;}
 .screen-tag{position:relative;}
+/* Home and club screens: the screen name / breadcrumbs at a readable size. */
+.screen-tag.screen-tag-lg{font-size:18px;letter-spacing:.03em;}
 @media (max-width:369px){.install-chip .chip-long{display:none;}}
 .theme-toggle{position:absolute;left:12px;top:9px;display:flex;align-items:center;gap:6px;height:32px;padding:0 12px 0 6px;border-radius:16px;border:1px solid rgba(212,175,55,.8);background:rgba(0,0,0,.28);color:var(--gold);font-family:inherit;font-size:13px;font-weight:700;letter-spacing:0;cursor:pointer;}
 .theme-toggle .tt-dot{width:22px;height:22px;border-radius:50%;border:1.5px solid rgba(255,255,255,.75);display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:0 1px 3px rgba(0,0,0,.35);}
@@ -87,7 +89,7 @@ h1.sm{font-size:20px;}
 @keyframes pokerChipSpin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
 .card:active{transform:scale(0.98);}
 .card .name{font-weight:700;font-size:16px;}
-.club-front .name,.card[data-new-community] .name{font-size:24px;}
+.club-front .name,.card[data-new-community] .name,.card[data-new-game] .name{font-size:24px;}
 .card .meta{color:var(--muted);font-size:12px;margin-top:4px;display:flex;align-items:center;gap:5px;}
 .chev{color:#059669;flex-shrink:0;}
 .row{display:flex;align-items:center;gap:12px;}
@@ -4639,8 +4641,8 @@ function render(){
   const screenTag = crumbGame
     ? `<div class="screen-tag" style="text-align:right;"><button type="button" class="crumb-link" data-crumb-home>מסך הבית</button><span class="crumb-sep">/</span><button type="button" class="crumb-link" data-back-community="${crumbGame.communityId}">מסך המועדון</button><span class="crumb-sep">/</span><span style="color:var(--text);">${esc(screenLabel)}</span></div>`
     : nav.screen === "community"
-      ? `<div class="screen-tag" style="text-align:right;"><button type="button" class="crumb-link" data-crumb-home>מסך הבית</button><span class="crumb-sep">/</span><span style="color:var(--text);">${esc(screenLabel)}</span></div>`
-      : `<div class="screen-tag">${esc(screenLabel)}</div>`;
+      ? `<div class="screen-tag screen-tag-lg" style="text-align:right;"><button type="button" class="crumb-link" data-crumb-home>מסך הבית</button><span class="crumb-sep">/</span><span style="color:var(--text);">מועדון: ${esc((getCommunity(nav.communityId) || {}).name || "")}</span></div>`
+      : `<div class="screen-tag${nav.screen === "home" ? " screen-tag-lg" : ""}">${esc(screenLabel)}</div>`;
   // "התקן אפליקציה" sits under the עיצוב button (not beside the screen name, which it
   // covered); the header grows a little to make room for it.
   const installChip = installChipHtml();
@@ -5097,7 +5099,7 @@ function renderCommunity(communityId){
     const canDelete = isGameCreator(g) || isClubCreator(c);
     const front = `
     <div class="card club-front ${g.closed?"":"card-open"}" data-open-game="${g.id}">
-      <div class="row flex1"><span style="color:#6ee7b7">${icon('cal')}</span><div class="flex1"><div style="font-weight:600">${esc(g.name || g.date)}</div>${g.name ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${esc(g.date)}</div>` : ""}${gameAlert ? `<div style="font-size:11px;color:#fdba74;margin-top:2px;">${gameAlert.text}</div>` : ""}</div>${gameStatusBadge(g)}</div>
+      <div class="row flex1"><span style="color:#6ee7b7">${icon('cal')}</span><div class="flex1"><div class="name serif">${esc(g.name || g.date)}</div>${g.name ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${esc(g.date)}</div>` : ""}${gameAlert ? `<div style="font-size:11px;color:#fdba74;margin-top:2px;">${gameAlert.text}</div>` : ""}</div>${gameStatusBadge(g)}</div>
       <div class="chev">${icon('chev')}</div>
     </div>`;
     if (!canInvite && !canDelete) return front.replace('class="card club-front ', 'class="card ');
@@ -5115,15 +5117,11 @@ function renderCommunity(communityId){
   }).join("");
 
   return `
-    <div class="top row" style="padding-bottom:8px;">
-      <button class="back-arrow" data-back-home>${icon('back')}</button>
-      <h1 class="serif sm flex1">מועדון: ${esc(c.name)}</h1>
-    </div>
-    <div class="px5 row" style="justify-content:flex-end;align-items:center;gap:10px;margin-bottom:10px;">
+    <div class="px5 row" style="justify-content:flex-end;align-items:center;gap:10px;margin:12px 0 10px;">
       <button class="btn btn-ghost btn-sm" data-show-roster style="display:flex;align-items:center;gap:6px;flex-shrink:0;">${icon('users')} שחקנים (${c.roster.length})</button>
       <div style="color:var(--muted);font-size:11px;line-height:1.4;">דרך כפתור "שחקנים"<br>ניתן למנות אדמינים</div>
     </div>
-    <div class="section-title">ערבי משחק</div>
+    <div class="section-title" style="font-size:14px;">ערבי משחק</div>
     <div class="px5" style="margin-bottom:20px;">${gamesHtml}</div>
   `;
 }
