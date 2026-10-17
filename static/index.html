@@ -70,8 +70,10 @@ body{
 /* Club screen breadcrumbs: one line, clear of the עיצוב button on the left - a long club
    name ends in "…" instead of running under it. */
 .screen-tag.crumbs-row{display:flex;align-items:baseline;white-space:nowrap;padding-left:100px;}
-.crumbs-row .crumb-link,.crumbs-row .crumb-sep{flex-shrink:0;}
-.crumbs-row .crumb-club{color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;}
+.crumbs-row .crumb-link,.crumbs-row .crumb-sep,.crumbs-row .crumb-here{flex-shrink:0;}
+.crumbs-row .crumb-here{color:var(--text);}
+.crumbs-row .crumb-club{color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;flex-shrink:1;}
+.crumbs-row .crumb-link.crumb-club{color:inherit;margin:-8px 0;}
 @media (max-width:369px){.install-chip .chip-long{display:none;}}
 .theme-toggle{position:absolute;left:12px;top:9px;display:flex;align-items:center;gap:6px;height:32px;padding:0 12px 0 6px;border-radius:16px;border:1px solid rgba(212,175,55,.8);background:rgba(0,0,0,.28);color:var(--gold);font-family:inherit;font-size:13px;font-weight:700;letter-spacing:0;cursor:pointer;}
 .theme-toggle .tt-dot{width:22px;height:22px;border-radius:50%;border:1.5px solid rgba(255,255,255,.75);display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:0 1px 3px rgba(0,0,0,.35);}
@@ -4638,16 +4640,20 @@ function render(){
     }
     }
   }
-  const SUB_VIEW_LABELS = { player: "מסך שחקן", table: "מסך השולחן", admin: "מסך ניהול שחקנים" };
+  // The game screens' last breadcrumb: the player screen, or the table screen in its
+  // current view (the seats, or the timeline).
+  const tableViewLabel = () => tableTimelineOn() ? "ציר זמן" : "שולחן";
+  const SUB_VIEW_LABELS = { player: "שחקן", table: tableViewLabel() };
   const watchFeedOn = nav.screen === "table" && !resultsScreen && !seated && watchView === "feed" && isSuperAdmin();
-  const screenLabel = resultsScreen ? "תוצאות משחק" : watchFeedOn ? "פעילות בשולחן" : ((seated && SUB_VIEW_LABELS[tableSubView]) || (SCREEN_NAMES[nav.screen] || nav.screen));
-  // On a game's screens the tag doubles as breadcrumbs: מסך הבית / מסך הקבוצה / <this
-  // screen>, the first two linking home and to the game's group.
+  const screenLabel = resultsScreen ? "תוצאות משחק" : watchFeedOn ? "פעילות בשולחן" : ((seated && SUB_VIEW_LABELS[tableSubView]) || (nav.screen === "table" ? tableViewLabel() : (SCREEN_NAMES[nav.screen] || nav.screen)));
+  // On the club and game screens the tag doubles as breadcrumbs: מסך הבית › מועדון: <name>
+  // › <this screen>, the first two linking home and to the club. One line: a long club
+  // name gives way first ("…", down to nothing), never the current screen's name.
   const crumbGame = nav.screen === "table" && nav.gameId ? getGame(nav.gameId) : null;
   const screenTag = crumbGame
-    ? `<div class="screen-tag" style="text-align:right;"><button type="button" class="crumb-link" data-crumb-home>מסך הבית</button><span class="crumb-sep">/</span><button type="button" class="crumb-link" data-back-community="${crumbGame.communityId}">מסך המועדון</button><span class="crumb-sep">/</span><span style="color:var(--text);">${esc(screenLabel)}</span></div>`
+    ? `<div class="screen-tag screen-tag-lg crumbs-row"><button type="button" class="crumb-link" data-crumb-home>מסך הבית</button><span class="crumb-sep">›</span><button type="button" class="crumb-link crumb-club" data-back-community="${crumbGame.communityId}">מועדון: ${esc((getCommunity(crumbGame.communityId) || {}).name || "")}</button><span class="crumb-sep">›</span><span class="crumb-here">${esc(screenLabel)}</span></div>`
     : nav.screen === "community"
-      ? `<div class="screen-tag screen-tag-lg crumbs-row"><button type="button" class="crumb-link" data-crumb-home>מסך הבית</button><span class="crumb-sep">/</span><span class="crumb-club">מועדון: ${esc((getCommunity(nav.communityId) || {}).name || "")}</span></div>`
+      ? `<div class="screen-tag screen-tag-lg crumbs-row"><button type="button" class="crumb-link" data-crumb-home>מסך הבית</button><span class="crumb-sep">›</span><span class="crumb-club">מועדון: ${esc((getCommunity(nav.communityId) || {}).name || "")}</span></div>`
       : `<div class="screen-tag${nav.screen === "home" ? " screen-tag-lg" : ""}">${esc(screenLabel)}</div>`;
   // "התקן אפליקציה" sits under the עיצוב button (not beside the screen name, which it
   // covered); the header grows a little to make room for it.
@@ -5600,14 +5606,6 @@ function renderPlayerScreen(gameId){
   // on screen), leave-table box. Nothing on this screen scrolls as a page (see
   // .player-screen-scroll) - only the active .player-history-feed-body pane scrolls internally.
   return `
-    <div class="top row" style="padding-top:14px;padding-bottom:16px;flex-shrink:0;">
-      <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
-      <div class="flex1" style="min-width:0;">
-        <h1 class="serif sm" style="color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:8px;"><span style="overflow:hidden;text-overflow:ellipsis;">${esc(g.name || c.name)}</span>${gameStatusBadge(g, true)}</h1>
-        <div class="meta" style="color:#6ee7b7;font-size:11px;display:flex;align-items:center;gap:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${icon('cal')}${esc(g.date)}${g.createdByName ? ` · נוצר ע"י ${esc(g.createdByName)}` : ""}</div>
-      </div>
-
-    </div>
     ${aloneAtTable ? `<div class="alone-hint" data-goto-table-view><span class="alone-hint-arrow">👈</span> אפשר להושיב שחקנים גם ממסך השולחן</div>` : ""}
     <div class="player-screen-scroll">
       <div style="text-align:center;padding:6px 0 ${cashedOut?16:4}px;flex-shrink:0;">
@@ -6057,17 +6055,10 @@ function renderTable(gameId){
   const cropClass = mySlotY < 50 ? "crop-from-bottom" : "crop-from-top";
 
   return `
-    <div class="top row" style="padding-top:14px;padding-bottom:16px;">
-      <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
-      <div class="flex1" style="min-width:0;">
-        <h1 class="serif sm" style="color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:8px;"><span style="overflow:hidden;text-overflow:ellipsis;">${esc(g.name || c.name)}</span>${gameStatusBadge(g, true)}</h1>
-        <div class="meta" style="color:#6ee7b7;font-size:11px;display:flex;align-items:center;gap:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${icon('cal')}${esc(g.date)}${g.createdByName ? ` · נוצר ע"י ${esc(g.createdByName)}` : ""}</div>
-      </div>
-      <button class="icon-btn gold${aloneAtTable?' invite-hint':''}" data-invite-game="${g.id}" title="הזמנת שחקנים" style="flex-shrink:0;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;white-space:nowrap;padding:5px 7px;">${icon('share')}הזמנת שחקנים</button>
-    </div>
     ${watchStripHtml(g)}
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:0 20px 10px;">
       <div class="tv-seg" role="tablist"><button type="button" class="${tableTimelineOn() ? '' : 'on'}" data-table-view="table">שולחן</button><button type="button" class="${tableTimelineOn() ? 'on' : ''}" data-table-view="timeline">ציר זמן</button></div>
+      <button class="icon-btn gold${aloneAtTable?' invite-hint':''}" data-invite-game="${g.id}" title="הזמנת שחקנים" style="flex-shrink:0;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;white-space:nowrap;padding:5px 7px;">${icon('share')}הזמנת שחקנים</button>
     ${!allCashedOut ? `<div style="display:flex;align-items:center;gap:8px;">
       <span data-open-poker-odds class="odds-label" style="color:#C8902F;font-size:12px;text-align:center;line-height:1.3;cursor:pointer;">מחשבון<br>סיכויי פוקר</span>
       <button class="icon-btn" data-open-poker-odds title="מה הסיכויים שלי" style="flex-shrink:0;width:48px;height:auto;background:none;border:none;padding:0;display:inline-flex;align-items:center;justify-content:center;">
