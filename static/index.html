@@ -5731,16 +5731,16 @@ function renderGameResultsScreen(gameId){
     // a loser's negative profit made every loser's tick fail with "שמירה נכשלה"). Nothing
     // to settle for a player who broke even, so no box for them.
     const checkboxHtml = isGroupPay && Math.abs(r.profit) >= 0.01
-      ? `<input type="checkbox" data-result-paybox-toggle="${r.id}" data-amount="${Math.abs(r.profit)}" data-payment-id="${paymentId||''}" ${checked?'checked':''} style="width:18px;height:18px;accent-color:var(--gold);flex-shrink:0;">`
+      ? `<input type="checkbox" data-result-paybox-toggle="${r.id}" data-amount="${Math.abs(r.profit)}" data-payment-id="${paymentId||''}" ${checked?'checked':''} style="width:22px;height:18px;accent-color:var(--gold);flex-shrink:0;">`
       : "";
     return `
       <div class="card" style="cursor:default;${isMe ? 'border:1.5px solid var(--gold);' : ''}">
         <div class="flex1" style="display:flex;align-items:center;gap:6px;min-width:0;">
           ${crownHtml}
-          <span style="font-weight:700;font-size:20px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.name)}${isMe ? ' <span style="color:var(--muted);font-weight:400;font-size:17px;">(את/ה)</span>' : ''}</span>
+          <span style="font-weight:700;font-size:24px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.name)}${isMe ? ' <span style="color:var(--muted);font-weight:400;font-size:21px;">(את/ה)</span>' : ''}</span>
         </div>
         <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
-          <span style="font-weight:800;font-size:17px;color:${profitColor(r.profit)};${checked?'text-decoration:line-through;opacity:.5;':''}">₪${Math.abs(r.profit)}</span>
+          <span style="font-weight:800;font-size:21px;color:${profitColor(r.profit)};${checked?'text-decoration:line-through;opacity:.5;':''}">₪${Math.abs(r.profit)}</span>
           ${checkboxHtml}
         </div>
       </div>`;
@@ -5752,10 +5752,10 @@ function renderGameResultsScreen(gameId){
     if (c.settlementDefault === 'paybox') {
       const activeLink = getActivePayboxLink(c);
       topButtonHtml = activeLink
-        ? `<a href="${esc(activeLink)}" class="btn btn-blue btn-block" style="font-size:18px;margin-top:8px;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;">פתיחת פייבוקס קבוצתי</a>`
-        : `<div style="font-size:16px;color:var(--muted);margin-top:8px;margin-bottom:16px;text-align:center;">לא הוגדרה קבוצת פייבוקס</div>`;
+        ? `<a href="${esc(activeLink)}" class="btn btn-blue btn-block" style="font-size:22px;margin-top:8px;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;">פתיחת פייבוקס קבוצתי</a>`
+        : `<div style="font-size:20px;color:var(--muted);margin-top:8px;margin-bottom:16px;text-align:center;">לא הוגדרה קבוצת פייבוקס</div>`;
     } else {
-      topButtonHtml = `<button class="btn btn-primary btn-block" data-open-bit-generic style="font-size:18px;margin-top:8px;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:6px;background:#0070E0;color:#fff;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;">פתיחת ביט קבוצתי</button>`;
+      topButtonHtml = `<button class="btn btn-primary btn-block" data-open-bit-generic style="font-size:22px;margin-top:8px;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:6px;background:#0070E0;color:#fff;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;">פתיחת ביט קבוצתי</button>`;
     }
   } else {
     const txns = settlementWithPayments({...synthGame, playerPayments, payboxPayments});
@@ -5771,8 +5771,8 @@ function renderGameResultsScreen(gameId){
             <span style="${paidStyle}">${esc(t.toName)}</span>
             <div style="display:flex;align-items:center;gap:8px;">
               <span style="font-weight:700;color:var(--gold);${paidStyle}">₪${t.amount}</span>
-              ${existing ? '<span style="font-size:16px;font-weight:700;color:#6ee7b7;">עבר</span>' : ''}
-              <input type="checkbox" data-result-player-payment-toggle data-from="${fromId}" data-to="${t.to}" data-amount="${t.amount}" data-payment-id="${existing?existing.id:''}" ${existing?'checked':''} style="width:18px;height:18px;accent-color:var(--gold);">
+              ${existing ? '<span style="font-size:20px;font-weight:700;color:#6ee7b7;">עבר</span>' : ''}
+              <input type="checkbox" data-result-player-payment-toggle data-from="${fromId}" data-to="${t.to}" data-amount="${t.amount}" data-payment-id="${existing?existing.id:''}" ${existing?'checked':''} style="width:22px;height:18px;accent-color:var(--gold);">
             </div>
           </div>`;
       }).join("");
@@ -5783,25 +5783,17 @@ function renderGameResultsScreen(gameId){
         </div>`;
     }).join("");
     transfersHtml = `
-      <div class="section-title" style="padding:0;margin:20px 0 8px;">מי מעביר למי</div>
-      ${payerCardsHtml || `<div class="empty" style="padding:10px 0;font-size:17px;">אין תשלומים נדרשים</div>`}
+      <div class="section-title" style="padding:0;margin:20px 0 8px;font-size:19px;">מי מעביר למי</div>
+      ${payerCardsHtml || `<div class="empty" style="padding:10px 0;font-size:21px;">אין תשלומים נדרשים</div>`}
     `;
   }
 
   return `
-    <div class="top row" style="padding-top:14px;padding-bottom:16px;flex-shrink:0;">
-      <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
-      <div class="flex1" style="min-width:0;">
-        <div style="font-size:15px;font-weight:700;color:var(--muted);letter-spacing:.05em;">המשחק הסתיים</div>
-        <h1 class="serif sm" style="color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:8px;"><span style="overflow:hidden;text-overflow:ellipsis;">${esc(g.name || c.name)}</span>${gameStatusBadge(g, true)}</h1>
-        <div class="meta" style="color:#6ee7b7;font-size:15px;display:flex;align-items:center;gap:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${icon('cal')}${esc(g.date)} · ${g.players.length} שחקנים</div>
-      </div>
-    </div>
-    <div style="flex:1;min-height:0;overflow-y:auto;padding:0 20px 20px;touch-action:pan-y;">
+    <div style="flex:1;min-height:0;overflow-y:auto;padding:8px 20px 20px;touch-action:pan-y;font-size:20px;">
       ${topButtonHtml}
       ${playerRowsHtml}
       ${transfersHtml}
-      <button class="btn btn-ghost btn-block" data-open-my-stats style="font-size:18px;margin-top:16px;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('bar')} הביצועים שלי</button>
+      <button class="btn btn-ghost btn-block" data-open-my-stats style="font-size:22px;margin-top:16px;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('bar')} הביצועים שלי</button>
     </div>
   `;
 }
