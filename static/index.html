@@ -823,6 +823,8 @@ html.theme-light.theme-blue .btn-blue{background:#0b2f4a!important;border:1.5px 
 /* Alone at a new table: pointing hands at "הזמנת שחקן" and at an empty seat. */
 .alone-hint{flex-shrink:0;text-align:center;font-size:18px;font-weight:700;color:var(--gold);margin:4px 20px 10px;cursor:pointer;line-height:1.4;}
 .alone-hint-arrow{font-size:26px;vertical-align:middle;margin-left:8px;}
+/* A line of text that must stay one line - shrinks to fit (fitNameBoxes) instead of wrapping. */
+.fit-line{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .pp-tiles.pp-tiles-alone{grid-template-columns:repeat(4,1fr);font-size:24px;margin-bottom:12px;}
 .pp-tiles-alone .pp-tile-invite{grid-column:2 / span 2;font-size:1em;padding:6px 8px;}
 .pp-tiles-alone .tile-hint::after{font-size:28px;left:-40px;}
@@ -6098,9 +6100,15 @@ function renderTable(gameId){
 // A name too long for its box steps its font down (to 11px) before it ever gets "…" -
 // the timeline's name chips, the player screen's player boxes and the chips-left label.
 function fitNameBoxes(){
-  document.querySelectorAll(".ttl-chip, .pp-tile bdi, .pp-tile-invite span, .lv-amount-label").forEach(el => {
+  document.querySelectorAll(".ttl-chip, .pp-tile bdi, .pp-tile-invite span, .lv-amount-label, .fit-line").forEach(el => {
     let fs = parseFloat(getComputedStyle(el).fontSize);
     while (el.scrollWidth > el.clientWidth + 1 && fs > 11) { fs -= 1; el.style.fontSize = fs + "px"; }
+  });
+  // Lines of one paragraph (.fit-same) end up the same size - the smallest one's.
+  document.querySelectorAll(".fit-same").forEach(par => {
+    const lines = [...par.querySelectorAll(".fit-line")];
+    const min = Math.min(...lines.map(l => parseFloat(getComputedStyle(l).fontSize)));
+    lines.forEach(l => { l.style.fontSize = min + "px"; });
   });
 }
 function tableTimelineOn(){ try { return localStorage.getItem("poker-table-view") === "timeline"; } catch(e) { return false; } }
@@ -6753,7 +6761,7 @@ function renderModal(m){
         <div class="field">
           <label>1 שקל עבור <input type="number" inputmode="decimal" id="chip-ratio-input" value="${esc(String(shownRatio))}" style="width:70px;display:inline-block;text-align:center;"> ז'יטונים</label>
         </div>
-        <p style="color:var(--muted);font-size:16px;margin:-8px 0 0;">משמש לספירת ז'יטונים כוללת בסיום ערב.<br>יחס של 1 ל-<span id="chip-ratio-example-x">${esc(String(shownRatio))}</span> אומר שעבור 50 ש"ח תקבל <span id="chip-ratio-example-y">${isNaN(parseFloat(shownRatio)) ? 'Y' : esc(String(Math.round(parseFloat(shownRatio) * 50 * 100) / 100))}</span> ז'יטונים.</p>
+        <p class="fit-same" style="color:var(--muted);font-size:16px;margin:-8px 0 0;"><span class="fit-line">משמש לספירת ז'יטונים כוללת בסיום ערב.</span><span class="fit-line">יחס של 1 ל-<span id="chip-ratio-example-x">${esc(String(shownRatio))}</span> אומר שעבור 50 ש"ח תקבל <span id="chip-ratio-example-y">${isNaN(parseFloat(shownRatio)) ? 'Y' : esc(String(Math.round(parseFloat(shownRatio) * 50 * 100) / 100))}</span> ז'יטונים.</span></p>
         </fieldset>
         <fieldset class="leave-frame setup-frame">
         <legend>הוספת ויזואליות של הז'יטונים</legend>
@@ -9317,6 +9325,7 @@ function attachHandlers(){
       const yEl = document.getElementById("chip-ratio-example-y");
       if (xEl) xEl.textContent = isNaN(x) ? "X" : String(x);
       if (yEl) yEl.textContent = isNaN(x) ? "Y" : String(Math.round(x * 50 * 100) / 100);
+      if (yEl) { const par = yEl.closest(".fit-same"); if (par) par.querySelectorAll(".fit-line").forEach(l => { l.style.fontSize = ""; }); fitNameBoxes(); }
     });
     const retakeBtn = app.querySelector("[data-retake-photo]");
     if (retakeBtn) retakeBtn.onclick = () => updateModal({imageSrc: null});
