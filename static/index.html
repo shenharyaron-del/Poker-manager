@@ -4646,14 +4646,14 @@ function render(){
   const SUB_VIEW_LABELS = { player: "שחקן", table: tableViewLabel() };
   const watchFeedOn = nav.screen === "table" && !resultsScreen && !seated && watchView === "feed" && isSuperAdmin();
   const screenLabel = resultsScreen ? "תוצאות משחק" : watchFeedOn ? "פעילות בשולחן" : ((seated && SUB_VIEW_LABELS[tableSubView]) || (nav.screen === "table" ? tableViewLabel() : (SCREEN_NAMES[nav.screen] || nav.screen)));
-  // On the club and game screens the tag doubles as breadcrumbs: מסך הבית › מועדון: <name>
+  // On the club and game screens the tag doubles as breadcrumbs: בית › <club name>
   // › <this screen>, the first two linking home and to the club. One line: a long club
   // name gives way first ("…", down to nothing), never the current screen's name.
   const crumbGame = nav.screen === "table" && nav.gameId ? getGame(nav.gameId) : null;
   const screenTag = crumbGame
-    ? `<div class="screen-tag screen-tag-lg crumbs-row"><button type="button" class="crumb-link" data-crumb-home>מסך הבית</button><span class="crumb-sep">›</span><button type="button" class="crumb-link crumb-club" data-back-community="${crumbGame.communityId}">מועדון: ${esc((getCommunity(crumbGame.communityId) || {}).name || "")}</button><span class="crumb-sep">›</span><span class="crumb-here">${esc(screenLabel)}</span></div>`
+    ? `<div class="screen-tag screen-tag-lg crumbs-row"><button type="button" class="crumb-link" data-crumb-home>בית</button><span class="crumb-sep">›</span><button type="button" class="crumb-link crumb-club" data-back-community="${crumbGame.communityId}">${esc((getCommunity(crumbGame.communityId) || {}).name || "")}</button><span class="crumb-sep">›</span><span class="crumb-here">${esc(screenLabel)}</span></div>`
     : nav.screen === "community"
-      ? `<div class="screen-tag screen-tag-lg crumbs-row"><button type="button" class="crumb-link" data-crumb-home>מסך הבית</button><span class="crumb-sep">›</span><span class="crumb-club">מועדון: ${esc((getCommunity(nav.communityId) || {}).name || "")}</span></div>`
+      ? `<div class="screen-tag screen-tag-lg crumbs-row"><button type="button" class="crumb-link" data-crumb-home>בית</button><span class="crumb-sep">›</span><span class="crumb-club">${esc((getCommunity(nav.communityId) || {}).name || "")}</span></div>`
       : `<div class="screen-tag${nav.screen === "home" ? " screen-tag-lg" : ""}">${esc(screenLabel)}</div>`;
   // "התקן אפליקציה" sits under the עיצוב button (not beside the screen name, which it
   // covered); the header grows a little to make room for it.
@@ -5131,7 +5131,7 @@ function renderCommunity(communityId){
   return `
     <div class="px5 row" style="justify-content:flex-end;align-items:center;gap:10px;margin:12px 0 10px;">
       <button class="btn btn-ghost btn-sm" data-show-roster style="display:flex;align-items:center;gap:6px;flex-shrink:0;">${icon('users')} שחקנים (${c.roster.length})</button>
-      <div style="color:var(--muted);font-size:11px;line-height:1.4;">דרך כפתור "שחקנים"<br>ניתן למנות אדמינים</div>
+      <div style="color:var(--muted);font-size:14px;line-height:1.4;">דרך כפתור "שחקנים"<br>ניתן למנות אדמינים</div>
     </div>
     <div class="section-title" style="font-size:14px;">ערבי משחק</div>
     <div class="px5" style="margin-bottom:20px;">${gamesHtml}</div>
