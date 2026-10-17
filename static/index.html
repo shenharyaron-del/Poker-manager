@@ -820,18 +820,17 @@ html.theme-light.theme-blue .btn-blue{background:#0b2f4a!important;border:1.5px 
 .status-badge{display:inline-block;flex-shrink:0;font-family:'Rubik',sans-serif;font-size:11px;font-weight:700;color:#fff;border-radius:8px;padding:3px 8px;white-space:nowrap;letter-spacing:0;}
 .status-badge.small{font-size:10px;padding:2px 7px;border-radius:7px;vertical-align:middle;}
 /* Player screen: tiles of everyone at tonight's table above the name (4 per row, max 6) */
-.pp-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:0 0 10px;}
-.pp-tile{position:relative;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:6px 4px;border-radius:10px;border:1px solid rgba(212,175,55,.45);background:transparent;color:var(--text);font-family:inherit;font-size:13px;font-weight:700;line-height:1.15;cursor:pointer;overflow:visible;}
+.pp-tiles{display:grid;gap:6px;margin:0 0 10px;}
+.pp-tile{position:relative;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:8px 16px;border-radius:10px;border:1px solid rgba(212,175,55,.45);background:transparent;color:var(--text);font-family:inherit;font-size:inherit;font-weight:700;line-height:1.15;cursor:pointer;overflow:visible;}
 .pp-tile bdi{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.pp-tile small{font-size:10px;font-weight:600;color:var(--muted);}
+.pp-tile small{font-size:.65em;font-weight:600;color:var(--muted);}
 /* A small gold chevron on each player tile - tapping opens that player's screen. */
 .pp-tile[data-pp-view]::after{content:"";position:absolute;top:50%;left:7px;width:6px;height:6px;border-top:2px solid var(--gold);border-left:2px solid var(--gold);transform:translateY(-50%) rotate(-45deg);opacity:.8;pointer-events:none;}
 .pp-tile.on{border-color:var(--gold);background:rgba(212,175,55,.18);box-shadow:0 0 0 1px rgba(212,175,55,.35);}
 .pp-tile.out{opacity:.65;}
-.pp-tile-invite{border-style:dashed;color:var(--gold);flex-direction:row;gap:4px;font-size:12px;}
-.pp-tile-invite svg{width:14px;height:14px;}
-.pp-tile-more{color:var(--gold);font-size:12px;}
-.pp-tile-more select{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;}
+.pp-tile-invite{border-style:dashed;color:var(--gold);flex-direction:row;gap:4px;font-size:.9em;padding:8px 6px;}
+.pp-tile-invite svg{width:1.1em;height:1.1em;flex-shrink:0;}
+.pp-tile-invite span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .tile-hint::after{content:"👉";position:absolute;left:-30px;top:50%;font-size:20px;line-height:1;transform:translateY(-50%);animation:tile-hand 1.1s ease-in-out infinite;pointer-events:none;}
 @keyframes tile-hand{0%,100%{transform:translate(0,-50%)}50%{transform:translate(8px,-50%)}}
 .pp-name-box{display:inline-block;box-sizing:border-box;min-width:66%;font-size:24px;font-weight:700;color:var(--text);border:1px solid rgba(212,175,55,.45);border-radius:12px;padding:6px 18px;max-width:92%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -5571,8 +5570,7 @@ function renderPlayerScreen(gameId){
     return `<div class="pp-name-row">${box}${viewingOther && me ? `<button type="button" class="pp-back-me" data-pp-back-me title="חזרה למסך שלי"><bdi>${esc(me.name)}</bdi></button>` : ""}</div>`;
   })();
   // Tiles above the name: everyone who entered tonight, in order, then a "הזמן שחקן" tile
-  // in the next free spot (it replaces the header's invite button here). At most 8 tiles, 4
-  // per row - past that, the 8th becomes "עוד N" with a picker for the rest (and invite).
+  // in the next free spot (it replaces the header's invite button here).
   // An admin taps a tile to see that player's screen; for everyone else they're a roster.
   const tilesHtml = (() => {
     // Everyone but me, each in a fixed slot (tonight's entry order) - the one being looked
@@ -5586,18 +5584,14 @@ function renderPlayerScreen(gameId){
       return `<button type="button" class="pp-tile${id===pid?' on':''}${out?' out':''}" data-pp-view="${id}"><bdi>${esc(pl.name)}</bdi>${out?'<small>יצא</small>':''}</button>`;
     };
     const inviteTile = `<button type="button" class="pp-tile pp-tile-invite${aloneAtTable?' tile-hint':''}" data-invite-game="${g.id}">${icon('share')}<span>הזמן שחקן</span></button>`;
-    const total = entered.length + (canInvite ? 1 : 0);
-    let out;
-    if (total <= 8) out = entered.map(tile).join("") + (canInvite ? inviteTile : "");
-    else {
-      const shown = entered.slice(0, 7), rest = entered.slice(7);
-      out = shown.map(tile).join("") + `<div class="pp-tile pp-tile-more">עוד ${rest.length}${canInvite ? ' / הזמנה' : ''}<select data-pp-more dir="rtl">
-        <option value="" selected disabled>בחרו…</option>
-        ${rest.map(id => { const pl = g.players.find(x => x.id === id); return `<option value="${id}">\u200F\u2068${esc(pl.name)}\u2069${id in (g.cashouts||{})?' · יצא':''}</option>`; }).join("")}
-        ${canInvite ? `<option value="__invite__">＋ הזמן שחקן</option>` : ""}
-      </select></div>`;
-    }
-    return `<div class="pp-tiles">${out}</div>`;
+    // At most 8 boxes (9 at a table, nobody replaces anyone: 8 others, or 7 + invite),
+    // laid out like the timeline's name chips: up to 4 in one row, 5-6 in rows of 3, 7-8
+    // in rows of 4 - the font sized to the box (long names shrink to fit, see fitNameBoxes).
+    const out = entered.map(tile).join("") + (canInvite ? inviteTile : "");
+    const n = entered.length + (canInvite ? 1 : 0);
+    const cols = n <= 4 ? Math.max(n, 1) : n <= 6 ? 3 : 4;
+    const fs = cols <= 2 ? 20 : cols === 3 ? 18 : 16;
+    return `<div class="pp-tiles" style="grid-template-columns:repeat(${cols},1fr);font-size:${fs}px;">${out}</div>`;
   })();
   // Order (top to bottom): name/total, ריביי buttons, the shared history/feed panel
   // (.player-history-feed, flex:1 - the one section whose size actually adapts, toggled
@@ -6085,9 +6079,10 @@ function renderTable(gameId){
 // stepped line - up on every buy-in, down by what they returned to the pot on leaving),
 // and below it, the night's activity in order from 0:00 (the first player's entry).
 // Which view is open is remembered per device.
-// A name too long for its box steps its font down (to 11px) before it ever gets "…".
-function fitTimelineChips(){
-  document.querySelectorAll(".ttl-chip").forEach(el => {
+// A name too long for its box steps its font down (to 11px) before it ever gets "…" -
+// the timeline's name chips and the player screen's player boxes.
+function fitNameBoxes(){
+  document.querySelectorAll(".ttl-chip, .pp-tile bdi, .pp-tile-invite span").forEach(el => {
     let fs = parseFloat(getComputedStyle(el).fontSize);
     while (el.scrollWidth > el.clientWidth + 1 && fs > 11) { fs -= 1; el.style.fontSize = fs + "px"; }
   });
@@ -6201,7 +6196,7 @@ function renderTableTimeline(g, c, myPlayerId){
         ${(() => {
           const cols = order.length <= 4 ? Math.max(order.length, 1) : order.length <= 6 ? 3 : order.length <= 8 ? 4 : 3;
           // The wider each name's box, the bigger its name (long ones shrink to fit - see
-          // fitTimelineChips).
+          // fitNameBoxes).
           const fs = cols <= 2 ? 20 : cols === 3 ? 18 : 16;
           return `<div class="ttl-chips" style="grid-template-columns:repeat(${cols},1fr);font-size:${fs}px;">${chips}</div>`;
         })()}
@@ -7902,7 +7897,7 @@ function attachHandlers(){
     timelineHighlight[gid] = timelineHighlight[gid] === pid ? null : pid;
     render();
   });
-  fitTimelineChips();
+  fitNameBoxes();
   // Tapping a line in the chart picks that player, same as their chip below it. Lines
   // that share the tapped spot (several players at the same amount) - the first one in
   // tonight's entry order wins.
@@ -7931,14 +7926,6 @@ function attachHandlers(){
     const id = el.dataset.ppView;
     // Tapping the player already shown goes back to my own screen.
     playerViewTarget = (id === mine || id === playerViewTarget) ? null : id;
-    render();
-  });
-  app.querySelectorAll("[data-pp-more]").forEach(el => el.onchange = () => {
-    const v = el.value;
-    if (v === "__invite__") { inviteToGame(nav.gameId); render(); return; }
-    const g = getGame(nav.gameId);
-    const mine = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
-    playerViewTarget = v === mine ? null : v;
     render();
   });
   app.querySelectorAll("[data-rb-pick]").forEach(el => el.onclick = () => {
