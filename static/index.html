@@ -837,6 +837,8 @@ html.theme-light.theme-blue .btn-blue{background:#0b2f4a!important;border:1.5px 
 .seat-hint::after{content:"👇";position:absolute;left:50%;top:-30px;font-size:22px;line-height:1;transform:translateX(-50%);animation:seat-hand 1s ease-in-out infinite;pointer-events:none;}
 /* "הוספת שחקן" over the hand, bobbing with it. */
 .seat-hint::before{content:"הוספת\Aשחקן";white-space:pre;position:absolute;left:50%;top:-66px;font-size:13px;font-weight:700;line-height:1.15;text-align:center;color:var(--gold);text-shadow:0 1px 2px rgba(0,0,0,.35);transform:translateX(-50%);animation:seat-hand 1s ease-in-out infinite;pointer-events:none;z-index:2;}
+.seat-hint-side::before{left:auto;right:calc(50% + 16px);top:-36px;text-align:right;transform:none;animation:seat-hand-side 1s ease-in-out infinite;}
+@keyframes seat-hand-side{0%,100%{transform:translate(0,0)}50%{transform:translate(0,6px)}}
 @keyframes seat-hand{0%,100%{transform:translate(-50%,0)}50%{transform:translate(-50%,6px)}}
 .game-welcome-overlay.no-anim{animation:none;}
 .status-badge{display:inline-block;flex-shrink:0;font-family:'Rubik',sans-serif;font-size:11px;font-weight:700;color:#fff;border-radius:8px;padding:3px 8px;white-space:nowrap;letter-spacing:0;}
@@ -5955,7 +5957,10 @@ function renderTable(gameId){
       // else gets a plain circle (no +) that's still a valid drop target for repositioning
       // an already-seated player via drag, just not tappable to add someone new.
       const hintHere = i === hintSeatIdx;
-      return `<div class="seat-wrap${hintHere?' seat-hint':''}" style="left:${x}%;top:${y}%;" data-seat="${i}"><div class="seat-circle vacant">${admin?'+':''}</div></div>`;
+      // The top-left seat sits right under "מחשבון סיכויי פוקר" - there the hint's text goes
+      // beside the hand (on its left) instead of above it, clear of that label.
+      const hintCls = hintHere ? (visualPos(i) === 0 ? ' seat-hint seat-hint-side' : ' seat-hint') : '';
+      return `<div class="seat-wrap${hintCls}" style="left:${x}%;top:${y}%;" data-seat="${i}"><div class="seat-circle vacant">${admin?'+':''}</div></div>`;
     }
     const p = g.players.find(pl => pl.id === pid);
     const name = p ? p.name : "?";
