@@ -3172,6 +3172,9 @@ function go(screen, extra){
   lastSeenFeedEventKey = null;
   lastSeenHistoryKey = null;
   settlementFilterPlayerId = null;
+  // Entering a table always opens on the player screen, and its table screen (one swipe
+  // away) on the seats - the timeline only for as long as it's picked there.
+  if (screen === "table") setTableView("table");
   if (screen === "table" && nav.gameId) autoSeatSelf(nav.gameId);
   lockPortraitForScreen(screen);
   render();
@@ -6113,6 +6116,8 @@ function fitNameBoxes(){
 }
 function tableTimelineOn(){ try { return localStorage.getItem("poker-table-view") === "timeline"; } catch(e) { return false; } }
 function setTableView(v){ try { localStorage.setItem("poker-table-view", v); } catch(e) {} }
+// Opening the app (e.g. straight into a table from an invite link) starts on the seats too.
+setTableView("table");
 let timelineHighlight = {}; // gameId -> the player tapped in the chips row (shown in blue)
 const timelineListScroll = {}; // gameId -> scrollTop of "מה קרה בערב"
 function fmtElapsed(ms){
