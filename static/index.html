@@ -87,7 +87,7 @@ h1.sm{font-size:20px;}
 @keyframes pokerChipSpin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
 .card:active{transform:scale(0.98);}
 .card .name{font-weight:700;font-size:16px;}
-.club-front .name{font-size:24px;}
+.club-front .name,.card[data-new-community] .name{font-size:24px;}
 .card .meta{color:var(--muted);font-size:12px;margin-top:4px;display:flex;align-items:center;gap:5px;}
 .chev{color:#059669;flex-shrink:0;}
 .row{display:flex;align-items:center;gap:12px;}
@@ -4948,8 +4948,8 @@ function renderHome(){
         ${isSuperAdmin() ? `<button class="icon-btn" data-open-admin-settings title="הגדרות">${icon('gear')}</button>` : ""}
       </div>
       <h1 class="serif" style="margin-top:14px;">המועדונים שלי</h1>
-      <div class="sub" style="color:var(--text);font-size:21px;">צרו מועדון כדי לנהל שחקנים וערבי משחק</div>
-      <div style="color:var(--text);font-size:20px;margin-top:6px;line-height:1.6;">
+      <div class="sub home-sub1" style="color:var(--text);font-size:min(19px,4.5vw);">צרו מועדון כדי לנהל שחקנים וערבי משחק</div>
+      <div class="home-sub2" style="color:var(--text);font-size:min(19px,4.5vw);margin-top:6px;line-height:1.6;">
         מועדון מאגד את כל חברי המועדון שלכם - ותחתיו נפתחים ערבי המשחק (השולחנות) שלהם.
       </div>
     </div>
