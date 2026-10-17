@@ -79,8 +79,8 @@ body{
 .theme-toggle .tt-dot{width:22px;height:22px;border-radius:50%;border:1.5px solid rgba(255,255,255,.75);display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:0 1px 3px rgba(0,0,0,.35);}
 html.theme-light .theme-toggle{background:rgba(255,255,255,.6);color:var(--text);}
 .theme-opt{flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;padding:10px 6px 12px;border-radius:14px;border:2px solid var(--card-b);background:var(--card);color:var(--text);font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;}
-.night-closed-toggle{display:flex;align-items:center;gap:7px;cursor:pointer;color:var(--text);font-size:14px;font-weight:700;padding:6px 12px 6px 10px;border-radius:12px;border:1px solid rgba(212,175,55,.5);background:rgba(0,0,0,.2);}
-.night-closed-toggle input{width:18px;height:18px;accent-color:var(--gold);margin:0;}
+.night-closed-toggle{display:flex;align-items:center;gap:7px;cursor:pointer;color:var(--text);font-size:18px;font-weight:700;padding:6px 12px 6px 10px;border-radius:12px;border:1px solid rgba(212,175,55,.5);background:rgba(0,0,0,.2);}
+.night-closed-toggle input{width:22px;height:22px;accent-color:var(--gold);margin:0;}
 html.theme-light .night-closed-toggle{background:rgba(255,255,255,.55);}
 .theme-opt span{display:block;width:100%;height:64px;border-radius:10px;border:1px solid rgba(0,0,0,.2);}
 .theme-opt.on{border-color:var(--gold);box-shadow:0 0 0 2px rgba(212,175,55,.35);}
@@ -236,12 +236,12 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
    end-of-evening area unlocked by its "סיום ערב" checkbox. */
 .rb-frame{padding:14px 12px 14px;margin-top:16px;}
 .rb-cancel{margin:12px auto 0;width:72%;}
-.rb-cancel-head{display:flex;align-items:center;justify-content:space-between;width:100%;padding:9px 14px;border-radius:10px;font-family:inherit;font-size:15px;color:var(--text);cursor:pointer;
+.rb-cancel-head{display:flex;align-items:center;justify-content:space-between;width:100%;padding:9px 14px;border-radius:10px;font-family:inherit;font-size:19px;color:var(--text);cursor:pointer;
   background:rgba(0,0,0,.35);border:1px solid rgba(212,175,55,.45);}
 .rb-cancel-chev{width:10px;height:10px;border-right:2px solid var(--gold);border-bottom:2px solid var(--gold);transform:rotate(45deg) translateY(-3px);}
 .rb-cancel-chev.up{transform:rotate(-135deg) translateY(-3px);}
 .rb-cancel-list{border:1px solid rgba(212,175,55,.45);border-top:none;border-radius:0 0 10px 10px;background:rgba(0,0,0,.45);padding:4px 0;margin-top:-4px;}
-.rb-cancel-item{display:block;width:100%;text-align:right;padding:8px 14px;background:none;border:none;color:var(--text);font-family:inherit;font-size:15px;cursor:pointer;}
+.rb-cancel-item{display:block;width:100%;text-align:right;padding:8px 14px;background:none;border:none;color:var(--text);font-family:inherit;font-size:19px;cursor:pointer;}
 .rb-cancel-item:active{background:rgba(212,175,55,.15);}
 .rb-chips{display:flex;justify-content:space-between;gap:6px;}
 .rb-chip{width:72px;height:72px;border-radius:50%;flex:0 0 auto;cursor:pointer;color:#e7e5e4;font-weight:800;font-size:17px;font-family:inherit;
@@ -254,8 +254,8 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
 .rb-confirm:disabled{opacity:.45;cursor:not-allowed;}
 .lv-frame{padding:12px 12px 14px;}
 .lv-frame.lv-frame-top{margin-top:16px;}
-.lv-arm{display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text);font-size:15px;font-weight:700;margin-bottom:10px;}
-.lv-arm input{width:20px;height:20px;accent-color:var(--gold);flex-shrink:0;}
+.lv-arm{display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text);font-size:19px;font-weight:700;margin-bottom:10px;}
+.lv-arm input{width:24px;height:24px;accent-color:var(--gold);flex-shrink:0;}
 .lv-line{flex:1;height:2px;background:linear-gradient(90deg,transparent,rgba(110,231,183,.6));}
 .lv-body.off{display:none;}
 .lv-arm:has(+ .lv-body.off){margin-bottom:0;}
@@ -811,8 +811,6 @@ html.theme-light .tp-row{border-color:var(--card-b)!important;}
    the blue page; give them a deep navy fill and a light rim instead. */
 html.theme-light.theme-blue .btn-blue{background:#0b2f4a!important;border:1.5px solid rgba(255,255,255,.75)!important;box-shadow:0 3px 10px rgba(0,20,40,.35);}
 /* Alone at a new table: pointing hands at "הזמנת שחקן" and at an empty seat. */
-.invite-hint{position:relative;overflow:visible;}
-.invite-hint::after{content:"👈";position:absolute;right:-32px;top:50%;font-size:22px;line-height:1;transform:translateY(-50%);animation:pot-hand 1.1s ease-in-out infinite;pointer-events:none;}
 .alone-hint{flex-shrink:0;text-align:center;font-size:13px;font-weight:700;color:var(--gold);margin:-8px 20px 4px;cursor:pointer;}
 .alone-hint-arrow{display:inline-block;animation:alone-arrow 1.1s ease-in-out infinite;}
 @keyframes alone-arrow{0%,100%{transform:translateX(0)}50%{transform:translateX(-8px)}}
@@ -911,14 +909,15 @@ html.theme-light.theme-sand .rb-confirm{background:linear-gradient(180deg,#bf8a4
 .ttl-grid{stroke:var(--card-b);stroke-width:1;opacity:.6;}
 .ttl-zero{stroke:var(--muted);stroke-width:1;opacity:.7;}
 .ttl-ax{fill:var(--muted);font-size:9px;font-family:inherit;}
-.ttl-other{fill:none;stroke:var(--text);stroke-opacity:.28;stroke-width:1.3;}
 .ttl-me{fill:none;stroke:var(--gold);stroke-width:2.6;stroke-linejoin:round;}
 .ttl-sel{fill:none;stroke:#3b82f6;stroke-width:2.6;stroke-linejoin:round;}
 .ttl-me-dot{fill:var(--gold);stroke:var(--bg2);stroke-width:2;}
 .ttl-sel-dot{fill:#3b82f6;stroke:var(--bg2);stroke-width:2;}
 .ttl-label{fill:var(--text);font-size:10px;font-weight:700;font-family:inherit;}
-.ttl-chips{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 4px;}
-.ttl-chip{font-family:inherit;font-size:11px;padding:3px 9px;border-radius:999px;border:1px solid var(--card-b);background:transparent;color:var(--muted);cursor:pointer;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* Name chips fill the row: up to 4 players in one row; 5-6 in rows of 3; 7-8 in rows of
+   4; 9 in rows of 3 (columns set inline by player count). */
+.ttl-chips{display:grid;gap:6px;margin:8px 0 4px;}
+.ttl-chip{font-family:inherit;font-size:14px;padding:6px 6px;text-align:center;border-radius:999px;border:1px solid var(--card-b);background:transparent;color:var(--muted);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .ttl-chip.me{border-color:var(--gold);color:var(--gold);font-weight:700;}
 .ttl-chip.sel{border-color:#3b82f6;color:#3b82f6;font-weight:700;}
 /* The table screen is sized to the phone (no page scroll), so the timeline view fills what's
@@ -928,7 +927,7 @@ body.table-screen .ttl-wrap{flex:1;min-height:0;display:flex;flex-direction:colu
 body.table-screen .ttl-list-frame{flex:1;min-height:140px;display:flex;flex-direction:column;}
 body.table-screen .ttl-list-frame .ttl-list{flex:1;min-height:0;max-height:none;}
 .ttl-list{display:flex;flex-direction:column;max-height:330px;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding-left:2px;}
-.ttl-row{display:flex;gap:10px;align-items:baseline;padding:6px 2px;border-bottom:1px solid var(--card-b);font-size:13px;color:var(--text);}
+.ttl-row{display:flex;gap:10px;align-items:baseline;padding:6px 2px;border-bottom:1px solid var(--card-b);font-size:17px;color:var(--text);}
 .ttl-row:last-child{border-bottom:none;}
 .ttl-time{flex-shrink:0;min-width:34px;color:var(--gold);font-weight:700;font-variant-numeric:tabular-nums;direction:ltr;text-align:right;}
 .ttl-text{flex:1;min-width:0;}
@@ -5914,8 +5913,8 @@ function renderTable(gameId){
   const rotationOffset = (mySeatIdx >= 0 && mySeatIdx < 9) ? ((getMySeatPosition() - mySeatIdx) % 9 + 9) % 9 : 0;
   const visualPos = (i) => i === 9 ? 9 : (i + rotationOffset) % 9;
 
-  // The "seat someone here" hand goes on the empty seat closest to the invite button
-  // (top-left corner of the screen), so the two pointers read together.
+  // While I'm alone at the table, a "seat someone here" hand on the empty seat closest to
+  // the top-left corner (inviting itself is on the player screen's invite tile).
   let hintSeatIdx = -1;
   if (aloneAtTable && isTableAdmin(g, c)) {
     let best = Infinity;
@@ -6058,7 +6057,6 @@ function renderTable(gameId){
     ${watchStripHtml(g)}
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:0 20px 10px;">
       <div class="tv-seg" role="tablist"><button type="button" class="${tableTimelineOn() ? '' : 'on'}" data-table-view="table">שולחן</button><button type="button" class="${tableTimelineOn() ? 'on' : ''}" data-table-view="timeline">ציר זמן</button></div>
-      <button class="icon-btn gold${aloneAtTable?' invite-hint':''}" data-invite-game="${g.id}" title="הזמנת שחקנים" style="flex-shrink:0;display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;white-space:nowrap;padding:5px 7px;">${icon('share')}הזמנת שחקנים</button>
     ${!allCashedOut ? `<div style="display:flex;align-items:center;gap:8px;">
       <span data-open-poker-odds class="odds-label" style="color:#C8902F;font-size:12px;text-align:center;line-height:1.3;cursor:pointer;">מחשבון<br>סיכויי פוקר</span>
       <button class="icon-btn" data-open-poker-odds title="מה הסיכויים שלי" style="flex-shrink:0;width:48px;height:auto;background:none;border:none;padding:0;display:inline-flex;align-items:center;justify-content:center;">
@@ -6122,7 +6120,11 @@ function renderTableTimeline(g, c, myPlayerId){
     if (!co) pts.push([end, v]);
     return {pid, pts, last: v, out: !!co};
   });
-  const vals = series.flatMap(s => s.pts.map(p => p[1]));
+  const sel = timelineHighlight[g.id];
+  // Only my own line and the picked player's are drawn (and set the scale) - the rest
+  // made a tangle; picking someone (chip or tap) brings their line in.
+  const shown = series.filter(s => s.pid === myPlayerId || s.pid === sel);
+  const vals = shown.flatMap(s => s.pts.map(p => p[1]));
   const hi = Math.max(0, ...vals), lo = Math.min(0, ...vals);
   const W = 360, H = 200, pl = 40, pr = 10, pt = 10, pb = 22;
   const X = ts => pl + (W - pl - pr) * (ts - t0) / span;
@@ -6136,11 +6138,9 @@ function renderTableTimeline(g, c, myPlayerId){
   for (let m = 0; m * 60000 <= span; m += tickStep) {
     svg += `<text class="ttl-ax" x="${X(t0 + m * 60000)}" y="${H - 6}" text-anchor="middle">${fmtElapsed(m * 60000)}</text>`;
   }
-  const sel = timelineHighlight[g.id];
   const pathOf = s => s.pts.map((p, i) => `${i ? "L" : "M"}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(" ");
   // Everyone thin and gray in the background; me (gold) and the tapped player (blue)
   // drawn on top with their current figure at the end of the line.
-  series.forEach(s => { if (s.pid !== myPlayerId && s.pid !== sel) svg += `<path class="ttl-other" d="${pathOf(s)}"><title>${esc(name(s.pid))}</title></path>`; });
   series.filter(s => s.pid === sel && s.pid !== myPlayerId).concat(series.filter(s => s.pid === myPlayerId)).forEach(s => {
     const cls = s.pid === myPlayerId ? "ttl-me" : "ttl-sel";
     const [ex, ey] = s.pts[s.pts.length - 1];
@@ -6190,8 +6190,8 @@ function renderTableTimeline(g, c, myPlayerId){
   return `
     <div class="px5 ttl-wrap">
       <fieldset class="leave-frame stats-frame" style="margin-top:0;"><legend>קניות לאורך הערב</legend>
-        <div class="ttl-chart"><svg viewBox="0 0 ${W} ${H}" width="100%" direction="ltr" data-ttl-lines="${esc(JSON.stringify(series.map(s => [s.pid, s.pts.map(p => [Math.round(X(p[0])), Math.round(Y(p[1]))])])))}">${svg}</svg></div>
-        <div class="ttl-chips">${chips}</div>
+        <div class="ttl-chart"><svg viewBox="0 0 ${W} ${H}" width="100%" direction="ltr" data-ttl-lines="${esc(JSON.stringify(shown.map(s => [s.pid, s.pts.map(p => [Math.round(X(p[0])), Math.round(Y(p[1]))])])))}">${svg}</svg></div>
+        <div class="ttl-chips" style="grid-template-columns:repeat(${order.length <= 4 ? Math.max(order.length, 1) : order.length <= 6 ? 3 : order.length <= 8 ? 4 : 3},1fr);">${chips}</div>
       </fieldset>
       <fieldset class="leave-frame stats-frame ttl-list-frame"><legend>מה קרה בערב</legend>
         <div class="ttl-list" data-ttl-list="${g.id}">${list}</div>
