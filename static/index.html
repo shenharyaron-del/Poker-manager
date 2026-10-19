@@ -995,6 +995,10 @@ body.table-screen .ttl-list-frame .ttl-list{flex:1;min-height:0;max-height:none;
 .ttl-row:last-child{border-bottom:none;}
 .ttl-time{flex-shrink:0;min-width:34px;color:var(--gold);font-weight:700;font-variant-numeric:tabular-nums;direction:ltr;text-align:right;}
 .ttl-text{flex:1;min-width:0;}
+.ttl-start .ttl-text b{color:var(--gold);}
+/* "תחילת משחק" on the player screen (see gameStarted) */
+.gs-start{display:flex;align-items:center;justify-content:center;gap:8px;font-size:20px;padding:14px 10px;margin-top:4px;flex-shrink:0;}
+.gs-wait{text-align:center;color:var(--muted);font-size:17px;padding:12px 0;flex-shrink:0;}
 .ttl-by,.feed-by{font-size:.8em;font-weight:400;opacity:.6;}
 .ttl-time.hl{color:#fff;background:#3b82f6;border-radius:6px;padding:0 5px;}
 /* "פתח בכרום" bar, only inside another app's built-in browser (see inAppBrowserBar). */
@@ -2080,6 +2084,12 @@ async function v2RemoveGamePlayer(gameId, playerId){
 async function v2AddBuyin(gameId, id, playerId, amount, actorName){
   await v2FetchWithRetry("POST", `/games/${gameId}/buyins`, {id, playerId, amount, actorName});
   getGame(gameId).buyins.push({id, playerId, amount, ts: Date.now(), actorName});
+}
+
+async function v2UpdateBuyinAmount(gameId, buyinId, amount){
+  await v2FetchWithRetry("PATCH", `/games/${gameId}/buyins/${buyinId}`, {amount});
+  const b = (getGame(gameId).buyins || []).find(x => x.id === buyinId);
+  if (b) b.amount = amount;
 }
 
 async function v2AddBuyinsBulk(gameId, buyins){
@@ -3183,7 +3193,8 @@ function tourGame(base, o){
     players: base.c.roster.map(pl => ({id: pl.id, name: pl.name})),
     // Chips on the table match the buy-ins, so the felt reads "קופה מאוזנת".
     liveChips: buyins.reduce((m, b) => { m[b.playerId] = (m[b.playerId]||0) + b.amount; return m; }, {}),
-    seats, buyins, events: [], playerPayments: [], payboxPayments: [], closed: false,
+    seats, buyins, playerPayments: [], payboxPayments: [], closed: false,
+    events: (o.alone || o.notStarted) ? [] : [{id: "__tour_start", type: "game_started", ts: now - 45*60*1000}],
     cashouts: o.cashedOut ? {[TOUR_ME]: {amount: myTotal + 80, ts: now}} : {},
   };
 }
@@ -3222,6 +3233,8 @@ function tourSteps(base){
       desc: "במסך השולחן לוחצים על כיסא פנוי עם הסימן (+) ומושיבים מיד שחקן אורח או חבר מהמועדון."},
     {view: "player", o: {}, sel: ".pp-tiles", title: "החברים מצטרפים",
       desc: "כל מי שמתיישב בשולחן מקבל ריבוע משלו כאן למעלה – בזמן אמת, אצל כולם."},
+    {view: "player", o: {notStarted: true}, sel: "[data-start-game]", admin: true, title: "תחילת משחק",
+      desc: 'כשכולם התיישבו לוחצים "תחילת משחק" – מכאן נספר הזמן בציר הזמן. ריביי לפני כן יכול פשוט להגדיל את הקנייה הראשונית.'},
     {view: "player", o: {}, sel: ".rb-frame", title: "ריביי – קנייה נוספת",
       desc: `נגמרו הז'יטונים? בוחרים סכום ולוחצים "ריביי". סך הקניות שלכם מתעדכן מיד.`},
     {view: "player", o: {}, sel: '.pp-tile[data-pp-view="' + TOUR_DANI + '"]', title: "ריביי לחבר",
@@ -5275,6 +5288,12 @@ function closedGameAlert(g, c){
   return { badge: "לא מאוזן", color: "#9f1239", text: `${diff > 0 ? "קופה בחוסר" : "קופה בעודף"} ₪${Math.round(Math.abs(diff))}` };
 }
 
+// "תחילת משחק" - a table admin's button on the player screen, saved as a game_started
+// event; its time is the timeline's 0:00. Until then there's no "סיימתי את הערב" / "ערב
+// סגור", and a rebuy offers to raise the entry instead. A night that's already closed or
+// has someone cashed out counts as started (nights from before the button existed).
+function gameStartEvent(g){ return (g.events || []).find(e => e.type === "game_started") || null; }
+function gameStarted(g){ return !!gameStartEvent(g) || !!g.closed || Object.keys(g.cashouts || {}).length > 0; }
 // One status per night, each with its own color (club screen cards + a small tag in the
 // game screens' header):
 //   ממתין לשחקנים - fewer than two seated, nobody's left yet
@@ -5630,6 +5649,9 @@ function renderPlayerScreen(gameId){
   // between players - paybox/bit groups close through their own payment flow. On the
   // player screen since that's where the admin spends the night.
   const showClosedToggle = isAdminView && !(c.settlementDefault === "paybox" || c.settlementDefault === "bit");
+  // Before "תחילת משחק" (see gameStarted): the start button (table admins) instead of
+  // "סיימתי את הערב" / "ערב סגור".
+  const notStarted = !gameStarted(g);
   // Any player can work on another player's screen (rebuy / end of night for them) - only
   // removing someone from the table or bringing them back stays admin-only (see
   // adminPlayerActions).
@@ -5915,9 +5937,12 @@ function renderPlayerScreen(gameId){
         ${cashedOutInfoHtml}
       </div>
       ${(cashedOut || armed) ? "" : `<fieldset class="leave-frame rb-frame" style="margin-bottom:14px;">${rebuyHtml}</fieldset>`}
-      ${cashedOut ? "" : `<fieldset class="leave-frame lv-frame${armed?' lv-frame-top':''}">${leaveHtml}</fieldset>`}
+      ${(cashedOut || (notStarted && !armed)) ? "" : `<fieldset class="leave-frame lv-frame${armed?' lv-frame-top':''}">${leaveHtml}</fieldset>`}
+      ${(notStarted && !cashedOut) ? (isAdminView
+        ? `<button type="button" class="btn btn-primary btn-block gs-start" data-start-game="${g.id}">${icon('check')} תחילת משחק</button>`
+        : `<div class="gs-wait">המשחק עוד לא התחיל</div>`) : ""}
       ${adminPlayerActions}
-      ${showClosedToggle ? `<div style="display:flex;justify-content:center;margin-top:12px;flex-shrink:0;"><label class="night-closed-toggle" data-toggle-end-night="${g.id}"><input type="checkbox" ${g.closed?'checked':''} onclick="return false;"><span>ערב סגור</span></label></div>` : ""}
+      ${(showClosedToggle && !notStarted) ? `<div style="display:flex;justify-content:center;margin-top:12px;flex-shrink:0;"><label class="night-closed-toggle" data-toggle-end-night="${g.id}"><input type="checkbox" ${g.closed?'checked':''} onclick="return false;"><span>ערב סגור</span></label></div>` : ""}
     </div>
   `;
 }
@@ -6412,7 +6437,12 @@ function fmtElapsed(ms){
 function renderTableTimeline(g, c, myPlayerId){
   const buyins = (g.buyins || []).slice().sort((a, b) => (a.ts || 0) - (b.ts || 0));
   if (!buyins.length) return `<div class="empty" style="padding:30px 20px;">אין עדיין קניות בערב הזה.</div>`;
-  const t0 = buyins[0].ts || 0;
+  // 0:00 is "תחילת משחק" when it was pressed (see gameStartEvent) - buy-ins made before
+  // it are listed above that line without a time and sit on the chart's 0:00. Older
+  // nights without it count from the first buy-in, as before.
+  const startEv = gameStartEvent(g);
+  const t0 = startEv ? (startEv.ts || buyins[0].ts || 0) : (buyins[0].ts || 0);
+  const atOrAfterStart = ts => Math.max(ts || t0, t0);
   const name = id => { const p = g.players.find(x => x.id === id); return p ? p.name : "שחקן"; };
   const fem = id => playerIsFemale(g, c, id);
   const cashouts = g.cashouts || {};
@@ -6426,7 +6456,7 @@ function renderTableTimeline(g, c, myPlayerId){
   const end = g.closed ? lastTs : Math.max(lastTs, Date.now());
   const span = Math.max(end - t0, 60000);
   const series = order.map(pid => {
-    const steps = buyins.filter(b => b.playerId === pid).map(b => ({ts: b.ts || t0, d: -b.amount}));
+    const steps = buyins.filter(b => b.playerId === pid).map(b => ({ts: atOrAfterStart(b.ts), d: -b.amount}));
     const co = cashouts[pid];
     if (co) steps.push({ts: co.ts || end, d: co.amount || 0});
     steps.sort((a, b) => a.ts - b.ts);
@@ -6480,8 +6510,8 @@ function renderTableTimeline(g, c, myPlayerId){
     if (isPotFixBuyin(b)) return;
     const first = !seen[b.playerId];
     seen[b.playerId] = true;
-    if (first) entryTs[b.playerId] = b.ts;
-    rows.push({ts: b.ts, pid: b.playerId, text: first
+    if (first) entryTs[b.playerId] = atOrAfterStart(b.ts);
+    rows.push({ts: b.ts, pid: b.playerId, pre: !!startEv && (b.ts || 0) < t0, text: first
       ? `<b>${esc(name(b.playerId))}</b> ${fem(b.playerId) ? "נכנסה" : "נכנס"} עם ₪${b.amount}${by(b.playerId, b.actorName)}`
       : `<b>${esc(name(b.playerId))}</b> ריביי ₪${b.amount}${by(b.playerId, b.actorName)}`});
   });
@@ -6498,11 +6528,17 @@ function renderTableTimeline(g, c, myPlayerId){
     else if (e.type === "pot_fixed") rows.push({ts: e.ts, text: `סידור קופה${e.actorName ? ` <span class="ttl-by">ע"י ${esc(e.actorName)}</span>` : ""}`});
     else if (e.type === "night_closed") rows.push({ts: e.ts, text: `הערב נסגר${e.actorName ? ` <span class="ttl-by">ע"י ${esc(e.actorName)}</span>` : ""}`});
     else if (e.type === "night_declared_over") rows.push({ts: e.ts, text: `הוכרז על סיום הערב${e.actorName ? ` <span class="ttl-by">ע"י ${esc(e.actorName)}</span>` : ""}`});
+    else if (e.type === "game_started") rows.push({ts: t0, start: true, text: `<b>תחילת משחק</b> ${fmtTime(t0)}${e.actorName ? ` <span class="ttl-by">ע"י ${esc(e.actorName)}</span>` : ""}`});
     else if (e.type === "night_reopened") rows.push({ts: e.ts, text: `הערב נפתח מחדש${e.actorName ? ` <span class="ttl-by">ע"י ${esc(e.actorName)}</span>` : ""}`});
   });
-  rows.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  // Pre-start entries first (in the order they sat down), then the start line, then the rest.
+  const rank = r => r.pre ? 0 : r.start ? 1 : 2;
+  rows.sort((a, b) => rank(a) - rank(b) || (a.ts || 0) - (b.ts || 0));
   // The player tapped in the chips row (see timelineHighlight) - their rows' times light up.
-  const list = rows.map(r => `<div class="ttl-row"><span class="ttl-time${sel && r.pid === sel ? ' hl' : ''}">${fmtElapsed((r.ts || t0) - t0)}</span><span class="ttl-text">${r.text}</span></div>`).join("");
+  // A pre-start row has no time - its text starts where the start line's 0:00 does.
+  const list = rows.map(r => r.pre
+    ? `<div class="ttl-row ttl-pre"><span class="ttl-text">${r.text}</span></div>`
+    : `<div class="ttl-row${r.start ? ' ttl-start' : ''}"><span class="ttl-time${sel && r.pid === sel ? ' hl' : ''}">${fmtElapsed((r.ts || t0) - t0)}</span><span class="ttl-text">${r.text}</span></div>`).join("");
   return `
     <div class="px5 ttl-wrap">
       <fieldset class="leave-frame stats-frame" style="margin-top:0;"><legend>קניות לאורך הערב</legend>
@@ -8181,7 +8217,25 @@ function attachHandlers(){
     // A "rebuy" in the first minute after sitting down is usually a new player re-entering
     // their entry amount, not a real second purchase - ask before adding it on top.
     const myBuyins = (g.buyins||[]).filter(b => b.playerId === pid);
-    if (myBuyins.length === 1 && myBuyins[0].ts && Date.now() - myBuyins[0].ts < 60*1000) {
+    const mineId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+    if (!gameStarted(g) && myBuyins.length) {
+      // Before "תחילת משחק" a rebuy is usually someone topping up what they sat down
+      // with - offer to fold it into their entry (one buy-in of the new total) instead.
+      const entry = myBuyins.slice().sort((a, b) => (a.ts || 0) - (b.ts || 0))[0];
+      const total = Math.round((entry.amount + amt) * 100) / 100;
+      const whose = pid === mineId ? "שלך" : `של ${(g.players.find(pl => pl.id === pid) || {}).name || "השחקן"}`;
+      const raise = await showConfirm(`המשחק עוד לא התחיל. להגדיל את הקנייה הראשונית ${whose} מ-₪${entry.amount} ל-₪${total}?`, {okLabel: `כן, ל-₪${total}`, cancelLabel: `לא, ריביי ₪${amt}`, outside: null});
+      if (raise === null) return;
+      if (raise) {
+        try {
+          if (USE_RELATIONAL_API) await v2UpdateBuyinAmount(gameId, entry.id, total);
+          else await mutateAndSave(() => { const b = getGame(gameId).buyins.find(x => x.id === entry.id); if (b) b.amount = total; });
+        } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+        render();
+        showAlert(`הקנייה הראשונית עודכנה ל-₪${total}`);
+        return;
+      }
+    } else if (myBuyins.length === 1 && myBuyins[0].ts && Date.now() - myBuyins[0].ts < 60*1000) {
       const mine = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
       const who = pid === mine ? "נכנסת" : `${(g.players.find(pl => pl.id === pid) || {}).name || "השחקן"} נכנס/ה`;
       const ok = await showConfirm(`${who} לשולחן עם ₪${myBuyins[0].amount} לפני פחות מדקה. להוסיף ריביי של ₪${amt} מעל הקנייה הראשונה?`, {okLabel: "כן, הוסף ריביי", cancelLabel: "ביטול"});
@@ -8256,6 +8310,23 @@ function attachHandlers(){
     const amt = picked === "other" ? parseFloat((el.parentElement.querySelector("#rb-other-amount")||{}).value) : (picked !== undefined ? picked : amounts[0]);
     if (!amt || amt <= 0) { showAlert("הזינו סכום לריביי."); return; }
     doPlayerBuyin(amt, el, pid);
+  });
+  app.querySelectorAll("[data-start-game]").forEach(el => el.onclick = async () => {
+    const gameId = el.dataset.startGame;
+    el.disabled = true;
+    showButtonLoading(el);
+    const ev = {id: uid(), type: "game_started", actorName: myIdentity.name};
+    try {
+      if (USE_RELATIONAL_API) {
+        await v2FetchWithRetry("POST", `/games/${gameId}/events`, ev);
+        const g = getGame(gameId);
+        if (!g.events) g.events = [];
+        if (!gameStartEvent(g)) g.events.push({...ev, ts: Date.now()});
+      } else {
+        await mutateAndSave(() => { const g = getGame(gameId); if (!gameStartEvent(g)) logGameEvent(g, "game_started", undefined, myIdentity.name); });
+      }
+    } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); el.disabled = false; render(); return; }
+    render();
   });
   app.querySelectorAll("[data-rb-cancel-toggle]").forEach(el => el.onclick = () => { const k = nav.gameId + ":" + viewedPid(); rebuyCancelOpen[k] = !rebuyCancelOpen[k]; render(); });
   app.querySelectorAll("[data-leave-arm]").forEach(el => el.onchange = () => { leaveArmed[nav.gameId + ":" + viewedPid()] = el.checked; render(); });

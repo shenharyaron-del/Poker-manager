@@ -2119,6 +2119,33 @@ def v2_add_buyins_bulk(game_id):
     return jsonify({"ok": True, "count": len(buyins)}), 201
 
 
+@app.route("/api/v2/games/<game_id>/buyins/<buyin_id>", methods=["PATCH"])
+def v2_update_buyin_amount(game_id, buyin_id):
+    denied = _guard(game_id=game_id)
+    if denied:
+        return denied
+    # A "rebuy" before the game has started is folded into the player's entry instead
+    # (the client asks first) - this raises the entry buy-in's amount in place, keeping
+    # its id and time.
+    body = request.get_json(silent=True) or {}
+    try:
+        amount = float(body.get("amount"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "amount required"}), 400
+    if amount <= 0:
+        return jsonify({"error": "amount must be positive"}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE buyins SET amount = %s WHERE id = %s AND game_id = %s", (amount, buyin_id, game_id))
+            updated = cur.rowcount
+            if updated:
+                cur.execute("UPDATE games SET updated_at = now() WHERE id = %s", (game_id,))
+        conn.commit()
+    if not updated:
+        return jsonify({"error": "not found"}), 404
+    return jsonify({"ok": True})
+
+
 @app.route("/api/v2/games/<game_id>/buyins/<buyin_id>", methods=["DELETE"])
 def v2_delete_buyin(game_id, buyin_id):
     denied = _guard(game_id=game_id)
