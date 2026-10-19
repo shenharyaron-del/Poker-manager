@@ -984,6 +984,22 @@ html.theme-light.theme-sand .rb-confirm{background:linear-gradient(180deg,#bf8a4
 .ttl-chip{font-family:inherit;font-size:inherit;padding:8px 6px;text-align:center;border-radius:999px;border:1px solid var(--card-b);background:transparent;color:var(--muted);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .ttl-chip.me{border-color:var(--gold);color:var(--gold);font-weight:700;}
 .ttl-chip.sel{border-color:#3b82f6;color:#3b82f6;font-weight:700;}
+/* Player boxes (player screen) and name chips (timeline): raised 3-D buttons that stand
+   off the page - felt green with a gold rim on the dark theme, cream with a gold rim on
+   sand / blue. The one being looked at is gold; in the timeline the picked player is
+   blue, matching their line in the chart. */
+.pp-tile,.ttl-chip{background:linear-gradient(180deg,#2f7a58 0%,#1a5a3f 55%,#0f3d2b 100%);border:1px solid #d4af37;border-style:solid;color:#fdf6e3;border-radius:12px;box-shadow:0 3px 0 #0a2a1d,0 5px 8px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);}
+.pp-tile small{color:#e9d8bd;}
+.pp-tile[data-pp-view]::after{border-color:#f2c14e;}
+.pp-tile-invite{color:#f2c14e;}
+.ttl-chip.me{color:#f2c14e;}
+html.theme-light .pp-tile,html.theme-light.theme-blue .pp-tile,html.theme-light .ttl-chip{background:linear-gradient(180deg,#fffaf0 0%,#f1e3c6 100%);border:1px solid #c9a46a;color:#3a2614;box-shadow:0 3px 0 #b08a52,0 5px 8px rgba(0,0,0,.25),inset 0 1px 0 #fff;}
+html.theme-light .pp-tile small{color:#7a5a3a;}
+html.theme-light .pp-tile[data-pp-view]::after{border-color:#a86a12;}
+html.theme-light .pp-tile-invite{color:#9a5f12;}
+html.theme-light .ttl-chip.me{color:#9a5f12;}
+.pp-tile.on,html.theme-light .pp-tile.on{background:linear-gradient(180deg,#fde68a,#e9b949);color:#2a1d05;border-color:#a87412;box-shadow:0 3px 0 #a87412,0 5px 8px rgba(0,0,0,.25),inset 0 1px 0 #fff7d6;}
+.ttl-chip.sel,html.theme-light .ttl-chip.sel{background:linear-gradient(180deg,#60a5fa,#2563eb);color:#fff;border-color:#1e40af;box-shadow:0 3px 0 #1e3a8a,0 5px 8px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.35);}
 /* The table screen is sized to the phone (no page scroll), so the timeline view fills what's
    left under the header and "מה קרה בערב" takes the rest, scrolling inside its own box -
    it always ends at the bottom of the screen, whatever the phone's height. */
