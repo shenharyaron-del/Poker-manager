@@ -985,6 +985,9 @@ html.theme-light.theme-sand .rb-confirm{background:linear-gradient(180deg,#bf8a4
 .gender-seg button{width:34px;border:none;background:var(--input);color:var(--muted);font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;padding:0;}
 .gender-seg button + button{border-right:1px solid var(--input-b);}
 .gender-seg button.on{background:var(--gold);color:var(--gold-text);}
+/* Blue theme windows: the main buttons and the picked ז / נ were the deep brown used for
+   gold text on light cards - the blue theme's bright gold instead, like its rebuy button. */
+html.theme-light.theme-blue .modal .btn-primary,html.theme-light.theme-blue .modal .gender-seg button.on{background:linear-gradient(180deg,#fde68a,#f2c14e 45%,#c8922a);color:#2a1d05;border-color:#c8922a;}
 .custom-alert-box span.one-line{white-space:nowrap;overflow:hidden;min-width:0;flex:1;}
 /* Table screen: שולחן / ציר זמן toggle and the timeline view */
 .tv-seg{display:flex;border:1px solid rgba(212,175,55,.55);border-radius:10px;overflow:hidden;flex-shrink:0;}
