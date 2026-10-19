@@ -3208,8 +3208,29 @@ def update_account():
     # from - an invite link opens in WhatsApp's or another browser with its own storage.
     if updates.get("theme") in ("dark", "sand", "blue"):
         account["theme"] = updates["theme"]
+    # A player can only mark the first-game walkthrough as seen for themselves - turning
+    # it back on goes through set_seen_game_tour (super admin).
+    if updates.get("seenGameTour") is True:
+        account["seenGameTour"] = True
     _save_account(email, account)
     return jsonify({"email": email, **account})
+
+
+@app.route("/api/auth/set-seen-tour", methods=["POST"])
+def set_seen_game_tour():
+    # Super admin's Users screen: whether a user has already seen the first-game
+    # walkthrough - clearing it makes it play again the next time they sit down.
+    ok, err = _require_super_admin(request.args.get("clientId", ""))
+    if not ok:
+        return err
+    body = request.get_json(silent=True) or {}
+    target_email = str(body.get("email", "")).strip().lower()
+    if not target_email:
+        return jsonify({"error": "missing email"}), 400
+    target_account = _get_account(target_email) or _default_account(target_email)
+    target_account["seenGameTour"] = bool(body.get("seen"))
+    _save_account(target_email, target_account)
+    return jsonify({"ok": True})
 
 
 @app.route("/api/auth/set-role", methods=["POST"])

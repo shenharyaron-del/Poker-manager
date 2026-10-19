@@ -769,6 +769,10 @@ html.theme-light.theme-sand .lv-line{background:linear-gradient(90deg,transparen
 html.theme-light.theme-blue .seat-info{background:rgba(226,239,245,.95);--gold:#a86a12;}
 html.theme-light.theme-sand .seat-info{background:rgba(74,46,20,.9);--text:#fbf3e6;--muted:#e9d8bd;--gold:#f2c14e;}
 html.theme-light.theme-sand .seat-circle.vacant{border-color:rgba(90,55,20,.55);color:#6b4a1f;background:rgba(90,55,20,.08);}
+/* A cashed-out seat's profit/loss (renderTable) is light green/pink for the dark felt -
+   unreadable on the blue theme's light nameplates, so darker shades here. */
+html.theme-light.theme-blue .seat-co-profit.pos{color:#047857!important;}
+html.theme-light.theme-blue .seat-co-profit.neg{color:#be123c!important;}
 /* Selected rebuy chip on the light themes - a filled gold chip with a solid rim and a lift,
    so the pick stands out clearly against the pale unselected chips. */
 html.theme-light .rb-chip.on,html.theme-light.theme-sand .rb-chip.on{color:#3a2208;border:3px solid #8a560c;
@@ -819,6 +823,29 @@ html.theme-light .club-swipe .club-front.card-open{background:#fff8e6;}
 .club-act-delete{background:#9f1239;color:#fff;}
 .club-swipe-hint{display:flex;align-items:center;justify-content:center;gap:4px;margin:-4px 0 10px;font-size:11px;color:var(--muted);}
 .club-swipe-hint svg{width:12px;height:12px;}
+/* First-game walkthrough (see openGameTour): the real screens, drawn for a sample game in
+   a copy of #app's table-screen column; everything under .gt-app is display only. */
+.game-tour{position:fixed;inset:0;z-index:100000;background:var(--bg2,#0c0a09);}
+.game-tour .gt-app{max-width:520px;margin:0 auto;height:100vh;height:100dvh;height:var(--real-vh,100dvh);display:flex;flex-direction:column;pointer-events:none;}
+.game-tour .gt-app .table-swipe-root{display:flex;flex-direction:column;flex:1;min-height:0;}
+.game-tour .gt-app .swipe-track-viewport{flex:1;min-height:0;overflow:hidden;position:relative;}
+.game-tour .gt-app .swipe-track{display:flex;direction:ltr;height:100%;}
+.game-tour .gt-app .swipe-page{flex:0 0 100%;width:100%;min-width:0;direction:rtl;display:flex;flex-direction:column;min-height:0;}
+.gt-highlight{position:fixed;border-radius:14px;border:2px solid #fbbf24;box-shadow:0 0 0 9999px rgba(0,0,0,.72),0 0 15px #fbbf24;transition:all .35s cubic-bezier(.2,.8,.2,1);pointer-events:none;z-index:2;}
+.gt-arrow{position:fixed;font-size:28px;z-index:3;transition:left .35s ease,top .35s ease;animation:gtBounce .9s infinite alternate ease-in-out;filter:drop-shadow(0 2px 5px rgba(0,0,0,.8));pointer-events:none;}
+@keyframes gtBounce{from{transform:translateY(0);}to{transform:translateY(-8px);}}
+.gt-card{position:fixed;left:50%;transform:translateX(-50%);width:min(440px,calc(100% - 32px));z-index:4;background:#064e3b;border:2px solid #fbbf24;border-radius:16px;padding:14px 15px;box-shadow:0 12px 30px rgba(0,0,0,.9);color:#fff;direction:rtl;}
+.gt-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.gt-badge{background:#fbbf24;color:#1c1917;font-size:11px;font-weight:800;border-radius:6px;padding:2px 8px;}
+.gt-skip{background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.3);color:#fff;font-family:inherit;font-size:12px;font-weight:700;border-radius:999px;padding:3px 10px;cursor:pointer;}
+.gt-title{font-size:16px;font-weight:700;margin-bottom:5px;}
+.gt-desc{font-size:13px;color:#d1fae5;line-height:1.5;margin-bottom:12px;}
+.gt-actions{display:flex;justify-content:space-between;align-items:center;}
+.gt-next{background:#fbbf24;color:#1c1917;border:none;border-radius:10px;padding:8px 18px;font-family:inherit;font-weight:800;font-size:14px;cursor:pointer;}
+.gt-prev{background:none;border:none;color:#6ee7b7;font-family:inherit;font-size:13px;cursor:pointer;text-decoration:underline;}
+.gt-dots{display:flex;gap:4px;}
+.gt-dots span{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.25);}
+.gt-dots span.on{background:#fbbf24;}
 @keyframes club-peek{0%{transform:translateX(0)}35%{transform:translateX(-30%)}55%{transform:translateX(-30%)}100%{transform:translateX(0)}}
 .club-swipe .club-front.club-hint-peek{animation:club-peek 1.4s ease-in-out 1;}
 html.theme-light .tp-row{border-color:var(--card-b)!important;}
@@ -2452,6 +2479,7 @@ async function checkLoginSession(){
 function applyAccountToIdentity(account){
   myIdentity.email = account.email;
   myIdentity.role = account.role;
+  myIdentity.seenGameTour = !!account.seenGameTour;
   if (account.name) myIdentity.name = account.name;
   // Unify this device's player identity (roster/buy-in linking) with the account's
   // canonical one, BEFORE writing photo/phone below, so they land on the right
@@ -3077,6 +3105,203 @@ function markGameWelcomed(gameId){
 // doRefreshNow to skip re-rendering while it's up, same as it already does for an open
 // modal, so the periodic/SSE auto-refresh doesn't replace the DOM (restarting its fade-in
 // animation, and mid-read) every few seconds while the player is reading it.
+// First-game walkthrough (see openGameTour below: the real screens, drawn for a sample game -
+// it never touches the real game): plays once per user, right after the welcome screen, the
+// first time they're seated at a table. "Seen" lives on the account (myIdentity.seenGameTour,
+// from applyAccountToIdentity) so it follows them across devices; a super admin can reset it
+// from the Users screen. Lives in a div appended to <body>, outside #app, so render() never
+// rebuilds it. "?demo=tour" plays it once more for anyone, without touching the saved flag.
+let gameTourDemo = false;
+try {
+  const u = new URL(location.href);
+  if (u.searchParams.get("demo") === "tour") {
+    gameTourDemo = true;
+    u.searchParams.delete("demo");
+    history.replaceState(history.state, "", u.pathname + u.search + u.hash);
+  }
+} catch(e) {}
+let gameTourGameId = null;
+function shouldShowGameTour(g){
+  if (!g || nav.screen !== "table" || nav.gameId !== g.id || !isSeatedInGame(g)) return false;
+  const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+  if (!myPlayerId || (myPlayerId in (g.cashouts||{})) || !hasWelcomedGame(g.id)) return false;
+  return gameTourDemo || !myIdentity.seenGameTour;
+}
+// The walkthrough draws the app's REAL screens (renderPlayerScreen/renderTable) for a sample
+// game - the viewer plus three made-up players - so it always looks exactly like the app,
+// including any later change to those screens. The sample game/club are pushed into state
+// only for the duration of one synchronous render call (tourSandbox) and removed right
+// after, so nothing is ever saved, synced or shown anywhere else.
+const TOUR_G = "__tour_game", TOUR_C = "__tour_club";
+const TOUR_ME = "__tour_me", TOUR_DANI = "__tour_p1", TOUR_YOSI = "__tour_p2", TOUR_MICHAL = "__tour_p3";
+let gameTour = null; // {steps, i, base} while the walkthrough is open
+function tourBase(realG){
+  const realC = getCommunity(realG.communityId) || {roster:[]};
+  const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[realG.communityId];
+  const realMe = (realC.roster||[]).find(pl => pl.id === myPlayerId) || {};
+  const meName = ((realG.players||[]).find(pl => pl.id === myPlayerId) || {}).name || myIdentity.name || "אני";
+  const amounts = getBuyinAmounts(realC);
+  const firstBuyin = (realG.buyins||[]).filter(b => b.playerId === myPlayerId).sort((a,b) => (a.ts||0)-(b.ts||0))[0];
+  const entry = firstBuyin ? firstBuyin.amount : amounts[0];
+  // Same name/creator/admin fields as the real club and table, so isTableAdmin answers
+  // the same for the sample game as for the real one (admin-only steps follow it).
+  const c = Object.assign({}, realC, {
+    id: TOUR_C,
+    roster: [
+      Object.assign({}, realMe, {id: TOUR_ME, name: meName}),
+      {id: TOUR_DANI, name: "דני"}, {id: TOUR_YOSI, name: "יוסי"}, {id: TOUR_MICHAL, name: "מיכל", gender: "female"},
+    ],
+  });
+  return {c, realG, meName, amounts, entry, admin: isTableAdmin(realG, realC)};
+}
+// One step's sample game: who's seated, buy-ins, cash-outs.
+function tourGame(base, o){
+  const now = Date.now();
+  const others = o.alone ? [] : [TOUR_DANI, TOUR_YOSI, TOUR_MICHAL];
+  const seats = new Array(10).fill(null);
+  seats[0] = TOUR_ME; others.forEach((id, i) => { seats[2 + i*2] = id; });
+  const buyins = [TOUR_ME, ...others].map((id, i) => ({id: `__tour_b${i}`, playerId: id, amount: base.entry, ts: now - 50*60*1000 + i*60*1000}));
+  if (o.myRebuy) buyins.push({id: "__tour_rb", playerId: TOUR_ME, amount: base.amounts[0], ts: now - 10*60*1000});
+  const myTotal = base.entry + (o.myRebuy ? base.amounts[0] : 0);
+  return {
+    id: TOUR_G, communityId: TOUR_C, name: base.realG.name, date: base.realG.date, createdByName: base.realG.createdByName,
+    players: base.c.roster.map(pl => ({id: pl.id, name: pl.name})),
+    // Chips on the table match the buy-ins, so the felt reads "קופה מאוזנת".
+    liveChips: buyins.reduce((m, b) => { m[b.playerId] = (m[b.playerId]||0) + b.amount; return m; }, {}),
+    seats, buyins, events: [], playerPayments: [], payboxPayments: [], closed: false,
+    cashouts: o.cashedOut ? {[TOUR_ME]: {amount: myTotal + 80, ts: now}} : {},
+  };
+}
+// Runs fn with the sample game/club in place (and the viewer seated in it), then puts
+// every touched global back exactly as it was.
+function tourSandbox(g, c, o, fn){
+  const saved = {pvt: playerViewTarget, hist: openHistorySeatPlayerId, cst: currentSettlementTransfers, sfp: settlementFilterPlayerId, hadMyPlayers: !!myIdentity.myPlayers};
+  const pickKey = TOUR_G + ":" + TOUR_ME;
+  state.games.push(g); state.communities.push(c);
+  if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
+  myIdentity.myPlayers[TOUR_C] = TOUR_ME;
+  playerViewTarget = o.viewOther ? TOUR_DANI : null;
+  openHistorySeatPlayerId = null; settlementFilterPlayerId = null;
+  if (o.armed) { leaveArmed[pickKey] = true; leaveAmountDraft[pickKey] = String(g.buyins.filter(b => b.playerId === TOUR_ME).reduce((s,b) => s+b.amount, 0) + 80); }
+  try { return fn(); }
+  finally {
+    const gi = state.games.indexOf(g); if (gi >= 0) state.games.splice(gi, 1);
+    const ci = state.communities.indexOf(c); if (ci >= 0) state.communities.splice(ci, 1);
+    delete myIdentity.myPlayers[TOUR_C];
+    if (!saved.hadMyPlayers) delete myIdentity.myPlayers;
+    playerViewTarget = saved.pvt; openHistorySeatPlayerId = saved.hist; currentSettlementTransfers = saved.cst; settlementFilterPlayerId = saved.sfp;
+    [rebuyPick, leaveArmed, leaveAmountDraft, rebuyCancelOpen, leaveChipsDraft].forEach(m => Object.keys(m).forEach(k => { if (k.startsWith(TOUR_G)) delete m[k]; }));
+    delete localBuyinLogs[TOUR_G];
+  }
+}
+function tourSteps(base){
+  const swipeWord = "ימינה";
+  const all = [
+    {view: "player", o: {alone: true}, sel: "[data-invite-game]", title: "הזמנת שחקנים",
+      desc: 'כשאתם לבד בשולחן, לוחצים על "הזמנת שחקן" ושולחים לחברים את הקישור בוואטסאפ.'},
+    {view: "table", o: {}, sel: ".poker-table-wrap", title: "מסך השולחן",
+      desc: `החברים לחצו על הקישור והתיישבו. גוררים ${swipeWord} ממסך השחקן כדי לראות את השולחן: כל השחקנים וכמה כל אחד קנה.`},
+    {view: "table", o: {}, sel: ".seat-circle.vacant", admin: true, title: "הושבת שחקן בלי קישור",
+      desc: "לוחצים על כיסא פנוי עם הסימן (+) ומושיבים מיד שחקן אורח או חבר מהמועדון."},
+    {view: "player", o: {}, sel: ".rb-frame", title: "ריביי – קנייה נוספת",
+      desc: 'נגמרו הז\'יטונים? בוחרים סכום ולוחצים "ריביי". סך הקניות שלכם מתעדכן מיד אצל כולם.'},
+    {view: "player", o: {}, sel: "[data-pp-view-select]", admin: true, title: "פעולה בשם שחקן אחר",
+      desc: "כמנהלים, בוחרים שחקן מהרשימה כדי לעשות לו ריביי או לסיים לו את הערב."},
+    {view: "player", o: {viewOther: true}, sel: ".rb-frame", admin: true, title: "מסך אדום = שחקן אחר",
+      desc: "המסך נצבע באדום כדי שלא תתבלבלו – כל פעולה כאן נרשמת לדני. כדי לחזור, בוחרים את השם שלכם ברשימה."},
+    {view: "player", o: {myRebuy: true}, sel: ".lv-arm", title: "סיום הערב",
+      desc: 'סיימתם לשחק? מסמנים V ב"סיימתי את הערב".'},
+    {view: "player", o: {myRebuy: true, armed: true}, sel: "[data-leave-photo]", title: "ספירת ז'יטונים",
+      desc: "כפתורי הריביי נעלמים. מצלמים את הז'יטונים לספירה אוטומטית, או מקלידים את הסכום שנשאר."},
+    {view: "player", o: {myRebuy: true, armed: true}, sel: "[data-leave-confirm]", title: "אישור הספירה",
+      desc: 'לוחצים "אישור ספירה" – המושב נסגר והרווח או ההפסד שלכם מחושב.'},
+    {view: "player", o: {myRebuy: true, cashedOut: true}, sel: ".player-screen-scroll > div", title: "הסיכום שלכם",
+      desc: "מקבלים סיכום אישי: קניות, ז'יטונים בסוף, רווח או הפסד – ואיך מסדרים את התשלומים. ערב מוצלח!"},
+  ];
+  return all.filter(s => !s.admin || base.admin);
+}
+function renderGameTourStep(){
+  const root = document.getElementById("game-tour");
+  if (!root || !gameTour) return;
+  const step = gameTour.steps[gameTour.i];
+  const base = gameTour.base;
+  const g = tourGame(base, step.o);
+  const pageHtml = tourSandbox(g, base.c, step.o, () => step.view === "table" ? renderTable(TOUR_G) : renderPlayerScreen(TOUR_G));
+  const label = step.view === "table" ? "מסך השולחן" : "מסך שחקן";
+  const n = gameTour.steps.length, last = gameTour.i === n - 1;
+  root.innerHTML = `
+    <div class="gt-app">
+      <div class="screen-tag" style="text-align:right;"><span>מסך הבית</span><span class="crumb-sep">/</span><span>מסך המועדון</span><span class="crumb-sep">/</span><span style="color:var(--text);">${label}</span></div>
+      <div class="table-swipe-root"><div class="swipe-track-viewport"><div class="swipe-track">
+        <div class="swipe-page lux-page${step.view === "player" ? " player-page" : ""}${step.o.viewOther ? " pp-other" : ""}">${pageHtml}
+          <div class="nav-bar nav-bar-compact"><div class="nav-dots"><span class="${step.view === "player" ? "on" : ""}"></span><span class="${step.view === "table" ? "on" : ""}"></span></div></div>
+        </div>
+      </div></div></div>
+    </div>
+    <div class="gt-highlight" data-gt-highlight></div>
+    <div class="gt-arrow" data-gt-arrow>👇</div>
+    <div class="gt-card" data-gt-card>
+      <div class="gt-head"><span class="gt-badge">שלב ${gameTour.i + 1} מתוך ${n}</span><button class="gt-skip" data-gt-skip>דלג ✕</button></div>
+      <div class="gt-title">${esc(step.title)}</div>
+      <div class="gt-desc">${esc(step.desc)}</div>
+      <div class="gt-actions">
+        <button class="gt-prev" data-gt-prev style="visibility:${gameTour.i ? "visible" : "hidden"};">הקודם</button>
+        <div class="gt-dots">${gameTour.steps.map((_, i) => `<span class="${i === gameTour.i ? "on" : ""}"></span>`).join("")}</div>
+        <button class="gt-next" data-gt-next>${last ? "סיום ✓" : "המשך ←"}</button>
+      </div>
+    </div>`;
+  root.querySelector("[data-gt-skip]").onclick = () => { closeGameTour(true); render(); };
+  root.querySelector("[data-gt-prev]").onclick = () => { if (gameTour.i > 0) { gameTour.i--; renderGameTourStep(); } };
+  root.querySelector("[data-gt-next]").onclick = () => {
+    if (last) { closeGameTour(true); render(); return; }
+    gameTour.i++; renderGameTourStep();
+  };
+  requestAnimationFrame(positionGameTour);
+  setTimeout(positionGameTour, 300); // images (felt, chips) can shift the layout once loaded
+}
+// Spotlight, arrow and card around the step's target - all position:fixed, from the
+// target's viewport rect.
+function positionGameTour(){
+  const root = document.getElementById("game-tour");
+  if (!root || !gameTour) return;
+  const target = root.querySelector(".gt-app " + gameTour.steps[gameTour.i].sel);
+  const hl = root.querySelector("[data-gt-highlight]"), arrow = root.querySelector("[data-gt-arrow]"), card = root.querySelector("[data-gt-card]");
+  if (!target || !hl) return;
+  const r = target.getBoundingClientRect();
+  Object.assign(hl.style, {top: (r.top - 4) + "px", left: (r.left - 4) + "px", width: (r.width + 8) + "px", height: (r.height + 8) + "px"});
+  const below = r.top < 50; // no room for the arrow above the target
+  arrow.textContent = below ? "👆" : "👇";
+  arrow.style.left = (r.left + r.width / 2 - 14) + "px";
+  arrow.style.top = below ? (r.bottom + 6) + "px" : (r.top - 38) + "px";
+  // Card on whichever side of the target has more room.
+  if (r.top + r.height / 2 > window.innerHeight / 2) { card.style.top = "calc(12px + env(safe-area-inset-top,0px))"; card.style.bottom = "auto"; }
+  else { card.style.top = "auto"; card.style.bottom = "calc(16px + env(safe-area-inset-bottom,0px))"; }
+}
+window.addEventListener("resize", positionGameTour);
+function openGameTour(g){
+  if (document.getElementById("game-tour")) return;
+  const base = tourBase(g);
+  gameTour = {base, steps: tourSteps(base), i: 0};
+  gameTourGameId = g.id;
+  const root = document.createElement("div");
+  root.id = "game-tour";
+  root.className = "game-tour";
+  document.body.appendChild(root);
+  renderGameTourStep();
+}
+function closeGameTour(markSeen){
+  const root = document.getElementById("game-tour");
+  if (root) root.remove();
+  if (markSeen && gameTourDemo) gameTourDemo = false;
+  else if (markSeen && !myIdentity.seenGameTour) {
+    myIdentity.seenGameTour = true;
+    saveIdentity();
+    updateAccount({seenGameTour: true});
+  }
+  gameTour = null;
+  gameTourGameId = null;
+}
+
 function shouldShowGameWelcome(){
   if (nav.screen !== "table") return false;
   const g = getGame(nav.gameId);
@@ -4701,6 +4926,11 @@ function render(){
     html += renderGameWelcomeOverlay(welcomeGameId, welcomePlayerId).replace('class="game-welcome-overlay"', `class="game-welcome-overlay${welcomeFadedIn === welcomeGameId ? ' no-anim' : ''}"`);
     welcomeFadedIn = welcomeGameId;
   }
+  // The first-game walkthrough follows the welcome screen (see shouldShowGameTour); leaving
+  // the game while it's up just closes it, so it plays again next time.
+  const tourGame = nav.screen === "table" ? getGame(nav.gameId) : null;
+  if (!modal && !welcomeGameId && tourGame && shouldShowGameTour(tourGame)) openGameTour(tourGame);
+  else if (gameTourGameId && !(tourGame && tourGame.id === gameTourGameId)) closeGameTour(false);
   // Captured BEFORE replacing the DOM below - app.innerHTML wipes and recreates these
   // elements from scratch every render, so a brand new element always starts at
   // scrollTop 0 regardless of where the old one was left. Not explicitly restoring that
@@ -5976,7 +6206,7 @@ function renderTable(gameId){
       const profit = chips - buyin;
       const sign = profit > 0 ? "+" : "";
       const profitColor = profit > 0.5 ? "#6ee7b7" : (profit < -0.5 ? "#fda4af" : "inherit");
-      caption = `<span style="color:${profitColor};font-weight:700;font-size:16px;" data-caption-for="${pid}">${sign}₪${Math.round(profit)}</span>`;
+      caption = `<span class="seat-co-profit${profit > 0.5 ? " pos" : (profit < -0.5 ? " neg" : "")}" style="color:${profitColor};font-weight:700;font-size:16px;" data-caption-for="${pid}">${sign}₪${Math.round(profit)}</span>`;
     }
     // No avatar photo - show the P logo rather than name initials, same fallback already
     // used for the home-screen avatar and the identityName preview.
@@ -6548,6 +6778,7 @@ function renderModal(m){
                 </div>
               </div>
               <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                <button class="btn btn-ghost" data-toggle-seen-tour="${esc(r.email)}" title="${r.seenGameTour ? "ראה את ההדרכה - לחיצה תציג לו אותה שוב" : "עוד לא ראה את ההדרכה"}" style="padding:6px 8px;font-size:11px;white-space:nowrap;${r.seenGameTour ? "" : "color:var(--gold);border-color:var(--gold);"}">${r.seenGameTour ? "✓ הדרכה" : "הדרכה"}</button>
                 ${r.email === myIdentity.email
                   ? `<span class="btn btn-ghost" style="padding:6px 10px;font-size:15px;white-space:nowrap;opacity:.6;cursor:default;">${r.role==="superAdmin"?"Super Admin":"User"} (אתה)</span>`
                   : `<button class="btn btn-ghost" data-toggle-role="${esc(r.email)}" style="padding:6px 10px;font-size:15px;white-space:nowrap;">${r.role==="superAdmin"?"Super Admin":"User"}</button>`}
@@ -8870,6 +9101,22 @@ function attachHandlers(){
       });
       if (!res.ok) { showAlert("הפעולה נכשלה - רק Super Admin יכול לשנות תפקידים."); updateModal({}); return; }
       account.role = newRole;
+      updateModal({accounts: modal.accounts});
+    });
+    // Seen / not seen the first-game walkthrough (account.seenGameTour) - clearing it makes
+    // it play again the next time that user sits down at a table.
+    app.querySelectorAll("[data-toggle-seen-tour]").forEach(el => el.onclick = async () => {
+      const email = el.dataset.toggleSeenTour;
+      const account = (modal.accounts||[]).find(a => a.email === email);
+      if (!account) return;
+      const seen = !account.seenGameTour;
+      el.disabled = true;
+      const res = await fetch("/api/auth/set-seen-tour?clientId=" + encodeURIComponent(getClientId()), {
+        method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({email, seen})
+      });
+      if (!res.ok) { showAlert("הפעולה נכשלה - רק Super Admin יכול לשנות את זה."); updateModal({}); return; }
+      account.seenGameTour = seen;
+      if (email === myIdentity.email) { myIdentity.seenGameTour = seen; saveIdentity(); }
       updateModal({accounts: modal.accounts});
     });
     app.querySelectorAll("[data-delete-global-player]").forEach(el => el.onclick = async () => {
