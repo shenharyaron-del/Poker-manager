@@ -858,8 +858,18 @@ html.theme-light .game-alert-line{color:#9a3412;}
 .game-tour .gt-app .swipe-track-viewport{flex:1;min-height:0;overflow:hidden;position:relative;}
 .game-tour .gt-app .swipe-track{display:flex;direction:ltr;height:100%;}
 .game-tour .gt-app .swipe-page{flex:0 0 100%;width:100%;min-width:0;direction:rtl;display:flex;flex-direction:column;min-height:0;}
-.gt-highlight{position:fixed;border-radius:14px;border:2px solid #fbbf24;box-shadow:0 0 0 9999px rgba(0,0,0,.72),0 0 15px #fbbf24;transition:all .35s cubic-bezier(.2,.8,.2,1);pointer-events:none;z-index:2;}
-.gt-arrow{position:fixed;font-size:28px;z-index:3;transition:left .35s ease,top .35s ease;animation:gtBounce .9s infinite alternate ease-in-out;filter:drop-shadow(0 2px 5px rgba(0,0,0,.8));pointer-events:none;}
+.gt-highlight{position:fixed;border-radius:14px;border:2px solid #fbbf24;box-shadow:0 0 0 9999px rgba(0,0,0,.72),0 0 15px #fbbf24;transition:top .8s ease-in-out,left .8s ease-in-out,width .8s ease-in-out,height .8s ease-in-out,opacity .5s ease;pointer-events:none;z-index:2;}
+.gt-arrow{position:fixed;font-size:28px;z-index:3;transition:left .8s ease-in-out,top .8s ease-in-out,opacity .5s ease;animation:gtBounce .9s infinite alternate ease-in-out;filter:drop-shadow(0 2px 5px rgba(0,0,0,.8));pointer-events:none;}
+.game-tour .gt-app{animation:gtFade .6s ease;}
+.gt-card{animation:gtFade .6s ease;}
+@keyframes gtFade{from{opacity:0;}to{opacity:1;}}
+.game-tour .gt-demo-track{transition:transform 1.8s ease-in-out;}
+.gt-hand{position:fixed;z-index:3;font-size:44px;line-height:1;opacity:0;transform:translate(-50%,-10%);transition:left 1.8s ease-in-out,opacity .4s ease;filter:drop-shadow(0 3px 6px rgba(0,0,0,.7));pointer-events:none;}
+/* The app's own "alone at the table" hints (pointing hands, "הוספת שחקן", the swaying
+   swipe line) stay out of the walkthrough - it does its own pointing. */
+.game-tour .gt-app .alone-hint{display:none!important;}
+.game-tour .gt-app .tile-hint::after,.game-tour .gt-app .seat-hint::after,.game-tour .gt-app .seat-hint::before{content:none!important;}
+.game-tour .gt-app *,.game-tour .gt-app *::before,.game-tour .gt-app *::after{animation:none!important;}
 @keyframes gtBounce{from{transform:translateY(0);}to{transform:translateY(-8px);}}
 .gt-card{position:fixed;left:50%;transform:translateX(-50%);width:min(440px,calc(100% - 32px));z-index:4;background:#064e3b;border:2px solid #fbbf24;border-radius:16px;padding:14px 15px;box-shadow:0 12px 30px rgba(0,0,0,.9);color:#fff;direction:rtl;}
 .gt-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
@@ -3262,12 +3272,12 @@ function tourSandbox(g, c, o, fn){
 }
 function tourSteps(base){
   const all = [
-    {view: "player", o: {alone: true}, sel: ".pp-tile-invite", title: "הזמנת שחקנים",
-      desc: 'כשאתם לבד בשולחן, לוחצים על "הזמן שחקן" ושולחים לחברים את הקישור בוואטסאפ.'},
-    {view: "player", o: {alone: true}, sel: ".alone-hint", title: "מעבר למסך השולחן",
-      desc: "מחליקים ימינה על המסך (או לוחצים על הפס הזה) כדי לעבור למסך השולחן."},
-    {view: "table", o: {alone: true}, sel: ".seat-circle.vacant", admin: true, title: "הושבת שחקן בלי קישור",
-      desc: "במסך השולחן לוחצים על כיסא פנוי עם הסימן (+) ומושיבים מיד שחקן אורח או חבר מהמועדון."},
+    // Shown as a loop (runSwipeDemo): "הזמן שחקן" lit up, a hand swipes over to the table
+    // screen and its empty seat, then back - until "המשך".
+    {view: "player", o: {alone: true}, demo: "swipe", sel: ".pp-tile-invite", title: "הזמנת שחקנים",
+      desc: base.admin
+        ? 'לוחצים על "הזמן שחקן" ושולחים לחברים את הקישור בוואטסאפ, או הוסיפו שחקן על כיסא פנוי.'
+        : 'לוחצים על "הזמן שחקן" ושולחים לחברים את הקישור בוואטסאפ. גרירה ימינה מראה את מסך השולחן.'},
     {view: "player", o: {}, sel: ".pp-tiles", title: "החברים מצטרפים",
       desc: "כל מי שמתיישב בשולחן מקבל ריבוע משלו כאן למעלה – בזמן אמת, אצל כולם."},
     {view: "player", o: {notStarted: true}, sel: "[data-start-game]", admin: true, title: "תחילת משחק",
@@ -3295,20 +3305,29 @@ function renderGameTourStep(){
   const step = gameTour.steps[gameTour.i];
   const base = gameTour.base;
   const g = tourGame(base, step.o);
-  const pageHtml = tourSandbox(g, base.c, step.o, () => step.view === "table" ? renderTable(TOUR_G) : renderPlayerScreen(TOUR_G));
+  const page = (view) => {
+    const html = tourSandbox(g, base.c, step.o, () => view === "table" ? renderTable(TOUR_G) : renderPlayerScreen(TOUR_G));
+    return `<div class="swipe-page lux-page${view === "player" ? " player-page" : ""}${step.o.viewOther ? " pp-other" : ""}" data-gt-page="${view}">${html}
+          <div class="nav-bar nav-bar-compact"><div class="nav-dots"><span class="${view === "player" ? "on" : ""}"></span><span class="${view === "table" ? "on" : ""}"></span></div></div>
+        </div>`;
+  };
+  // The swipe demo has both pages side by side - [table, player] left to right, the player
+  // page showing, so a drag to the right brings the table in (as in the real carousel).
+  const pagesHtml = step.demo === "swipe" ? page("table") + page("player") : page(step.view);
   const label = step.view === "table" ? "שולחן" : "שחקן";
   const n = gameTour.steps.length, last = gameTour.i === n - 1;
+  const prevHl = root.querySelector("[data-gt-highlight]");
+  const prevHlStyle = prevHl ? prevHl.getAttribute("style") : null;
   root.innerHTML = `
     <div class="gt-app">
-      <div class="screen-tag screen-tag-lg crumbs-row"><span class="crumb-link">בית</span><span class="crumb-sep">›</span><span class="crumb-link crumb-club">${esc(base.c.name || "")}</span><span class="crumb-sep">›</span><span class="crumb-here">${label}</span></div>
-      <div class="table-swipe-root"><div class="swipe-track-viewport"><div class="swipe-track">
-        <div class="swipe-page lux-page${step.view === "player" ? " player-page" : ""}${step.o.viewOther ? " pp-other" : ""}">${pageHtml}
-          <div class="nav-bar nav-bar-compact"><div class="nav-dots"><span class="${step.view === "player" ? "on" : ""}"></span><span class="${step.view === "table" ? "on" : ""}"></span></div></div>
-        </div>
+      <div class="screen-tag screen-tag-lg crumbs-row"><span class="crumb-link">בית</span><span class="crumb-sep">›</span><span class="crumb-link crumb-club">${esc(base.c.name || "")}</span><span class="crumb-sep">›</span><span class="crumb-here" data-gt-label>${label}</span></div>
+      <div class="table-swipe-root"><div class="swipe-track-viewport"><div class="swipe-track${step.demo ? " gt-demo-track" : ""}" data-gt-track${step.demo === "swipe" ? ' style="transform:translateX(-100%);"' : ""}>
+        ${pagesHtml}
       </div></div></div>
     </div>
-    <div class="gt-highlight" data-gt-highlight></div>
+    <div class="gt-highlight" data-gt-highlight${prevHlStyle ? ` style="${prevHlStyle}"` : ""}></div>
     <div class="gt-arrow" data-gt-arrow>👇</div>
+    <div class="gt-hand" data-gt-hand>👆</div>
     <div class="gt-card" data-gt-card>
       <div class="gt-head"><span class="gt-badge">שלב ${gameTour.i + 1} מתוך ${n}</span><button class="gt-skip" data-gt-skip>דלג ✕</button></div>
       <div class="gt-title">${esc(step.title)}</div>
@@ -3325,17 +3344,71 @@ function renderGameTourStep(){
     if (last) { closeGameTour(true); render(); return; }
     gameTour.i++; renderGameTourStep();
   };
+  gameTour.demoToken = (gameTour.demoToken || 0) + 1;
+  if (step.demo === "swipe") { runSwipeDemo(gameTour.demoToken); return; }
   requestAnimationFrame(positionGameTour);
   setTimeout(positionGameTour, 300); // images (felt, chips) can shift the layout once loaded
+}
+// Step 1's loop: "הזמן שחקן" lit up on the player page, a hand drags the screen over to
+// the table page and its empty seat lights up, then the hand drags back - over and over,
+// unhurried, until the step changes (demoToken) or the walkthrough closes.
+async function runSwipeDemo(token){
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const alive = () => !!(gameTour && gameTour.demoToken === token && document.getElementById("game-tour"));
+  const root = document.getElementById("game-tour");
+  const track = root.querySelector("[data-gt-track]"), hand = root.querySelector("[data-gt-hand]"), label = root.querySelector("[data-gt-label]");
+  const hl = root.querySelector("[data-gt-highlight]"), arrow = root.querySelector("[data-gt-arrow]");
+  const viewport = root.querySelector(".swipe-track-viewport");
+  const lightUp = el => { if (el) { hl.style.opacity = "1"; arrow.style.opacity = "1"; spotlight(el, true); } };
+  const dim = () => { hl.style.opacity = "0"; arrow.style.opacity = "0"; };
+  const playerTarget = () => root.querySelector('[data-gt-page="player"] .pp-tile-invite');
+  // The empty seat nearest the top of the table (an admin sees its "+"); without seats
+  // to add to, the whole table.
+  const tableTarget = () => {
+    const seats = [...root.querySelectorAll('[data-gt-page="table"] .seat-circle.vacant')];
+    if (!gameTour.base.admin || !seats.length) return root.querySelector('[data-gt-page="table"] .poker-table-wrap');
+    return seats.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)[0];
+  };
+  const drag = async (toTable) => {
+    const vr = viewport.getBoundingClientRect();
+    const y = vr.top + vr.height * 0.55;
+    const from = vr.left + vr.width * (toTable ? 0.22 : 0.78), to = vr.left + vr.width * (toTable ? 0.78 : 0.22);
+    hand.style.transition = "none";
+    Object.assign(hand.style, {left: from + "px", top: y + "px", opacity: "1"});
+    await sleep(700);
+    if (!alive()) return;
+    hand.style.transition = "";
+    hand.style.left = to + "px";
+    track.style.transform = toTable ? "translateX(0)" : "translateX(-100%)";
+    await sleep(1800);
+    hand.style.opacity = "0";
+    if (label) label.textContent = toTable ? "שולחן" : "שחקן";
+  };
+  await sleep(50);
+  while (alive()) {
+    lightUp(playerTarget()); await sleep(3200); if (!alive()) return;
+    dim(); await sleep(500); if (!alive()) return;
+    await drag(true); if (!alive()) return;
+    lightUp(tableTarget()); await sleep(3200); if (!alive()) return;
+    dim(); await sleep(500); if (!alive()) return;
+    await drag(false); if (!alive()) return;
+  }
 }
 // Spotlight, arrow and card around the step's target - all position:fixed, from the
 // target's viewport rect.
 function positionGameTour(){
   const root = document.getElementById("game-tour");
   if (!root || !gameTour) return;
-  const target = root.querySelector(".gt-app " + gameTour.steps[gameTour.i].sel);
+  const step = gameTour.steps[gameTour.i];
+  if (step.demo) return; // runSwipeDemo places its own spotlight
+  spotlight(root.querySelector(".gt-app " + step.sel), false);
+}
+function spotlight(target, cardAtBottom){
+  const root = document.getElementById("game-tour");
+  if (!root) return;
   const hl = root.querySelector("[data-gt-highlight]"), arrow = root.querySelector("[data-gt-arrow]"), card = root.querySelector("[data-gt-card]");
   if (!target || !hl) return;
+  hl.style.opacity = "1"; arrow.style.opacity = "1"; // the swipe demo may have faded them out
   const r = target.getBoundingClientRect();
   Object.assign(hl.style, {top: (r.top - 4) + "px", left: (r.left - 4) + "px", width: (r.width + 8) + "px", height: (r.height + 8) + "px"});
   const below = r.top < 50; // no room for the arrow above the target
@@ -3343,7 +3416,7 @@ function positionGameTour(){
   arrow.style.left = (r.left + r.width / 2 - 14) + "px";
   arrow.style.top = below ? (r.bottom + 6) + "px" : (r.top - 38) + "px";
   // Card on whichever side of the target has more room.
-  if (r.top + r.height / 2 > window.innerHeight / 2) { card.style.top = "calc(12px + env(safe-area-inset-top,0px))"; card.style.bottom = "auto"; }
+  if (!cardAtBottom && r.top + r.height / 2 > window.innerHeight / 2) { card.style.top = "calc(12px + env(safe-area-inset-top,0px))"; card.style.bottom = "auto"; }
   else { card.style.top = "auto"; card.style.bottom = "calc(16px + env(safe-area-inset-bottom,0px))"; }
 }
 window.addEventListener("resize", positionGameTour);
