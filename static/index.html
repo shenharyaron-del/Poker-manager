@@ -3293,10 +3293,9 @@ function tourSteps(base){
       desc: "המסך נצבע באדום כדי שלא תתבלבלו – כל פעולה כאן נרשמת לדני. אחרי הריביי חוזרים למסך שלכם לבד תוך 10 שניות, או מיד בלחיצה על השם שלכם."},
     {view: "player", o: {myRebuy: true}, sel: ".lv-arm", title: "סיום הערב",
       desc: 'סיימתם לשחק? מסמנים V ב"סיימתי את הערב".'},
-    {view: "player", o: {myRebuy: true, armed: true}, sel: "[data-leave-photo]", title: "ספירת ז'יטונים",
-      desc: "כפתורי הריביי נעלמים. מצלמים את הז'יטונים לספירה אוטומטית, או מקלידים את הסכום שנשאר."},
-    {view: "player", o: {myRebuy: true, armed: true}, sel: "[data-leave-confirm]", title: "אישור הספירה",
-      desc: 'לוחצים "אישור ספירה" – המושב נסגר והרווח או ההפסד שלכם מחושב.'},
+    // The card sits at the top so it never covers the pot line at the bottom of the area.
+    {view: "player", o: {myRebuy: true, armed: true}, sel: ".lv-frame", cardTop: true, title: "אזור סיום הערב",
+      desc: "מצלמים את הז'יטונים לספירה אוטומטית, או מקלידים את הסכום שנשאר. למטה: כמה כסף נשאר בקופה וכמה שחקנים עוד יושבים."},
     {view: "player", o: {myRebuy: true, cashedOut: true}, sel: ".player-screen-scroll > div", title: "הסיכום שלכם",
       desc: "מקבלים סיכום אישי: קניות, ז'יטונים בסוף, רווח או הפסד – ואיך מסדרים את התשלומים. ערב מוצלח!"},
   ];
@@ -3406,9 +3405,9 @@ function positionGameTour(){
   if (!root || !gameTour) return;
   const step = gameTour.steps[gameTour.i];
   if (step.demo) return; // runSwipeDemo places its own spotlight
-  spotlight(root.querySelector(".gt-app " + step.sel), false);
+  spotlight(root.querySelector(".gt-app " + step.sel), false, !!step.cardTop);
 }
-function spotlight(target, cardAtBottom){
+function spotlight(target, cardAtBottom, cardAtTop){
   const root = document.getElementById("game-tour");
   if (!root) return;
   const hl = root.querySelector("[data-gt-highlight]"), arrow = root.querySelector("[data-gt-arrow]"), card = root.querySelector("[data-gt-card]");
@@ -3421,7 +3420,7 @@ function spotlight(target, cardAtBottom){
   arrow.style.left = (r.left + r.width / 2 - 14) + "px";
   arrow.style.top = below ? (r.bottom + 6) + "px" : (r.top - 38) + "px";
   // Card on whichever side of the target has more room.
-  if (!cardAtBottom && r.top + r.height / 2 > window.innerHeight / 2) { card.style.top = "calc(12px + env(safe-area-inset-top,0px))"; card.style.bottom = "auto"; }
+  if (cardAtTop || (!cardAtBottom && r.top + r.height / 2 > window.innerHeight / 2)) { card.style.top = "calc(12px + env(safe-area-inset-top,0px))"; card.style.bottom = "auto"; }
   else { card.style.top = "auto"; card.style.bottom = "calc(16px + env(safe-area-inset-bottom,0px))"; }
 }
 window.addEventListener("resize", positionGameTour);
