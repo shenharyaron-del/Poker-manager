@@ -893,9 +893,7 @@ html.theme-light.theme-blue .btn-blue{background:#0b2f4a!important;border:1.5px 
 .alone-hint-arrow{flex-shrink:0;font-size:26px;width:40px;text-align:left;}
 /* A line of text that must stay one line - shrinks to fit (fitNameBoxes) instead of wrapping. */
 .fit-line{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.pp-tiles.pp-tiles-alone{grid-template-columns:repeat(4,1fr);font-size:24px;margin-bottom:12px;}
-.pp-tiles-alone .pp-tile-invite{grid-column:2 / span 2;font-size:1em;padding:6px 8px;}
-.pp-tiles-alone .tile-hint::after{font-size:28px;left:-40px;}
+.pp-tiles .tile-hint::after{font-size:28px;left:-36px;}
 .alone-hint-arrow{display:inline-block;animation:alone-arrow 1.1s ease-in-out infinite;}
 @keyframes alone-arrow{0%,100%{transform:translateX(0)}50%{transform:translateX(-8px)}}
 .seat-hint::after{content:"👇";position:absolute;left:50%;top:-30px;font-size:22px;line-height:1;transform:translateX(-50%);animation:seat-hand 1s ease-in-out infinite;pointer-events:none;}
@@ -1001,8 +999,8 @@ html.theme-light.theme-sand .rb-confirm{background:linear-gradient(180deg,#bf8a4
 .ttl-me-dot{fill:var(--gold);stroke:var(--bg2);stroke-width:2;}
 .ttl-sel-dot{fill:#3b82f6;stroke:var(--bg2);stroke-width:2;}
 .ttl-label{fill:var(--text);font-size:10px;font-weight:700;font-family:inherit;}
-/* Name chips fill the row: up to 4 players in one row; 5-6 in rows of 3; 7-8 in rows of
-   4; 9 in rows of 3 (columns set inline by player count). */
+/* Name chips: never bigger than a third of the row - 1-3 players sit from the right at
+   that size; 4 in one row; 5-6 in rows of 3; 7-8 in rows of 4; 9 in rows of 3. */
 .ttl-chips{display:grid;gap:6px;margin:8px 0 4px;}
 .ttl-chip{font-family:inherit;font-size:inherit;padding:8px 6px;text-align:center;border-radius:999px;border:1px solid var(--card-b);background:transparent;color:var(--muted);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .ttl-chip.me{border-color:var(--gold);color:var(--gold);font-weight:700;}
@@ -5943,15 +5941,14 @@ function renderPlayerScreen(gameId){
     };
     const inviteTile = `<button type="button" class="pp-tile pp-tile-invite${aloneAtTable?' tile-hint':''}" data-invite-game="${g.id}">${icon('share')}<span>הזמן שחקן</span></button>`;
     // At most 8 boxes (9 at a table, nobody replaces anyone: 8 others, or 7 + invite),
-    // laid out like the timeline's name chips: up to 4 in one row, 5-6 in rows of 3, 7-8
-    // in rows of 4 - the font sized to the box (long names shrink to fit, see fitNameBoxes).
+    // laid out like the timeline's name chips: never bigger than a third of the row (1-3
+    // boxes sit from the right at that size, "הזמן שחקן" last), 4 in one row, 5-6 in rows
+    // of 3, 7-8 in rows of 4 - the font sized to the box (long names shrink to fit, see
+    // fitNameBoxes).
     const out = entered.map(tile).join("") + (canInvite ? inviteTile : "");
     const n = entered.length + (canInvite ? 1 : 0);
-    const cols = n <= 4 ? Math.max(n, 1) : n <= 6 ? 3 : 4;
-    const fs = cols <= 2 ? 20 : cols === 3 ? 18 : 16;
-    // Alone at the table: "הזמן שחקן" alone in the row, the same size as my name box under
-    // it (columns 2-3 of 4), with room beside it for the pointing hand.
-    if (!entered.length) return `<div class="pp-tiles pp-tiles-alone">${out}</div>`;
+    const cols = n === 4 || n > 6 ? 4 : 3;
+    const fs = cols === 3 ? 18 : 16;
     return `<div class="pp-tiles" style="grid-template-columns:repeat(${cols},1fr);font-size:${fs}px;">${out}</div>`;
   })();
   // Order (top to bottom): name/total, ריביי buttons, the shared history/feed panel
@@ -6583,10 +6580,10 @@ function renderTableTimeline(g, c, myPlayerId){
       <fieldset class="leave-frame stats-frame" style="margin-top:0;"><legend>קניות לאורך הערב</legend>
         <div class="ttl-chart"><svg viewBox="0 0 ${W} ${H}" width="100%" direction="ltr" data-ttl-lines="${esc(JSON.stringify(shown.map(s => [s.pid, s.pts.map(p => [Math.round(X(p[0])), Math.round(Y(p[1]))])])))}">${svg}</svg></div>
         ${(() => {
-          const cols = order.length <= 4 ? Math.max(order.length, 1) : order.length <= 6 ? 3 : order.length <= 8 ? 4 : 3;
+          const cols = order.length === 4 || order.length === 7 || order.length === 8 ? 4 : 3;
           // The wider each name's box, the bigger its name (long ones shrink to fit - see
           // fitNameBoxes).
-          const fs = cols <= 2 ? 20 : cols === 3 ? 18 : 16;
+          const fs = cols === 3 ? 18 : 16;
           return `<div class="ttl-chips" style="grid-template-columns:repeat(${cols},1fr);font-size:${fs}px;">${chips}</div>`;
         })()}
       </fieldset>
