@@ -876,7 +876,9 @@ html.theme-light .game-alert-line{color:#9a3412;}
 .gt-badge{background:#fbbf24;color:#1c1917;font-size:11px;font-weight:800;border-radius:6px;padding:2px 8px;}
 .gt-skip{background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.3);color:#fff;font-family:inherit;font-size:12px;font-weight:700;border-radius:999px;padding:3px 10px;cursor:pointer;}
 .gt-title{font-size:16px;font-weight:700;margin-bottom:5px;}
-.gt-desc{font-size:13px;color:#d1fae5;line-height:1.5;margin-bottom:12px;}
+.gt-desc{font-size:17px;color:#d1fae5;line-height:1.5;margin-bottom:12px;}
+.gt-part{transition:color .5s ease;}
+.gt-part.on{font-weight:800;color:#fff;}
 .gt-actions{display:flex;justify-content:space-between;align-items:center;}
 .gt-next{background:#fbbf24;color:#1c1917;border:none;border-radius:10px;padding:8px 18px;font-family:inherit;font-weight:800;font-size:14px;cursor:pointer;}
 .gt-prev{background:none;border:none;color:#6ee7b7;font-family:inherit;font-size:13px;cursor:pointer;text-decoration:underline;}
@@ -3275,17 +3277,18 @@ function tourSteps(base){
     // Shown as a loop (runSwipeDemo): "הזמן שחקן" lit up, a hand swipes over to the table
     // screen and its empty seat, then back - until "המשך".
     {view: "player", o: {alone: true}, demo: "swipe", sel: ".pp-tile-invite", title: "הזמנת שחקנים",
+      // In parts - runSwipeDemo bolds the part for the screen that's showing.
       desc: base.admin
-        ? 'לוחצים על "הזמן שחקן" ושולחים לחברים את הקישור בוואטסאפ, או הוסיפו שחקן על כיסא פנוי.'
-        : 'לוחצים על "הזמן שחקן" ושולחים לחברים את הקישור בוואטסאפ. גרירה ימינה מראה את מסך השולחן.'},
+        ? [{page: "player", text: 'לוחצים על "הזמן שחקן" ושולחים לחברים את הקישור בוואטסאפ'}, ", או ", {page: "table", text: "הוסיפו שחקן על כיסא פנוי"}, "."]
+        : [{page: "player", text: 'לוחצים על "הזמן שחקן" ושולחים לחברים את הקישור בוואטסאפ'}, ". ", {page: "table", text: "גרירה ימינה מראה את מסך השולחן"}, "."]},
     {view: "player", o: {}, sel: ".pp-tiles", title: "החברים מצטרפים",
       desc: "כל מי שמתיישב בשולחן מקבל ריבוע משלו כאן למעלה – בזמן אמת, אצל כולם."},
     {view: "player", o: {notStarted: true}, sel: "[data-start-game]", admin: true, title: "תחילת משחק",
-      desc: 'כשכולם התיישבו לוחצים "תחילת משחק" – מכאן נספר הזמן בציר הזמן. ריביי לפני כן יכול פשוט להגדיל את הקנייה הראשונית.'},
+      desc: 'כשמתחילים לשחק לוחצים על "תחילת משחק". ריביי לפני כן יגדיל את הקנייה הראשונית.'},
     {view: "player", o: {}, sel: ".rb-frame", title: "ריביי – קנייה נוספת",
       desc: `נגמרו הז'יטונים? בוחרים סכום ולוחצים "ריביי". סך הקניות שלכם מתעדכן מיד.`},
     {view: "player", o: {}, sel: '.pp-tile[data-pp-view="' + TOUR_DANI + '"]', title: "ריביי לחבר",
-      desc: "דני ביקש שתוסיפו לו ריביי? לוחצים על הריבוע שלו כדי לעבור למסך שלו."},
+      desc: "דני ביקש שתוסיפו לו ריביי או הודיע על סיום הערב? לוחצים על הריבוע שלו כדי לעבוד עליו."},
     {view: "player", o: {viewOther: true}, sel: ".rb-frame", title: "מסך אדום = שחקן אחר",
       desc: "המסך נצבע באדום כדי שלא תתבלבלו – כל פעולה כאן נרשמת לדני. אחרי הריביי חוזרים למסך שלכם לבד תוך 10 שניות, או מיד בלחיצה על השם שלכם."},
     {view: "player", o: {myRebuy: true}, sel: ".lv-arm", title: "סיום הערב",
@@ -3331,7 +3334,7 @@ function renderGameTourStep(){
     <div class="gt-card" data-gt-card>
       <div class="gt-head"><span class="gt-badge">שלב ${gameTour.i + 1} מתוך ${n}</span><button class="gt-skip" data-gt-skip>דלג ✕</button></div>
       <div class="gt-title">${esc(step.title)}</div>
-      <div class="gt-desc">${esc(step.desc)}</div>
+      <div class="gt-desc">${Array.isArray(step.desc) ? step.desc.map(part => typeof part === "string" ? esc(part) : `<span class="gt-part" data-gt-part="${part.page}">${esc(part.text)}</span>`).join("") : esc(step.desc)}</div>
       <div class="gt-actions">
         <button class="gt-prev" data-gt-prev style="visibility:${gameTour.i ? "visible" : "hidden"};">הקודם</button>
         <div class="gt-dots">${gameTour.steps.map((_, i) => `<span class="${i === gameTour.i ? "on" : ""}"></span>`).join("")}</div>
@@ -3361,6 +3364,8 @@ async function runSwipeDemo(token){
   const viewport = root.querySelector(".swipe-track-viewport");
   const lightUp = el => { if (el) { hl.style.opacity = "1"; arrow.style.opacity = "1"; spotlight(el, true); } };
   const dim = () => { hl.style.opacity = "0"; arrow.style.opacity = "0"; };
+  // The card's text part for the screen that's showing (see step 1's desc parts) in bold.
+  const boldPart = page => root.querySelectorAll("[data-gt-part]").forEach(el => el.classList.toggle("on", el.dataset.gtPart === page));
   const playerTarget = () => root.querySelector('[data-gt-page="player"] .pp-tile-invite');
   // The empty seat nearest the top of the table (an admin sees its "+"); without seats
   // to add to, the whole table.
@@ -3386,10 +3391,10 @@ async function runSwipeDemo(token){
   };
   await sleep(50);
   while (alive()) {
-    lightUp(playerTarget()); await sleep(3200); if (!alive()) return;
+    boldPart("player"); lightUp(playerTarget()); await sleep(3200); if (!alive()) return;
     dim(); await sleep(500); if (!alive()) return;
     await drag(true); if (!alive()) return;
-    lightUp(tableTarget()); await sleep(3200); if (!alive()) return;
+    boldPart("table"); lightUp(tableTarget()); await sleep(3200); if (!alive()) return;
     dim(); await sleep(500); if (!alive()) return;
     await drag(false); if (!alive()) return;
   }
