@@ -3183,8 +3183,11 @@ function tourSandbox(g, c, o, fn){
   playerViewTarget = o.viewOther ? TOUR_DANI : null;
   openHistorySeatPlayerId = null; settlementFilterPlayerId = null;
   if (o.armed) { leaveArmed[pickKey] = true; leaveAmountDraft[pickKey] = String(g.buyins.filter(b => b.playerId === TOUR_ME).reduce((s,b) => s+b.amount, 0) + 80); }
+  let savedTableView = null;
+  try { savedTableView = localStorage.getItem("poker-table-view"); localStorage.removeItem("poker-table-view"); } catch(e) {}
   try { return fn(); }
   finally {
+    try { if (savedTableView !== null) localStorage.setItem("poker-table-view", savedTableView); } catch(e) {}
     const gi = state.games.indexOf(g); if (gi >= 0) state.games.splice(gi, 1);
     const ci = state.communities.indexOf(c); if (ci >= 0) state.communities.splice(ci, 1);
     delete myIdentity.myPlayers[TOUR_C];
@@ -3195,20 +3198,21 @@ function tourSandbox(g, c, o, fn){
   }
 }
 function tourSteps(base){
-  const swipeWord = "ימינה";
   const all = [
-    {view: "player", o: {alone: true}, sel: "[data-invite-game]", title: "הזמנת שחקנים",
-      desc: 'כשאתם לבד בשולחן, לוחצים על "הזמנת שחקן" ושולחים לחברים את הקישור בוואטסאפ.'},
-    {view: "table", o: {}, sel: ".poker-table-wrap", title: "מסך השולחן",
-      desc: `החברים לחצו על הקישור והתיישבו. גוררים ${swipeWord} ממסך השחקן כדי לראות את השולחן: כל השחקנים וכמה כל אחד קנה.`},
-    {view: "table", o: {}, sel: ".seat-circle.vacant", admin: true, title: "הושבת שחקן בלי קישור",
-      desc: "לוחצים על כיסא פנוי עם הסימן (+) ומושיבים מיד שחקן אורח או חבר מהמועדון."},
+    {view: "player", o: {alone: true}, sel: ".pp-tile-invite", title: "הזמנת שחקנים",
+      desc: 'כשאתם לבד בשולחן, לוחצים על "הזמן שחקן" ושולחים לחברים את הקישור בוואטסאפ.'},
+    {view: "player", o: {alone: true}, sel: ".alone-hint", title: "מעבר למסך השולחן",
+      desc: "מחליקים ימינה על המסך (או לוחצים על הפס הזה) כדי לעבור למסך השולחן."},
+    {view: "table", o: {alone: true}, sel: ".seat-circle.vacant", admin: true, title: "הושבת שחקן בלי קישור",
+      desc: "במסך השולחן לוחצים על כיסא פנוי עם הסימן (+) ומושיבים מיד שחקן אורח או חבר מהמועדון."},
+    {view: "player", o: {}, sel: ".pp-tiles", title: "החברים מצטרפים",
+      desc: "כל מי שמתיישב בשולחן מקבל ריבוע משלו כאן למעלה – בזמן אמת, אצל כולם."},
     {view: "player", o: {}, sel: ".rb-frame", title: "ריביי – קנייה נוספת",
-      desc: 'נגמרו הז\'יטונים? בוחרים סכום ולוחצים "ריביי". סך הקניות שלכם מתעדכן מיד אצל כולם.'},
-    {view: "player", o: {}, sel: "[data-pp-view-select]", admin: true, title: "פעולה בשם שחקן אחר",
-      desc: "כמנהלים, בוחרים שחקן מהרשימה כדי לעשות לו ריביי או לסיים לו את הערב."},
-    {view: "player", o: {viewOther: true}, sel: ".rb-frame", admin: true, title: "מסך אדום = שחקן אחר",
-      desc: "המסך נצבע באדום כדי שלא תתבלבלו – כל פעולה כאן נרשמת לדני. כדי לחזור, בוחרים את השם שלכם ברשימה."},
+      desc: `נגמרו הז'יטונים? בוחרים סכום ולוחצים "ריביי". סך הקניות שלכם מתעדכן מיד.`},
+    {view: "player", o: {}, sel: '.pp-tile[data-pp-view="' + TOUR_DANI + '"]', title: "ריביי לחבר",
+      desc: "דני ביקש שתוסיפו לו ריביי? לוחצים על הריבוע שלו כדי לעבור למסך שלו."},
+    {view: "player", o: {viewOther: true}, sel: ".rb-frame", title: "מסך אדום = שחקן אחר",
+      desc: "המסך נצבע באדום כדי שלא תתבלבלו – כל פעולה כאן נרשמת לדני. אחרי הריביי חוזרים למסך שלכם לבד תוך 10 שניות, או מיד בלחיצה על השם שלכם."},
     {view: "player", o: {myRebuy: true}, sel: ".lv-arm", title: "סיום הערב",
       desc: 'סיימתם לשחק? מסמנים V ב"סיימתי את הערב".'},
     {view: "player", o: {myRebuy: true, armed: true}, sel: "[data-leave-photo]", title: "ספירת ז'יטונים",
@@ -3227,11 +3231,11 @@ function renderGameTourStep(){
   const base = gameTour.base;
   const g = tourGame(base, step.o);
   const pageHtml = tourSandbox(g, base.c, step.o, () => step.view === "table" ? renderTable(TOUR_G) : renderPlayerScreen(TOUR_G));
-  const label = step.view === "table" ? "מסך השולחן" : "מסך שחקן";
+  const label = step.view === "table" ? "שולחן" : "שחקן";
   const n = gameTour.steps.length, last = gameTour.i === n - 1;
   root.innerHTML = `
     <div class="gt-app">
-      <div class="screen-tag" style="text-align:right;"><span>מסך הבית</span><span class="crumb-sep">/</span><span>מסך המועדון</span><span class="crumb-sep">/</span><span style="color:var(--text);">${label}</span></div>
+      <div class="screen-tag screen-tag-lg crumbs-row"><span class="crumb-link">בית</span><span class="crumb-sep">›</span><span class="crumb-link crumb-club">${esc(base.c.name || "")}</span><span class="crumb-sep">›</span><span class="crumb-here">${label}</span></div>
       <div class="table-swipe-root"><div class="swipe-track-viewport"><div class="swipe-track">
         <div class="swipe-page lux-page${step.view === "player" ? " player-page" : ""}${step.o.viewOther ? " pp-other" : ""}">${pageHtml}
           <div class="nav-bar nav-bar-compact"><div class="nav-dots"><span class="${step.view === "player" ? "on" : ""}"></span><span class="${step.view === "table" ? "on" : ""}"></span></div></div>
@@ -5323,6 +5327,18 @@ function returnToMyScreenAfter(gameId, pid, what){
   const g = getGame(gameId);
   const mine = g && myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
   if (!g || !pid || pid === mine || playerViewTarget !== pid) return;
+  // Ending the night for a player who lost can open the "who did you pay" window
+  // (maybeOpenDirectPayAfterCashout) - the countdown only starts once it's closed, so
+  // it doesn't run out while that's still being filled in.
+  if (modal && modal.type === "directPay") {
+    const wait = setInterval(() => {
+      if (playerViewTarget !== pid) { clearInterval(wait); return; }
+      if (modal && modal.type === "directPay") return;
+      clearInterval(wait);
+      returnToMyScreenAfter(gameId, pid, what);
+    }, 300);
+    return;
+  }
   const name = (g.players.find(pl => pl.id === pid) || {}).name || "השחקן";
   const base = `${what} ${/^[\u0590-\u05FF]/.test(name) ? "ל" : "ל-"}${name} - חוזרים למסך שלך`;
   const inText = n => n === 1 ? "בעוד שנייה" : `בעוד ${n} שניות`;
@@ -7185,8 +7201,9 @@ function renderModal(m){
           const all = sc.roster.map(p => ({id: p.id, ...playerNetProfit(sc.id, p.id)}));
           const ranked = all.filter(isRegular).sort((a, b) => b.net - a.net);
           const place = ranked.findIndex(x => x.id === me.id) + 1;
-          if (place > 0) rankHtml = `<div class="roster-row"><span>המקום שלי במועדון</span><span style="font-weight:700;white-space:nowrap;">${place===1?'🏆 ':''}${place} מתוך ${ranked.length}</span></div>`;
-          else rankHtml = `<div class="roster-row"><span>המקום שלי במועדון</span><span style="font-size:16px;color:var(--muted);">הדירוג רק למי ששיחק ביותר מ-40% מהערבים</span></div>`;
+          // Shown only to a ranked player in the top half by profit - anyone else (not a
+          // regular, or in the bottom half) gets no rank row at all.
+          if (place > 0 && place <= Math.ceil(ranked.length / 2)) rankHtml = `<div class="roster-row"><span>המקום שלי במועדון</span><span style="font-weight:700;white-space:nowrap;">${place===1?'🏆 ':''}${place} מתוך ${ranked.length}</span></div>`;
         }
       }
       const tlType = ["bar","dot","line"].includes(tlPref("type","line")) ? tlPref("type","line") : "line";
