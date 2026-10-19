@@ -1954,7 +1954,18 @@ async function v2UpdateGame(gameId, fields){
 }
 
 async function v2DeleteGame(gameId){
-  await v2Fetch("DELETE", `/games/${gameId}`);
+  try { await v2Fetch("DELETE", `/games/${gameId}`); }
+  catch(e) {
+    // The delete can go through on the server while its answer is lost or arrives after
+    // the timeout (or a second tap finds it already gone, 404) - that showed "מחיקה נכשלה"
+    // for a night that had in fact been deleted. Only a night still on the server is a
+    // real failure.
+    if (e.status !== 404) {
+      let gone = false;
+      try { await v2Fetch("GET", `/games/${gameId}`); } catch(e2) { gone = e2.status === 404; }
+      if (!gone) throw e;
+    }
+  }
   state.games = state.games.filter(g => g.id !== gameId);
 }
 
@@ -9866,8 +9877,12 @@ function attachHandlers(){
       const g = getGame(modal.gameId);
       const communityId = g.communityId;
       if (USE_RELATIONAL_API) {
+        // One delete at a time - a second tap while the first is still running used to
+        // send a second DELETE that came back "not found".
+        confirmDel.disabled = true;
+        showButtonLoading(confirmDel);
         try { await v2DeleteGame(modal.gameId); }
-        catch(e) { showAlert("מחיקה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+        catch(e) { showAlert("מחיקה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmDel.disabled = false; render(); return; }
       } else {
         state.games = state.games.filter(gm => gm.id !== modal.gameId);
         saveState();
