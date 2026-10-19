@@ -868,10 +868,11 @@ html.theme-light .game-alert-line{color:#9a3412;}
 .gt-highlight{position:fixed;border-radius:14px;border:2px solid #fbbf24;box-shadow:0 0 0 9999px rgba(0,0,0,.72),0 0 15px #fbbf24;transition:top .8s ease-in-out,left .8s ease-in-out,width .8s ease-in-out,height .8s ease-in-out,opacity .5s ease;pointer-events:none;z-index:2;}
 .gt-arrow{position:fixed;font-size:28px;z-index:3;transition:left .8s ease-in-out,top .8s ease-in-out,opacity .5s ease;animation:gtBounce .9s infinite alternate ease-in-out;filter:drop-shadow(0 2px 5px rgba(0,0,0,.8));pointer-events:none;}
 .game-tour .gt-app{animation:gtFade .6s ease;}
-.gt-card{animation:gtFade .6s ease;}
+.gt-card{top:62%;transition:top .8s ease-in-out;}
+.gt-card > *{animation:gtFade .6s ease;}
 @keyframes gtFade{from{opacity:0;}to{opacity:1;}}
 .game-tour .gt-demo-track{transition:transform 1.8s ease-in-out;}
-.gt-hand{position:fixed;z-index:3;font-size:44px;line-height:1;opacity:0;transform:translate(-50%,-10%);transition:left 1.8s ease-in-out,opacity .4s ease;filter:drop-shadow(0 3px 6px rgba(0,0,0,.7));pointer-events:none;}
+.gt-hand{position:fixed;z-index:3;font-size:51px;line-height:1;opacity:0;transform:translate(-50%,-10%);transition:left 1.8s ease-in-out,opacity .4s ease;filter:drop-shadow(0 3px 6px rgba(0,0,0,.7));pointer-events:none;}
 /* The app's own "alone at the table" hints (pointing hands, "הוספת שחקן", the swaying
    swipe line) stay out of the walkthrough - it does its own pointing. */
 .game-tour .gt-app .alone-hint{display:none!important;}
@@ -3301,11 +3302,9 @@ function tourSteps(base){
       desc: "דני ביקש שתוסיפו לו ריביי או הודיע על סיום הערב? לוחצים על הריבוע שלו כדי לעבוד עליו."},
     {view: "player", o: {viewOther: true}, sel: ".rb-frame", title: "מסך אדום = שחקן אחר",
       desc: "המסך נצבע באדום כדי שלא תתבלבלו – כל פעולה כאן נרשמת לדני. אחרי הריביי חוזרים למסך שלכם לבד תוך 10 שניות, או מיד בלחיצה על השם שלכם."},
-    {view: "player", o: {myRebuy: true}, sel: ".lv-arm", title: "סיום הערב",
-      desc: 'סיימתם לשחק? מסמנים V ב"סיימתי את הערב".'},
-    // The card sits at the top so it never covers the pot line at the bottom of the area.
-    {view: "player", o: {myRebuy: true, armed: true}, sel: ".lv-frame", cardTop: true, title: "אזור סיום הערב",
-      desc: "מצלמים את הז'יטונים לספירה אוטומטית, או מקלידים את הסכום שנשאר. למטה: כמה כסף נשאר בקופה וכמה שחקנים עוד יושבים."},
+    // The card sits over the area so it never covers the pot line at its bottom.
+    {view: "player", o: {myRebuy: true, armed: true}, sel: ".lv-frame", cardTop: true, title: "סיום הערב",
+      desc: `מסמנים V ב"סיימתי את הערב", מצלמים את הז'יטונים או מקלידים את הסכום. למטה: כמה כסף נשאר בקופה וכמה עוד יושבים.`},
     {view: "player", o: {myRebuy: true, cashedOut: true}, sel: ".player-screen-scroll > div", title: "הסיכום שלכם",
       desc: "מקבלים סיכום אישי: קניות, ז'יטונים בסוף, רווח או הפסד – ואיך מסדרים את התשלומים. ערב מוצלח!"},
   ];
@@ -3330,6 +3329,8 @@ function renderGameTourStep(){
   const n = gameTour.steps.length, last = gameTour.i === n - 1;
   const prevHl = root.querySelector("[data-gt-highlight]");
   const prevHlStyle = prevHl ? prevHl.getAttribute("style") : null;
+  const prevCard = root.querySelector("[data-gt-card]");
+  const prevCardTop = prevCard ? prevCard.style.top : "";
   root.innerHTML = `
     <div class="gt-app">
       <div class="screen-tag screen-tag-lg crumbs-row"><span class="crumb-link">בית</span><span class="crumb-sep">›</span><span class="crumb-link crumb-club">${esc(base.c.name || "")}</span><span class="crumb-sep">›</span><span class="crumb-here" data-gt-label>${label}</span></div>
@@ -3340,7 +3341,7 @@ function renderGameTourStep(){
     <div class="gt-highlight" data-gt-highlight${prevHlStyle ? ` style="${prevHlStyle}"` : ""}></div>
     <div class="gt-arrow" data-gt-arrow>👇</div>
     <div class="gt-hand" data-gt-hand>👆</div>
-    <div class="gt-card" data-gt-card>
+    <div class="gt-card" data-gt-card${prevCardTop ? ` style="top:${prevCardTop};"` : ""}>
       <div class="gt-head"><span class="gt-badge">שלב ${gameTour.i + 1} מתוך ${n}</span><button class="gt-skip" data-gt-skip>דלג ✕</button></div>
       <div class="gt-title">${esc(step.title)}</div>
       <div class="gt-desc">${Array.isArray(step.desc) ? step.desc.map(part => typeof part === "string" ? esc(part) : `<span class="gt-part" data-gt-part="${part.page}">${esc(part.text)}</span>`).join("") : esc(step.desc)}</div>
@@ -3371,7 +3372,7 @@ async function runSwipeDemo(token){
   const track = root.querySelector("[data-gt-track]"), hand = root.querySelector("[data-gt-hand]"), label = root.querySelector("[data-gt-label]");
   const hl = root.querySelector("[data-gt-highlight]"), arrow = root.querySelector("[data-gt-arrow]");
   const viewport = root.querySelector(".swipe-track-viewport");
-  const lightUp = el => { if (el) { hl.style.opacity = "1"; arrow.style.opacity = "1"; spotlight(el, true); } };
+  const lightUp = el => { if (el) { hl.style.opacity = "1"; arrow.style.opacity = "1"; spotlight(el, false); } };
   const dim = () => { hl.style.opacity = "0"; arrow.style.opacity = "0"; };
   // The card's text part for the screen that's showing (see step 1's desc parts) in bold.
   const boldPart = page => root.querySelectorAll("[data-gt-part]").forEach(el => el.classList.toggle("on", el.dataset.gtPart === page));
@@ -3385,7 +3386,7 @@ async function runSwipeDemo(token){
   };
   const drag = async (toTable) => {
     const vr = viewport.getBoundingClientRect();
-    const y = vr.top + vr.height * 0.55;
+    const y = vr.top + vr.height * 0.35;
     const from = vr.left + vr.width * (toTable ? 0.22 : 0.78), to = vr.left + vr.width * (toTable ? 0.78 : 0.22);
     hand.style.transition = "none";
     Object.assign(hand.style, {left: from + "px", top: y + "px", opacity: "1"});
@@ -3415,9 +3416,9 @@ function positionGameTour(){
   if (!root || !gameTour) return;
   const step = gameTour.steps[gameTour.i];
   if (step.demo) return; // runSwipeDemo places its own spotlight
-  spotlight(root.querySelector(".gt-app " + step.sel), false, !!step.cardTop);
+  spotlight(root.querySelector(".gt-app " + step.sel), !!step.cardTop);
 }
-function spotlight(target, cardAtBottom, cardAtTop){
+function spotlight(target, cardAbove){
   const root = document.getElementById("game-tour");
   if (!root) return;
   const hl = root.querySelector("[data-gt-highlight]"), arrow = root.querySelector("[data-gt-arrow]"), card = root.querySelector("[data-gt-card]");
@@ -3429,9 +3430,14 @@ function spotlight(target, cardAtBottom, cardAtTop){
   arrow.textContent = below ? "👆" : "👇";
   arrow.style.left = (r.left + r.width / 2 - 14) + "px";
   arrow.style.top = below ? (r.bottom + 6) + "px" : (r.top - 38) + "px";
-  // Card on whichever side of the target has more room.
-  if (cardAtTop || (!cardAtBottom && r.top + r.height / 2 > window.innerHeight / 2)) { card.style.top = "calc(12px + env(safe-area-inset-top,0px))"; card.style.bottom = "auto"; }
-  else { card.style.top = "auto"; card.style.bottom = "calc(16px + env(safe-area-inset-bottom,0px))"; }
+  // Card right by the action: just under the target, or just over it (clear of the
+  // arrow) when there's no room under it or the step asks for it (cardAbove) - its top
+  // eases over from wherever it was (see .gt-card's transition).
+  const ch = card.offsetHeight, vh = window.innerHeight, margin = 12;
+  const underTop = r.bottom + (below ? 44 : 14), overTop = r.top - (below ? 14 : 44) - ch;
+  const fitsUnder = underTop + ch <= vh - margin, fitsOver = overTop >= margin;
+  const top = (!cardAbove && fitsUnder) ? underTop : fitsOver ? overTop : fitsUnder ? underTop : Math.max(margin, vh - margin - ch);
+  card.style.top = top + "px";
 }
 window.addEventListener("resize", positionGameTour);
 function openGameTour(g){
