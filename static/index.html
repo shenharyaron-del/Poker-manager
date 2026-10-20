@@ -7956,13 +7956,14 @@ function renderModal(m){
     const p = g.players.find(pl => pl.id === m.playerId);
     const amt = getBuyinAmounts(getCommunity(g.communityId))[0];
     title = `סכום קנייה ראשונית ל${p ? p.name : "שחקן"}`;
+    // One row: the community amount (one tap) next to a box for any other amount; "הכנס"
+    // enters whatever is typed in the box, or the community amount while it's empty.
     body = `
-      <button class="btn btn-primary btn-block" data-entry-amount="${amt}" style="font-size:28px;font-weight:800;padding:14px 0;">₪${amt}</button>
-      <p style="text-align:center;color:var(--muted);margin:14px 0 8px;">או הכנס סכום אחר</p>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <input type="number" id="entry-other-amount" inputmode="decimal" min="1" style="flex:1;text-align:center;font-size:22px;">
-        <button class="btn btn-ghost" data-entry-other style="font-size:20px;">הכנס</button>
-      </div>`;
+      <div style="display:flex;gap:10px;align-items:stretch;">
+        <button class="btn btn-primary" data-entry-amount="${amt}" style="flex:1;font-size:28px;font-weight:800;padding:12px 0;">₪${amt}</button>
+        <input type="number" id="entry-other-amount" inputmode="decimal" min="1" placeholder="סכום אחר" style="flex:1;min-width:0;text-align:center;font-size:22px;">
+      </div>
+      <button class="btn btn-ghost btn-block" data-entry-other data-default-amount="${amt}" style="font-size:22px;margin-top:12px;">הכנס</button>`;
   } else if (m.type === "playerNight") {
     const g = getGame(m.gameId) || {players:[], cashouts:{}};
     const p = (g.players||[]).find(pl => pl.id === m.playerId);
@@ -8364,8 +8365,9 @@ function attachHandlers(){
     const otherBtn = app.querySelector("[data-entry-other]");
     const otherInput = app.querySelector("#entry-other-amount");
     if (otherBtn && otherInput) {
-      otherBtn.onclick = () => enter(Number(otherInput.value));
-      otherInput.onkeydown = e => { if (e.key === "Enter") enter(Number(otherInput.value)); };
+      const typedOrDefault = () => otherInput.value.trim() ? Number(otherInput.value) : Number(otherBtn.dataset.defaultAmount);
+      otherBtn.onclick = () => enter(typedOrDefault());
+      otherInput.onkeydown = e => { if (e.key === "Enter") enter(typedOrDefault()); };
     }
   }
   app.querySelectorAll("[data-player-night]").forEach(el => el.onclick = async (e) => {
