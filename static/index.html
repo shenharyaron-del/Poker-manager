@@ -7963,7 +7963,7 @@ function renderModal(m){
         <button class="btn btn-primary" data-entry-amount="${amt}" style="flex:1;font-size:28px;font-weight:800;padding:12px 0;">₪${amt}</button>
         <input type="number" id="entry-other-amount" inputmode="decimal" min="1" placeholder="סכום אחר" style="flex:1;min-width:0;text-align:center;font-size:22px;">
       </div>
-      <button class="btn btn-ghost btn-block" data-entry-other data-default-amount="${amt}" style="font-size:22px;margin-top:12px;">הכנס</button>
+      <button class="btn btn-ghost btn-block" data-entry-other data-default-amount="${amt}" style="font-size:22px;margin-top:12px;">הכנס (₪${amt})</button>
       <button data-entry-cancel style="display:block;width:100%;background:none;border:none;color:var(--muted);font-size:18px;font-weight:600;margin-top:10px;padding:6px;cursor:pointer;font-family:inherit;text-decoration:underline;text-underline-offset:3px;">ביטול</button>`;
   } else if (m.type === "playerNight") {
     const g = getGame(m.gameId) || {players:[], cashouts:{}};
@@ -8419,6 +8419,8 @@ function attachHandlers(){
         const typed = !!otherInput.value.trim();
         if (presetBtn) { presetBtn.classList.toggle("btn-primary", !typed); presetBtn.classList.toggle("btn-ghost", typed); }
         otherBtn.classList.toggle("btn-primary", typed); otherBtn.classList.toggle("btn-ghost", !typed);
+        const shown = typedOrDefault();
+        otherBtn.textContent = shown > 0 ? `הכנס (₪${shown})` : "הכנס";
       };
     }
   }
