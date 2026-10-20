@@ -224,6 +224,9 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
 .leave-frame{border:1px solid rgba(212,175,55,.55);border-radius:14px;padding:6px 10px 10px;margin:0;min-width:0;flex-shrink:0;}
 .setup-frame{margin:0 0 16px;padding:8px 12px 12px;}
 .leave-frame legend{color:var(--gold);font-size:11px;font-weight:700;letter-spacing:.05em;padding:0 8px;margin-right:6px;}
+/* Club setup > payments: the how-the-night-settles radio sits on each frame's title. */
+.settle-pick{display:flex;align-items:center;gap:6px;cursor:pointer;}
+.settle-pick input{width:18px;height:18px;margin:0;accent-color:var(--gold);}
 /* History/table-activity used to be two always-visible stacked panels (a short fixed-height
    one plus a flex:1 one); now they share one tab-switched panel instead, so whichever is
    selected gets ALL the space both used to split between them. The unselected tab is fully
@@ -3964,7 +3967,11 @@ function captureSetupDraft(){
       });
       return out;
     };
-    setupDraft.payments = {paybox: grab("data-paybox-name-input", "data-paybox-link-input"), bit: grab("data-bit-name-input", "data-bit-link-input")};
+    const picked = document.querySelector("[data-settle-radio]:checked");
+    const val = id => { const el = q("#" + id); return el ? el.value.trim() : ""; };
+    setupDraft.payments = {paybox: grab("data-paybox-name-input", "data-paybox-link-input"), bit: grab("data-bit-name-input", "data-bit-link-input"),
+      settle: picked ? picked.value : (setupDraft.payments && setupDraft.payments.settle),
+      newPaybox: {name: val("new-paybox-name"), link: val("new-paybox-link")}, newBit: {name: val("new-bit-name"), link: val("new-bit-link")}};
   }
 }
 // Switching tabs never prompts anymore - the current tab's edits are kept in the draft
@@ -4044,6 +4051,29 @@ async function saveSetupChips(communityId, chips){
 }
 async function saveSetupPayments(communityId, payments){
   const c = getCommunity(communityId);
+  // A group typed in but not yet saved with its own button is saved here too.
+  for (const [kind, nw] of [["paybox", payments.newPaybox], ["bit", payments.newBit]]) {
+    const list = kind === "paybox" ? (c.payboxLinks || []) : (c.bitLinks || []);
+    if (list.length || !nw || !nw.name || !nw.link) continue;
+    const entry = {id: uid(), name: nw.name, link: nw.link};
+    if (USE_RELATIONAL_API) {
+      try { await (kind === "paybox" ? v2AddPayboxLink : v2AddBitLink)(communityId, entry); }
+      catch(e) { showAlert(setupSaveErrorText(e, "payments")); return false; }
+    } else {
+      if (kind === "paybox") { c.payboxLinks = [entry]; c.activePayboxLinkId = entry.id; }
+      else { c.bitLinks = [entry]; c.activeBitLinkId = entry.id; }
+      saveState();
+    }
+  }
+  const settle = payments.settle;
+  if (settle && settle !== (c.settlementDefault || "direct")) {
+    const hasGroup = settle === "paybox" ? (c.payboxLinks || []).length : settle === "bit" ? (c.bitLinks || []).length : 1;
+    if (!hasGroup) { showAlert(settle === "paybox" ? "כדי לבחור פייבוקס - הזינו את שם הקבוצה והקישור שלה." : "כדי לבחור ביט - הזינו את שם הקבוצה והקישור שלה."); return false; }
+    if (USE_RELATIONAL_API) {
+      try { if ((await v2UpdateCommunity(communityId, {settlementDefault: settle})) === null) { showAlert("שמירה נכשלה - נסו שוב."); return false; } }
+      catch(e) { showAlert(setupSaveErrorText(e, "payments")); return false; }
+    } else { c.settlementDefault = settle; saveState(); }
+  }
   const merge = (list, edits) => (list||[]).map(pl => {
     const e = edits[pl.id] || {};
     return {id: pl.id, name: (e.name && e.name.trim()) || pl.name, link: (e.link && e.link.trim()) || pl.link};
@@ -7540,13 +7570,17 @@ function renderModal(m){
     // case here). Same shape for Paybox and Bit, side by side.
     const link = (c.payboxLinks || [])[0] || null;
     const bitLink = (c.bitLinks || [])[0] || null;
-    const settlementDefault = c.settlementDefault || "direct";
     const payDraft = (setupDraft && setupDraft.communityId === m.communityId && setupDraft.payments) || {paybox:{}, bit:{}};
+    // How players settle at the end of the night: one of three, picked by the radio on
+    // each frame's title (and auto-picked when a group's details are typed). Kept in the
+    // draft and saved with "שמור שינויים", like the rest of the tab.
+    const settlementDefault = payDraft.settle || c.settlementDefault || "direct";
+    const settlePick = (val, label) => `<label class="settle-pick"><input type="radio" name="settlement-default" value="${val}" data-settle-radio ${settlementDefault===val?'checked':''}>${label}</label>`;
     body = `
       ${setupTabsHtml(m.communityId, "payments")}
       <p style="color:var(--muted);font-size:16px;margin:0 0 14px;">פתיחה מהירה לקבוצת הפייבוקס או הביט לטובת הסדר התשלומים.<br>אם אין, Poker Manager יציע העברות ישירות בין השחקנים.</p>
-      <fieldset class="leave-frame setup-frame">
-      <legend style="display:flex;align-items:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:14px;width:auto;display:block;">קבוצת פייבוקס</legend>
+      <fieldset class="leave-frame setup-frame" data-settle-frame="paybox">
+      <legend>${settlePick("paybox", `<span style="display:inline-flex;background:#0891b2;border-radius:4px;padding:2px;"><img src="/static/paybox-icon.png" style="height:13px;width:auto;display:block;"></span>קבוצת פייבוקס`)}</legend>
       ${link ? `
         <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:10px;">
           <input type="text" data-paybox-name-input="${link.id}" value="${esc(payDraft.paybox[link.id] ? payDraft.paybox[link.id].name : '')}" placeholder="${esc(link.name) || 'שם'}" style="margin-bottom:6px;font-weight:700;">
@@ -7558,8 +7592,8 @@ function renderModal(m){
         <button class="btn btn-block lux-paybox" data-add-paybox-entry><img src="/static/paybox-icon.png" alt="">שמור קבוצת פייבוקס</button>
       `}
       </fieldset>
-      <fieldset class="leave-frame setup-frame">
-      <legend style="display:flex;align-items:center;gap:6px;"><img src="/static/bit-icon.png" style="height:14px;width:auto;display:block;">קבוצת ביט</legend>
+      <fieldset class="leave-frame setup-frame" data-settle-frame="bit">
+      <legend>${settlePick("bit", `<img src="/static/bit-icon.png" style="height:14px;width:auto;display:block;">קבוצת ביט`)}</legend>
       ${bitLink ? `
         <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:10px;">
           <input type="text" data-bit-name-input="${bitLink.id}" value="${esc(payDraft.bit[bitLink.id] ? payDraft.bit[bitLink.id].name : '')}" placeholder="${esc(bitLink.name) || 'שם'}" style="margin-bottom:6px;font-weight:700;">
@@ -7572,22 +7606,8 @@ function renderModal(m){
       `}
       </fieldset>
       <fieldset class="leave-frame setup-frame">
-      <legend>ברירת מחדל לסיום שולחן</legend>
-      <p style="color:var(--muted);font-size:16px;margin:0 0 10px;">כשמישהו מסיים ערב, איזו אפשרות תוצע לו כברירת מחדל לתשלום.</p>
-      <div class="checkbox-row" style="cursor:${link?'pointer':'not-allowed'};opacity:${link?'1':'.5'};" ${link?`data-select-settlement-default="paybox"`:''}>
-        <input type="radio" name="settlement-default" ${settlementDefault==='paybox'?'checked':''} ${link?'':'disabled'}>
-        <span class="flex1">תשלום לפייבוקס הקבוצתי</span>
-      </div>
-      ${!link ? `<p style="color:var(--muted);font-size:15px;margin:-2px 0 10px;">דורש הגדרת קבוצת פייבוקס למעלה</p>` : ""}
-      <div class="checkbox-row" style="cursor:${bitLink?'pointer':'not-allowed'};opacity:${bitLink?'1':'.5'};" ${bitLink?`data-select-settlement-default="bit"`:''}>
-        <input type="radio" name="settlement-default" ${settlementDefault==='bit'?'checked':''} ${bitLink?'':'disabled'}>
-        <span class="flex1">תשלום לביט הקבוצתי</span>
-      </div>
-      ${!bitLink ? `<p style="color:var(--muted);font-size:15px;margin:-2px 0 10px;">דורש הגדרת קבוצת ביט למעלה</p>` : ""}
-      <div class="checkbox-row" style="cursor:pointer;margin-bottom:0;" data-select-settlement-default="direct">
-        <input type="radio" name="settlement-default" ${settlementDefault==='direct'?'checked':''}>
-        <span class="flex1">העברה ישירות בין שחקנים</span>
-      </div>
+      <legend>${settlePick("direct", "העברות ישירות בין חברים")}</legend>
+      <p style="color:var(--muted);font-size:16px;margin:0;">בסוף הערב Poker Manager יחשב מי מעביר למי, וכל אחד משלם ישירות לחבר.</p>
       </fieldset>
     `;
   } else if (m.type === "buyinSetup") {
@@ -10200,19 +10220,13 @@ function attachHandlers(){
   }
 
   if (modal && modal.type === "payboxSettings") {
-    app.querySelectorAll("[data-select-settlement-default]").forEach(el => el.onclick = async () => {
-      const value = el.dataset.selectSettlementDefault;
-      const c = getCommunity(modal.communityId);
-      if (!value || c.settlementDefault === value) return;
-      if (USE_RELATIONAL_API) {
-        try { if ((await v2UpdateCommunity(modal.communityId, {settlementDefault: value})) === null) { showAlert("שמירה נכשלה - נסו שוב."); return; } }
-        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
-      } else {
-        c.settlementDefault = value;
-        saveState();
-      }
-      render();
-    });
+    // Typing a group's details picks that group as how the night settles (the change
+    // event this fires marks the tab dirty, like any other edit here).
+    app.querySelectorAll("[data-settle-frame]").forEach(fr => fr.addEventListener("input", (e) => {
+      if (e.target.matches("[data-settle-radio]")) return;
+      const r = fr.querySelector("[data-settle-radio]");
+      if (r && !r.checked) { r.checked = true; r.dispatchEvent(new Event("change", {bubbles: true})); }
+    }));
     const addEntryBtn = app.querySelector("[data-add-paybox-entry]");
     if (addEntryBtn) addEntryBtn.onclick = async () => {
       const name = document.getElementById("new-paybox-name").value.trim();
