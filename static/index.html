@@ -4051,7 +4051,7 @@ async function saveSetupChips(communityId, chips){
 }
 async function saveSetupPayments(communityId, payments){
   const c = getCommunity(communityId);
-  // A group typed in but not yet saved with its own button is saved here too.
+  // A group typed in for the first time is created here (there's no separate save button).
   for (const [kind, nw] of [["paybox", payments.newPaybox], ["bit", payments.newBit]]) {
     const list = kind === "paybox" ? (c.payboxLinks || []) : (c.bitLinks || []);
     if (list.length || !nw || !nw.name || !nw.link) continue;
@@ -7589,7 +7589,6 @@ function renderModal(m){
       ` : `
         <div class="field"><label>שם</label><input type="text" id="new-paybox-name" placeholder="שם הקבוצה בפייבוקס"></div>
         <div class="field"><label>קישור</label><input type="text" id="new-paybox-link" placeholder="https://links.payboxapp.com/..." dir="ltr"></div>
-        <button class="btn btn-block lux-paybox" data-add-paybox-entry><img src="/static/paybox-icon.png" alt="">שמור קבוצת פייבוקס</button>
       `}
       </fieldset>
       <fieldset class="leave-frame setup-frame" data-settle-frame="bit">
@@ -7602,7 +7601,6 @@ function renderModal(m){
       ` : `
         <div class="field"><label>שם</label><input type="text" id="new-bit-name" placeholder="שם הקבוצה בביט"></div>
         <div class="field"><label>קישור</label><input type="text" id="new-bit-link" placeholder="https://www.bitpay.co.il/..." dir="ltr"></div>
-        <button class="btn btn-block lux-bit" data-add-bit-entry><img src="/static/bit-icon.png" alt="">שמור קבוצת ביט</button>
       `}
       </fieldset>
       <fieldset class="leave-frame setup-frame">
@@ -10227,42 +10225,6 @@ function attachHandlers(){
       const r = fr.querySelector("[data-settle-radio]");
       if (r && !r.checked) { r.checked = true; r.dispatchEvent(new Event("change", {bubbles: true})); }
     }));
-    const addEntryBtn = app.querySelector("[data-add-paybox-entry]");
-    if (addEntryBtn) addEntryBtn.onclick = async () => {
-      const name = document.getElementById("new-paybox-name").value.trim();
-      const link = document.getElementById("new-paybox-link").value.trim();
-      if (!name || !link) return;
-      const c = getCommunity(modal.communityId);
-      const newEntry = {id: uid(), name, link};
-      if (USE_RELATIONAL_API) {
-        try { await v2AddPayboxLink(modal.communityId, newEntry); }
-        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
-      } else {
-        if (!c.payboxLinks) c.payboxLinks = [];
-        c.payboxLinks.push(newEntry);
-        if (!c.activePayboxLinkId) c.activePayboxLinkId = newEntry.id;
-        saveState();
-      }
-      render();
-    };
-    const addBitEntryBtn = app.querySelector("[data-add-bit-entry]");
-    if (addBitEntryBtn) addBitEntryBtn.onclick = async () => {
-      const name = document.getElementById("new-bit-name").value.trim();
-      const link = document.getElementById("new-bit-link").value.trim();
-      if (!name || !link) return;
-      const c = getCommunity(modal.communityId);
-      const newEntry = {id: uid(), name, link};
-      if (USE_RELATIONAL_API) {
-        try { await v2AddBitLink(modal.communityId, newEntry); }
-        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
-      } else {
-        if (!c.bitLinks) c.bitLinks = [];
-        c.bitLinks.push(newEntry);
-        if (!c.activeBitLinkId) c.activeBitLinkId = newEntry.id;
-        saveState();
-      }
-      render();
-    };
   }
 
   if (modal && modal.type === "pickSeat") {
