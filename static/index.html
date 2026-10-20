@@ -7963,7 +7963,8 @@ function renderModal(m){
         <button class="btn btn-primary" data-entry-amount="${amt}" style="flex:1;font-size:28px;font-weight:800;padding:12px 0;">₪${amt}</button>
         <input type="number" id="entry-other-amount" inputmode="decimal" min="1" placeholder="סכום אחר" style="flex:1;min-width:0;text-align:center;font-size:22px;">
       </div>
-      <button class="btn btn-ghost btn-block" data-entry-other data-default-amount="${amt}" style="font-size:22px;margin-top:12px;">הכנס</button>`;
+      <button class="btn btn-ghost btn-block" data-entry-other data-default-amount="${amt}" style="font-size:22px;margin-top:12px;">הכנס</button>
+      <button data-entry-cancel style="display:block;width:100%;background:none;border:none;color:var(--muted);font-size:18px;font-weight:600;margin-top:10px;padding:6px;cursor:pointer;font-family:inherit;text-decoration:underline;text-underline-offset:3px;">ביטול</button>`;
   } else if (m.type === "playerNight") {
     const g = getGame(m.gameId) || {players:[], cashouts:{}};
     const p = (g.players||[]).find(pl => pl.id === m.playerId);
@@ -8378,6 +8379,33 @@ function attachHandlers(){
       performBuyin(gameId, playerId, Math.round(amt * 100) / 100, {isEntry: true, actorName: myIdentity.name});
     };
     app.querySelectorAll("[data-entry-amount]").forEach(el => el.onclick = () => enter(Number(el.dataset.entryAmount)));
+    // ביטול: nothing was bought, so just take the player off the seat again. My own seat
+    // -> back to the club screen; someone I was seating -> stay on the table.
+    const cancelEntryBtn = app.querySelector("[data-entry-cancel]");
+    if (cancelEntryBtn) cancelEntryBtn.onclick = async () => {
+      cancelEntryBtn.disabled = true;
+      const g = getGame(gameId);
+      if (!g) { closeModal(); return; }
+      const mine = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+      const idx = (g.seats || []).indexOf(playerId);
+      try {
+        if (idx !== -1) {
+          if (USE_RELATIONAL_API) {
+            await v2ClearSeat(gameId, idx);
+            v2AddGameEvent(gameId, "seat_removed", playerId, myIdentity.name, undefined);
+          } else {
+            await mutateAndSave(() => {
+              const freshG = getGame(gameId);
+              const i2 = (freshG.seats || []).indexOf(playerId);
+              if (i2 !== -1) freshG.seats[i2] = null;
+              logGameEvent(freshG, "seat_removed", playerId, myIdentity.name, undefined);
+            });
+          }
+        }
+      } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); cancelEntryBtn.disabled = false; return; }
+      if (playerId === mine) go("community", {communityId: g.communityId});
+      else closeModal();
+    };
     const otherBtn = app.querySelector("[data-entry-other]");
     const otherInput = app.querySelector("#entry-other-amount");
     if (otherBtn && otherInput) {
