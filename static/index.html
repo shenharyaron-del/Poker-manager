@@ -9673,9 +9673,11 @@ function attachHandlers(){
             // table never exists with an empty seat 0 even for an instant) - that bypasses
             // v2ClaimSeat entirely, which is the only place the "first time seated here ->
             // auto buy-in the community's first amount" trigger otherwise lives. Without
-            // this, the creator's own table opened with ₪0 bought in instead of the usual
-            // default. Fire-and-forget, same reasoning as v2ClaimSeat's own call.
-            performBuyin(gid, creatorPlayer.id, getBuyinAmounts(c)[0], {isEntry: true, actorName: myIdentity.name});
+            // this, the creator's own table opened with ₪0 bought in. Asks for the amount
+            // (same window as v2ClaimSeat) rather than charging the default outright -
+            // deferred a tick so it opens after the go("table") below.
+            const creatorId = creatorPlayer.id;
+            setTimeout(() => openModal({type: "entryBuyin", gameId: gid, playerId: creatorId}), 0);
             if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
             myIdentity.myPlayers[c.id] = creatorPlayer.id;
             saveIdentity();
@@ -9718,7 +9720,7 @@ function attachHandlers(){
       // seatPlayerIfRoom just now only occupies the seat - unlike v2ClaimSeat (the
       // relational equivalent), it has no "first time seated here -> auto buy-in" trigger
       // of its own, so the creator's own table would otherwise open with ₪0 bought in.
-      if (creatorPlayer) performBuyin(g.id, creatorPlayer.id, getBuyinAmounts(c)[0], {isEntry: true, actorName: myIdentity.name});
+      if (creatorPlayer) { const gameId = g.id, creatorId = creatorPlayer.id; setTimeout(() => openModal({type: "entryBuyin", gameId, playerId: creatorId}), 0); }
       // Straight into the new table (the welcome screen shows first).
       if (creatorPlayer) {
         if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
