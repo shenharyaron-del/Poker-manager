@@ -65,6 +65,12 @@ body{
 .screen-tag .crumb-link{background:none;border:none;padding:8px 2px;margin:-8px -2px;font:inherit;letter-spacing:inherit;color:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer;}
 .screen-tag .crumb-sep{margin:0 6px;opacity:.7;}
 .screen-tag{position:relative;}
+/* iPhone with the app installed: the page runs under the clock / notch (translucent
+   status bar), so the top row, the עיצוב button and full-screen windows start below it. */
+.screen-tag{padding-top:calc(20px + env(safe-area-inset-top,0px));}
+.screen-tag .theme-toggle{top:calc(9px + env(safe-area-inset-top,0px));}
+.screen-tag .install-chip{top:calc(47px + env(safe-area-inset-top,0px));}
+.overlay.overlay-fullscreen .modal,.overlay.overlay-top .modal{padding-top:calc(20px + env(safe-area-inset-top,0px));}
 /* Home and club screens: the screen name / breadcrumbs at a readable size. */
 .screen-tag.screen-tag-lg{font-size:18px;letter-spacing:.03em;}
 /* Club screen breadcrumbs: one line, clear of the עיצוב button on the left - a long club
@@ -1076,7 +1082,7 @@ html.has-inapp-bar .overlay{top:48px;}
   html.theme-light{color-scheme:only light;}
 }
 .screen-tag.with-install{padding-bottom:30px;}
-html.has-install-chip [data-share-app]{top:84px!important;}
+html.has-install-chip [data-share-app]{top:calc(84px + env(safe-area-inset-top,0px))!important;}
 </style>
 </head>
 <body>
@@ -5406,7 +5412,7 @@ function renderHome(){
     </div>`;
   cards = newCommunityCard + cards;
   return `
-    <button data-share-app style="position:fixed;left:16px;top:56px;z-index:20;display:flex;align-items:center;gap:7px;background:#25D366;color:#fff;border:none;border-radius:20px;padding:9px 14px 9px 12px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.45);">${icon('share')} שיתוף חברים</button>
+    <button data-share-app style="position:fixed;left:16px;top:calc(56px + env(safe-area-inset-top,0px));z-index:20;display:flex;align-items:center;gap:7px;background:#25D366;color:#fff;border:none;border-radius:20px;padding:9px 14px 9px 12px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.45);">${icon('share')} שיתוף חברים</button>
     <div class="top">
       <div class="row" style="gap:8px;align-items:center;">
         <img src="${getGlobalPlayer(myIdentity.id).photo || '/static/logo-watermark.png'}" data-edit-identity-name style="width:28px;height:28px;border-radius:50%;object-fit:cover;cursor:pointer;flex-shrink:0;border:1px solid var(--card-b);">
