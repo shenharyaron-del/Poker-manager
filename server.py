@@ -1183,6 +1183,40 @@ def v2_get_game_summary(game_id):
     })
 
 
+@app.route("/api/v2/games/<game_id>/players/<player_id>/history", methods=["GET"])
+def v2_get_player_night(game_id, player_id):
+    caller = _caller()
+    # One player's own night, for the results screen's per-player summary - the summary
+    # load above only carries totals, so the individual buy-ins (with their times) and any
+    # cancelled ones are fetched here on demand, for just this one player.
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT community_id FROM games WHERE id = %s", (game_id,))
+            row = cur.fetchone()
+            if not row or not _can_see_community(cur, caller, row[0]):
+                return jsonify({"error": "not found"}), 404
+            cur.execute(
+                "SELECT id, amount, ts, actor_name FROM buyins WHERE game_id = %s AND player_id = %s ORDER BY ts",
+                (game_id, player_id),
+            )
+            buyins = [
+                {"id": r[0], "amount": _num(r[1]), "ts": int(r[2].timestamp() * 1000) if r[2] else None, "actorName": r[3]}
+                for r in cur.fetchall()
+            ]
+            cur.execute(
+                "SELECT ts, actor_name, amount FROM game_events "
+                "WHERE game_id = %s AND player_id = %s AND type = 'buyin_deleted' ORDER BY ts",
+                (game_id, player_id),
+            )
+            deleted = [
+                {"ts": int(r[0].timestamp() * 1000) if r[0] else None, "actorName": r[1],
+                 "amount": _num(r[2]) if r[2] is not None else None}
+                for r in cur.fetchall()
+            ]
+        conn.commit()
+    return jsonify({"buyins": buyins, "deleted": deleted})
+
+
 @app.route("/api/v2/games/<game_id>/events", methods=["POST"])
 def v2_add_game_event(game_id):
     denied = _guard(game_id=game_id)
