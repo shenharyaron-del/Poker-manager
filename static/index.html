@@ -7494,13 +7494,24 @@ function renderModal(m){
     body = `
       <p style="color:var(--muted);font-size:16px;margin-top:0;">בחרו למי את/ה מעביר את הכסף במזומן${isForSelf ? ', או פתחו ביט/פייבוקס לתשלום' : ''}.</p>
       <div class="field"><label>למי?</label>
-        <div class="scroll-list" style="max-height:200px;">
+        <div class="scroll-list" style="max-height:240px;">
+          <div class="checkbox-row" data-select-direct-pay-to="__group__" style="cursor:pointer;">
+            <input type="radio" name="direct-pay-to" ${selectedToPlayerId==="__group__"?"checked":""} style="pointer-events:none;">
+            <span class="flex1" style="display:flex;align-items:center;gap:6px;"><span style="display:inline-flex;background:#0891b2;border-radius:5px;padding:2px;"><img src="/static/paybox-icon.png" style="height:16px;width:auto;display:block;"></span><img src="/static/bit-icon.png" style="height:20px;width:auto;"> פייבוקס / ביט קבוצתי</span>
+          </div>
           ${otherPlayers.map(p => `<div class="checkbox-row" data-select-direct-pay-to="${p.id}" style="cursor:pointer;">
             <input type="radio" name="direct-pay-to" ${selectedToPlayerId===p.id?"checked":""} style="pointer-events:none;">
             <span class="flex1">${esc(p.name)}</span>
           </div>`).join("")}
         </div>
       </div>
+      ${selectedToPlayerId === "__group__" ? (() => {
+        // Paying the group's PayBox / Bit: suggest setting the group's details in the club
+        // profile (with a way there for whoever can edit it).
+        const gc = getCommunity(g.communityId) || {};
+        const canSetup = isSuperAdmin() || isClubCreator(gc);
+        return `<p style="color:var(--muted);font-size:15px;margin:-6px 0 12px;">מומלץ להגדיר את פרטי הקבוצה בהגדרות המועדון${canSetup ? ` - <a href="#" data-direct-pay-open-group-setup="${g.communityId}" style="color:var(--gold);font-weight:700;">להגדרות התשלומים</a>` : ' (מנהל המועדון יכול להגדיר)'}.</p>`;
+      })() : ""}
       <p style="font-weight:700;margin:0 0 14px;">סכום העברה: ${m.amount||0} שח</p>
       ${isForSelf ? `
       <div style="display:flex;gap:8px;margin-bottom:14px;">
@@ -7513,7 +7524,7 @@ function renderModal(m){
         // wrong in two ways (wrong recipient, stale amount left over from auto-fill), and
         // a button that silently just says "done" doesn't let you catch either.
         const toP = g.players.find(pl => pl.id === selectedToPlayerId);
-        const toName = esc(toP ? toP.name : "");
+        const toName = selectedToPlayerId === "__group__" ? "קבוצה" : esc(toP ? toP.name : "");
         const amt = m.amount || "0";
         const forWhom = isForSelf ? "" : ` ל${esc(fromP ? fromP.name : "")}`;
         return `<button class="btn btn-primary btn-block" data-confirm-direct-pay>סיים ערב${forWhom}, הועבר ל${toName} ₪${amt}</button>`;
@@ -10149,17 +10160,30 @@ function attachHandlers(){
       confirmDirectPay.disabled = true;
       showButtonLoading(confirmDirectPay);
       if (USE_RELATIONAL_API) {
-        try { await v2AddPlayerPayment(modal.gameId, uid(), modal.fromPlayerId, toPlayerId, amt); }
+        try {
+          // The group's PayBox / Bit is recorded as a payment to the group, not to a player.
+          if (toPlayerId === "__group__") await v2AddPayboxPayment(modal.gameId, uid(), modal.fromPlayerId, amt);
+          else await v2AddPlayerPayment(modal.gameId, uid(), modal.fromPlayerId, toPlayerId, amt);
+        }
         catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmDirectPay.disabled = false; return; }
       } else {
         await mutateAndSave(() => {
           const g = getGame(modal.gameId);
-          if (!g.playerPayments) g.playerPayments = [];
-          g.playerPayments.push({id:uid(), fromPlayerId: modal.fromPlayerId, toPlayerId, amount: amt, ts: Date.now()});
+          if (toPlayerId === "__group__") {
+            if (!g.payboxPayments) g.payboxPayments = [];
+            g.payboxPayments.push({id:uid(), playerId: modal.fromPlayerId, amount: amt, ts: Date.now()});
+          } else {
+            if (!g.playerPayments) g.playerPayments = [];
+            g.playerPayments.push({id:uid(), fromPlayerId: modal.fromPlayerId, toPlayerId, amount: amt, ts: Date.now()});
+          }
         });
       }
       closeModal();
     };
+    app.querySelectorAll("[data-direct-pay-open-group-setup]").forEach(el => el.onclick = (e) => {
+      e.preventDefault();
+      openPayboxSettingsModal(el.dataset.directPayOpenGroupSetup);
+    });
     const endNightFromDirectPayBtn = app.querySelector("[data-end-night-from-direct-pay]");
     if (endNightFromDirectPayBtn) endNightFromDirectPayBtn.onclick = async () => {
       endNightFromDirectPayBtn.disabled = true;
