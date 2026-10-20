@@ -503,6 +503,8 @@ input:focus,.select-input:focus{border-color:var(--gold);}
    mode body) that opening from the bottom kept its own top - the part you look at
    first - furthest from the thumb/eye. */
 .overlay.overlay-top{align-items:flex-start;}
+.overlay.overlay-center{align-items:center;padding:0 16px;}
+.overlay.overlay-center .modal{border-radius:20px;}
 .overlay.overlay-top .modal{border-radius:0 0 20px 20px;}
 @media(min-width:600px){.overlay.overlay-top .modal{border-radius:20px;}}
 /* A dedicated screen, not a sheet - the group-setup flow (chipSetup/payboxSettings) got
@@ -2064,9 +2066,12 @@ async function v2ClaimSeat(gameId, seatIndex, playerId, name, gender){
   // actually operating this device - themselves, or an admin seating someone else from
   // the admin screen), not the seated player's own `name`, so the feed attributes it
   // correctly either way (see performBuyin's actorName===playerName self-buy check).
+  // Asks for the entry amount instead of charging the community's first amount
+  // outright - a player seated before actually buying in used to get a ₪100 entry they
+  // never paid. Deferred a tick: every caller closes its own modal right after this
+  // returns, which would otherwise close this one too.
   if (!g.buyins.some(b => b.playerId === playerId) && !pendingBuyinRequest) {
-    const c = getCommunity(g.communityId);
-    performBuyin(gameId, playerId, getBuyinAmounts(c)[0], {isEntry: true, actorName: myIdentity.name});
+    setTimeout(() => openModal({type: "entryBuyin", gameId, playerId}), 0);
   }
   return true;
 }
@@ -7946,6 +7951,18 @@ function renderModal(m){
       ${(hasBuyins || hasChips) ? `<p style="color:var(--gold);font-size:16px;">לשחקן יש קניות/ז'יטונים בשולחן - הם יאופסו, כאילו לא ישב בשולחן. אם יחזור, הכל יעמוד על אפס.</p>` : ""}
       <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-clear-seat>הסר מהשולחן</button>
     `;
+  } else if (m.type === "entryBuyin") {
+    const g = getGame(m.gameId) || {players: [], communityId: null};
+    const p = g.players.find(pl => pl.id === m.playerId);
+    const amt = getBuyinAmounts(getCommunity(g.communityId))[0];
+    title = `סכום קנייה ראשונית ל${p ? p.name : "שחקן"}`;
+    body = `
+      <button class="btn btn-primary btn-block" data-entry-amount="${amt}" style="font-size:28px;font-weight:800;padding:14px 0;">₪${amt}</button>
+      <p style="text-align:center;color:var(--muted);margin:14px 0 8px;">או הכנס סכום אחר</p>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="number" id="entry-other-amount" inputmode="decimal" min="1" style="flex:1;text-align:center;font-size:22px;">
+        <button class="btn btn-ghost" data-entry-other style="font-size:20px;">הכנס</button>
+      </div>`;
   } else if (m.type === "playerNight") {
     const g = getGame(m.gameId) || {players:[], cashouts:{}};
     const p = (g.players||[]).find(pl => pl.id === m.playerId);
@@ -7997,7 +8014,7 @@ function renderModal(m){
   // directPay (item 15): closes only by picking a recipient or tapping "הערב נגמר",
   // never by dismissing - someone who left owing money shouldn't be able to just back
   // out of saying who they paid.
-  const dismissable = m.type !== "loginRequired" && !(m.type === "identityName" && m.forced) && m.type !== "directPay";
+  const dismissable = m.type !== "loginRequired" && !(m.type === "identityName" && m.forced) && m.type !== "directPay" && m.type !== "entryBuyin";
   const topAnchored = m.type === "seatChips" || m.type === "loginRequired" || m.type === "newCommunity";
   // The photo-count tab needs real room - a full-width photo plus the per-color table
   // below it never fit in the normal 480px/85vh modal without heavy scrolling, reported
@@ -8009,7 +8026,7 @@ function renderModal(m){
       return (sc.chipValues||[]).length > 0;
     })());
   return `
-    <div class="overlay${topAnchored ? ' overlay-top' : ''}${isSetupFlow ? ' overlay-fullscreen' : ''}${m.type === "stats" ? ' overlay-full' : ''}">
+    <div class="overlay${topAnchored ? ' overlay-top' : ''}${m.type === "entryBuyin" ? ' overlay-center' : ''}${isSetupFlow ? ' overlay-fullscreen' : ''}${m.type === "stats" ? ' overlay-full' : ''}">
       <div class="modal${["chipSetup","payboxSettings","buyinSetup","seatChips"].includes(m.type) ? "" : " modal-big"}" onclick="event.stopPropagation()">
         <div class="modal-head"><h3 class="serif">${title}</h3>${dismissable ? `<button class="close-x" data-close-modal>${icon('x')}</button>` : ""}</div>
         ${body}${body.includes('class="mode-panel ' + SETUP_PANEL_MARK) ? '</div></div>' + SETUP_FOOTER_HTML : ''}
@@ -8336,6 +8353,21 @@ function attachHandlers(){
   app.querySelectorAll("[data-open-pot-fix]").forEach(el => el.onclick = () => openModal({type: "potFix", gameId: nav.gameId}));
   // "הביצועים שלי" on the end-of-night screens (cashed-out player view, game results).
   app.querySelectorAll("[data-open-my-stats]").forEach(el => el.onclick = () => openModal({type:"stats", clientId: myIdentity.id}));
+  if (modal && modal.type === "entryBuyin") {
+    const {gameId, playerId} = modal;
+    const enter = (amt) => {
+      if (!(amt > 0)) { showAlert("צריך להזין סכום."); return; }
+      closeModal();
+      performBuyin(gameId, playerId, Math.round(amt * 100) / 100, {isEntry: true, actorName: myIdentity.name});
+    };
+    app.querySelectorAll("[data-entry-amount]").forEach(el => el.onclick = () => enter(Number(el.dataset.entryAmount)));
+    const otherBtn = app.querySelector("[data-entry-other]");
+    const otherInput = app.querySelector("#entry-other-amount");
+    if (otherBtn && otherInput) {
+      otherBtn.onclick = () => enter(Number(otherInput.value));
+      otherInput.onkeydown = e => { if (e.key === "Enter") enter(Number(otherInput.value)); };
+    }
+  }
   app.querySelectorAll("[data-player-night]").forEach(el => el.onclick = async (e) => {
     if (e.target.closest("input")) return;  // the "paid" checkbox keeps its own job
     const gameId = el.dataset.gameId, playerId = el.dataset.playerNight;
@@ -10804,7 +10836,7 @@ window.addEventListener("popstate", async () => {
   if (openConfirm) { openConfirm.click(); return; }
   if (modal) {
     const t = modal.type;
-    const dismissable = t !== "loginRequired" && !(t === "identityName" && modal.forced) && t !== "directPay";
+    const dismissable = t !== "loginRequired" && !(t === "identityName" && modal.forced) && t !== "directPay" && t !== "entryBuyin";
     if (!dismissable) return;
     if (t === "chipSetup" || t === "payboxSettings" || t === "buyinSetup") {
       await tryCloseSetupModal();
