@@ -8068,6 +8068,15 @@ function attachHandlers(){
         setTimeout(() => openModal({type:"directPay", gameId: g.id, fromPlayerId: pid, amount: String(Math.round(Math.abs(myProfit)*100)/100)}), 0);
       }
     }
+    // Seated with nothing bought in (the entry window was left unanswered - app closed,
+    // or whoever seated me never picked an amount): ask again whenever the table is open.
+    if (g && pid && !g.closed && Array.isArray(g.buyins) && (g.seats||[]).includes(pid)
+        && !(pid in (g.cashouts||{})) && !g.buyins.some(b => b.playerId === pid) && !pendingBuyinRequest) {
+      setTimeout(() => {
+        const fresh = getGame(g.id);
+        if (!modal && !pendingBuyinRequest && fresh && !(fresh.buyins || []).some(b => b.playerId === pid)) openModal({type: "entryBuyin", gameId: g.id, playerId: pid});
+      }, 0);
+    }
   }
 
   // The two corner labels next to the carousel dots (3-page case only, see render()) -
@@ -8364,9 +8373,16 @@ function attachHandlers(){
   app.querySelectorAll("[data-open-my-stats]").forEach(el => el.onclick = () => openModal({type:"stats", clientId: myIdentity.id}));
   if (modal && modal.type === "entryBuyin") {
     const {gameId, playerId} = modal;
+    // Another device (the player's own, or whoever seated them) may have entered it
+    // meanwhile - never record a second entry.
+    const alreadyIn = () => ((getGame(gameId) || {}).buyins || []).some(b => b.playerId === playerId);
+    if (alreadyIn()) setTimeout(() => { if (modal && modal.type === "entryBuyin" && alreadyIn()) closeModal(); }, 0);
     const enter = (amt) => {
       if (!(amt > 0)) { showAlert("צריך להזין סכום."); return; }
-      closeModal();
+      if (alreadyIn()) { closeModal(); return; }
+      // No render in between: performBuyin marks the request pending and renders itself,
+      // so the "seated with nothing bought in" check never sees a gap and reopens this.
+      setupDraft = null; modal = null;
       performBuyin(gameId, playerId, Math.round(amt * 100) / 100, {isEntry: true, actorName: myIdentity.name});
     };
     app.querySelectorAll("[data-entry-amount]").forEach(el => el.onclick = () => enter(Number(el.dataset.entryAmount)));
