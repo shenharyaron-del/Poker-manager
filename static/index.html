@@ -5960,7 +5960,8 @@ function renderPlayerScreen(gameId){
   const amounts = getBuyinAmounts(c);
   const pickKey = g.id + ":" + pid;
   const picked = rebuyPick[pickKey] !== undefined ? rebuyPick[pickKey] : amounts[0];
-  const rebuyLocked = buyinPending;
+  // No rebuys before "תחילת משחק" - only the entry amount counts until the game starts.
+  const rebuyLocked = buyinPending || notStarted;
   const rebuyHtml = `
     <div class="rb-chips">
       ${amounts.map(v => `<button class="rb-chip${picked===v?' on':''}" data-rb-pick="${v}" ${rebuyLocked?'disabled':''}><span>₪${v}</span></button>`).join("")}
