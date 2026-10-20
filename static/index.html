@@ -3304,8 +3304,8 @@ function tourSteps(base){
         : [{page: "player", text: 'לוחצים על "הזמן שחקן" ושולחים לחברים את הקישור בוואטסאפ'}, ". ", {page: "table", text: "גרירה ימינה מראה את מסך השולחן"}, "."]},
     {view: "player", o: {}, sel: ".pp-tiles", title: "החברים מצטרפים",
       desc: "כל מי שמתיישב בשולחן מקבל ריבוע משלו כאן למעלה – בזמן אמת, אצל כולם."},
-    {view: "player", o: {notStarted: true}, sel: "[data-start-game]", admin: true, title: "תחילת משחק",
-      desc: 'כשמתחילים לשחק לוחצים על "תחילת משחק". ריביי לפני כן יגדיל את הקנייה הראשונית.'},
+    {view: "player", o: {notStarted: true}, sel: "[data-start-game]", title: "תחילת משחק",
+      desc: 'כשמתחילים לשחק, כל אחד מהשולחן יכול ללחוץ על "תחילת משחק". ריביי נפתח רק אחרי זה.'},
     {view: "player", o: {}, sel: ".rb-frame", title: "ריביי – קנייה נוספת",
       desc: `נגמרו הז'יטונים? בוחרים סכום ולוחצים "ריביי". סך הקניות שלכם מתעדכן מיד.`},
     {view: "player", o: {}, sel: '.pp-tile[data-pp-view="' + TOUR_DANI + '"]', title: "ריביי לחבר",
@@ -6105,9 +6105,7 @@ function renderPlayerScreen(gameId){
       </div>
       ${(cashedOut || armed) ? "" : `<fieldset class="leave-frame rb-frame" style="margin-bottom:14px;">${rebuyHtml}</fieldset>`}
       ${(cashedOut || (notStarted && !armed)) ? "" : `<fieldset class="leave-frame lv-frame${armed?' lv-frame-top':''}">${leaveHtml}</fieldset>`}
-      ${(notStarted && !cashedOut) ? (isAdminView
-        ? `<button type="button" class="btn btn-primary btn-block gs-start" data-start-game="${g.id}">${icon('check')} תחילת משחק</button>`
-        : `<div class="gs-wait">המשחק עוד לא התחיל</div>`) : ""}
+      ${(notStarted && !cashedOut) ? `<button type="button" class="btn btn-primary btn-block gs-start" data-start-game="${g.id}">${icon('check')} תחילת משחק</button>` : ""}
       ${adminPlayerActions}
       ${(showClosedToggle && !notStarted) ? `<div style="display:flex;justify-content:center;margin-top:12px;flex-shrink:0;"><label class="night-closed-toggle" data-toggle-end-night="${g.id}"><input type="checkbox" ${g.closed?'checked':''} onclick="return false;"><span>ערב סגור</span></label></div>` : ""}
     </div>
