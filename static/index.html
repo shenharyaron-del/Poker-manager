@@ -8412,6 +8412,14 @@ function attachHandlers(){
       const typedOrDefault = () => otherInput.value.trim() ? Number(otherInput.value) : Number(otherBtn.dataset.defaultAmount);
       otherBtn.onclick = () => enter(typedOrDefault());
       otherInput.onkeydown = e => { if (e.key === "Enter") enter(typedOrDefault()); };
+      // Typing an amount un-highlights the preset (it's no longer what הכנס will enter)
+      // and lights up הכנס instead; clearing the box switches back.
+      const presetBtn = app.querySelector("[data-entry-amount]");
+      otherInput.oninput = () => {
+        const typed = !!otherInput.value.trim();
+        if (presetBtn) { presetBtn.classList.toggle("btn-primary", !typed); presetBtn.classList.toggle("btn-ghost", typed); }
+        otherBtn.classList.toggle("btn-primary", typed); otherBtn.classList.toggle("btn-ghost", !typed);
+      };
     }
   }
   app.querySelectorAll("[data-player-night]").forEach(el => el.onclick = async (e) => {
