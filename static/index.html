@@ -8478,11 +8478,21 @@ function attachHandlers(){
         showAlert(`הקנייה הראשונית עודכנה ל-₪${total}`);
         return;
       }
-    } else if (myBuyins.length === 1 && myBuyins[0].ts && Date.now() - myBuyins[0].ts < 60*1000) {
-      const mine = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
-      const who = pid === mine ? "נכנסת" : `${(g.players.find(pl => pl.id === pid) || {}).name || "השחקן"} נכנס/ה`;
-      const ok = await showConfirm(`${who} לשולחן עם ₪${myBuyins[0].amount} לפני פחות מדקה. להוסיף ריביי של ₪${amt} מעל הקנייה הראשונה?`, {okLabel: "כן, הוסף ריביי", cancelLabel: "ביטול"});
-      if (!ok) return;
+    } else {
+      // A rebuy within 5 minutes of this player's last buy-in, or of "תחילת משחק", is
+      // often a double tap or a mistaken player - ask first, saying when the last one was.
+      const RECENT = 5*60*1000, now = Date.now();
+      const lastTs = Math.max(0, ...myBuyins.map(b => b.ts || 0));
+      const startEv = gameStartEvent(g);
+      const recentBuy = lastTs && now - lastTs < RECENT;
+      const recentStart = startEv && startEv.ts && now - startEv.ts < RECENT;
+      if (myBuyins.length && (recentBuy || recentStart)) {
+        const ago = ts => { const m = Math.floor((now - ts) / 60000); return m < 1 ? "פחות מדקה" : m === 1 ? "דקה" : `${m} דקות`; };
+        const whose = pid === mineId ? "שלך" : `של ${(g.players.find(pl => pl.id === pid) || {}).name || "השחקן"}`;
+        const startLine = recentStart ? `המשחק התחיל לפני ${ago(startEv.ts)}. ` : "";
+        const ok = await showConfirm(`${startLine}הקנייה האחרונה ${whose} הייתה לפני ${ago(lastTs)} (${fmtTime(lastTs)}). האם אתה בטוח שאתה רוצה להוסיף ריביי של ₪${amt}?`, {okLabel: "כן, הוסף ריביי", cancelLabel: "ביטול"});
+        if (!ok) return;
+      }
     }
     playerScreenCustomOpen = false;
     const before = (getGame(gameId).buyins||[]).filter(b => b.playerId === pid).length;
