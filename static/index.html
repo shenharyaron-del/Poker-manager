@@ -6205,7 +6205,7 @@ function renderGameResultsScreen(gameId){
         <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
           <span style="font-weight:800;font-size:21px;color:${profitColor(r.profit)};${checked?'text-decoration:line-through;opacity:.5;':''}">₪${Math.abs(r.profit)}</span>
           ${checkboxHtml}
-          <span style="color:var(--muted);font-size:22px;line-height:1;flex-shrink:0;">‹</span>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted);flex-shrink:0;"><path d="M15 18l-6-6 6-6"/></svg>
         </div>
       </div>`;
   }).join("");
