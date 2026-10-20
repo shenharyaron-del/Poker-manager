@@ -5923,7 +5923,15 @@ function renderPlayerScreen(gameId){
     }
     // Lost, mid-game, not closed: no inline status text - the "who do I pay" modal
     // auto-opens itself instead (see attachHandlers/autoOpenedDirectPay).
-    cashedOutInfoHtml = breakdownHtml + paymentNotesHtml + statusHtml + exitHighlightsHtml
+    // While others are still playing: how many, and what's still in the pot (all buy-ins
+    // minus everything already cashed out).
+    const stillPlaying = seatedIdsForSettlement.filter(sid => !(sid in g.cashouts)).length;
+    const potLeft = Math.round((totalBuyinsForSettlement - totalCashedOutForSettlement) * 100) / 100;
+    const stillPlayingHtml = stillPlaying > 0 ? `
+      <div class="still-playing-note" style="margin-top:12px;font-size:19px;font-weight:700;color:var(--text);">
+        ${stillPlaying === 1 ? "שחקן אחד עדיין לא יצא" : `${stillPlaying} שחקנים עדיין לא יצאו`} · בקופה ₪${potLeft}
+      </div>` : "";
+    cashedOutInfoHtml = breakdownHtml + paymentNotesHtml + statusHtml + stillPlayingHtml + exitHighlightsHtml
       + ((isAdminView && allCashedOutForSettlement && !potBalancedForSettlement) ? `<div class="pot-fix-cta"><button class="btn btn-blue co-act" data-open-pot-fix>${icon('coins')} סידור קופה</button><span class="pot-fix-hand">👈</span></div>` : "")
       + (viewingOther ? "" : `<button class="btn btn-ghost co-act" data-open-my-stats>${icon('bar')} הביצועים שלי</button>`);
   }
