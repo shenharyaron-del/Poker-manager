@@ -72,7 +72,10 @@ body{
 @keyframes agbLive{0%{box-shadow:0 0 0 0 rgba(239,68,68,.7);}100%{box-shadow:0 0 0 9px rgba(239,68,68,0);}}
 .active-games-bar .agb-game{background:linear-gradient(180deg,#fde68a,#f5c542 55%,#d4a017)!important;color:#1c1917!important;border:none!important;box-shadow:0 3px 8px rgba(0,0,0,.35);}
 .active-games-bar .agb-game{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:20px;}
-.active-games-bar .agb-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+.active-games-bar .agb-label{display:flex;flex-direction:column;align-items:flex-start;min-width:0;line-height:1.2;}
+.active-games-bar .agb-name,.active-games-bar .agb-club{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.active-games-bar .agb-name{font-size:21px;font-weight:800;}
+.active-games-bar .agb-club{font-size:14px;font-weight:600;opacity:.75;}
 body.has-active-games #app{padding-bottom:calc(150px + env(safe-area-inset-bottom,0px));}
 .px5{padding-left:20px;padding-right:20px;}
 .notice{background:#78350f;color:#fde68a;font-size:12px;text-align:center;padding:8px 12px;display:flex;align-items:center;justify-content:center;gap:10px;}
@@ -5140,7 +5143,9 @@ function render(){
       <div class="agb-title"><span class="agb-live"></span>${activeGames.length === 1 ? "יש לך משחק פעיל" : `יש לך ${activeGames.length} משחקים פעילים`}</div>
       ${activeGames.map(g => {
         const cname = (getCommunity(g.communityId) || {}).name || "";
-        return `<button type="button" class="btn btn-primary btn-block agb-game" data-open-game="${g.id}"><span class="agb-label">${esc(cname)} · ${esc(g.name || g.date || "")}</span>${icon('chev')}</button>`;
+        // The game's own name leads (a long club name used to push it off the end, so two
+        // games in one club read the same); the club goes on a small second line.
+        return `<button type="button" class="btn btn-primary btn-block agb-game" data-open-game="${g.id}"><span class="agb-label"><span class="agb-name">${esc(g.name || g.date || "")}</span><span class="agb-club">${esc(cname)}</span></span>${icon('chev')}</button>`;
       }).join("")}
     </div>`;
   }
