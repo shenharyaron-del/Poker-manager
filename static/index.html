@@ -473,6 +473,17 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
 .mode-tab-setup-chips.active{box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 -2px 12px rgba(251,191,36,.3);}
 .mode-tab-setup-payments.active{box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 -2px 12px rgba(31,155,184,.4);}
 .mode-tab-setup-buyins.active{box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 -2px 12px rgba(47,174,95,.4);}
+.mode-tab-setup-perms{background:linear-gradient(180deg,#d6b4ff 0%,#9b6be0 50%,#6a3fb0 100%);color:#1a0b33;}
+.mode-tab-setup-perms.active{box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 -2px 12px rgba(155,107,224,.4);}
+.mode-panel.mode-panel-setup-perms{border-color:#9b6be0;box-shadow:inset 0 0 18px rgba(0,0,0,.4),0 0 14px rgba(155,107,224,.2);}
+.perm-table{width:100%;border-collapse:collapse;font-size:16px;}
+.perm-table th{font-size:14px;color:var(--muted);font-weight:700;padding:6px 4px;border-bottom:1px solid var(--card-b);}
+.perm-table th:first-child,.perm-table td:first-child{text-align:right;}
+.perm-table td{padding:8px 4px;border-bottom:1px solid var(--card-b);text-align:center;}
+.perm-table td:not(:first-child),.perm-table th:not(:first-child){width:56px;}
+.perm-yes{color:#22c55e;font-weight:800;font-size:18px;}
+.perm-no{color:#ef4444;font-weight:800;font-size:16px;opacity:.85;}
+.perm-part{font-size:12px;color:var(--gold);font-weight:700;line-height:1.2;display:inline-block;}
 .mode-panel.mode-panel-setup-payments{border-color:#1f9bb8;box-shadow:inset 0 0 18px rgba(0,0,0,.4),0 0 14px rgba(31,155,184,.2);}
 .mode-panel.mode-panel-setup-buyins{border-color:#2fae5f;box-shadow:inset 0 0 18px rgba(0,0,0,.4),0 0 14px rgba(47,174,95,.2);}
 .mode-panel.setup-panel{padding:14px 12px 12px;}
@@ -579,7 +590,9 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 /* Club profile setup: the club's name rides in the title (one line, "…" when long), and
    the tabs' text is a step larger, like the rest of the screens. */
 .overlay-fullscreen .modal-head h3{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.mode-tab[class*="mode-tab-setup-"]{font-size:16px;}
+.mode-tab[class*="mode-tab-setup-"]{font-size:15px;padding:9px 2px;gap:3px;}
+/* Four setup tabs share the row - the icon gives way first so every name stays whole. */
+@media (max-width:440px){.mode-tab[class*="mode-tab-setup-"] svg{display:none;}}
 .setup-panel .leave-frame legend{font-size:15px;}
 .setup-panel .field label{font-size:16px;}
 .setup-panel input[type=text],.setup-panel input[type=number]{font-size:19px;}
@@ -3948,9 +3961,9 @@ function closeModal(){ setupDraft = null; modal = null; render(); }
 //     chips?:{points, ratio}, payments?:{paybox:{id:{name,link}}, bit:{id:{name,link}}},
 //     buyins?:[string,...]}
 let setupDraft = null;
-const SETUP_MODAL_TYPES = ["chipSetup", "payboxSettings", "buyinSetup"];
+const SETUP_MODAL_TYPES = ["chipSetup", "payboxSettings", "buyinSetup", "permSetup"];
 const isSetupModal = (m) => !!m && SETUP_MODAL_TYPES.includes(m.type);
-function setupTabOf(type){ return type === "chipSetup" ? "chips" : type === "buyinSetup" ? "buyins" : "payments"; }
+function setupTabOf(type){ return type === "chipSetup" ? "chips" : type === "buyinSetup" ? "buyins" : type === "permSetup" ? "perms" : "payments"; }
 function ensureSetupDraft(communityId){
   if (!setupDraft || setupDraft.communityId !== communityId) setupDraft = {communityId, dirty: new Set()};
   return setupDraft;
@@ -4012,6 +4025,7 @@ function trySwitchSetupTab(targetTab, communityId){
   captureSetupDraft();
   if (targetTab === "chips") openChipSetupModal(communityId);
   else if (targetTab === "buyins") openBuyinSetupModal(communityId);
+  else if (targetTab === "perms") { ensureSetupDraft(communityId); openModal({type: "permSetup", communityId}); }
   else openPayboxSettingsModal(communityId);
 }
 async function tryCloseSetupModal(){
@@ -4196,7 +4210,7 @@ function setupTabsHtml(communityId, activeTab){
   // ריביי = green), the active one merges into a panel framed in its color, and the rest
   // of the modal body renders inside that panel. This only OPENS the panel's div - the
   // modal shell (renderModal) closes it after the body when it sees SETUP_PANEL_MARK.
-  const TABS = [["chips", "ז'יטונים", 'chip'], ["payments", "תשלומים", 'payment'], ["buyins", "ריביי", 'coinsPlus']];
+  const TABS = [["chips", "ז'יטונים", 'chip'], ["payments", "תשלומים", 'payment'], ["buyins", "ריביי", 'coinsPlus'], ["perms", "הרשאות", 'shield']];
   const idx = TABS.findIndex(t => t[0] === activeTab);
   return `
     <div class="mode-panel-wrap">
@@ -7709,6 +7723,43 @@ function renderModal(m){
       <p style="color:var(--muted);font-size:16px;margin:0;">בסוף הערב Poker Manager יחשב מי מעביר למי, וכל אחד משלם ישירות לחבר.</p>
       </fieldset>
     `;
+  } else if (m.type === "permSetup") {
+    // Read-only for now: who may do what, mirroring the rules the app already enforces
+    // (isClubCreator / isCommunityAdmin / isGameCreator / isTableAdmin). Not editable yet.
+    title = `הגדרת פרופיל מועדון: ${esc((getCommunity(m.communityId) || {}).name || "")}`;
+    const Y = `<span class="perm-yes">✓</span>`, N = `<span class="perm-no">✕</span>`;
+    const table = (rows) => `
+      <table class="perm-table">
+        <thead><tr><th>פעולה</th><th>יוצר</th><th>אדמין</th><th>שחקן</th></tr></thead>
+        <tbody>${rows.map(([label, a, b, c2]) => `<tr><td>${label}</td><td>${a}</td><td>${b}</td><td>${c2}</td></tr>`).join("")}</tbody>
+      </table>`;
+    body = `
+      ${setupTabsHtml(m.communityId, "perms")}
+      <p style="color:var(--muted);font-size:16px;margin:0 0 12px;">מי יכול לעשות מה. בשלב זה לצפייה בלבד.</p>
+      <div class="section-title" style="padding:0;margin:0 0 6px;">מועדון</div>
+      ${table([
+        ["פתיחת מועדון חדש", Y, Y, Y],
+        ["מחיקת מועדון", Y, N, N],
+        ["שליחת הזמנה למועדון", Y, Y, Y],
+        ["הגדרות מועדון (Setup)", Y, N, N],
+        ["מינוי והסרת אדמינים", Y, Y, N],
+      ])}
+      <div class="section-title" style="padding:0;margin:18px 0 6px;">משחק</div>
+      ${table([
+        ["פתיחת שולחן חדש", Y, Y, Y],
+        ["מחיקת שולחן", Y, `<span class="perm-part">רק יוצר המועדון</span>`, N],
+        ["שליחת הזמנה לשולחן", Y, Y, Y],
+        ["הושבת שחקן בכיסא", Y, Y, N],
+        ["תחילת משחק", Y, Y, Y],
+        ["ריביי לעצמי", Y, Y, Y],
+        ["ריביי / סיום ערב לשחקן אחר", Y, Y, Y],
+        ["ביטול ריביי", Y, Y, Y],
+        ["הוצאת שחקן מהשולחן / החזרה", Y, Y, N],
+        ["סידור קופה", Y, Y, N],
+        ["סימון ערב סגור (העברות ישירות)", Y, Y, N],
+      ])}
+      <p style="color:var(--muted);font-size:14px;margin:10px 0 16px;line-height:1.5;">יוצר = מי שפתח את המועדון (בטבלת המועדון) או את השולחן (בטבלת המשחק). יוצר המועדון הוא גם אדמין בכל השולחנות שלו.</p>
+    `;
   } else if (m.type === "buyinSetup") {
     const c = getCommunity(m.communityId);
     title = `הגדרת פרופיל מועדון: ${esc((getCommunity(m.communityId) || {}).name || "")}`;
@@ -8086,14 +8137,14 @@ function renderModal(m){
   // below it never fit in the normal 480px/85vh modal without heavy scrolling, reported
   // live as not being able to see the whole photo and table at once - full-screen like
   // the setup flows gives it the same room they get.
-  const isSetupFlow = m.type === "chipSetup" || m.type === "payboxSettings" || m.type === "buyinSetup"
+  const isSetupFlow = m.type === "chipSetup" || m.type === "payboxSettings" || m.type === "buyinSetup" || m.type === "permSetup"
     || (m.type === "seatChips" && (() => {
       const sc = getCommunity((getGame(m.gameId)||{}).communityId) || {};
       return (sc.chipValues||[]).length > 0;
     })());
   return `
     <div class="overlay${topAnchored ? ' overlay-top' : ''}${m.type === "entryBuyin" ? ' overlay-center' : ''}${isSetupFlow ? ' overlay-fullscreen' : ''}${m.type === "stats" ? ' overlay-full' : ''}">
-      <div class="modal${["chipSetup","payboxSettings","buyinSetup","seatChips"].includes(m.type) ? "" : " modal-big"}" onclick="event.stopPropagation()">
+      <div class="modal${["chipSetup","payboxSettings","buyinSetup","permSetup","seatChips"].includes(m.type) ? "" : " modal-big"}" onclick="event.stopPropagation()">
         <div class="modal-head"><h3 class="serif">${title}</h3>${dismissable ? `<button class="close-x" data-close-modal>${icon('x')}</button>` : ""}</div>
         ${body}${body.includes('class="mode-panel ' + SETUP_PANEL_MARK) ? '</div></div>' + SETUP_FOOTER_HTML : ''}
       </div>
@@ -10969,7 +11020,7 @@ window.addEventListener("popstate", async () => {
     const t = modal.type;
     const dismissable = t !== "loginRequired" && !(t === "identityName" && modal.forced) && t !== "directPay" && t !== "entryBuyin";
     if (!dismissable) return;
-    if (t === "chipSetup" || t === "payboxSettings" || t === "buyinSetup") {
+    if (t === "chipSetup" || t === "payboxSettings" || t === "buyinSetup" || t === "permSetup") {
       await tryCloseSetupModal();
       if (!modal && nav.screen !== "home") go("home");
       return;
