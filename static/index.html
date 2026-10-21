@@ -57,6 +57,11 @@ body{
 }
 .serif{font-family:'Frank Ruhl Libre',Georgia,serif;}
 #app{max-width:520px;margin:0 auto;min-height:100vh;padding-bottom:40px;}
+/* Entry-amount window: הכנס is always the strong gold action; the preset amount is
+   outlined in gold while it's the one הכנס will enter, plain once another is typed. */
+.entry-preset.sel{border:3px solid var(--gold)!important;background:rgba(212,175,55,.22)!important;color:var(--text)!important;}
+.entry-preset:not(.sel){opacity:.6;}
+.entry-go{box-shadow:0 4px 14px rgba(0,0,0,.3);}
 /* "חזרה למשחק" bar - see render()'s activeGames. */
 .active-games-bar{position:fixed;left:0;right:0;bottom:0;z-index:40;max-width:520px;margin:0 auto;padding:10px 16px calc(12px + env(safe-area-inset-bottom,0px));background:var(--card);border-top:2px solid var(--gold);border-radius:18px 18px 0 0;box-shadow:0 -8px 24px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:8px;max-height:45vh;overflow-y:auto;}
 .active-games-bar .agb-title{text-align:center;font-size:17px;font-weight:700;color:var(--text);}
@@ -7979,13 +7984,14 @@ function renderModal(m){
     const amt = getBuyinAmounts(getCommunity(g.communityId))[0];
     title = `סכום קנייה ראשונית ל${p ? p.name : "שחקן"}`;
     // One row: the community amount (one tap) next to a box for any other amount; "הכנס"
-    // enters whatever is typed in the box, or the community amount while it's empty.
+    // (always the strong gold button) enters whatever is typed in the box, or the
+    // community amount while it's empty - the preset is outlined while it's the one.
     body = `
       <div style="display:flex;gap:10px;align-items:stretch;">
-        <button class="btn btn-primary" data-entry-amount="${amt}" style="flex:1;font-size:28px;font-weight:800;padding:12px 0;">₪${amt}</button>
+        <button class="btn btn-ghost entry-preset sel" data-entry-amount="${amt}" style="flex:1;font-size:28px;font-weight:800;padding:12px 0;">₪${amt}</button>
         <input type="number" id="entry-other-amount" inputmode="decimal" min="1" placeholder="סכום אחר" style="flex:1;min-width:0;text-align:center;font-size:22px;">
       </div>
-      <button class="btn btn-ghost btn-block" data-entry-other data-default-amount="${amt}" style="font-size:22px;margin-top:12px;">הכנס (₪${amt})</button>
+      <button class="btn btn-primary btn-block entry-go" data-entry-other data-default-amount="${amt}" style="font-size:24px;font-weight:800;padding:14px 0;margin-top:12px;">הכנס (₪${amt})</button>
       <button data-entry-cancel style="display:block;width:100%;background:none;border:none;color:var(--muted);font-size:18px;font-weight:600;margin-top:10px;padding:6px;cursor:pointer;font-family:inherit;text-decoration:underline;text-underline-offset:3px;">ביטול</button>`;
   } else if (m.type === "playerNight") {
     const g = getGame(m.gameId) || {players:[], cashouts:{}};
@@ -8439,8 +8445,7 @@ function attachHandlers(){
       const presetBtn = app.querySelector("[data-entry-amount]");
       otherInput.oninput = () => {
         const typed = !!otherInput.value.trim();
-        if (presetBtn) { presetBtn.classList.toggle("btn-primary", !typed); presetBtn.classList.toggle("btn-ghost", typed); }
-        otherBtn.classList.toggle("btn-primary", typed); otherBtn.classList.toggle("btn-ghost", !typed);
+        if (presetBtn) presetBtn.classList.toggle("sel", !typed);
         const shown = typedOrDefault();
         otherBtn.textContent = shown > 0 ? `הכנס (₪${shown})` : "הכנס";
       };
