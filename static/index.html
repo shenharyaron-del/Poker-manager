@@ -8795,6 +8795,11 @@ function attachHandlers(){
   });
   app.querySelectorAll("[data-start-game]").forEach(el => el.onclick = async () => {
     const gameId = el.dataset.startGame;
+    // Fewer than 4 at the table is usually someone pressing it before everyone sat down.
+    const seatedNow = ((getGame(gameId) || {}).seats || []).filter(Boolean).length;
+    if (seatedNow < 4) {
+      if (!(await showConfirm(`האם אתה בטוח שברצונך להתחיל משחק עם ${seatedNow === 1 ? "שחקן אחד בלבד" : `${seatedNow} יושבים`}?`, {okLabel: "כן, התחל משחק", cancelLabel: "ביטול"}))) return;
+    }
     el.disabled = true;
     showButtonLoading(el);
     const ev = {id: uid(), type: "game_started", actorName: myIdentity.name};
