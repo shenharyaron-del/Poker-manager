@@ -6773,28 +6773,39 @@ function defaultGameName(isoDate){
   const d = isoDate ? new Date(isoDate + "T12:00:00") : new Date();
   return `ערב פוקר ${HE_MONTHS_SHORT[d.getMonth()]} ${d.getDate()}`;
 }
-// One player's night as rows - every buy-in (time, amount, who entered it when not the
-// player), cancelled rebuys struck through at the time they were cancelled (game_events
-// only keep that time) and never counted, then total bought and the cash-out. Shared by
-// the results screen's per-player window (fetched rows) and the cashed-out player's own
-// screen (rows already in g); withProfit adds the profit/loss line the window needs and
-// the player screen already shows big above.
-function nightSummaryHtml(g, playerId, buyins, deleted, withProfit){
+// One player's night as rows, oldest first: the entry ("קנייה ראשונית"), numbered rebuys,
+// cancelled rebuys struck through at the time they were cancelled (game_events only keep
+// that time, never counted), the cash-out ("סיום · יצא עם"), then how long they played -
+// from their entry or "תחילת משחק", whichever came later, to the cash-out. Shared by the
+// results screen's per-player window (fetched rows) and the cashed-out player's own screen
+// (rows already in g); withTotals adds total bought + profit/loss, which the window needs
+// and the player screen already shows big above.
+function nightSummaryHtml(g, playerId, buyins, deleted, withTotals){
   const p = (g.players||[]).find(pl => pl.id === playerId);
+  const shekel = v => `${v == null ? "" : v} ש"ח`;
   const sorted = buyins.slice().sort((a, b) => (a.ts||0) - (b.ts||0));
+  const co = (g.cashouts||{})[playerId];
   const rows = [
-    ...sorted.map((b, i) => ({ts: b.ts, amount: b.amount, label: i === 0 ? "קנייה" : "ריביי", actor: b.actorName})),
+    ...sorted.map((b, i) => ({ts: b.ts, amount: b.amount, label: i === 0 ? "קנייה ראשונית" : `ריביי ${i}`, actor: b.actorName})),
     ...deleted.map(d => ({ts: d.ts, amount: d.amount, label: "ריביי בוטל", actor: d.actorName, deleted: true})),
   ].sort((a, b) => (a.ts||0) - (b.ts||0));
+  if (co) rows.push({ts: co.ts, amount: co.amount, label: "סיום · יצא עם", end: true});
   const total = Math.round(sorted.reduce((s, b) => s + (b.amount||0), 0) * 100) / 100;
-  const co = (g.cashouts||{})[playerId];
-  const out = co ? co.amount : null;
-  const profit = out == null ? null : Math.round((out - total) * 100) / 100;
+  const profit = co ? Math.round((co.amount - total) * 100) / 100 : null;
+  const startEv = gameStartEvent(g);
+  const from = Math.max((sorted[0] && sorted[0].ts) || 0, (startEv && startEv.ts) || 0);
+  const playedMin = co && co.ts && from && co.ts > from ? Math.round((co.ts - from) / 60000) : null;
+  const playedText = playedMin == null ? "" : (() => {
+    const h = Math.floor(playedMin / 60), m = playedMin % 60;
+    const hs = h === 0 ? "" : h === 1 ? "שעה" : h === 2 ? "שעתיים" : `${h} שעות`;
+    const ms = m === 0 ? "" : m === 1 ? "דקה" : `${m} דקות`;
+    return hs && ms ? `${hs} ו-${ms}` : (hs || ms || "פחות מדקה");
+  })();
   const rowHtml = r => `
-    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--card-b);${r.deleted ? 'opacity:.55;' : ''}">
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--card-b);${r.deleted ? 'opacity:.55;' : ''}${r.end ? 'font-weight:700;' : ''}">
       <span style="font-weight:700;min-width:56px;" dir="ltr">${fmtTime(r.ts)}</span>
-      <span class="flex1" style="min-width:0;${r.deleted ? 'text-decoration:line-through;' : ''}">${r.label}${r.actor && (!p || r.actor !== p.name) ? `<div style="font-size:15px;color:var(--muted);">הוזן ע"י ${esc(r.actor)}</div>` : ''}</span>
-      <span style="font-weight:800;${r.deleted ? 'text-decoration:line-through;' : ''}">₪${r.amount == null ? "" : r.amount}</span>
+      <span class="flex1" style="min-width:0;${r.deleted ? 'text-decoration:line-through;' : ''}">${r.label}${r.actor && (!p || r.actor !== p.name) ? `<div style="font-size:15px;color:var(--muted);font-weight:400;">הוזן ע"י ${esc(r.actor)}</div>` : ''}</span>
+      <span style="font-weight:800;white-space:nowrap;${r.deleted ? 'text-decoration:line-through;' : ''}">${shekel(r.amount)}</span>
     </div>`;
   const sumRow = (label, val, color) => `
     <div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:700;">
@@ -6803,9 +6814,9 @@ function nightSummaryHtml(g, playerId, buyins, deleted, withProfit){
   return `
     ${rows.length ? rows.map(rowHtml).join("") : `<p style="color:var(--muted);text-align:center;">אין קניות רשומות</p>`}
     <div style="margin-top:10px;">
-      ${sumRow('סה"כ קניות', `₪${total}`)}
-      ${out != null ? sumRow(`יצא עם${co.ts ? ` (${fmtTime(co.ts)})` : ''}`, `₪${out}`) : ''}
-      ${withProfit && profit != null ? sumRow(profit >= 0 ? "רווח" : "הפסד", `₪${Math.abs(profit)}`, profitColor(profit)) : ''}
+      ${withTotals ? sumRow('סה"כ קניות', shekel(total)) : ''}
+      ${withTotals && profit != null ? sumRow(profit >= 0 ? "רווח" : "הפסד", shekel(Math.abs(profit)), profitColor(profit)) : ''}
+      ${playedText ? sumRow("זמן משחק", playedText) : ''}
     </div>`;
 }
 function renderModal(m){
