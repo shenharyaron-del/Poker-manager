@@ -143,6 +143,11 @@ _INIT_STATEMENTS = (
     # by this, not by created_by_name, which is just a display name anyone could copy.
     # NULL on tables from before this column (those fall back to the name client-side).
     "ALTER TABLE games ADD COLUMN IF NOT EXISTS created_by TEXT",
+    # When the table was opened - the quick-access bar only offers tables opened in the
+    # last 24 hours. Added without a default first, so tables from before this column stay
+    # NULL (unknown) instead of all looking freshly opened; new tables get now().
+    "ALTER TABLE games ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ",
+    "ALTER TABLE games ALTER COLUMN created_at SET DEFAULT now()",
     # A one-off guest's gender (ז / נ in the add-player window) - guests have no roster
     # row to hold it, so it lives on their row for that one game. NULL = not given.
     "ALTER TABLE game_players ADD COLUMN IF NOT EXISTS gender TEXT",
@@ -419,7 +424,10 @@ def _valid_id(value):
     return isinstance(value, str) and 0 < len(value) <= 64
 
 
-_MAX_SEATS = 10
+# A table seats 9. Seat index 9 (a 10th "overflow" seat) is no longer handed out; it's
+# still accepted where a seat is cleared or swapped away, for tables from before.
+_MAX_SEATS = 9
+_LEGACY_MAX_SEATS = 10
 
 
 # In-memory mirror of the `shared_state` row plus its hash. GET /api/state and GET
@@ -990,7 +998,7 @@ def v2_list_all_game_summaries():
         with conn.cursor() as cur:
             visible = _visible_community_ids(cur, caller)
             cur.execute(
-                "SELECT id, community_id, name, date, created_by_name, closed, updated_at, created_by "
+                "SELECT id, community_id, name, date, created_by_name, closed, updated_at, created_by, created_at "
                 "FROM games ORDER BY date DESC"
             )
             games = [_row_to_game_summary(r) for r in cur.fetchall()]
@@ -1010,7 +1018,7 @@ def v2_list_games(community_id):
             if not _can_see_community(cur, caller, community_id):
                 return jsonify({"error": "not found"}), 404
             cur.execute(
-                "SELECT id, community_id, name, date, created_by_name, closed, updated_at, created_by "
+                "SELECT id, community_id, name, date, created_by_name, closed, updated_at, created_by, created_at "
                 "FROM games WHERE community_id = %s ORDER BY date DESC",
                 (community_id,),
             )
@@ -1033,14 +1041,14 @@ def v2_get_game(game_id):
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at, created_by "
+                "SELECT id, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at, created_by, created_at "
                 "FROM games WHERE id = %s",
                 (game_id,),
             )
             row = cur.fetchone()
             if not row:
                 return jsonify({"error": "not found"}), 404
-            gid, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at, created_by = row
+            gid, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at, created_by, created_at = row
             if not _can_see_community(cur, caller, community_id):
                 return jsonify({"error": "not found"}), 404
 
@@ -1102,6 +1110,7 @@ def v2_get_game(game_id):
         "date": date.isoformat() if date else None,
         "createdByName": created_by_name, "createdBy": created_by, "closed": closed,
         "updatedAt": updated_at.isoformat() if updated_at else None,
+        "createdAt": created_at.isoformat() if created_at else None,
         "seats": seats, "liveChips": live_chips,
         "players": players, "buyins": buyins, "cashouts": cashouts,
         "payboxPayments": paybox_payments, "playerPayments": player_payments,
@@ -1123,14 +1132,14 @@ def v2_get_game_summary(game_id):
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, community_id, name, date, created_by_name, closed, updated_at, created_by "
+                "SELECT id, community_id, name, date, created_by_name, closed, updated_at, created_by, created_at "
                 "FROM games WHERE id = %s",
                 (game_id,),
             )
             row = cur.fetchone()
             if not row:
                 return jsonify({"error": "not found"}), 404
-            gid, community_id, name, date, created_by_name, closed, updated_at, created_by = row
+            gid, community_id, name, date, created_by_name, closed, updated_at, created_by, created_at = row
             if not _can_see_community(cur, caller, community_id):
                 return jsonify({"error": "not found"}), 404
 
@@ -1178,6 +1187,7 @@ def v2_get_game_summary(game_id):
         "date": date.isoformat() if date else None,
         "createdByName": created_by_name, "createdBy": created_by, "closed": closed,
         "updatedAt": updated_at.isoformat() if updated_at else None,
+        "createdAt": created_at.isoformat() if created_at else None,
         "players": players, "buyinTotals": buyin_totals, "cashouts": cashouts,
         "payboxPayments": paybox_payments, "playerPayments": player_payments,
     })
@@ -1810,6 +1820,7 @@ def _row_to_game_summary(row):
         "createdByName": row[4], "closed": row[5],
         "updatedAt": row[6].isoformat() if row[6] else None,
         "createdBy": row[7] if len(row) > 7 else None,
+        "createdAt": row[8].isoformat() if len(row) > 8 and row[8] else None,
     }
 
 
@@ -2022,7 +2033,7 @@ def v2_swap_seats(game_id):
     from_index, to_index = body.get("fromIndex"), body.get("toIndex")
     if from_index is None or to_index is None:
         return jsonify({"error": "fromIndex and toIndex required"}), 400
-    if not all(isinstance(i, int) and not isinstance(i, bool) and 0 <= i < _MAX_SEATS for i in (from_index, to_index)):
+    if not all(isinstance(i, int) and not isinstance(i, bool) and 0 <= i < _LEGACY_MAX_SEATS for i in (from_index, to_index)):
         return jsonify({"error": "seat index out of range"}), 400
     with get_db() as conn:
         with conn.cursor() as cur:
