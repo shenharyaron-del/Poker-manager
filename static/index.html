@@ -477,6 +477,7 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
 .mode-tab-setup-perms.active{box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 -2px 12px rgba(155,107,224,.4);}
 .mode-panel.mode-panel-setup-perms{border-color:#9b6be0;box-shadow:inset 0 0 18px rgba(0,0,0,.4),0 0 14px rgba(155,107,224,.2);}
 .perm-table{width:100%;border-collapse:collapse;font-size:16px;}
+.delete-club-warn{border:2px solid #ef4444;background:rgba(239,68,68,.12);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;font-size:17px;font-weight:600;line-height:1.45;color:var(--text);}
 .perm-table th{font-size:14px;color:var(--muted);font-weight:700;padding:6px 4px;border-bottom:1px solid var(--card-b);}
 .perm-table th:first-child,.perm-table td:first-child{text-align:right;}
 .perm-table td{padding:8px 4px;border-bottom:1px solid var(--card-b);text-align:center;}
@@ -5451,7 +5452,7 @@ function renderHome(){
   // to reveal them (see attachClubSwipe). A club with neither action just doesn't swipe.
   let hintShown = false;
   let cards = myCommunities.map(c => {
-    const canDelete = isSuperAdmin() || (c.createdBy && c.createdBy === myIdentity.id);
+    const canDelete = isSuperAdmin() || isCommunityAdmin(c);
     const canSetup = isSuperAdmin() || isClubCreator(c);
     const front = `
     <div class="card club-front" data-open-community="${c.id}" style="gap:6px;">
@@ -7442,11 +7443,26 @@ function renderModal(m){
     `;
   } else if (m.type === "deleteCommunity") {
     const c = getCommunity(m.communityId);
-    const gameCount = gamesForCommunity(m.communityId).length;
+    // A club that was played in or has members gets a clear list of exactly what goes
+    // with it - especially a table running right now - before the irreversible delete.
+    const games = gamesForCommunity(m.communityId);
+    const myPid = myIdentity.myPlayers && myIdentity.myPlayers[c.id];
+    const otherPlayers = (c.roster || []).filter(p => p.id !== myPid).length;
+    const liveGames = games.filter(g => { const st = gameStatus(g).key; return st === "waiting" || st === "notStarted" || st === "active"; })
+      .filter(g => (g.seats || []).some(Boolean));
+    const liveSeated = liveGames.reduce((n, g) => n + (g.seats || []).filter(pid => pid && !(pid in (g.cashouts || {}))).length, 0);
+    const playedGames = games.filter(g => (g.buyins || g.buyinTotals || []).length).length;
+    const warnings = [
+      liveGames.length ? `🔴 ${liveGames.length === 1 ? "שולחן פעיל כרגע" : `${liveGames.length} שולחנות פעילים כרגע`}${liveSeated ? ` - ${liveSeated === 1 ? "שחקן אחד יושב" : `${liveSeated} שחקנים יושבים`}` : ""}. המשחק שלהם יימחק באמצע.` : "",
+      playedGames ? `🃏 שוחקו במועדון ${playedGames === 1 ? "ערב משחק אחד" : `${playedGames} ערבי משחק`} - כל ההיסטוריה, הקניות, התוצאות והתשלומים יימחקו.` : "",
+      otherPlayers ? `👥 ${otherPlayers === 1 ? "יש במועדון שחקן נוסף" : `יש במועדון עוד ${otherPlayers} שחקנים`} - המועדון ייעלם גם אצלם.` : "",
+    ].filter(Boolean);
     title = "מחיקת מועדון";
     body = `
-      <p style="color:#6ee7b7;font-size:17px;">למחוק לגמרי את המועדון <b>${esc(c.name)}</b>?${gameCount ? ` יימחקו גם ${gameCount} ערבי המשחק שלו.` : ""} הפעולה בלתי הפיכה.</p>
-      <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-delete-community>מחק מועדון</button>
+      <p style="font-size:18px;margin:0 0 12px;">למחוק לגמרי את המועדון <b>${esc(c.name)}</b>?</p>
+      ${warnings.length ? `<div class="delete-club-warn">${warnings.map(w => `<div>${w}</div>`).join("")}</div>` : ""}
+      <p style="color:#fda4af;font-size:17px;font-weight:700;margin:12px 0 0;">הפעולה בלתי הפיכה.</p>
+      <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:12px;" data-confirm-delete-community>${warnings.length ? "מחק את המועדון וכל מה שבו" : "מחק מועדון"}</button>
     `;
   } else if (m.type === "roster") {
     const c = getCommunity(m.communityId);
@@ -7764,7 +7780,7 @@ function renderModal(m){
       <div class="section-title" style="padding:0;margin:0 0 6px;">מועדון</div>
       ${table([
         ["פתיחת מועדון חדש", Y, Y, Y],
-        ["מחיקת מועדון", Y, N, N],
+        ["מחיקת מועדון", Y, Y, N],
         ["שליחת הזמנה למועדון", Y, Y, Y],
         ["הגדרות מועדון (Setup)", Y, N, N],
         ["מינוי והסרת אדמינים", Y, Y, N],
