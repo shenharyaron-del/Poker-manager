@@ -5452,7 +5452,7 @@ function renderHome(){
   // to reveal them (see attachClubSwipe). A club with neither action just doesn't swipe.
   let hintShown = false;
   let cards = myCommunities.map(c => {
-    const canDelete = isSuperAdmin() || isCommunityAdmin(c);
+    const canDelete = isSuperAdmin() || (c.createdBy && c.createdBy === myIdentity.id);
     const canSetup = isSuperAdmin() || isClubCreator(c);
     const front = `
     <div class="card club-front" data-open-community="${c.id}" style="gap:6px;">
@@ -5661,7 +5661,9 @@ function renderCommunity(communityId){
     // Invite / delete sit behind the card - swipe it left to reveal them, same as the
     // club cards on the home screen (see attachClubSwipe). Visible: name, date, status.
     const canInvite = !g.closed;
-    const canDelete = isGameCreator(g) || isClubCreator(c);
+    // The table's creator, any club admin (the creator included) or a super admin - the
+    // same table-admin rights the server checks on delete.
+    const canDelete = isSuperAdmin() || isTableAdmin(g, c);
     const front = `
     <div class="card club-front ${g.closed?"":"card-open"}" data-open-game="${g.id}">
       <div class="row flex1"><span style="color:#6ee7b7">${icon('cal')}</span><div class="flex1"><div class="name serif">${esc(g.name || g.date)}</div>${g.name ? `<div style="font-size:15px;color:var(--muted);margin-top:2px;">${esc(g.date)}</div>` : ""}${gameAlert ? `<div class="game-alert-line">${gameAlert.text}</div>` : ""}</div>${gameStatusBadge(g)}</div>
@@ -7619,10 +7621,27 @@ function renderModal(m){
     `;
   } else if (m.type === "deleteGame") {
     const g = getGame(m.gameId);
+    // A table that's running, or that was played, gets a clear list of what goes with it
+    // before the irreversible delete.
+    const st = gameStatus(g);
+    const stillSeated = (g.seats || []).filter(pid => pid && !(pid in (g.cashouts || {}))).length;
+    const buyinRows = g.buyins || [];
+    const buyinCount = g.buyinTotals ? null : buyinRows.length;
+    const buyinTotal = Math.round((g.buyinTotals ? g.buyinTotals : buyinRows).reduce((s, b) => s + (b.amount || 0), 0) * 100) / 100;
+    const playerCount = new Set((g.buyinTotals || buyinRows).map(b => b.playerId)).size;
+    const cashedCount = Object.keys(g.cashouts || {}).length;
+    const live = st.key === "waiting" || st.key === "notStarted" || st.key === "active";
+    const warnings = [
+      live && stillSeated ? `🔴 השולחן ${st.label === "פעיל" ? "פעיל כרגע" : `במצב "${st.label}"`} - ${stillSeated === 1 ? "שחקן אחד יושב בו" : `${stillSeated} שחקנים יושבים בו`}. המשחק שלהם יימחק באמצע.` : "",
+      buyinTotal > 0 ? `🃏 נרשמו ${buyinCount != null ? (buyinCount === 1 ? "קנייה אחת" : `${buyinCount} קניות`) + " " : "קניות "}בסך ${buyinTotal} ש"ח${playerCount ? ` של ${playerCount === 1 ? "שחקן אחד" : `${playerCount} שחקנים`}` : ""} - הן יימחקו.` : "",
+      cashedCount ? `🏁 ${cashedCount === 1 ? "שחקן אחד כבר סיים" : `${cashedCount} שחקנים כבר סיימו`} ונרשמו תוצאות ותשלומים - גם הם יימחקו, וייעלמו מהביצועים של השחקנים.` : "",
+    ].filter(Boolean);
     title = "מחיקת ערב משחק";
     body = `
-      <p style="color:#6ee7b7;font-size:17px;">למחוק לגמרי את הערב מתאריך <b>${esc(g.date)}</b>? כל התשלומים והנתונים שלו יימחקו. הפעולה בלתי הפיכה.</p>
-      <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-delete-game>מחק ערב</button>
+      <p style="font-size:18px;margin:0 0 12px;">למחוק לגמרי את הערב <b>${esc(g.name || g.date)}</b>${g.name ? ` (${esc(g.date)})` : ""}?</p>
+      ${warnings.length ? `<div class="delete-club-warn">${warnings.map(w => `<div>${w}</div>`).join("")}</div>` : ""}
+      <p style="color:#fda4af;font-size:17px;font-weight:700;margin:12px 0 0;">הפעולה בלתי הפיכה.</p>
+      <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:12px;" data-confirm-delete-game>${warnings.length ? "מחק את הערב וכל מה שבו" : "מחק ערב"}</button>
     `;
   } else if (m.type === "deleteBuyin") {
     const g = getGame(m.gameId);
@@ -7780,7 +7799,7 @@ function renderModal(m){
       <div class="section-title" style="padding:0;margin:0 0 6px;">מועדון</div>
       ${table([
         ["פתיחת מועדון חדש", Y, Y, Y],
-        ["מחיקת מועדון", Y, Y, N],
+        ["מחיקת מועדון", Y, N, N],
         ["שליחת הזמנה למועדון", Y, Y, Y],
         ["הגדרות מועדון (Setup)", Y, N, N],
         ["מינוי והסרת אדמינים", Y, Y, N],
@@ -7788,7 +7807,7 @@ function renderModal(m){
       <div class="section-title" style="padding:0;margin:18px 0 6px;">משחק</div>
       ${table([
         ["פתיחת שולחן חדש", Y, Y, Y],
-        ["מחיקת שולחן", Y, `<span class="perm-part">רק יוצר המועדון</span>`, N],
+        ["מחיקת שולחן", Y, Y, N],
         ["שליחת הזמנה לשולחן", Y, Y, Y],
         ["הושבת שחקן בכיסא", Y, Y, N],
         ["תחילת משחק", Y, Y, Y],

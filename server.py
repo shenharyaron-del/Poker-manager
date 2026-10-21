@@ -1391,9 +1391,9 @@ def v2_update_community(community_id):
 def v2_delete_community(community_id):
     # ON DELETE CASCADE on every community_id/game_id FK takes care of chip_values,
     # paybox_links, roster_players, games and everything under those games in one
-    # statement - see schema.sql. The community's creator, one of its admins or a super
-    # admin may do this - checked here, not just by hiding the button, since the request
-    # itself is what deletes everything.
+    # statement - see schema.sql. Only the community's creator or a super admin may do
+    # this - checked here, not just by hiding the button, since the request itself is
+    # what deletes everything.
     caller = _caller()
     with get_db() as conn:
         with conn.cursor() as cur:
@@ -1401,8 +1401,8 @@ def v2_delete_community(community_id):
             row = cur.fetchone()
             if not row:
                 return jsonify({"error": "not found"}), 404
-            if not _rights(cur, caller, community_id)["community_admin"]:
-                return jsonify({"error": "only the community's creator, an admin or a super admin can delete it"}), 403
+            if not caller["is_super"] and row[0] not in caller["ids"]:
+                return jsonify({"error": "only the community creator or a super admin can delete it"}), 403
             cur.execute("DELETE FROM communities WHERE id = %s", (community_id,))
             deleted = cur.rowcount
         conn.commit()
