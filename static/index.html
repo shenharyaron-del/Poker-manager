@@ -11211,13 +11211,16 @@ window.addEventListener("popstate", async () => {
     }
   }
   // No invite link at all (plain app open, e.g. from the home-screen icon) - if this
-  // player is seated in a still-open game somewhere, land there directly instead of the
-  // communities list, same as if they'd followed that game's own invite link.
+  // player is seated (and not yet out) at exactly one still-open game, land there directly
+  // instead of the communities list, same as if they'd followed that game's own invite
+  // link. Seated at two or more: no guessing which - stay on the home screen, where the
+  // quick-access bar at the bottom lists every one of them.
   if (!inviteGameId && !inviteCommunityId) {
-    const myActiveGames = state.games
-      .filter(g => !g.closed && myIdentity.myPlayers && (g.seats || []).includes(myIdentity.myPlayers[g.communityId]))
-      .sort((a, b) => new Date(b.updatedAt || b.date || 0) - new Date(a.updatedAt || a.date || 0));
-    if (myActiveGames.length) {
+    const myActiveGames = state.games.filter(g => {
+      const pid = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+      return !g.closed && pid && (g.seats || []).includes(pid) && !(pid in (g.cashouts || {}));
+    });
+    if (myActiveGames.length === 1) {
       const g = myActiveGames[0];
       nav = { screen: "table", gameId: g.id, communityId: g.communityId };
     }
