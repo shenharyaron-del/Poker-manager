@@ -2120,9 +2120,10 @@ async function v2SeatPlayerIfRoom(gameId, playerId, name){
   for (let attempt = 0; attempt < 3; attempt++) {
     const freshSeats = attempt === 0 ? g.seats : (await v2LoadGameFull(gameId)).seats;
     if (freshSeats.includes(playerId)) return true;
+    // 9 seats per table - the old 10th "overflow" seat (index 9) is no longer handed out.
     let emptyIdx = freshSeats.findIndex((s,i) => i < 9 && !s);
-    if (emptyIdx === -1 && freshSeats.length < 10) emptyIdx = freshSeats.length === 9 ? 9 : -1;
-    if (emptyIdx === -1) return false; // table full (10/10)
+    if (emptyIdx === -1 && freshSeats.length < 9) emptyIdx = freshSeats.length;
+    if (emptyIdx === -1) return false; // table full (9/9)
     if (await v2ClaimSeat(gameId, emptyIdx, playerId, name)) return true;
     // Conflict - someone else claimed that exact seat between our read and our claim;
     // loop re-fetches and tries the next empty one.
@@ -3748,17 +3749,14 @@ async function urlToDataUrl(url){
     reader.readAsDataURL(blob);
   });
 }
-// Seat a player into the first open slot (main 9, then the 10th overflow slot),
-// growing g.seats to hold it if needed. Shared by autoSeatSelf and autoJoinViaInvite.
+// Seat a player into the first of the table's 9 open slots. Shared by autoSeatSelf and
+// autoJoinViaInvite.
 function seatPlayerIfRoom(g, playerId, p){
   if (!g.seats) g.seats = new Array(9).fill(null);
   if (g.seats.includes(playerId)) return true;
-  let emptyIdx = g.seats.findIndex((s,i) => i < 9 && !s);
-  if (emptyIdx === -1) {
-    while (g.seats.length < 10) g.seats.push(null);
-    if (g.seats[9] == null) emptyIdx = 9;
-  }
-  if (emptyIdx === -1) return false; // table full (10/10)
+  while (g.seats.length < 9) g.seats.push(null);
+  const emptyIdx = g.seats.findIndex((s,i) => i < 9 && !s);
+  if (emptyIdx === -1) return false; // table full (9/9)
   g.seats[emptyIdx] = playerId;
   if (!g.players.some(gp => gp.id === playerId)) g.players.push({id:p.id, name:p.name});
   if (!g.liveChips) g.liveChips = {};
@@ -3850,7 +3848,7 @@ function autoSeatSelf(gameId){
 // For someone opening a game via a shared invite link: if this device isn't already
 // linked to a roster player in this community, find one by matching name (so the same
 // person re-clicking a link doesn't get duplicated) or create a new roster entry for
-// them, then seat them - up to the table's 10-seat capacity.
+// them, then seat them - up to the table's 9-seat capacity.
 //
 // Goes through mutateAndSave (hash-checked, re-synced and retried on conflict) rather
 // than a plain load-mutate-save - two people opening the same invite link within
@@ -5153,16 +5151,17 @@ function render(){
     const pid = myPid(g);
     return pid && (g.seats || []).includes(pid) && !(pid in (g.cashouts || {}));
   });
-  // Plus tonight's open tables in my clubs that I'm not at yet and that still have a free
-  // seat (10 max) - a quick way to join one. Today's or yesterday's only (a night runs
-  // past midnight), so a table someone forgot to close weeks ago doesn't linger here.
-  const dayStr = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  const recentDays = [dayStr(new Date()), dayStr(new Date(Date.now() - 864e5))];
+  // Plus open tables in my clubs that I'm not at yet and that still have a free seat (9
+  // max) - a quick way to join one. Only tables opened in the last 24 hours (createdAt;
+  // a table from before that was recorded counts only if it's dated today), so a table
+  // someone forgot to close doesn't linger here.
+  const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; })();
+  const openedRecently = g => g.createdAt ? Date.now() - new Date(g.createdAt).getTime() < 24*60*60*1000 : g.date === today;
   const openGames = nav.screen === "table" ? [] : (state.games || []).filter(g => {
     const pid = myPid(g);
-    if (!pid || g.closed || (g.seats || []).includes(pid) || !recentDays.includes(g.date)) return false;
+    if (!pid || g.closed || (g.seats || []).includes(pid) || !openedRecently(g)) return false;
     const st = gameStatus(g).key;
-    return (st === "waiting" || st === "active") && (g.seats || []).filter(Boolean).length < 10;
+    return (st === "waiting" || st === "notStarted" || st === "active") && (g.seats || []).filter(Boolean).length < 9;
   });
   const barGames = [...activeGames, ...openGames];
   document.body.classList.toggle("has-active-games", barGames.length > 0);
@@ -5179,7 +5178,10 @@ function render(){
         // The game's own name leads (a long club name used to push it off the end, so two
         // games in one club read the same); the club, how many sit there and the game's
         // status go on a small second line.
-        return `<button type="button" class="btn btn-primary btn-block agb-game" data-open-game="${g.id}"><span class="agb-label"><span class="agb-name">${esc(g.name || g.date || "")}</span><span class="agb-club">${esc(cname)} · ${seatedText} · ${gameStatus(g).label}</span></span>${icon('chev')}</button>`;
+        // At a table I sit at, "you're sitting here" stands in for the status.
+        const mine = activeGames.includes(g);
+        const statusText = mine ? (myIdentity.gender === "female" ? "את יושבת כאן" : "אתה יושב כאן") : gameStatus(g).label;
+        return `<button type="button" class="btn btn-primary btn-block agb-game" data-open-game="${g.id}"><span class="agb-label"><span class="agb-name">${esc(g.name || g.date || "")}</span><span class="agb-club">${esc(cname)} · ${seatedText} · ${statusText}</span></span>${icon('chev')}</button>`;
       }).join("")}
     </div>`;
   }
@@ -5529,16 +5531,18 @@ function gameStarted(g){ return !!gameStartEvent(g) || !!g.closed || Object.keys
 // One status per night, each with its own color (club screen cards + a small tag in the
 // game screens' header):
 //   ממתין לשחקנים - fewer than two seated, nobody's left yet
+//   לפני תחילת משחק - two or more seated, "תחילת משחק" not pressed yet
 //   פעיל          - people still at the table (also after "ערב סגור" until they leave)
 //   קופה לא מאוזנת - everyone's out but the declared chips miss the buy-ins by more than ₪5
 //   הסתיים        - everyone's out and the pot balances
-const GAME_STATUS_COLORS = { waiting: "#2563eb", active: "#15803d", unbalanced: "#be123c", done: "#6b7280" };
+const GAME_STATUS_COLORS = { waiting: "#2563eb", notStarted: "#d97706", active: "#15803d", unbalanced: "#be123c", done: "#6b7280" };
 function gameStatus(g){
   const cashouts = g.cashouts || {};
   const seated = (g.seats || []).filter(Boolean);
   const still = seated.filter(pid => !(pid in cashouts));
   if (still.length || (!seated.length && !g.closed)) {
     if (!Object.keys(cashouts).length && seated.length < 2 && !g.closed) return {key: "waiting", label: "ממתין לשחקנים"};
+    if (!gameStarted(g)) return {key: "notStarted", label: "לפני תחילת משחק"};
     return {key: "active", label: "פעיל"};
   }
   // A night only one player ever sat at (and they've left) never really happened.
@@ -5574,7 +5578,9 @@ async function inviteToGame(gameId){
   const g = getGame(gameId);
   const c = g && getCommunity(g.communityId);
   if (!g || !c) return;
-  const url = location.origin + location.pathname + "?game=" + encodeURIComponent(g.id);
+  // The club's code rides along, so someone new joins the club itself first (see the
+  // invite handling at startup), then sits at this table.
+  const url = location.origin + location.pathname + "?game=" + encodeURIComponent(g.id) + "&community=" + encodeURIComponent(c.id);
   const text = `הצטרפו אליי למשחק פוקר ב${c.name} - ${g.name || g.date}`;
   if (navigator.share) {
     try { await navigator.share({title: "הזמנה למשחק פוקר", text, url}); } catch(err) { /* user cancelled the share sheet */ }
@@ -11152,6 +11158,23 @@ window.addEventListener("popstate", async () => {
   state.games = state.games.filter(g => keepIds.has(g.communityId));
   if (hadLegacy) saveState();
   const inviteGameId = new URLSearchParams(location.search).get("game");
+  const inviteCommunityId = new URLSearchParams(location.search).get("community");
+  // A club code - on its own (a club invite) or riding along with a table invite - joins
+  // the visitor to that club's roster first, so someone new is a club member before they
+  // ever sit at the table. Only a club-only invite lands on the club screen.
+  if (inviteCommunityId) {
+    let invitedCommunity = getCommunity(inviteCommunityId);
+    if (!invitedCommunity) {
+      try { const fresh = USE_RELATIONAL_API ? await loadStateV2() : await loadState(); applyFreshState(fresh); } catch(e) { /* keep the state we already have */ }
+      invitedCommunity = getCommunity(inviteCommunityId);
+    }
+    if (invitedCommunity) {
+      if (!inviteGameId) nav = { screen: "community", communityId: invitedCommunity.id };
+      await autoJoinViaCommunityInvite(invitedCommunity.id);
+    } else if (!inviteGameId) {
+      modal = {type:"inviteGone"};
+    }
+  }
   if (inviteGameId) {
     let invitedGame = getGame(inviteGameId);
     if (!invitedGame) {
@@ -11168,20 +11191,6 @@ window.addEventListener("popstate", async () => {
       // The linked game genuinely doesn't exist (most likely its host deleted that
       // evening) - say so instead of silently landing on the home screen with no
       // explanation for why the link didn't work.
-      modal = {type:"inviteGone"};
-    }
-  }
-  const inviteCommunityId = new URLSearchParams(location.search).get("community");
-  if (inviteCommunityId && !inviteGameId) {
-    let invitedCommunity = getCommunity(inviteCommunityId);
-    if (!invitedCommunity) {
-      try { const fresh = USE_RELATIONAL_API ? await loadStateV2() : await loadState(); applyFreshState(fresh); } catch(e) { /* keep the state we already have */ }
-      invitedCommunity = getCommunity(inviteCommunityId);
-    }
-    if (invitedCommunity) {
-      nav = { screen: "community", communityId: invitedCommunity.id };
-      await autoJoinViaCommunityInvite(invitedCommunity.id);
-    } else {
       modal = {type:"inviteGone"};
     }
   }
