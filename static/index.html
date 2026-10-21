@@ -5148,19 +5148,38 @@ function render(){
   // Away from the table while still seated (not cashed out) at one or more games: a bar at
   // the bottom with a quick way back to each of them. Taps go through [data-open-game],
   // the same handler as the game cards on the club screen.
+  const myPid = g => myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
   const activeGames = nav.screen === "table" ? [] : (state.games || []).filter(g => {
-    const pid = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+    const pid = myPid(g);
     return pid && (g.seats || []).includes(pid) && !(pid in (g.cashouts || {}));
   });
-  document.body.classList.toggle("has-active-games", activeGames.length > 0);
-  if (activeGames.length) {
+  // Plus tonight's open tables in my clubs that I'm not at yet and that still have a free
+  // seat (10 max) - a quick way to join one. Today's or yesterday's only (a night runs
+  // past midnight), so a table someone forgot to close weeks ago doesn't linger here.
+  const dayStr = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const recentDays = [dayStr(new Date()), dayStr(new Date(Date.now() - 864e5))];
+  const openGames = nav.screen === "table" ? [] : (state.games || []).filter(g => {
+    const pid = myPid(g);
+    if (!pid || g.closed || (g.seats || []).includes(pid) || !recentDays.includes(g.date)) return false;
+    const st = gameStatus(g).key;
+    return (st === "waiting" || st === "active") && (g.seats || []).filter(Boolean).length < 10;
+  });
+  const barGames = [...activeGames, ...openGames];
+  document.body.classList.toggle("has-active-games", barGames.length > 0);
+  if (barGames.length) {
+    const barTitle = !openGames.length ? (activeGames.length === 1 ? "יש לך משחק פעיל" : `יש לך ${activeGames.length} משחקים פעילים`)
+      : !activeGames.length ? (openGames.length === 1 ? "יש שולחן פתוח במועדון שלך" : `יש ${openGames.length} שולחנות פתוחים במועדונים שלך`)
+      : "המשחקים הפתוחים שלך";
     html += `<div class="active-games-bar">
-      <div class="agb-title"><span class="agb-live"></span>${activeGames.length === 1 ? "יש לך משחק פעיל" : `יש לך ${activeGames.length} משחקים פעילים`}</div>
-      ${activeGames.map(g => {
+      <div class="agb-title"><span class="agb-live"></span>${barTitle}</div>
+      ${barGames.map(g => {
         const cname = (getCommunity(g.communityId) || {}).name || "";
+        const seated = (g.seats || []).filter(Boolean).length;
+        const seatedText = seated === 0 ? "אין יושבים" : seated === 1 ? "יושב אחד" : `${seated} יושבים`;
         // The game's own name leads (a long club name used to push it off the end, so two
-        // games in one club read the same); the club goes on a small second line.
-        return `<button type="button" class="btn btn-primary btn-block agb-game" data-open-game="${g.id}"><span class="agb-label"><span class="agb-name">${esc(g.name || g.date || "")}</span><span class="agb-club">${esc(cname)}</span></span>${icon('chev')}</button>`;
+        // games in one club read the same); the club, how many sit there and the game's
+        // status go on a small second line.
+        return `<button type="button" class="btn btn-primary btn-block agb-game" data-open-game="${g.id}"><span class="agb-label"><span class="agb-name">${esc(g.name || g.date || "")}</span><span class="agb-club">${esc(cname)} · ${seatedText} · ${gameStatus(g).label}</span></span>${icon('chev')}</button>`;
       }).join("")}
     </div>`;
   }
