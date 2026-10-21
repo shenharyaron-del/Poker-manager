@@ -5579,9 +5579,10 @@ async function inviteToGame(gameId){
   const g = getGame(gameId);
   const c = g && getCommunity(g.communityId);
   if (!g || !c) return;
-  // The club's code rides along, so someone new joins the club itself first (see the
-  // invite handling at startup), then sits at this table.
-  const url = location.origin + location.pathname + "?game=" + encodeURIComponent(g.id) + "&community=" + encodeURIComponent(c.id);
+  // Only the club's code: the link joins the invitee to the club and opens the club
+  // screen (see autoJoinViaCommunityInvite), not the table itself - from there tonight's
+  // open table is one tap away (its card, and the quick-access bar at the bottom).
+  const url = location.origin + location.pathname + "?community=" + encodeURIComponent(c.id);
   const text = `הצטרפו אליי למשחק פוקר ב${c.name} - ${g.name || g.date}`;
   if (navigator.share) {
     try { await navigator.share({title: "הזמנה למשחק פוקר", text, url}); } catch(err) { /* user cancelled the share sheet */ }
