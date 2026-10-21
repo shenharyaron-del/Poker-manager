@@ -57,6 +57,12 @@ body{
 }
 .serif{font-family:'Frank Ruhl Libre',Georgia,serif;}
 #app{max-width:520px;margin:0 auto;min-height:100vh;padding-bottom:40px;}
+/* "חזרה למשחק" bar - see render()'s activeGames. */
+.active-games-bar{position:fixed;left:0;right:0;bottom:0;z-index:40;max-width:520px;margin:0 auto;padding:10px 16px calc(12px + env(safe-area-inset-bottom,0px));background:var(--card);border-top:2px solid var(--gold);border-radius:18px 18px 0 0;box-shadow:0 -8px 24px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:8px;max-height:45vh;overflow-y:auto;}
+.active-games-bar .agb-title{text-align:center;font-size:17px;font-weight:700;color:var(--text);}
+.active-games-bar .agb-game{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:20px;}
+.active-games-bar .agb-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+body.has-active-games #app{padding-bottom:calc(150px + env(safe-area-inset-bottom,0px));}
 .px5{padding-left:20px;padding-right:20px;}
 .notice{background:#78350f;color:#fde68a;font-size:12px;text-align:center;padding:8px 12px;display:flex;align-items:center;justify-content:center;gap:10px;}
 .notice button{background:none;border:none;color:inherit;text-decoration:underline;cursor:pointer;font-size:12px;}
@@ -5110,6 +5116,23 @@ function render(){
   const installChip = installChipHtml();
   document.documentElement.classList.toggle("has-install-chip", !!installChip);
   html = screenTag.replace(/^<div class="screen-tag"/, installChip ? '<div class="screen-tag with-install"' : '<div class="screen-tag"').replace(/<\/div>$/, themeToggleHtml() + installChip + '</div>') + html;
+  // Away from the table while still seated (not cashed out) at one or more games: a bar at
+  // the bottom with a quick way back to each of them. Taps go through [data-open-game],
+  // the same handler as the game cards on the club screen.
+  const activeGames = nav.screen === "table" ? [] : (state.games || []).filter(g => {
+    const pid = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+    return pid && (g.seats || []).includes(pid) && !(pid in (g.cashouts || {}));
+  });
+  document.body.classList.toggle("has-active-games", activeGames.length > 0);
+  if (activeGames.length) {
+    html += `<div class="active-games-bar">
+      <div class="agb-title">${activeGames.length === 1 ? "יש לך משחק פעיל" : `יש לך ${activeGames.length} משחקים פעילים`}</div>
+      ${activeGames.map(g => {
+        const cname = (getCommunity(g.communityId) || {}).name || "";
+        return `<button type="button" class="btn btn-primary btn-block agb-game" data-open-game="${g.id}"><span class="agb-label">${esc(cname)} · ${esc(g.name || g.date || "")}</span>${icon('chev')}</button>`;
+      }).join("")}
+    </div>`;
+  }
   if (modal) html += renderModal(modal);
   else if (welcomeGameId) {
     // Fade in only the first time - every later render (the entry buy-in landing, a
