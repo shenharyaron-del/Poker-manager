@@ -63,8 +63,14 @@ body{
 .entry-preset:not(.sel){opacity:.6;}
 .entry-go{box-shadow:0 4px 14px rgba(0,0,0,.3);}
 /* "חזרה למשחק" bar - see render()'s activeGames. */
-.active-games-bar{position:fixed;left:0;right:0;bottom:0;z-index:40;max-width:520px;margin:0 auto;padding:10px 16px calc(12px + env(safe-area-inset-bottom,0px));background:var(--card);border-top:2px solid var(--gold);border-radius:18px 18px 0 0;box-shadow:0 -8px 24px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:8px;max-height:45vh;overflow-y:auto;}
-.active-games-bar .agb-title{text-align:center;font-size:17px;font-weight:700;color:var(--text);}
+/* Same look in every theme: a lit poker-felt panel with a gold rim that softly pulses,
+   and a blinking "live" dot - meant to catch the eye from any screen. */
+.active-games-bar{position:fixed;left:0;right:0;bottom:0;z-index:40;max-width:520px;margin:0 auto;padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));background:radial-gradient(ellipse at 50% 0%,#2f9e63 0%,#17703f 45%,#0b4426 100%);border:2px solid #f5c542;border-bottom:none;border-radius:20px 20px 0 0;display:flex;flex-direction:column;gap:8px;max-height:45vh;overflow-y:auto;animation:agbGlow 2.4s ease-in-out infinite;}
+@keyframes agbGlow{0%,100%{box-shadow:0 -6px 22px rgba(0,0,0,.4),0 0 0 rgba(245,197,66,0);}50%{box-shadow:0 -6px 22px rgba(0,0,0,.4),0 -4px 26px rgba(245,197,66,.65);}}
+.active-games-bar .agb-title{display:flex;align-items:center;justify-content:center;gap:8px;font-size:18px;font-weight:800;color:#fde68a;text-shadow:0 1px 2px rgba(0,0,0,.5);}
+.active-games-bar .agb-live{width:10px;height:10px;border-radius:50%;background:#ef4444;box-shadow:0 0 0 0 rgba(239,68,68,.7);animation:agbLive 1.4s ease-out infinite;flex-shrink:0;}
+@keyframes agbLive{0%{box-shadow:0 0 0 0 rgba(239,68,68,.7);}100%{box-shadow:0 0 0 9px rgba(239,68,68,0);}}
+.active-games-bar .agb-game{background:linear-gradient(180deg,#fde68a,#f5c542 55%,#d4a017)!important;color:#1c1917!important;border:none!important;box-shadow:0 3px 8px rgba(0,0,0,.35);}
 .active-games-bar .agb-game{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:20px;}
 .active-games-bar .agb-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
 body.has-active-games #app{padding-bottom:calc(150px + env(safe-area-inset-bottom,0px));}
@@ -5131,7 +5137,7 @@ function render(){
   document.body.classList.toggle("has-active-games", activeGames.length > 0);
   if (activeGames.length) {
     html += `<div class="active-games-bar">
-      <div class="agb-title">${activeGames.length === 1 ? "יש לך משחק פעיל" : `יש לך ${activeGames.length} משחקים פעילים`}</div>
+      <div class="agb-title"><span class="agb-live"></span>${activeGames.length === 1 ? "יש לך משחק פעיל" : `יש לך ${activeGames.length} משחקים פעילים`}</div>
       ${activeGames.map(g => {
         const cname = (getCommunity(g.communityId) || {}).name || "";
         return `<button type="button" class="btn btn-primary btn-block agb-game" data-open-game="${g.id}"><span class="agb-label">${esc(cname)} · ${esc(g.name || g.date || "")}</span>${icon('chev')}</button>`;
