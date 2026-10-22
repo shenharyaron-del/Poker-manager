@@ -1053,6 +1053,16 @@ html.theme-light.theme-blue .modal .btn-primary,html.theme-light.theme-blue .mod
 .custom-alert-box span.one-line{white-space:nowrap;overflow:hidden;min-width:0;flex:1;}
 /* Table screen: שולחן / ציר זמן toggle and the timeline view */
 .tv-seg{display:flex;border:1px solid rgba(212,175,55,.55);border-radius:10px;overflow:hidden;flex-shrink:0;}
+.game-tabs-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 16px 10px;flex-shrink:0;}
+.game-seg{flex:1;min-width:0;}
+.game-seg button{flex:1;min-width:0;padding:8px 4px;white-space:nowrap;}
+.game-invite-btn{flex-shrink:0;display:flex;align-items:center;gap:5px;border:1px solid var(--gold);border-radius:10px;background:transparent;color:var(--gold);font-family:inherit;font-size:15px;font-weight:700;padding:8px 10px;cursor:pointer;}
+.pick-seat-hint{text-align:center;color:var(--gold);font-weight:700;font-size:18px;margin:0 16px 6px;animation:alone-arrow 1.1s ease-in-out infinite;}
+.felt-odds{display:flex;flex-direction:column;align-items:center;gap:2px;margin:6px auto 0;background:none;border:none;padding:0;cursor:pointer;color:#C8902F;font-family:inherit;font-size:11px;font-weight:700;line-height:1.15;pointer-events:auto;}
+.felt-odds img{width:30px;height:auto;display:block;}
+.felt-odds span{text-shadow:0 1px 2px rgba(0,0,0,.55);}
+html.theme-light .felt-odds{color:#7a4a08;}
+html.theme-light .felt-odds span{text-shadow:0 1px 1px rgba(255,255,255,.6);}
 .tv-seg button{background:transparent;border:none;color:var(--text);font-family:inherit;font-size:17px;padding:7px 14px;cursor:pointer;}
 .tv-seg button.on{background:var(--gold);color:var(--gold-text);font-weight:700;}
 .ttl-chart svg{display:block;height:auto;overflow:visible;cursor:pointer;}
@@ -3262,9 +3272,9 @@ function shouldShowGameTour(g){
   // Only once the entry is bought - the entry-amount window answered and the buy-in saved -
   // so the walkthrough never covers that window or starts before the player is in.
   if (pendingBuyinRequest || !(g.buyins||[]).some(b => b.playerId === myPlayerId)) return false;
-  // The Super Admin can turn the automatic walkthrough off for everyone (system settings);
-  // a walkthrough opened on purpose (gameTourDemo) still runs.
-  return gameTourDemo || (authSettings.showGameTour !== false && !myIdentity.seenGameTour);
+  // The automatic walkthrough is off for now (it explained the old two-page swipe); only a
+  // walkthrough opened on purpose ("?demo=tour") still runs.
+  return gameTourDemo;
 }
 // The walkthrough draws the app's REAL screens (renderPlayerScreen/renderTable) for a sample
 // game - the viewer plus three made-up players - so it always looks exactly like the app,
@@ -3634,7 +3644,8 @@ function go(screen, extra){
   // Entering a table always opens on the player screen, and its table screen (one swipe
   // away) on the seats - the timeline only for as long as it's picked there.
   if (screen === "table") setTableView("table");
-  if (screen === "table" && nav.gameId) autoSeatSelf(nav.gameId);
+  // No auto-seat: everyone lands on the table and picks a free seat themselves (tapping
+  // it seats them and opens the entry-amount window - see the [data-seat] handler).
   lockPortraitForScreen(screen);
   render();
 }
@@ -3794,6 +3805,38 @@ function canSelfSeat(g){
   const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[c.id];
   return (c.roster||[]).some(pl => pl.id === myPlayerId) || !!findMyRosterRow(c);
 }
+// Someone on the table screen who isn't sitting at it (and didn't sit and leave tonight)
+// and belongs to the club - every free seat shows "+" for them, and tapping one seats them.
+function canTakeSeatHere(g){
+  if (!g || g.closed || isSeatedInGame(g)) return false;
+  const c = getCommunity(g.communityId);
+  if (!c) return false;
+  return !!((myIdentity.myPlayers && myIdentity.myPlayers[c.id]) || findMyRosterRow(c) || myIdentity.name);
+}
+// Sits me at seat idx: makes sure I have a roster row in this club (linking or creating
+// it, same as an invite join), then claims the seat - which opens the entry-amount window.
+async function takeSeatAt(g, idx){
+  const c = getCommunity(g.communityId);
+  try {
+    let pid = myIdentity.myPlayers && myIdentity.myPlayers[c.id];
+    let p = pid ? c.roster.find(pl => pl.id === pid) : null;
+    if (!p) {
+      if (!myIdentity.name) { showAlert("צריך להזין שם לפני שמתיישבים."); return; }
+      p = findMyRosterRow(c);
+      if (!p) { p = {id: uid(), name: myIdentity.name}; await v2AddRosterPlayer(c.id, p.id, p.name); }
+      await v2LinkRosterPlayer(c.id, p.id, myIdentity.id);
+      if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
+      myIdentity.myPlayers[c.id] = p.id;
+      saveIdentity();
+    } else if (!p.clientId) {
+      await v2LinkRosterPlayer(c.id, p.id, myIdentity.id);
+    }
+    const ok = await v2ClaimSeat(g.id, idx, p.id, p.name);
+    if (!ok) { showAlert("המושב הזה כבר תפוס - בחרו מושב אחר."); return; }
+    tableSubView = "player";
+    render();
+  } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+}
 function shouldAskWatchOrJoin(g){
   if (!g || g.closed || watchOnlyGameIds.has(g.id) || isSeatedInGame(g) || !canSelfSeat(g)) return false;
   return isSuperAdmin();
@@ -3885,7 +3928,7 @@ async function autoJoinViaInvite(gameId){
       } else if (!p.clientId) {
         await v2LinkRosterPlayer(g.communityId, p.id, myIdentity.id);
       }
-      await v2SeatPlayerIfRoom(gameId, p.id, p.name);
+      // Not seated here - they pick a free seat on the table themselves.
     } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
     render();
     return;
@@ -3909,7 +3952,6 @@ async function autoJoinViaInvite(gameId){
       // Backfill for a player who self-identified before global-player linking existed.
       linkToGlobalPlayer(p);
     }
-    seatPlayerIfRoom(g, p.id, p);
   });
   render();
 }
@@ -5047,6 +5089,29 @@ function isSeatedInGame(g){
   const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
   return !!(myPlayerId && (g.seats||[]).includes(myPlayerId));
 }
+// A live table: one row of tabs - "משחק" (my player screen, only while I'm seated),
+// "שולחן" (the seats) and "ציר זמן" - plus the "הזמן שחקן" button, which stays in that
+// row on every tab. Replaces the old swipe between the player and table pages.
+function gameTabsScreen(g, c, seated){
+  const tab = seated && tableSubView === "player" ? "game" : (tableTimelineOn() ? "timeline" : "table");
+  const tabs = [...(seated ? [["game", "משחק"]] : []), ["table", "שולחן"], ["timeline", "ציר זמן"]];
+  const canInvite = !g.closed && (g.seats || []).slice(0, 9).filter(Boolean).length < 9;
+  const aloneAtTable = seated && !g.closed && (g.seats || []).filter(Boolean).length === 1;
+  const row = `
+    <div class="game-tabs-row">
+      <div class="tv-seg game-seg" role="tablist">${tabs.map(([k, label]) => `<button type="button" class="${tab === k ? "on" : ""}" data-game-tab="${k}">${label}</button>`).join("")}</div>
+      ${canInvite ? `<button type="button" class="game-invite-btn${aloneAtTable ? " tile-hint" : ""}" data-invite-game="${g.id}">${icon('share')}<span>הזמן שחקן</span></button>` : ""}
+    </div>`;
+  const content = tab === "game" ? renderPlayerScreen(g.id) : renderTable(g.id);
+  const pageCls = tab === "game" ? ` player-page${playerScreenViewingOther() ? " pp-other" : ""}` : "";
+  return `<div class="table-swipe-root">
+    <div class="swipe-track-viewport">
+      <div class="swipe-track">
+        <div class="swipe-page lux-page${pageCls}">${row}${content}</div>
+      </div>
+    </div>
+  </div>`;
+}
 // The page on screen, kept for this browser tab only (sessionStorage) so a refresh lands
 // back on it instead of re-following the invite link or jumping into a table - see the
 // invite handling at startup. A new tab or a fresh app launch starts clean.
@@ -5080,62 +5145,14 @@ function render(){
       // (entryBuyin) is the only step on sitting down now. Still marked as welcomed, which
       // is what lets the table walkthrough (shouldShowGameTour) follow.
       if (myPlayerId && !hasWelcomedGame(g.id)) markGameWelcomed(g.id);
-      const pageOrder = swipePageOrder(g, c);
-      // Losing admin rights (or just never having had them) between renders shouldn't
-      // strand tableSubView on a page that no longer exists in the carousel - falls back
-      // to the default face instead of rendering nothing/crashing on a page lookup miss.
-      if (!pageOrder.includes(tableSubView)) tableSubView = "player";
-      const N = pageOrder.length;
-      const RENDERERS = { player: () => renderPlayerScreen(nav.gameId), table: () => renderTable(nav.gameId) };
-      // Every page in the carousel is mounted at once (not just the active one) - lets the
-      // swipe drag actually slide real content under the finger like a phone home screen,
-      // instead of an invisible gesture that only silently swaps views on release (that
-      // version was reported repeatedly as "swiping doesn't work" even once the touch
-      // handling itself was fixed - it technically worked, it just never looked or felt
-      // like it was doing anything while dragging). Exactly 2 pages (no admin screen) keep
-      // the DOM in the fixed authored order [player, table] always, with attachHandlers'
-      // own swipe logic reordering those two real nodes on the fly as a gesture commits to
-      // a direction (see ensureAdjacency there) - the only way to make BOTH swipe
-      // directions reveal the same lone "other" page smoothly with just 2 real pages and
-      // no duplicates. With 3 pages there's no such wraparound gap to begin with: centering
-      // the current page between its two DISTINCT real neighbors (prev, cur, next) already
-      // covers both drag directions correctly every render, no reordering ever needed.
-      const domOrder = N === 3 ? [cyclicPage(pageOrder, tableSubView, -1), tableSubView, cyclicPage(pageOrder, tableSubView, 1)] : pageOrder;
-      const restOffset = N === 3 ? "-100%" : (domOrder[0] === tableSubView ? "0" : "-100%");
-      const DOT_LABELS = { admin: "ניהול שחקנים", player: "השחקן שלי", table: "שולחן" };
-      // Bottom switcher, rendered INSIDE each page (as if that page were the current one)
-      // rather than once under the whole track, so it slides along with its page during a
-      // swipe drag like the rest of the screen. With all 3 faces (admin carousel): that
-      // page's illustration (gold, glowing) above the dots in the middle, and each side
-      // names the adjacent screen a swipe (or a tap right there) leads to, with its own
-      // illustration and a chevron pointing toward it. With just 2 pages (player/table) the
-      // full version read as oversized for what it does (two side buttons pointing at the
-      // same lone "other" screen either way) - just the dots, smaller, swipe still works.
-      const navBarFor = (cur) => {
-        const dotsRow = `<div class="nav-dots">${pageOrder.map(key => `<span class="${cur===key?'on':''}" title="${DOT_LABELS[key]}"></span>`).join("")}</div>`;
-        if (N < 3) return `<div class="nav-bar nav-bar-compact">${dotsRow}</div>`;
-        const navSide = (key, side) => `<button class="nav-side ${side}" data-swipe-to="${key}">${NAV_ART[key]}<span class="nav-side-label">${side==='left'?'':icon('right')}${esc(DOT_LABELS[key])}${side==='left'?icon('left'):''}</span></button>`;
-        return `
-          <div class="nav-bar">
-            ${navSide(cyclicPage(pageOrder, cur, -1), 'left')}
-            <div class="nav-center">${NAV_ART[cur] || ''}${dotsRow}</div>
-            ${navSide(cyclicPage(pageOrder, cur, 1), 'right')}
-          </div>
-        `;
-      };
-      const pagesHtml = domOrder.map(key => `<div class="swipe-page lux-page${key==='player'?' player-page':''}${key==='player' && playerScreenViewingOther()?' pp-other':''}">${RENDERERS[key]()}${navBarFor(key)}</div>`).join("");
-      html = `<div class="table-swipe-root">
-        <div class="swipe-track-viewport">
-          <div class="swipe-track" data-swipe-track style="transform:translateX(${restOffset});">
-            ${pagesHtml}
-          </div>
-        </div>
-      </div>`;
+      if (tableSubView !== "player" && tableSubView !== "table") tableSubView = "player";
+      html = gameTabsScreen(g, c, true);
     } else {
-      // Not seated (spectator/admin) - only the circles view exists, nothing to swipe to,
-      // so skip the carousel machinery entirely and keep the plain single-face structure.
+      // Not seated: no "משחק" tab - just the table (free seats to pick from) and timeline.
       const watchFeed = watchView === "feed" && isSuperAdmin() && !isSeatedInGame(g);
-      html = `<div class="table-swipe-root"${watchFeed ? ' style="display:flex;flex-direction:column;height:100%;"' : ''}>${watchFeed ? renderWatchFeed(nav.gameId) : renderTable(nav.gameId)}</div>`;
+      html = watchFeed
+        ? `<div class="table-swipe-root" style="display:flex;flex-direction:column;height:100%;">${renderWatchFeed(nav.gameId)}</div>`
+        : gameTabsScreen(g, c, false);
     }
     }
   }
@@ -5145,12 +5162,14 @@ function render(){
   const SUB_VIEW_LABELS = { player: "שחקן", table: tableViewLabel() };
   const watchFeedOn = nav.screen === "table" && !resultsScreen && !seated && watchView === "feed" && isSuperAdmin();
   const screenLabel = resultsScreen ? "תוצאות משחק" : watchFeedOn ? "פעילות בשולחן" : ((seated && SUB_VIEW_LABELS[tableSubView]) || (nav.screen === "table" ? tableViewLabel() : (SCREEN_NAMES[nav.screen] || nav.screen)));
+  // A live table's tabs already say which view is open - the breadcrumbs stop at the club.
+  const crumbsStopAtClub = nav.screen === "table" && !resultsScreen && !watchFeedOn;
   // On the club and game screens the tag doubles as breadcrumbs: בית › <club name>
   // › <this screen>, the first two linking home and to the club. One line: a long club
   // name gives way first ("…", down to nothing), never the current screen's name.
   const crumbGame = nav.screen === "table" && nav.gameId ? getGame(nav.gameId) : null;
   const screenTag = crumbGame
-    ? `<div class="screen-tag screen-tag-lg crumbs-row"><button type="button" class="crumb-link" data-crumb-home>בית</button><span class="crumb-sep">›</span><button type="button" class="crumb-link crumb-club" data-back-community="${crumbGame.communityId}">${esc((getCommunity(crumbGame.communityId) || {}).name || "")}</button><span class="crumb-sep">›</span><span class="crumb-here">${esc(screenLabel)}</span></div>`
+    ? `<div class="screen-tag screen-tag-lg crumbs-row"><button type="button" class="crumb-link" data-crumb-home>בית</button><span class="crumb-sep">›</span><button type="button" class="crumb-link crumb-club" data-back-community="${crumbGame.communityId}">${esc((getCommunity(crumbGame.communityId) || {}).name || "")}</button>${crumbsStopAtClub ? "" : `<span class="crumb-sep">›</span><span class="crumb-here">${esc(screenLabel)}</span>`}</div>`
     : nav.screen === "community"
       ? `<div class="screen-tag screen-tag-lg crumbs-row"><button type="button" class="crumb-link" data-crumb-home>בית</button><span class="crumb-sep">›</span><span class="crumb-club">${esc((getCommunity(nav.communityId) || {}).name || "")}</span></div>`
       : `<div class="screen-tag${nav.screen === "home" ? " screen-tag-lg" : ""}">${esc(screenLabel)}</div>`;
@@ -6177,8 +6196,9 @@ function renderPlayerScreen(gameId){
     // boxes sit from the right at that size, "הזמן שחקן" last), 4 in one row, 5-6 in rows
     // of 3, 7-8 in rows of 4 - the font sized to the box (long names shrink to fit, see
     // fitNameBoxes).
-    const out = entered.map(tile).join("") + (canInvite ? inviteTile : "");
-    const n = entered.length + (canInvite ? 1 : 0);
+    // "הזמן שחקן" moved to the tabs row above (see gameTabsScreen).
+    const out = entered.map(tile).join("");
+    const n = entered.length;
     const cols = n === 4 || n > 6 ? 4 : 3;
     const fs = cols === 3 ? 18 : 16;
     return `<div class="pp-tiles" style="grid-template-columns:repeat(${cols},1fr);font-size:${fs}px;">${out}</div>`;
@@ -6530,7 +6550,7 @@ function renderTable(gameId){
       // The top-left seat sits right under "מחשבון סיכויי פוקר" - there the hint's text goes
       // beside the hand (on its left) instead of above it, clear of that label.
       const hintCls = hintHere ? (visualPos(i) === 0 ? ' seat-hint seat-hint-side' : ' seat-hint') : '';
-      return `<div class="seat-wrap${hintCls}" style="left:${x}%;top:${y}%;" data-seat="${i}"><div class="seat-circle vacant">${admin?'+':''}</div></div>`;
+      return `<div class="seat-wrap${hintCls}" style="left:${x}%;top:${y}%;" data-seat="${i}"><div class="seat-circle vacant">${(admin || canTakeSeatHere(g))?'+':''}</div></div>`;
     }
     const p = g.players.find(pl => pl.id === pid);
     const name = p ? p.name : "?";
@@ -6651,15 +6671,7 @@ function renderTable(gameId){
 
   return `
     ${watchStripHtml(g)}
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:0 20px 10px;">
-      <div class="tv-seg" role="tablist"><button type="button" class="${tableTimelineOn() ? '' : 'on'}" data-table-view="table">שולחן</button><button type="button" class="${tableTimelineOn() ? 'on' : ''}" data-table-view="timeline">ציר זמן</button></div>
-    ${!allCashedOut ? `<div style="display:flex;align-items:center;gap:8px;">
-      <span data-open-poker-odds class="odds-label" style="color:#C8902F;font-size:16px;text-align:center;line-height:1.3;cursor:pointer;">מחשבון<br>סיכויי פוקר</span>
-      <button class="icon-btn" data-open-poker-odds title="מה הסיכויים שלי" style="flex-shrink:0;width:48px;height:auto;background:none;border:none;padding:0;display:inline-flex;align-items:center;justify-content:center;">
-        <img src="/static/odds-coin.png" style="width:48px;height:auto;display:block;">
-      </button>
-    </div>` : ""}
-    </div>
+    ${canTakeSeatHere(g) && !tableTimelineOn() && (g.seats||[]).slice(0, 9).some(sid => !sid) ? `<div class="pick-seat-hint">לחצו על כיסא פנוי (+) כדי להתיישב</div>` : ""}
     ${tableTimelineOn() ? renderTableTimeline(g, c, myPlayerId) : `<div class="poker-table-wrap">
       <div class="poker-table-inner ${cropClass}">
         <div class="poker-table-felt"></div>
@@ -6670,6 +6682,7 @@ function renderTable(gameId){
           <div style="color:var(--muted);font-size:12px;">סה"כ קנייה ₪${totalBuyinAll}</div>
           <div style="color:var(--muted);font-size:12px;">סה"כ ז'יטונים ₪${totalChipsAll}</div>
           <div style="color:${diffColor};font-weight:700;font-size:13px;margin-top:4px;">${diffLabel}${Math.abs(diff)>=0.5?` ₪${Math.abs(Math.round(diff))}`:""}</div>
+          ${!allCashedOut ? `<button type="button" class="felt-odds" data-open-poker-odds title="מחשבון סיכויי פוקר"><img src="/static/odds-coin.png" alt=""><span>מחשבון<br>סיכויי פוקר</span></button>` : ""}
         </div>
       </div>
     </div>`}
@@ -7110,11 +7123,7 @@ function renderModal(m){
         <input type="checkbox" data-toggle-require-admin-verify ${authSettings.requireVerifyBeforeAdminSettings?"checked":""}>
         <span class="flex1">חייב קוד אימות להגדרות מערכת</span>
       </label>
-      <div class="section-title" style="padding:0;margin:0 0 8px;">הדרכה</div>
-      <label class="checkbox-row" style="cursor:pointer;margin-bottom:18px;">
-        <input type="checkbox" data-toggle-show-game-tour ${authSettings.showGameTour !== false?"checked":""}>
-        <span class="flex1">להציג את ההדרכה בשולחן (Helper) לשחקן שעוד לא ראה אותה</span>
-      </label>
+
       <div class="section-title" style="padding:0;margin:0 0 8px;">אווטרים</div>
       <div style="display:flex;gap:8px;margin-bottom:18px;">
         <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-open-avatar-creator>${icon('plus')} יצירת אווטרים חדשים</button>
@@ -8585,7 +8594,7 @@ function attachHandlers(){
   app.querySelectorAll("[data-back-community]").forEach(el => el.onclick = () => go("community", {communityId: el.dataset.backCommunity}));
   app.querySelectorAll("[data-crumb-home]").forEach(el => el.onclick = () => go("home"));
   app.querySelectorAll("[data-install-app]").forEach(el => el.onclick = (e) => { e.stopPropagation(); startInstall(); });
-  app.querySelectorAll("[data-goto-table-view]").forEach(el => el.onclick = () => { tableSubView = "table"; render(); });
+  app.querySelectorAll("[data-goto-table-view]").forEach(el => el.onclick = () => { tableSubView = "table"; setTableView("table"); render(); });
   app.querySelectorAll("[data-open-pot-fix]").forEach(el => el.onclick = () => openModal({type: "potFix", gameId: nav.gameId}));
   // "הביצועים שלי" on the end-of-night screens (cashed-out player view, game results).
   app.querySelectorAll("[data-open-my-stats]").forEach(el => el.onclick = () => openModal({type:"stats", clientId: myIdentity.id}));
@@ -8628,8 +8637,9 @@ function attachHandlers(){
           }
         }
       } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); cancelEntryBtn.disabled = false; return; }
-      if (playerId === mine) go("community", {communityId: g.communityId});
-      else closeModal();
+      // Back on the table either way - its free seats are right there to pick another.
+      if (playerId === mine) { tableSubView = "table"; setTableView("table"); }
+      closeModal();
     };
     const otherBtn = app.querySelector("[data-entry-other]");
     const otherInput = app.querySelector("#entry-other-amount");
@@ -8787,6 +8797,12 @@ function attachHandlers(){
   };
   app.querySelectorAll("[data-pp-back-me]").forEach(el => el.onclick = () => { playerViewTarget = null; render(); });
   app.querySelectorAll("[data-table-view]").forEach(el => el.onclick = () => { setTableView(el.dataset.tableView); render(); });
+  app.querySelectorAll("[data-game-tab]").forEach(el => el.onclick = () => {
+    const t = el.dataset.gameTab;
+    if (t === "game") tableSubView = "player";
+    else { tableSubView = "table"; setTableView(t); }
+    render();
+  });
   // "מה קרה בערב" scrolls inside its own box - keep its position through re-renders.
   app.querySelectorAll("[data-ttl-list]").forEach(el => {
     const gid = el.dataset.ttlList;
@@ -9239,15 +9255,17 @@ function attachHandlers(){
       drag = null;
       seatDragInProgress = false;
     });
-    el.onclick = () => {
+    el.onclick = async () => {
       const g = getGame(nav.gameId);
       const c = getCommunity(g.communityId);
       const idx = parseInt(el.dataset.seat);
       const seats = g.seats || new Array(9).fill(null);
-      // Only the table/community creator can seat a new guest into an empty seat -
-      // everyone else just sees a plain circle, still a valid drag target for moving an
-      // already-seated player's own position.
-      if (!seats[idx] && isTableAdmin(g, c)) openModal({type:"pickSeat", gameId: nav.gameId, seatIndex: idx});
+      if (seats[idx]) return;
+      // Not at this table yet: the free seat I tap is mine - sit there, and the entry-amount
+      // window opens (v2ClaimSeat does that for a first sit-down).
+      if (canTakeSeatHere(g)) { await takeSeatAt(g, idx); return; }
+      // Already sitting: a table admin seats someone else there.
+      if (isTableAdmin(g, c)) openModal({type:"pickSeat", gameId: nav.gameId, seatIndex: idx});
     };
   });
 
@@ -9644,8 +9662,7 @@ function attachHandlers(){
     if (requireVerifyExistingCb) requireVerifyExistingCb.onchange = () => updateAuthSetting("requireVerifyExistingEmail", requireVerifyExistingCb.checked);
     const requireAdminVerifyCb = app.querySelector("[data-toggle-require-admin-verify]");
     if (requireAdminVerifyCb) requireAdminVerifyCb.onchange = () => updateAuthSetting("requireVerifyBeforeAdminSettings", requireAdminVerifyCb.checked);
-    const showTourCb = app.querySelector("[data-toggle-show-game-tour]");
-    if (showTourCb) showTourCb.onchange = () => updateAuthSetting("showGameTour", showTourCb.checked);
+
     const openCreatorBtn = app.querySelector("[data-open-avatar-creator]");
     if (openCreatorBtn) openCreatorBtn.onclick = () => openModal({type:"avatarCreator", imageSrc: null, points: []});
     const openManageBtn = app.querySelector("[data-open-avatar-manage]");
@@ -9945,16 +9962,9 @@ function attachHandlers(){
               await v2AddRosterPlayer(c.id, creatorPlayer.id, creatorPlayer.name);
             }
             await v2LinkRosterPlayer(c.id, creatorPlayer.id, myIdentity.id);
-            await v2CreateGame(gid, c.id, name || null, modal.date, myIdentity.name, creatorPlayer.id, creatorPlayer.name, myIdentity.id);
-            // The server seats the creator directly as part of creating the game (so the
-            // table never exists with an empty seat 0 even for an instant) - that bypasses
-            // v2ClaimSeat entirely, which is the only place the "first time seated here ->
-            // auto buy-in the community's first amount" trigger otherwise lives. Without
-            // this, the creator's own table opened with ₪0 bought in. Asks for the amount
-            // (same window as v2ClaimSeat) rather than charging the default outright -
-            // deferred a tick so it opens after the go("table") below.
-            const creatorId = creatorPlayer.id;
-            setTimeout(() => openModal({type: "entryBuyin", gameId: gid, playerId: creatorId}), 0);
+            // The creator isn't seated up front either - like everyone else they land on
+            // the table and tap a free seat, which opens the entry-amount window.
+            await v2CreateGame(gid, c.id, name || null, modal.date, myIdentity.name, null, null, myIdentity.id);
             if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
             myIdentity.myPlayers[c.id] = creatorPlayer.id;
             saveIdentity();
@@ -9990,14 +10000,13 @@ function attachHandlers(){
         creatorPlayer = (linked && c.roster.find(pl => pl.id === linked)) || findMyRosterRow(c);
         if (!creatorPlayer) { creatorPlayer = {id: uid(), name: myIdentity.name}; c.roster.push(creatorPlayer); }
         linkToGlobalPlayer(creatorPlayer);
-        seatPlayerIfRoom(g, creatorPlayer.id, creatorPlayer);
       }
       state.games.push(g);
       saveState();
       // seatPlayerIfRoom just now only occupies the seat - unlike v2ClaimSeat (the
       // relational equivalent), it has no "first time seated here -> auto buy-in" trigger
       // of its own, so the creator's own table would otherwise open with ₪0 bought in.
-      if (creatorPlayer) { const gameId = g.id, creatorId = creatorPlayer.id; setTimeout(() => openModal({type: "entryBuyin", gameId, playerId: creatorId}), 0); }
+
       // Straight into the new table (the welcome screen shows first).
       if (creatorPlayer) {
         if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
