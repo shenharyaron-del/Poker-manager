@@ -921,7 +921,6 @@ html.theme-light .game-alert-line{color:#9a3412;}
 .gt-hand{position:fixed;z-index:3;font-size:51px;line-height:1;opacity:0;transform:translate(-50%,-10%);transition:left 1.8s ease-in-out,opacity .4s ease;filter:drop-shadow(0 3px 6px rgba(0,0,0,.7));pointer-events:none;}
 /* The app's own "alone at the table" hints (pointing hands, "הוספת שחקן", the swaying
    swipe line) stay out of the walkthrough - it does its own pointing. */
-.game-tour .gt-app .alone-hint{display:none!important;}
 .game-tour .gt-app .tile-hint::after,.game-tour .gt-app .seat-hint::after,.game-tour .gt-app .seat-hint::before{content:none!important;}
 .game-tour .gt-app *,.game-tour .gt-app *::before,.game-tour .gt-app *::after{animation:none!important;}
 @keyframes gtBounce{from{transform:translateY(0);}to{transform:translateY(-8px);}}
@@ -951,16 +950,9 @@ html.theme-light .tp-row{border-color:var(--card-b)!important;}
 /* Blue theme: the paybox-blue (#0891b2) buttons - pay to paybox, סידור קופה - blend into
    the blue page; give them a deep navy fill and a light rim instead. */
 html.theme-light.theme-blue .btn-blue{background:#0b2f4a!important;border:1.5px solid rgba(255,255,255,.75)!important;box-shadow:0 3px 10px rgba(0,20,40,.35);}
-/* Alone at a new table: pointing hands at "הזמנת שחקן" and at an empty seat. */
-.alone-hint{flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;font-size:18px;font-weight:700;color:var(--gold);margin:4px 20px 10px;cursor:pointer;line-height:1.4;}
-/* One line: the text shrinks to fit before it wraps (fitNameBoxes); the hand at its end
-   keeps room to swing. */
-.alone-hint-text{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;animation:alone-arrow 1.1s ease-in-out infinite;}
-.alone-hint-arrow{flex-shrink:0;font-size:26px;width:40px;text-align:left;}
 /* A line of text that must stay one line - shrinks to fit (fitNameBoxes) instead of wrapping. */
 .fit-line{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .pp-tiles .tile-hint::after{font-size:28px;left:-36px;}
-.alone-hint-arrow{display:inline-block;animation:alone-arrow 1.1s ease-in-out infinite;}
 @keyframes alone-arrow{0%,100%{transform:translateX(0)}50%{transform:translateX(-8px)}}
 .seat-hint::after{content:"👇";position:absolute;left:50%;top:-30px;font-size:22px;line-height:1;transform:translateX(-50%);animation:seat-hand 1s ease-in-out infinite;pointer-events:none;}
 /* "הוספת שחקן" over the hand, bobbing with it. */
@@ -5924,8 +5916,6 @@ const EASY_CHIP_RATIOS = [1, 2, 10, 100];
 function renderPlayerScreen(gameId){
   const g = getGame(gameId);
   if (!g) return `<div class="empty">משחק לא נמצא</div>`;
-  // Alone at a fresh table: point at "הזמנת שחקן" (and, on the circles view, an empty seat).
-  const aloneAtTable = !g.closed && (g.seats||[]).filter(Boolean).length === 1;
   const c = getCommunity(g.communityId) || {name:"מועדון", roster:[]};
   const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
   const isAdminView = isTableAdmin(g, c);
@@ -6099,11 +6089,11 @@ function renderPlayerScreen(gameId){
     </div>` : `
     <button class="rb-confirm" data-rb-confirm ${rebuyLocked?'disabled':''}>ריביי ₪${picked}</button>`}
     ${(() => {
-      // Undo right after a rebuy (a double tap, the wrong player): for 20 seconds after the
+      // Undo right after a rebuy (a double tap, the wrong player): for 30 seconds after the
       // latest rebuy, one tap opens its delete confirmation - same as picking it from
-      // "ביטול ריביי" below. A timer re-renders once the 20 seconds are up to hide it.
+      // "ביטול ריביי" below. A timer re-renders once the 30 seconds are up to hide it.
       const last = myBuyins.length > 1 ? myBuyins[myBuyins.length - 1] : null;
-      const left = last && last.ts ? 20000 - (Date.now() - last.ts) : 0;
+      const left = last && last.ts ? 30000 - (Date.now() - last.ts) : 0;
       if (left <= 0) return "";
       clearTimeout(undoRebuyTimer);
       undoRebuyTimer = setTimeout(() => { if (nav.screen === "table") render(); }, left + 50);
@@ -6224,7 +6214,6 @@ function renderPlayerScreen(gameId){
   // on screen), leave-table box. Nothing on this screen scrolls as a page (see
   // .player-screen-scroll) - only the active .player-history-feed-body pane scrolls internally.
   return `
-    ${aloneAtTable ? `<div class="alone-hint" data-goto-table-view><span class="alone-hint-text">אפשר להושיב שחקנים גם ממסך השולחן</span><span class="alone-hint-arrow">👈</span></div>` : ""}
     <div class="player-screen-scroll">
       <div style="text-align:center;padding:6px 0 ${cashedOut?16:4}px;flex-shrink:0;">
         ${tilesHtml}
@@ -6717,7 +6706,7 @@ function renderTable(gameId){
 // A name too long for its box steps its font down (to 11px) before it ever gets "…" -
 // the timeline's name chips, the player screen's player boxes and the chips-left label.
 function fitNameBoxes(){
-  document.querySelectorAll(".ttl-chip, .pp-tile bdi, .pp-tile-invite span, .lv-amount-label, .fit-line, .alone-hint-text").forEach(el => {
+  document.querySelectorAll(".ttl-chip, .pp-tile bdi, .pp-tile-invite span, .lv-amount-label, .fit-line").forEach(el => {
     let fs = parseFloat(getComputedStyle(el).fontSize);
     while (el.scrollWidth > el.clientWidth + 1 && fs > 11) { fs -= 1; el.style.fontSize = fs + "px"; }
   });
@@ -8614,7 +8603,6 @@ function attachHandlers(){
   app.querySelectorAll("[data-back-community]").forEach(el => el.onclick = () => go("community", {communityId: el.dataset.backCommunity}));
   app.querySelectorAll("[data-crumb-home]").forEach(el => el.onclick = () => go("home"));
   app.querySelectorAll("[data-install-app]").forEach(el => el.onclick = (e) => { e.stopPropagation(); startInstall(); });
-  app.querySelectorAll("[data-goto-table-view]").forEach(el => el.onclick = () => { tableSubView = "table"; setTableView("table"); render(); });
   app.querySelectorAll("[data-open-pot-fix]").forEach(el => el.onclick = () => openModal({type: "potFix", gameId: nav.gameId}));
   // "הביצועים שלי" on the end-of-night screens (cashed-out player view, game results).
   app.querySelectorAll("[data-open-my-stats]").forEach(el => el.onclick = () => openModal({type:"stats", clientId: myIdentity.id}));
