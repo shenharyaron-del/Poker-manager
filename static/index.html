@@ -2867,7 +2867,7 @@ let myIdentity = { id: getClientId(), name: null };
 let appVersion = null; // filled in by init() from /api/version
 // Global admin toggles (see adminSettings) - safe defaults (full verification, no
 // bypass) if the fetch itself ever fails, never the other way around.
-let authSettings = { requireVerifyExistingEmail: true, requireVerifyBeforeAdminSettings: false };
+let authSettings = { requireVerifyExistingEmail: true, requireVerifyBeforeAdminSettings: false, showGameTour: true };
 
 // ---------- Navigation (not persisted - always starts at home) ----------
 let nav = { screen: "home", communityId: null, gameId: null };
@@ -3259,7 +3259,9 @@ function shouldShowGameTour(g){
   if (!g || nav.screen !== "table" || nav.gameId !== g.id || !isSeatedInGame(g)) return false;
   const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
   if (!myPlayerId || (myPlayerId in (g.cashouts||{})) || !hasWelcomedGame(g.id)) return false;
-  return gameTourDemo || !myIdentity.seenGameTour;
+  // The Super Admin can turn the automatic walkthrough off for everyone (system settings);
+  // a walkthrough opened on purpose (gameTourDemo) still runs.
+  return gameTourDemo || (authSettings.showGameTour !== false && !myIdentity.seenGameTour);
 }
 // The walkthrough draws the app's REAL screens (renderPlayerScreen/renderTable) for a sample
 // game - the viewer plus three made-up players - so it always looks exactly like the app,
@@ -7105,6 +7107,11 @@ function renderModal(m){
         <input type="checkbox" data-toggle-require-admin-verify ${authSettings.requireVerifyBeforeAdminSettings?"checked":""}>
         <span class="flex1">חייב קוד אימות להגדרות מערכת</span>
       </label>
+      <div class="section-title" style="padding:0;margin:0 0 8px;">הדרכה</div>
+      <label class="checkbox-row" style="cursor:pointer;margin-bottom:18px;">
+        <input type="checkbox" data-toggle-show-game-tour ${authSettings.showGameTour !== false?"checked":""}>
+        <span class="flex1">להציג את ההדרכה בשולחן (Helper) לשחקן שעוד לא ראה אותה</span>
+      </label>
       <div class="section-title" style="padding:0;margin:0 0 8px;">אווטרים</div>
       <div style="display:flex;gap:8px;margin-bottom:18px;">
         <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-open-avatar-creator>${icon('plus')} יצירת אווטרים חדשים</button>
@@ -9634,6 +9641,8 @@ function attachHandlers(){
     if (requireVerifyExistingCb) requireVerifyExistingCb.onchange = () => updateAuthSetting("requireVerifyExistingEmail", requireVerifyExistingCb.checked);
     const requireAdminVerifyCb = app.querySelector("[data-toggle-require-admin-verify]");
     if (requireAdminVerifyCb) requireAdminVerifyCb.onchange = () => updateAuthSetting("requireVerifyBeforeAdminSettings", requireAdminVerifyCb.checked);
+    const showTourCb = app.querySelector("[data-toggle-show-game-tour]");
+    if (showTourCb) showTourCb.onchange = () => updateAuthSetting("showGameTour", showTourCb.checked);
     const openCreatorBtn = app.querySelector("[data-open-avatar-creator]");
     if (openCreatorBtn) openCreatorBtn.onclick = () => openModal({type:"avatarCreator", imageSrc: null, points: []});
     const openManageBtn = app.querySelector("[data-open-avatar-manage]");
