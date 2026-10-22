@@ -1061,12 +1061,10 @@ html.theme-light.theme-blue .modal .btn-primary,html.theme-light.theme-blue .mod
 .game-seg button{flex:1;min-width:0;padding:8px 2px;white-space:nowrap;border:none;border-radius:999px;background:none;color:var(--text);opacity:.8;font-family:inherit;font-size:16px;font-weight:600;cursor:pointer;}
 .game-seg button.on{background:var(--gold);color:var(--gold-text);opacity:1;font-weight:800;box-shadow:0 2px 8px rgba(0,0,0,.35);}
 html.theme-light .game-seg{background:rgba(0,0,0,.12);}
-.game-seg button.seg-main{flex:2;display:flex;align-items:center;justify-content:center;gap:5px;font-size:17px;}
+.game-seg button.seg-main{flex:1.65;display:flex;align-items:center;justify-content:center;gap:5px;font-size:17px;}
 .game-seg button.seg-main svg{width:17px;height:17px;flex-shrink:0;}
-/* One-time bubble under the "משחק" tab (the first tab - on the right). */
-.game-tab-tip{position:relative;align-self:flex-start;display:flex;align-items:center;gap:10px;margin:-2px 16px 10px;padding:10px 12px;border-radius:12px;background:var(--gold);color:var(--gold-text);font-size:16px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.35);cursor:pointer;flex-shrink:0;}
-.game-tab-tip::before{content:"";position:absolute;top:-7px;right:36px;border:8px solid transparent;border-top:0;border-bottom-color:var(--gold);}
-.game-tab-tip-x{font-size:14px;opacity:.75;}
+.unseated-game{padding:30px 24px;text-align:center;}
+.unseated-game p{font-size:19px;margin:0 0 16px;line-height:1.5;}
 .game-seg button.tab-hint{animation:tab-pulse 1.2s ease-in-out infinite;}
 @keyframes tab-pulse{0%,100%{box-shadow:0 0 0 0 rgba(212,175,55,.0);}50%{box-shadow:0 0 0 4px rgba(212,175,55,.55);}}
 .invite-tab{padding:4px 20px 20px;overflow-y:auto;}
@@ -3651,7 +3649,8 @@ function go(screen, extra){
   nav = Object.assign({screen}, extra||{});
   modal = null;
   openHistorySeatPlayerId = null;
-  tableSubView = "player";
+  // Seated: "משחק"; not seated yet: the seats, to pick one.
+  tableSubView = screen === "table" && !isSeatedInGame(getGame((extra||{}).gameId)) ? "table" : "player";
   playerScreenCustomOpen = false;
   adminBalanceFixSelected = {};
   lastSeenFeedEventKey = null;
@@ -5111,22 +5110,17 @@ function isSeatedInGame(g){
 function gameTabsScreen(g, c, seated){
   const canInvite = !g.closed && (g.seats || []).slice(0, 9).filter(Boolean).length < 9;
   const tab = tableSubView === "invite" && canInvite ? "invite"
-    : seated && tableSubView === "player" ? "game" : (tableTimelineOn() ? "timeline" : "table");
+    : tableSubView === "player" ? "game" : (tableTimelineOn() ? "timeline" : "table");
   const aloneAtTable = seated && !g.closed && (g.seats || []).filter(Boolean).length === 1;
-  const tabs = [...(seated ? [["game", "משחק"]] : []), ["table", "שולחן"], ["timeline", "ציר זמן"], ...(canInvite ? [["invite", "הזמנה"]] : [])];
+  const tabs = [["game", "משחק"], ["table", "שולחן"], ["timeline", "ציר זמן"], ...(canInvite ? [["invite", "הזמנה"]] : [])];
   // "משחק" is where everything that matters happens (rebuys, ending the night) - wider than
-  // the rest, with an icon. A one-time bubble under it explains that, the first time this
-  // device sits down and buys in (dismissed with a tap, never shown again).
-  const myPid = myIdentity.myPlayers && myIdentity.myPlayers[c.id];
-  let tipSeen = true;
-  try { tipSeen = !!localStorage.getItem("poker-game-tab-tip"); } catch(e) {}
-  const showTip = seated && !tipSeen && !pendingBuyinRequest && (g.buyins || []).some(b => b.playerId === myPid);
+  // the rest, with an icon. Shown even before I've sat down (it then points to the seats).
   const row = `
     <div class="game-tabs-row">
       <div class="game-seg" role="tablist">${tabs.map(([k, label]) => `<button type="button" class="${tab === k ? "on" : ""}${k === "game" ? " seg-main" : ""}${k === "invite" && aloneAtTable && tab !== "invite" ? " tab-hint" : ""}" data-game-tab="${k}">${k === "game" ? icon('user') : ""}${label}</button>`).join("")}</div>
-    </div>
-    ${showTip ? `<div class="game-tab-tip" data-dismiss-game-tab-tip><span>כאן עושים ריביי ומסיימים את הערב</span><span class="game-tab-tip-x">✕</span></div>` : ""}`;
-  const content = tab === "game" ? renderPlayerScreen(g.id) : tab === "invite" ? renderInviteTab(g, c) : renderTable(g.id);
+    </div>`;
+  const content = tab === "game" ? (seated ? renderPlayerScreen(g.id) : renderUnseatedGameTab(g))
+    : tab === "invite" ? renderInviteTab(g, c) : renderTable(g.id);
   const pageCls = tab === "game" ? ` player-page${playerScreenViewingOther() ? " pp-other" : ""}` : "";
   return `<div class="table-swipe-root">
     <div class="swipe-track-viewport">
@@ -5134,6 +5128,14 @@ function gameTabsScreen(g, c, seated){
         <div class="swipe-page lux-page${pageCls}">${row}${content}</div>
       </div>
     </div>
+  </div>`;
+}
+// "משחק" before I've sat down: nothing of mine to show yet - point to the seats.
+function renderUnseatedGameTab(g){
+  const full = (g.seats || []).slice(0, 9).filter(Boolean).length >= 9;
+  return `<div class="unseated-game">
+    <p>${g.closed ? "הערב הזה כבר נסגר." : full ? "השולחן מלא - אין כרגע כיסא פנוי." : "עוד לא התיישבת בשולחן.<br>בחרו כיסא פנוי (+) כדי להצטרף - ואז כאן עושים ריביי ומסיימים את הערב."}</p>
+    ${!g.closed && !full ? `<button class="btn btn-primary btn-block" data-game-tab="table" style="font-size:20px;">לבחירת כיסא</button>` : ""}
   </div>`;
 }
 // The "הזמנה" tab: the two ways to invite, right on the page - WhatsApp (share sheet) and
@@ -8853,7 +8855,6 @@ function attachHandlers(){
     else { tableSubView = "table"; setTableView(t); }
     render();
   });
-  app.querySelectorAll("[data-dismiss-game-tab-tip]").forEach(el => el.onclick = () => { try { localStorage.setItem("poker-game-tab-tip", "1"); } catch(e) {} render(); });
   app.querySelectorAll("[data-invite-whatsapp-tab]").forEach(el => el.onclick = () => inviteToGame(el.dataset.inviteWhatsappTab));
   // "מה קרה בערב" scrolls inside its own box - keep its position through re-renders.
   app.querySelectorAll("[data-ttl-list]").forEach(el => {
