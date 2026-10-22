@@ -11266,14 +11266,10 @@ window.addEventListener("popstate", async () => {
   scheduleAutoRefresh();
   connectLiveSync();
   prefetchAvatars();
-  // Keep the server from spinning down (Render's free tier sleeps after 15 minutes with
-  // no requests, and the next request then pays a real cold-start delay - tens of
-  // seconds). Pings from any open tab regardless of screen, not just the table screen -
-  // someone just browsing communities/games still counts as "the app is in use." A plain,
-  // cheap GET, not tied to whether anything actually changed. This only helps while at
-  // least one tab is open somewhere - it can't prevent the very first cold open after
-  // everyone's been away for a while.
-  setInterval(() => { fetch("/api/version").catch(()=>{}); }, 5*60*1000);
+  // No keep-alive ping from here: an external cron-job.org job hits /api/version every
+  // 10 minutes so Render's free tier never spins the server down (listed under the Super
+  // Admin's third-party services), and an open app already talks to the server every
+  // few seconds through its own refresh.
 })();
 
 // Opened inside another app's built-in browser (WhatsApp's, Facebook's... - an Android
