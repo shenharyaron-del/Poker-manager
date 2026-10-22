@@ -1066,6 +1066,17 @@ html.theme-light.theme-blue .game-stats-btn{color:#a86a12;border-color:#a86a12;b
 .game-seg button.seg-main{flex:1.65;display:flex;align-items:center;justify-content:center;gap:5px;font-size:17px;}
 .game-seg button.seg-main svg{width:17px;height:17px;flex-shrink:0;}
 .unseated-game{padding:30px 24px;text-align:center;}
+.monthly-podium{display:flex;flex-direction:column;gap:8px;margin-top:6px;}
+.monthly-place{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;border:1px solid var(--card-b);background:rgba(255,255,255,.05);}
+.monthly-place.place-1{border:2px solid var(--gold);background:rgba(212,175,55,.14);}
+.monthly-place b{display:block;font-size:20px;}
+.monthly-place small{display:block;font-size:14px;color:var(--muted);}
+.monthly-mark{font-size:30px;line-height:1;}
+.monthly-sum{font-size:20px;font-weight:800;white-space:nowrap;}
+.monthly-rest{margin-top:10px;font-size:16px;}
+.monthly-rest div{display:flex;justify-content:space-between;padding:4px 4px;border-bottom:1px solid var(--card-b);}
+.monthly-preview{margin-top:12px;padding:10px 12px;border-radius:12px;background:rgba(0,0,0,.2);font-size:15px;line-height:1.6;color:var(--text);white-space:normal;}
+html.theme-light .monthly-preview{background:rgba(0,0,0,.06);}
 .unseated-game p{font-size:19px;margin:0 0 16px;line-height:1.5;}
 .game-seg button.tab-hint{animation:tab-pulse 1.2s ease-in-out infinite;}
 @keyframes tab-pulse{0%,100%{box-shadow:0 0 0 0 rgba(212,175,55,.0);}50%{box-shadow:0 0 0 4px rgba(212,175,55,.55);}}
@@ -5727,9 +5738,46 @@ function renderCommunity(communityId){
       <button class="btn btn-ghost btn-sm" data-show-roster style="display:flex;align-items:center;gap:6px;flex-shrink:0;">${icon('users')} שחקנים (${c.roster.length})</button>
       <div style="color:var(--muted);font-size:14px;line-height:1.4;">דרך כפתור "שחקנים"<br>ניתן למנות אדמינים</div>
     </div>
+    <div class="px5" style="margin:0 0 14px;"><button class="btn btn-ghost btn-block monthly-report-btn" data-monthly-report="${c.id}">🏆 דוח מנצחים חודשי</button></div>
     <div class="section-title" style="font-size:14px;">ערבי משחק</div>
     <div class="px5" style="margin-bottom:20px;">${gamesHtml}</div>
   `;
+}
+
+// ---------- Monthly winners report (club screen) ----------
+// Each player's total profit over one month's game nights in this club (cash-out minus
+// everything they bought in, for every night they ended), best first.
+function monthlyStandings(communityId, ym){
+  const games = gamesForCommunity(communityId).filter(g => g.date && g.date.startsWith(ym));
+  const rows = {};
+  games.forEach(g => {
+    const bought = {};
+    (g.buyins || g.buyinTotals || []).forEach(b => { bought[b.playerId] = (bought[b.playerId] || 0) + (b.amount || 0); });
+    Object.entries(g.cashouts || {}).forEach(([pid, co]) => {
+      const name = ((g.players || []).find(pl => pl.id === pid) || {}).name || "?";
+      const r = rows[pid] || (rows[pid] = {id: pid, name, profit: 0, nights: 0});
+      r.profit += (co.amount || 0) - (bought[pid] || 0);
+      r.nights += 1;
+    });
+  });
+  const list = Object.values(rows).map(r => ({...r, profit: Math.round(r.profit * 100) / 100})).sort((a, b) => b.profit - a.profit);
+  return {list, nights: games.length};
+}
+// Months (YYYY-MM) this club has game nights in, newest first.
+function clubMonths(communityId){
+  return [...new Set(gamesForCommunity(communityId).map(g => (g.date || "").slice(0, 7)).filter(Boolean))].sort().reverse();
+}
+function monthLabel(ym){
+  const [y, m] = ym.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString("he-IL", {month: "long", year: "numeric"});
+}
+const PLACE_MARKS = ["🏆", "🥈", "🥉"];
+const PLACE_NAMES = ["מקום ראשון", "מקום שני", "מקום שלישי"];
+const signedShekel = v => `${v > 0 ? "+" : v < 0 ? "-" : ""}₪${Math.abs(v)}`;
+// The ready-to-send WhatsApp text: the top three with a trophy and silver/bronze medals.
+function monthlyReportText(c, ym, st){
+  const top = st.list.slice(0, 3).map((r, i) => `${PLACE_MARKS[i]} ${PLACE_NAMES[i]}: ${r.name} (${signedShekel(r.profit)})`);
+  return `🏆 המנצחים של ${c.name} - ${monthLabel(ym)}\n\n${top.join("\n")}\n\n${st.nights === 1 ? "ערב משחק אחד" : `${st.nights} ערבי משחק`} החודש`;
 }
 
 // Percentage [x,y] position of each of the 9 main seat slots around the oval table -
@@ -8228,6 +8276,29 @@ function renderModal(m){
         <button class="btn btn-block" data-invite-whatsapp style="background:#25D366;color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:10px;">${icon('share')} שליחה בוואטסאפ</button>
         <button class="btn btn-primary btn-block" data-invite-qr style="font-size:20px;">הצגת QR לסריקה</button>`;
     }
+  } else if (m.type === "monthlyReport") {
+    const c = getCommunity(m.communityId) || {name: ""};
+    const months = clubMonths(m.communityId);
+    title = "דוח מנצחים חודשי";
+    if (!months.length) {
+      body = `<p style="color:var(--muted);text-align:center;">עוד אין ערבי משחק במועדון.</p>`;
+    } else {
+      const ym = months.includes(m.month) ? m.month : months[0];
+      const st = monthlyStandings(m.communityId, ym);
+      body = `
+        <div class="field"><label>חודש</label>
+          <select id="monthly-report-month" style="width:100%;font-size:18px;">${months.map(x => `<option value="${x}"${x === ym ? " selected" : ""}>${esc(monthLabel(x))}</option>`).join("")}</select>
+        </div>
+        ${st.list.length ? `
+        <div class="monthly-podium">${st.list.slice(0, 3).map((r, i) => `
+          <div class="monthly-place place-${i + 1}"><span class="monthly-mark">${PLACE_MARKS[i]}</span><span class="flex1"><b>${esc(r.name)}</b><small>${PLACE_NAMES[i]}</small></span><span class="monthly-sum" dir="ltr" style="color:${profitColor(r.profit)};">${signedShekel(r.profit)}</span></div>`).join("")}
+        </div>
+        ${st.list.length > 3 ? `<div class="monthly-rest">${st.list.slice(3).map((r, i) => `<div><span>${i + 4}. ${esc(r.name)}</span><span dir="ltr" style="color:${profitColor(r.profit)};">${signedShekel(r.profit)}</span></div>`).join("")}</div>` : ""}
+        <p style="color:var(--muted);text-align:center;font-size:15px;margin:10px 0 14px;">${st.nights === 1 ? "ערב משחק אחד" : `${st.nights} ערבי משחק`} ב${esc(monthLabel(ym))}</p>
+        <button class="btn btn-block" data-monthly-share style="background:#25D366;color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;gap:8px;">${icon('share')} שליחה בוואטסאפ</button>
+        <div class="monthly-preview">${esc(monthlyReportText(c, ym, st)).replace(/\n/g, "<br>")}</div>`
+        : `<p style="color:var(--muted);text-align:center;">באף ערב בחודש הזה עוד לא נרשם סיום לשחקנים.</p>`}`;
+    }
   } else if (m.type === "playerNight") {
     const g = getGame(m.gameId) || {players:[], cashouts:{}};
     const p = (g.players||[]).find(pl => pl.id === m.playerId);
@@ -8813,6 +8884,22 @@ function attachHandlers(){
     else { tableSubView = "table"; setTableView(t); }
     render();
   });
+  app.querySelectorAll("[data-monthly-report]").forEach(el => el.onclick = () => openModal({type: "monthlyReport", communityId: el.dataset.monthlyReport}));
+  if (modal && modal.type === "monthlyReport") {
+    const sel = app.querySelector("#monthly-report-month");
+    if (sel) sel.onchange = () => updateModal({month: sel.value});
+    const shareBtn = app.querySelector("[data-monthly-share]");
+    if (shareBtn) shareBtn.onclick = async () => {
+      const c = getCommunity(modal.communityId);
+      const months = clubMonths(modal.communityId);
+      const ym = months.includes(modal.month) ? modal.month : months[0];
+      const text = monthlyReportText(c, ym, monthlyStandings(modal.communityId, ym));
+      // Same as the other invites: the phone's share sheet (WhatsApp is right there),
+      // else a wa.me link with the text.
+      if (navigator.share) { try { await navigator.share({text}); } catch(e) { /* cancelled */ } }
+      else window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank", "noopener");
+    };
+  }
   app.querySelectorAll("[data-invite-whatsapp-tab]").forEach(el => el.onclick = () => inviteToGame(el.dataset.inviteWhatsappTab));
   // "מה קרה בערב" scrolls inside its own box - keep its position through re-renders.
   app.querySelectorAll("[data-ttl-list]").forEach(el => {
