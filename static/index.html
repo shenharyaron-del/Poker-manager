@@ -1053,6 +1053,7 @@ html.theme-light.theme-blue .modal .btn-primary,html.theme-light.theme-blue .mod
 .custom-alert-box span.one-line{white-space:nowrap;overflow:hidden;min-width:0;flex:1;}
 /* Table screen: שולחן / ציר זמן toggle and the timeline view */
 .tv-seg{display:flex;border:1px solid rgba(212,175,55,.55);border-radius:10px;overflow:hidden;flex-shrink:0;}
+.rb-undo-last{display:block;width:100%;margin-top:10px;padding:10px;border-radius:12px;border:2px dashed #ef4444;background:rgba(239,68,68,.12);color:var(--text);font-family:inherit;font-size:18px;font-weight:700;cursor:pointer;}
 .game-tabs-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 16px 10px;flex-shrink:0;}
 .game-seg{flex:1;min-width:0;}
 .game-seg button{flex:1;min-width:0;padding:8px 4px;white-space:nowrap;}
@@ -5906,14 +5907,10 @@ let playerViewTarget = null;
 // "סיום ערב" box is ticked (unlocks the cash-out controls) and the typed chip count - kept
 // across the periodic re-render.
 const rebuyPick = {}, leaveArmed = {}, leaveAmountDraft = {}, rebuyCancelOpen = {}, leaveChipsDraft = {};
+let undoRebuyTimer = null;
 // Ratios easy enough to convert in your head (1 ₪ = 1/2/10/100 chips) - any other one gets
 // a chips → ₪ converter in the end-of-evening area.
 const EASY_CHIP_RATIOS = [1, 2, 10, 100];
-function fmtDateTimeShort(ts){
-  if (!ts) return "";
-  const d = new Date(ts), two = n => String(n).padStart(2, "0");
-  return `${two(d.getDate())}/${two(d.getMonth()+1)}/${String(d.getFullYear()).slice(-2)} ${two(d.getHours())}:${two(d.getMinutes())}`;
-}
 function renderPlayerScreen(gameId){
   const g = getGame(gameId);
   if (!g) return `<div class="empty">משחק לא נמצא</div>`;
@@ -6092,6 +6089,17 @@ function renderPlayerScreen(gameId){
     </div>` : `
     <button class="rb-confirm" data-rb-confirm ${rebuyLocked?'disabled':''}>ריביי ₪${picked}</button>`}
     ${(() => {
+      // Undo right after a rebuy (a double tap, the wrong player): for 20 seconds after the
+      // latest rebuy, one tap opens its delete confirmation - same as picking it from
+      // "ביטול ריביי" below. A timer re-renders once the 20 seconds are up to hide it.
+      const last = myBuyins.length > 1 ? myBuyins[myBuyins.length - 1] : null;
+      const left = last && last.ts ? 20000 - (Date.now() - last.ts) : 0;
+      if (left <= 0) return "";
+      clearTimeout(undoRebuyTimer);
+      undoRebuyTimer = setTimeout(() => { if (nav.screen === "table") render(); }, left + 50);
+      return `<button class="rb-undo-last" data-delete-seat-buyin="${last.id}" data-delete-seat-buyin-player="${pid}">↩ בטל ריביי ₪${last.amount} אחרון</button>`;
+    })()}
+    ${(() => {
       // "ביטול ריביי": the rebuys (not the entry), newest first; picking one opens the
       // existing delete-buy-in confirmation.
       const rebuys = myBuyins.slice(1).reverse();
@@ -6100,7 +6108,7 @@ function renderPlayerScreen(gameId){
       return `
       <div class="rb-cancel">
         <button class="rb-cancel-head" data-rb-cancel-toggle>ביטול ריביי<span class="rb-cancel-chev${open?' up':''}"></span></button>
-        ${open ? `<div class="rb-cancel-list">${rebuys.map(b => `<button class="rb-cancel-item" data-delete-seat-buyin="${b.id}" data-delete-seat-buyin-player="${pid}">• ₪${b.amount} - <span dir="ltr" style="unicode-bidi:isolate;">${fmtDateTimeShort(b.ts)}</span></button>`).join("")}</div>` : ""}
+        ${open ? `<div class="rb-cancel-list">${rebuys.map(b => `<button class="rb-cancel-item" data-delete-seat-buyin="${b.id}" data-delete-seat-buyin-player="${pid}">• ₪${b.amount} - <span dir="ltr" style="unicode-bidi:isolate;">${fmtTime(b.ts)}</span></button>`).join("")}</div>` : ""}
       </div>`;
     })()}
   `;
