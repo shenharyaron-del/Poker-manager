@@ -5737,7 +5737,7 @@ function renderCommunity(communityId){
 
 // ---------- Monthly winners report (club screen) ----------
 // Each player's total profit over one month's game nights in this club (cash-out minus
-// everything they bought in, for every night they ended), best first.
+// everything they bought in, for every night they ended), best first - one row per name.
 function monthlyStandings(communityId, ym){
   const games = gamesForCommunity(communityId).filter(g => g.date && g.date.startsWith(ym));
   const rows = {};
@@ -5746,7 +5746,10 @@ function monthlyStandings(communityId, ym){
     (g.buyins || g.buyinTotals || []).forEach(b => { bought[b.playerId] = (bought[b.playerId] || 0) + (b.amount || 0); });
     Object.entries(g.cashouts || {}).forEach(([pid, co]) => {
       const name = ((g.players || []).find(pl => pl.id === pid) || {}).name || "?";
-      const r = rows[pid] || (rows[pid] = {id: pid, name, profit: 0, nights: 0});
+      // By name, not player id: a guest gets a new id at every table (and someone can be
+      // a guest one night and a club player the next), which split one person in two.
+      const key = name.trim().toLowerCase();
+      const r = rows[key] || (rows[key] = {id: pid, name: name.trim(), profit: 0, nights: 0});
       r.profit += (co.amount || 0) - (bought[pid] || 0);
       r.nights += 1;
     });
