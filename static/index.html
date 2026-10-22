@@ -3259,6 +3259,9 @@ function shouldShowGameTour(g){
   if (!g || nav.screen !== "table" || nav.gameId !== g.id || !isSeatedInGame(g)) return false;
   const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
   if (!myPlayerId || (myPlayerId in (g.cashouts||{})) || !hasWelcomedGame(g.id)) return false;
+  // Only once the entry is bought - the entry-amount window answered and the buy-in saved -
+  // so the walkthrough never covers that window or starts before the player is in.
+  if (pendingBuyinRequest || !(g.buyins||[]).some(b => b.playerId === myPlayerId)) return false;
   // The Super Admin can turn the automatic walkthrough off for everyone (system settings);
   // a walkthrough opened on purpose (gameTourDemo) still runs.
   return gameTourDemo || (authSettings.showGameTour !== false && !myIdentity.seenGameTour);
