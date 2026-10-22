@@ -1066,16 +1066,7 @@ html.theme-light.theme-blue .game-stats-btn{color:#a86a12;border-color:#a86a12;b
 .game-seg button.seg-main{flex:1.65;display:flex;align-items:center;justify-content:center;gap:5px;font-size:17px;}
 .game-seg button.seg-main svg{width:17px;height:17px;flex-shrink:0;}
 .unseated-game{padding:30px 24px;text-align:center;}
-.monthly-podium{display:flex;flex-direction:column;gap:8px;margin-top:6px;}
-.monthly-place{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;border:1px solid var(--card-b);background:rgba(255,255,255,.05);}
-.monthly-place.place-1{border:2px solid var(--gold);background:rgba(212,175,55,.14);}
-.monthly-place b{display:block;font-size:20px;}
-.monthly-place small{display:block;font-size:14px;color:var(--muted);}
-.monthly-mark{font-size:30px;line-height:1;}
-.monthly-sum{font-size:20px;font-weight:800;white-space:nowrap;}
-.monthly-rest{margin-top:10px;font-size:16px;}
-.monthly-rest div{display:flex;justify-content:space-between;padding:4px 4px;border-bottom:1px solid var(--card-b);}
-.monthly-preview{margin-top:12px;padding:10px 12px;border-radius:12px;background:rgba(0,0,0,.2);font-size:15px;line-height:1.6;color:var(--text);white-space:normal;}
+.monthly-preview{margin-top:4px;font-size:17px;padding:10px 12px;border-radius:12px;background:rgba(0,0,0,.2);font-size:15px;line-height:1.6;color:var(--text);white-space:normal;}
 html.theme-light .monthly-preview{background:rgba(0,0,0,.06);}
 .unseated-game p{font-size:19px;margin:0 0 16px;line-height:1.5;}
 .game-seg button.tab-hint{animation:tab-pulse 1.2s ease-in-out infinite;}
@@ -8293,13 +8284,8 @@ function renderModal(m){
           <select id="monthly-report-month" style="width:100%;font-size:18px;">${months.map(x => `<option value="${x}"${x === ym ? " selected" : ""}>${esc(monthLabel(x))}</option>`).join("")}</select>
         </div>
         ${podiumOf(st).length ? `
-        <div class="monthly-podium">${podiumOf(st).map((r, i) => `
-          <div class="monthly-place place-${i + 1}"><span class="monthly-mark">${PLACE_MARKS[i]}</span><span class="flex1"><b>${esc(r.name)}</b><small>${PLACE_NAMES[i]}</small></span><span class="monthly-sum" dir="ltr" style="color:${profitColor(r.profit)};">${signedShekel(r.profit)}</span></div>`).join("")}
-        </div>
-        ${st.list.length > podiumOf(st).length ? `<div class="monthly-rest">${st.list.slice(podiumOf(st).length).map((r, i) => `<div><span>${i + podiumOf(st).length + 1}. ${esc(r.name)}</span><span dir="ltr" style="color:${profitColor(r.profit)};">${signedShekel(r.profit)}</span></div>`).join("")}</div>` : ""}
-        <p style="color:var(--muted);text-align:center;font-size:15px;margin:10px 0 14px;">${st.nights === 1 ? "ערב משחק אחד" : `${st.nights} ערבי משחק`} ב${esc(monthLabel(ym))}</p>
-        <button class="btn btn-block" data-monthly-share style="background:#25D366;color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;gap:8px;">${icon('share')} שליחה בוואטסאפ</button>
-        <div class="monthly-preview">${esc(monthlyReportText(c, ym, st)).replace(/\n/g, "<br>")}</div>`
+        <div class="monthly-preview">${esc(monthlyReportText(c, ym, st)).replace(/\n/g, "<br>")}</div>
+        <button class="btn btn-block" data-monthly-share style="background:#25D366;color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:14px;">${icon('share')} שליחה בוואטסאפ</button>`
         : `<p style="color:var(--muted);text-align:center;">${st.list.length ? "אף שחקן לא סיים את החודש ברווח." : "באף ערב בחודש הזה עוד לא נרשם סיום לשחקנים."}</p>`}`;
     }
   } else if (m.type === "playerNight") {
