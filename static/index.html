@@ -560,6 +560,8 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .terms-body li{margin:4px 0;}
 .terms-date{color:var(--muted);font-size:15px;}
 .terms-link{text-align:center;font-size:14px;color:var(--muted);margin-top:16px;}
+.terms-link a{color:inherit;text-underline-offset:3px;}
+.terms-sep{margin:0 8px;}
 .terms-link button{background:none;border:none;padding:0;font:inherit;color:inherit;text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
 .overlay.overlay-full .modal{max-width:none;width:100%;height:100%;max-height:none;border-radius:0;border:none;}
 .modal{background:#064e3b;width:100%;max-width:480px;border-radius:20px 20px 0 0;border:1px solid var(--card-b);padding:20px;max-height:85vh;overflow-y:auto;}
@@ -5595,7 +5597,7 @@ function renderHome(){
         מועדון מאגד את כל חברי המועדון שלכם - ותחתיו נפתחים ערבי המשחק (השולחנות) שלהם.
       </div>
     </div>
-    <div class="px5" style="margin-bottom:80px;">${passkeyOfferHtml()}${cards}${termsLinkHtml("")}</div>
+    <div class="px5" style="margin-bottom:80px;">${passkeyOfferHtml()}${cards}<div class="terms-link"><a href="${esc(contactMailto())}">✉️ צור קשר</a><span class="terms-sep">·</span><button type="button" data-open-terms>תנאי השימוש ומדיניות הפרטיות</button></div></div>
   `;
 }
 
@@ -6967,6 +6969,7 @@ function nightSummaryHtml(g, playerId, buyins, deleted, withTotals){
 // Terms of use + privacy policy (the text the owner supplied, Oct 2026). Opened from the
 // login screen and the home screen; on top of the login screen it returns there on close.
 const TERMS_UPDATED = "אוקטובר 2026";
+const SUPPORT_EMAIL = "poker.manager44@gmail.com";
 const TERMS_HTML = `
   <p class="terms-date"><b>תאריך עדכון אחרון:</b> ${TERMS_UPDATED}</p>
   <p>ברוכים הבאים לאפליקציית <b>Poker Manager</b> ("האפליקציה"). השימוש באפליקציה כפוף לתנאים ולמדיניות המפורטים להלן. בעצם השימוש, ההורדה או ההרשמה לאפליקציה, אתה מסכים לתנאים אלו במלואם. אם אינך מסכים לתנאי מהתנאים, אינך מורשה לעשות שימוש באפליקציה.</p>
@@ -7019,8 +7022,14 @@ const TERMS_HTML = `
   <h2>חלק ג': שינויים ויצירת קשר</h2>
   <ul>
     <li><b>שינויים בתנאים:</b> הנהלת האפליקציה רשאית לעדכן את תנאי השימוש ומדיניות הפרטיות מעת לעת. עדכונים ייכנסו לתוקף עם פרסומם באפליקציה.</li>
-    <li><b>יצירת קשר:</b> לכל שאלה, פנייה או בקשה בנוגע לתנאי השימוש או לפרטיות שלך, ניתן לפנות אלינו דרך האפליקציה או בדוא"ל: <a href="mailto:poker.manager44@gmail.com" dir="ltr" style="color:var(--gold);">poker.manager44@gmail.com</a></li>
+    <li><b>יצירת קשר:</b> לכל שאלה, פנייה או בקשה בנוגע לתנאי השימוש או לפרטיות שלך, ניתן לפנות אלינו דרך "צור קשר" בתחתית מסך הבית או בדוא"ל: <a href="mailto:${SUPPORT_EMAIL}" dir="ltr" style="color:var(--gold);">${SUPPORT_EMAIL}</a></li>
   </ul>`;
+// "צור קשר" on the home screen: a ready mail to support with who's writing and the app
+// version already filled in, so a report can be traced without asking.
+function contactMailto(){
+  const body = `\n\n\n---\nשם: ${myIdentity.name || ""}\nאימייל: ${myIdentity.email || ""}\nגרסה: ${appVersion || ""}`;
+  return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Poker Manager - פנייה")}&body=${encodeURIComponent(body)}`;
+}
 function termsLinkHtml(prefix){
   return `<div class="terms-link">${prefix}<button type="button" data-open-terms>תנאי השימוש ומדיניות הפרטיות</button></div>`;
 }
