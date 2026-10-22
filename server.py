@@ -2832,6 +2832,7 @@ def get_auth_settings():
     return jsonify({
         "requireVerifyExistingEmail": _get_setting("require_verify_existing_email", True),
         "requireVerifyBeforeAdminSettings": _get_setting("require_verify_before_admin_settings", False),
+        "showGameTour": _get_setting("show_game_tour", True),
     })
 
 
@@ -2845,6 +2846,8 @@ def set_auth_settings():
         _set_setting("require_verify_existing_email", bool(body["requireVerifyExistingEmail"]))
     if "requireVerifyBeforeAdminSettings" in body:
         _set_setting("require_verify_before_admin_settings", bool(body["requireVerifyBeforeAdminSettings"]))
+    if "showGameTour" in body:
+        _set_setting("show_game_tour", bool(body["showGameTour"]))
     return jsonify({"ok": True})
 
 
