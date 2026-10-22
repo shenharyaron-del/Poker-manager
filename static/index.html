@@ -5773,7 +5773,11 @@ const signedShekel = v => `${v < 0 ? "-" : ""}₪${Math.abs(v)}`;
 const podiumOf = st => st.list.filter(r => r.profit > 0).slice(0, 3);
 // The ready-to-send WhatsApp text: the podium with a trophy and silver/bronze medals.
 function monthlyReportText(c, ym, st){
-  const top = podiumOf(st).map((r, i) => `${PLACE_MARKS[i]} ${PLACE_NAMES[i]}: ${r.name} (${signedShekel(r.profit)})`);
+  // A name in English (Latin letters) would otherwise pull the "(₪…)" after it into a
+  // left-to-right run and flip the line around - isolating it (FSI…PDI) plus a right-to-
+  // left mark keeps every line in the same order as a Hebrew name.
+  const nameIso = n => `\u2068${n}\u2069\u200F`;
+  const top = podiumOf(st).map((r, i) => `${PLACE_MARKS[i]} ${PLACE_NAMES[i]}: ${nameIso(r.name)} (${signedShekel(r.profit)})`);
   return `🏆 המנצחים של ${c.name} - ${monthLabel(ym)}\n\n${top.join("\n")}\n\n${st.nights === 1 ? "ערב משחק אחד" : `${st.nights} ערבי משחק`} החודש`;
 }
 
