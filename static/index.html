@@ -5111,13 +5111,18 @@ function gameTabsScreen(g, c, seated){
   const canInvite = !g.closed && (g.seats || []).slice(0, 9).filter(Boolean).length < 9;
   const tab = tableSubView === "invite" && canInvite ? "invite"
     : tableSubView === "player" ? "game" : (tableTimelineOn() ? "timeline" : "table");
-  const aloneAtTable = seated && !g.closed && (g.seats || []).filter(Boolean).length === 1;
+  // One tab pulses to draw the eye: "הזמנה" until the game starts or it's been opened once
+  // for this game (on this device); after that, "משחק" whenever another tab is open.
+  let inviteOpened = false;
+  try { inviteOpened = !!localStorage.getItem("poker-invite-tab-opened:" + g.id); } catch(e) {}
+  const invitePulse = canInvite && tab !== "invite" && !gameStarted(g) && !inviteOpened;
+  const gamePulse = !invitePulse && tab !== "game";
   const tabs = [["game", "משחק"], ["table", "שולחן"], ["timeline", "ציר זמן"], ...(canInvite ? [["invite", "הזמנה"]] : [])];
   // "משחק" is where everything that matters happens (rebuys, ending the night) - wider than
   // the rest, with an icon. Shown even before I've sat down (it then points to the seats).
   const row = `
     <div class="game-tabs-row">
-      <div class="game-seg" role="tablist">${tabs.map(([k, label]) => `<button type="button" class="${tab === k ? "on" : ""}${k === "game" ? " seg-main" : ""}${k === "invite" && aloneAtTable && tab !== "invite" ? " tab-hint" : ""}" data-game-tab="${k}">${k === "game" ? icon('user') : ""}${label}</button>`).join("")}</div>
+      <div class="game-seg" role="tablist">${tabs.map(([k, label]) => `<button type="button" class="${tab === k ? "on" : ""}${k === "game" ? " seg-main" : ""}${(k === "invite" && invitePulse) || (k === "game" && gamePulse) ? " tab-hint" : ""}" data-game-tab="${k}">${k === "game" ? icon('user') : ""}${label}</button>`).join("")}</div>
     </div>`;
   const content = tab === "game" ? (seated ? renderPlayerScreen(g.id) : renderUnseatedGameTab(g))
     : tab === "invite" ? renderInviteTab(g, c) : renderTable(g.id);
@@ -8851,7 +8856,10 @@ function attachHandlers(){
   app.querySelectorAll("[data-game-tab]").forEach(el => el.onclick = () => {
     const t = el.dataset.gameTab;
     if (t === "game") tableSubView = "player";
-    else if (t === "invite") tableSubView = "invite";
+    else if (t === "invite") {
+      tableSubView = "invite";
+      try { localStorage.setItem("poker-invite-tab-opened:" + nav.gameId, "1"); } catch(e) {}
+    }
     else { tableSubView = "table"; setTableView(t); }
     render();
   });
