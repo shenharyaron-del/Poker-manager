@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import json
+import io
 import os
 import queue
 import re
@@ -526,6 +527,21 @@ def service_worker():
     # that same subpath.
     response = send_from_directory(STATIC_DIR, "sw.js")
     response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return response
+
+
+@app.route("/api/qr")
+def qr_svg():
+    # An SVG QR code for the table-invite screen ("הזמנה דרך QR") - drawn here so the
+    # client needs no QR library. Only short http(s) links are encoded.
+    text = request.args.get("text", "")
+    if not text.startswith(("http://", "https://")) or len(text) > 500:
+        return jsonify({"error": "bad text"}), 400
+    import segno
+    buf = io.BytesIO()
+    segno.make(text, error="m").save(buf, kind="svg", scale=8, border=2, dark="#000", light="#fff", xmldecl=False)
+    response = app.response_class(buf.getvalue(), mimetype="image/svg+xml")
+    response.headers["Cache-Control"] = "public, max-age=86400"
     return response
 
 
