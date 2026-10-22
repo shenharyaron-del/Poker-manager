@@ -251,6 +251,10 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
 .setup-frame{margin:0 0 16px;padding:8px 12px 12px;}
 .leave-frame legend{color:var(--gold);font-size:11px;font-weight:700;letter-spacing:.05em;padding:0 8px;margin-right:6px;}
 .night-recap legend{font-size:17px;}
+/* The recap takes whatever height is left at the bottom of the (non-scrolling) player
+   screen and scrolls inside itself, so the whole box always stays on screen. */
+.night-recap{flex:1 1 auto;min-height:110px;display:flex;flex-direction:column;}
+.night-recap-body{flex:1;min-height:0;overflow-y:auto;touch-action:pan-y;padding-left:4px;}
 /* Club setup > payments: the how-the-night-settles radio sits on each frame's title. */
 .settle-pick{display:flex;align-items:center;gap:6px;cursor:pointer;}
 .settle-pick input{width:18px;height:18px;margin:0;accent-color:var(--gold);}
@@ -5676,53 +5680,6 @@ async function inviteToGame(gameId){
   }
 }
 
-// After doing something on ANOTHER player's screen (their rebuy / end of night), briefly
-// confirm it and drop back to my own screen - one-off help for someone else is the usual
-// reason to be on their screen, and staying there invites a mistaken second action.
-function returnToMyScreenAfter(gameId, pid, what){
-  const g = getGame(gameId);
-  const mine = g && myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
-  if (!g || !pid || pid === mine || playerViewTarget !== pid) return;
-  // Ending the night for a player who lost can open the "who did you pay" window
-  // (maybeOpenDirectPayAfterCashout) - the countdown only starts once it's closed, so
-  // it doesn't run out while that's still being filled in.
-  if (modal && modal.type === "directPay") {
-    const wait = setInterval(() => {
-      if (playerViewTarget !== pid) { clearInterval(wait); return; }
-      if (modal && modal.type === "directPay") return;
-      clearInterval(wait);
-      returnToMyScreenAfter(gameId, pid, what);
-    }, 300);
-    return;
-  }
-  const name = (g.players.find(pl => pl.id === pid) || {}).name || "השחקן";
-  const base = `${what} ${/^[\u0590-\u05FF]/.test(name) ? "ל" : "ל-"}${name} - חוזרים למסך שלך`;
-  const inText = n => n === 1 ? "בעוד שנייה" : `בעוד ${n} שניות`;
-  let left = 10;
-  const el = showAlert(`${base} ${inText(left)}`, (left + 1) * 1000);
-  const span = el.querySelector(".custom-alert-box span");
-  // One line only: no wrapping, and the font steps down until the whole text fits.
-  if (span) span.classList.add("one-line");
-  const fit = () => {
-    if (!span) return;
-    let size = 17;
-    span.style.fontSize = size + "px";
-    while (span.scrollWidth > span.clientWidth && size > 9) { size -= 0.5; span.style.fontSize = size + "px"; }
-  };
-  fit();
-  // Counts down in the toast; stops (and clears the toast) if I already moved to another
-  // screen myself.
-  const timer = setInterval(() => {
-    if (playerViewTarget !== pid) { clearInterval(timer); el.remove(); return; }
-    left--;
-    if (left > 0) { if (span) { span.textContent = `${base} ${inText(left)}`; fit(); } return; }
-    clearInterval(timer);
-    el.remove();
-    playerViewTarget = null;
-    render();
-  }, 1000);
-}
-
 function renderCommunity(communityId){
   const c = getCommunity(communityId);
   if (!c) return `<div class="empty">מועדון לא נמצא</div>`;
@@ -6280,10 +6237,10 @@ function renderPlayerScreen(gameId){
       ${(notStarted && !cashedOut) ? `<button type="button" class="btn btn-primary btn-block gs-start" data-start-game="${g.id}">${icon('check')} תחילת משחק</button>` : ""}
       ${adminPlayerActions}
       ${(showClosedToggle && !notStarted) ? `<div style="display:flex;justify-content:center;margin-top:12px;flex-shrink:0;"><label class="night-closed-toggle" data-toggle-end-night="${g.id}"><input type="checkbox" ${g.closed?'checked':''} onclick="return false;"><span>ערב סגור</span></label></div>` : ""}
-      ${cashedOut ? `<fieldset class="leave-frame night-recap" style="margin-top:16px;text-align:right;font-size:18px;"><legend>סיכום הערב</legend>${nightSummaryHtml(g, pid,
+      ${cashedOut ? `<fieldset class="leave-frame night-recap" style="margin-top:16px;text-align:right;font-size:18px;"><legend>סיכום הערב</legend><div class="night-recap-body">${nightSummaryHtml(g, pid,
         (g.buyins||[]).filter(b => b.playerId === pid),
         (g.events||[]).filter(e => e.type === "buyin_deleted" && e.playerId === pid).map(e => ({ts: e.ts, amount: e.amount, actorName: e.actorName})),
-        false)}</fieldset>` : ""}
+        false)}</div></fieldset>` : ""}
     </div>
   `;
 }
@@ -8839,9 +8796,7 @@ function attachHandlers(){
       }
     }
     playerScreenCustomOpen = false;
-    const before = (getGame(gameId).buyins||[]).filter(b => b.playerId === pid).length;
     await performBuyin(gameId, pid, amt, {fromEl});
-    if ((getGame(gameId).buyins||[]).filter(b => b.playerId === pid).length > before) returnToMyScreenAfter(gameId, pid, `ריביי ₪${amt}`);
   };
   app.querySelectorAll("[data-player-tab]").forEach(el => el.onclick = () => { playerHistoryTab = el.dataset.playerTab; render(); });
   // New player screen: whose view (admin dropdown), rebuy pick + confirm, and the
@@ -8983,7 +8938,6 @@ function attachHandlers(){
     delete leaveArmed[key]; delete leaveAmountDraft[key]; delete leaveChipsDraft[key];
     render();
     maybeOpenDirectPayAfterCashout(gameId, pid, rounded);
-    returnToMyScreenAfter(gameId, pid, "סיום הערב נרשם");
   });
   app.querySelectorAll("[data-player-instant-buyin]").forEach(el => el.onclick = () => doPlayerBuyin(parseFloat(el.dataset.playerInstantBuyin), el));
   const playerBuyinOtherBtn = app.querySelector("[data-player-buyin-other]");
@@ -11137,7 +11091,6 @@ function attachHandlers(){
       }
       closeModal();
       maybeOpenDirectPayAfterCashout(gameId, playerId, chips);
-      returnToMyScreenAfter(gameId, playerId, "סיום הערב נרשם");
     };
   }
 
