@@ -552,6 +552,15 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .overlay.overlay-fullscreen .modal{max-width:none;width:100%;height:100%;max-height:none;border-radius:0;border:none;}
 /* The player stats screen: whole phone screen too, but keeps the normal sheet colors. */
 .overlay.overlay-full{align-items:stretch;padding:0;}
+.terms-body{line-height:1.65;font-size:16px;color:var(--text);}
+.terms-body h2{font-size:19px;color:var(--gold);margin:20px 0 6px;}
+.terms-body h4{font-size:17px;margin:14px 0 4px;}
+.terms-body p{margin:6px 0;}
+.terms-body ul{margin:4px 0;padding-inline-start:20px;}
+.terms-body li{margin:4px 0;}
+.terms-date{color:var(--muted);font-size:15px;}
+.terms-link{text-align:center;font-size:14px;color:var(--muted);margin-top:16px;}
+.terms-link button{background:none;border:none;padding:0;font:inherit;color:inherit;text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
 .overlay.overlay-full .modal{max-width:none;width:100%;height:100%;max-height:none;border-radius:0;border:none;}
 .modal{background:#064e3b;width:100%;max-width:480px;border-radius:20px 20px 0 0;border:1px solid var(--card-b);padding:20px;max-height:85vh;overflow-y:auto;}
 @media(min-width:600px){.modal{border-radius:20px;}}
@@ -4024,7 +4033,7 @@ async function autoJoinViaCommunityInvite(communityId){
   render();
 }
 function openModal(m){ if (!isSetupModal(m)) setupDraft = null; modal = m; render(); }
-function closeModal(){ setupDraft = null; modal = null; render(); }
+function closeModal(){ const back = modal && modal.type === "terms" ? modal.back : null; setupDraft = null; modal = back || null; render(); }
 // The community-setup flow (chips / payments / ריביי tabs) keeps unsaved edits from ALL
 // three tabs in one draft while the user switches between them, so the single
 // "שמור שינויים" under the tabs saves everything at once (see saveAllSetup). The draft
@@ -5586,7 +5595,7 @@ function renderHome(){
         מועדון מאגד את כל חברי המועדון שלכם - ותחתיו נפתחים ערבי המשחק (השולחנות) שלהם.
       </div>
     </div>
-    <div class="px5" style="margin-bottom:80px;">${passkeyOfferHtml()}${cards}</div>
+    <div class="px5" style="margin-bottom:80px;">${passkeyOfferHtml()}${cards}${termsLinkHtml("")}</div>
   `;
 }
 
@@ -6955,6 +6964,66 @@ function nightSummaryHtml(g, playerId, buyins, deleted, withTotals){
       ${playedText ? sumRow("זמן משחק", playedText) : ''}
     </div>`;
 }
+// Terms of use + privacy policy (the text the owner supplied, Oct 2026). Opened from the
+// login screen and the home screen; on top of the login screen it returns there on close.
+const TERMS_UPDATED = "אוקטובר 2026";
+const TERMS_HTML = `
+  <p class="terms-date"><b>תאריך עדכון אחרון:</b> ${TERMS_UPDATED}</p>
+  <p>ברוכים הבאים לאפליקציית <b>Poker Manager</b> ("האפליקציה"). השימוש באפליקציה כפוף לתנאים ולמדיניות המפורטים להלן. בעצם השימוש, ההורדה או ההרשמה לאפליקציה, אתה מסכים לתנאים אלו במלואם. אם אינך מסכים לתנאי מהתנאים, אינך מורשה לעשות שימוש באפליקציה.</p>
+  <h2>חלק א': תנאי שימוש</h2>
+  <h4>1. מהות השירות</h4>
+  <ul>
+    <li><b>Poker Manager</b> היא אפליקציה טכנולוגית המיועדת לסייע בניהול, מעקב, חישוב וארגון של משחקי פוקר פרטיים (כגון מעקב אחר זמני בליינדים, ניהול צ'יפים, קופות וחישוב מאזנים).</li>
+    <li><b>הבהרה חד-משמעית:</b> האפליקציה <b>אינה</b> אתר או פלטפורמת הימורים, אינה מנהלת הימורים בכסף אמיתי, אינה מעבדת תשלומים עבור הימורים ואינה מחלקת פרסים כספיים.</li>
+  </ul>
+  <h4>2. אחריות המשתמש והתאמה לחוק</h4>
+  <ul>
+    <li>המשתמש נושא באחריות הבלעדית לוודא כי השימוש באפליקציה נעשה בהתאם לחוק החל במקום מושבו/שיפוטו.</li>
+    <li>האפליקציה נועדה לשימוש חברתי וניהולי בלבד. הנהלת האפליקציה אינה מעודדת, אינה קוראת ואינה אחראית לכל פעילות הימורים בלתי חוקית המבוצעת על ידי משתמשים.</li>
+  </ul>
+  <h4>3. הגבלת אחריות</h4>
+  <ul>
+    <li>השירות מסופק כפי שהוא (<b dir="ltr">"As-Is"</b>) ועל בסיס זמינות (<b dir="ltr">"As-Available"</b>).</li>
+    <li>הנהלת האפליקציה אינה מתחייבת שהשירות יפעל ללא תקלות, שגיאות, נפילות שרת או הפרעות ברשת.</li>
+    <li>הנהלת האפליקציה לא תישא באף אחריות לנזק ישיר, עקיף, מקרי או תוצאתי (לרבות אובדן נתונים, אובדן רווחים, או סכסוכים כספיים/אישיים בין שחקנים) הנובעים מהשימוש באפליקציה או מאי-יכולת להשתמש בה.</li>
+  </ul>
+  <h4>4. שימוש קביל</h4>
+  <ul>
+    <li>אין לעשות שימוש באפליקציה לשם ביצוע פעולות המפרות את החוק, העלאת תוכן פוגעני, ניסיונות פריצה, שיבוש שרתים או סריקת מידע לא מורשית.</li>
+    <li>הנהלת האפליקציה שומרת לעצמה את הזכות לחסום או לבטל חשבון משתמש שמפר את תנאי השימוש.</li>
+  </ul>
+  <h2>חלק ב': מדיניות פרטיות</h2>
+  <h4>1. איסוף מידע</h4>
+  <p>בעת השימוש באפליקציה, עשוי להיאסף מידע מהסוגים הבאים:</p>
+  <ul>
+    <li><b>פרטי חשבון:</b> שם משתמש, כתובת דוא"ל או פרטי אימות בסיסיים.</li>
+    <li><b>נתוני משחק:</b> נתוני משחקים שהזנת (זמנים, סכומי קופה, רשימות שחקנים, היסטוריית ניהול משחקים).</li>
+    <li><b>תמונות ועיבוד מדיה:</b> תמונות שהועלו על ידך לצורך זיהוי/חישוב צ'יפים או רכיבי משחק, המעובדות לצורך מתן השירות בלבד.</li>
+    <li><b>מידע טכני:</b> כתובת IP, סוג מכשיר, מערכת הפעלה ונתוני שימוש טכניים לשם שיפור השירות ואבטחתו.</li>
+  </ul>
+  <h4>2. השימוש במידע</h4>
+  <p>המידע שנאסף משמש אך ורק לצרכים הבאים:</p>
+  <ul>
+    <li>תפעול שוטף של האפליקציה, שמירת נתוני המשחקים שלך והצגתם.</li>
+    <li>שיפור חוויית המשתמש והפונקציונליות של האפליקציה.</li>
+    <li>אבטחת השירות ומניעת שימוש לרעה.</li>
+  </ul>
+  <h4>3. העברת מידע לצד שלישי</h4>
+  <ul>
+    <li>איננו מוכרים, משכירים או מעבירים את המידע האישי שלך לצדדים שלישיים למטרות שיווק.</li>
+    <li>מידע עשוי להיות מעובד באמצעות ספקי שירותי ענן ואחסון מובילים (כגון שירותי מסדי נתונים ושרתים) לצורך תפעול האפליקציה בלבד.</li>
+    <li>העברת מידע תיעשה אך ורק במידה ונדרש על פי חוק, צו שיפוטי או לצורך הגנה על זכויות משפטיות.</li>
+  </ul>
+  <h4>4. אבטחת מידע</h4>
+  <p>אנו נוקטים באמצעי אבטחה מקובלים כדי להגן על המידע האישי שלך מפני גישה לא מורשית, שינוי או דליפה. עם זאת, אף מערכת אינה מאובטחת לחלוטין, ואיננו יכולים להבטיח אבטחה מוחלטת.</p>
+  <h2>חלק ג': שינויים ויצירת קשר</h2>
+  <ul>
+    <li><b>שינויים בתנאים:</b> הנהלת האפליקציה רשאית לעדכן את תנאי השימוש ומדיניות הפרטיות מעת לעת. עדכונים ייכנסו לתוקף עם פרסומם באפליקציה.</li>
+    <li><b>יצירת קשר:</b> לכל שאלה, פנייה או בקשה בנוגע לתנאי השימוש או לפרטיות שלך, ניתן לפנות אלינו דרך האפליקציה או בדוא"ל התמיכה של המיזם.</li>
+  </ul>`;
+function termsLinkHtml(prefix){
+  return `<div class="terms-link">${prefix}<button type="button" data-open-terms>תנאי השימוש ומדיניות הפרטיות</button></div>`;
+}
 function renderModal(m){
   let body = "";
   let title = "";
@@ -7003,11 +7072,13 @@ function renderModal(m){
       <fieldset class="leave-frame login-frame"><legend>כניסה או הרשמה עם אימייל</legend>
         ${emailForm("btn-ghost", "המשך עם אימייל")}
       </fieldset>
+      ${termsLinkHtml("בהרשמה ובשימוש באפליקציה אתה מסכים ל")}
     ` : `
       <p style="color:var(--muted);font-size:17px;margin-bottom:12px;">${authSettings.requireVerifyExistingEmail
         ? "כדי להשתמש באפליקציה, התחברו עם האימייל שלכם - משתמשים חדשים ייכנסו ישר, ולחשבון קיים נשלח קוד בן 6 ספרות."
         : "כדי להשתמש באפליקציה, התחברו עם האימייל שלכם."}</p>
       ${emailForm("btn-primary", authSettings.requireVerifyExistingEmail ? `${icon('share')} שלח קוד כניסה` : "כנס ל-Poker Manager")}
+      ${termsLinkHtml("בהרשמה ובשימוש באפליקציה אתה מסכים ל")}
     `;
   } else if (m.type === "addEmail") {
     title = "הוספת אימייל כגיבוי";
@@ -7760,6 +7831,10 @@ function renderModal(m){
   } else if (m.type === "potFix") {
     title = "סידור קופה";
     body = renderPotFix(m.gameId);
+  } else if (m.type === "terms") {
+    title = "תנאי שימוש ופרטיות";
+    body = `<div class="terms-body">${TERMS_HTML}</div>
+      <button class="btn btn-primary btn-block" style="margin-top:14px;" data-close-modal>סגירה</button>`;
   } else if (m.type === "themePicker") {
     title = "עיצוב";
     const cur = currentTheme();
@@ -8338,7 +8413,7 @@ function renderModal(m){
       return (sc.chipValues||[]).length > 0;
     })());
   return `
-    <div class="overlay${topAnchored ? ' overlay-top' : ''}${m.type === "entryBuyin" ? ' overlay-center' : ''}${isSetupFlow ? ' overlay-fullscreen' : ''}${m.type === "stats" ? ' overlay-full' : ''}">
+    <div class="overlay${topAnchored ? ' overlay-top' : ''}${m.type === "entryBuyin" ? ' overlay-center' : ''}${isSetupFlow ? ' overlay-fullscreen' : ''}${m.type === "stats" || m.type === "terms" ? ' overlay-full' : ''}">
       <div class="modal${["chipSetup","payboxSettings","buyinSetup","permSetup","seatChips"].includes(m.type) ? "" : " modal-big"}" onclick="event.stopPropagation()">
         <div class="modal-head"><h3 class="serif">${title}</h3>${dismissable ? `<button class="close-x" data-close-modal>${icon('x')}</button>` : ""}</div>
         ${body}${body.includes('class="mode-panel ' + SETUP_PANEL_MARK) ? '</div></div>' + SETUP_FOOTER_HTML : ''}
@@ -8750,6 +8825,7 @@ function attachHandlers(){
       if (modal && modal.type === "playerNight" && modal.playerId === playerId) updateModal({error: "הטעינה נכשלה"});
     }
   });
+  app.querySelectorAll("[data-open-terms]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type: "terms", back: modal}); });
   app.querySelectorAll("[data-theme-toggle]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type: "themePicker"}); });
   // Profile screen: switch right away but don't re-render (would drop a half-typed name) -
   // just move the highlight; the rest of the app picks the colors up through CSS.
@@ -9395,8 +9471,7 @@ function attachHandlers(){
     if (modal && (modal.type === "chipSetup" || modal.type === "payboxSettings" || modal.type === "buyinSetup")) { tryCloseSetupModal(); return; }
     closeModal();
   };
-  const closeBtn = app.querySelector("[data-close-modal]");
-  if (closeBtn) closeBtn.onclick = closeModalOrBack;
+  app.querySelectorAll("[data-close-modal]").forEach(el => el.onclick = closeModalOrBack);
 
   // The blocking first-entry welcome screen (see renderGameWelcomeOverlay) has no close-x
   // and no overlay-click dismissal anywhere - only this button clears its per-device flag.
