@@ -3475,7 +3475,7 @@ def vision():
     client = anthropic.Anthropic()
     try:
         response = client.messages.create(
-            model="claude-sonnet-5",
+            model="claude-sonnet-5-5",
             # Was 1000: a chip photo with many piles (one JSON entry each, plus the
             # per-reference color list and the "mixed" flag) could run past it, the reply
             # got cut off mid-JSON, and the whole count silently came back empty.
