@@ -1058,13 +1058,19 @@ html.theme-light.theme-blue .modal .btn-primary,html.theme-light.theme-blue .mod
 /* Table screen: שולחן / ציר זמן toggle and the timeline view */
 .tv-seg{display:flex;border:1px solid rgba(212,175,55,.55);border-radius:10px;overflow:hidden;flex-shrink:0;}
 .rb-undo-last{display:block;width:100%;margin-top:10px;padding:10px;border-radius:12px;border:2px dashed #ef4444;background:rgba(239,68,68,.12);color:var(--text);font-family:inherit;font-size:18px;font-weight:700;cursor:pointer;}
-.game-tabs-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 16px 10px;flex-shrink:0;}
+.game-tabs-row{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:2px 12px 10px;flex-shrink:0;}
 /* One dark rounded track with the open tab as a gold pill inside it (a switch, so it
    doesn't read like the player tiles below). */
 .game-seg{flex:1;min-width:0;display:flex;gap:2px;background:rgba(0,0,0,.35);border-radius:999px;padding:4px;}
 .game-seg button{flex:1;min-width:0;padding:8px 2px;white-space:nowrap;border:none;border-radius:999px;background:none;color:var(--text);opacity:.8;font-family:inherit;font-size:16px;font-weight:600;cursor:pointer;}
 .game-seg button.on{background:var(--gold);color:var(--gold-text);opacity:1;font-weight:800;box-shadow:0 2px 8px rgba(0,0,0,.35);}
 html.theme-light .game-seg{background:rgba(0,0,0,.12);}
+/* "הביצועים שלי" - a round icon at the end of the tabs row: across all nights, not a
+   view of tonight's table, so it isn't one of the tabs. */
+.game-stats-btn{flex-shrink:0;width:42px;height:42px;border-radius:50%;border:1.5px solid var(--gold);background:rgba(0,0,0,.35);color:var(--gold);display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;}
+.game-stats-btn svg{width:20px;height:20px;}
+html.theme-light .game-stats-btn{background:rgba(255,255,255,.55);}
+html.theme-light.theme-blue .game-stats-btn{color:#a86a12;border-color:#a86a12;background:rgba(255,255,255,.75);}
 .game-seg button.seg-main{flex:1.65;display:flex;align-items:center;justify-content:center;gap:5px;font-size:17px;}
 .game-seg button.seg-main svg{width:17px;height:17px;flex-shrink:0;}
 .unseated-game{padding:30px 24px;text-align:center;}
@@ -5127,6 +5133,7 @@ function gameTabsScreen(g, c, seated){
   const row = `
     <div class="game-tabs-row">
       <div class="game-seg" role="tablist">${tabs.map(([k, label]) => `<button type="button" class="${tab === k ? "on" : ""}${k === "game" ? " seg-main" : ""}${(k === "invite" && invitePulse) || (k === "game" && gamePulse) ? " tab-hint" : ""}" data-game-tab="${k}">${k === "game" ? icon('user') : ""}${label}</button>`).join("")}</div>
+      <button type="button" class="game-stats-btn" data-open-my-stats title="הביצועים שלי" aria-label="הביצועים שלי">${icon('bar')}</button>
     </div>`;
   const content = tab === "game" ? (seated ? renderPlayerScreen(g.id) : renderUnseatedGameTab(g))
     : tab === "invite" ? renderInviteTab(g, c) : renderTable(g.id);
