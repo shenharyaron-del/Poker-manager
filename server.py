@@ -239,6 +239,14 @@ _INIT_STATEMENTS = (
     # Groups services under a heading (e.g. "Database" above Supabase) - NULL for one with
     # no category yet, listed ungrouped rather than under a synthetic "other" bucket.
     "ALTER TABLE third_party_services ADD COLUMN IF NOT EXISTS category TEXT",
+    # cron-job.org pings /api/version every 10 minutes so Render's free tier never spins
+    # the server down (the in-app ping only runs while someone has the app open). Added
+    # once, by name, at the end of the list; the Super Admin fills in the login from the
+    # list's own edit button.
+    "INSERT INTO third_party_services (id, name, url, category, sort_order) "
+    "SELECT 'cronjob-keepalive', 'cron-job.org', 'https://console.cron-job.org/jobs', 'Keep-alive', "
+    "COALESCE(MAX(sort_order), -1) + 1 FROM third_party_services "
+    "WHERE NOT EXISTS (SELECT 1 FROM third_party_services WHERE name = 'cron-job.org')",
 )
 
 
