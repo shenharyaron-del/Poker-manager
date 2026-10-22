@@ -2871,6 +2871,9 @@ let authSettings = { requireVerifyExistingEmail: true, requireVerifyBeforeAdminS
 
 // ---------- Navigation (not persisted - always starts at home) ----------
 let nav = { screen: "home", communityId: null, gameId: null };
+// The page this tab was on before a refresh (see rememberNav) - read once at load, before
+// the first render overwrites it.
+const SAVED_NAV_AT_LOAD = (() => { try { return JSON.parse(sessionStorage.getItem("poker-nav") || "null"); } catch(e) { return null; } })();
 let modal = null; // {type, ...}
 // A small per-seat popup (chevron next to an active player's name, see renderTable's
 // seatsHtml) listing their buy-in history inline, right on the table - only one open at a
@@ -5039,7 +5042,14 @@ function isSeatedInGame(g){
   const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
   return !!(myPlayerId && (g.seats||[]).includes(myPlayerId));
 }
+// The page on screen, kept for this browser tab only (sessionStorage) so a refresh lands
+// back on it instead of re-following the invite link or jumping into a table - see the
+// invite handling at startup. A new tab or a fresh app launch starts clean.
+function rememberNav(){
+  try { sessionStorage.setItem("poker-nav", JSON.stringify({screen: nav.screen, communityId: nav.communityId || null, gameId: nav.gameId || null})); } catch(e) { /* storage blocked - a refresh just starts over */ }
+}
 function render(){
+  rememberNav();
   const app = document.getElementById("app");
   document.body.classList.toggle("table-screen", nav.screen === "table");
   let html = "";
@@ -5574,15 +5584,18 @@ async function inviteToClub(communityId){
     showAlert(url);
   }
 }
+// The table invite link - shared on WhatsApp and drawn as the QR code alike.
+function gameInviteUrl(g, c){
+  return location.origin + location.pathname + "?game=" + encodeURIComponent(g.id) + "&community=" + encodeURIComponent(c.id);
+}
 // Share an invite link to a game (native share sheet, else copy to clipboard).
 async function inviteToGame(gameId){
   const g = getGame(gameId);
   const c = g && getCommunity(g.communityId);
   if (!g || !c) return;
-  // Only the club's code: the link joins the invitee to the club and opens the club
-  // screen (see autoJoinViaCommunityInvite), not the table itself - from there tonight's
-  // open table is one tap away (its card, and the quick-access bar at the bottom).
-  const url = location.origin + location.pathname + "?community=" + encodeURIComponent(c.id);
+  // Straight to this table, with the club's code riding along so someone new joins the
+  // club first (see the invite handling at startup), then sits down here.
+  const url = gameInviteUrl(g, c);
   const text = `הצטרפו אליי למשחק פוקר ב${c.name} - ${g.name || g.date}`;
   if (navigator.share) {
     try { await navigator.share({title: "הזמנה למשחק פוקר", text, url}); } catch(err) { /* user cancelled the share sheet */ }
@@ -8167,6 +8180,26 @@ function renderModal(m){
       </div>
       <button class="btn btn-primary btn-block entry-go" data-entry-other data-default-amount="${amt}" style="font-size:24px;font-weight:800;padding:14px 0;margin-top:12px;">כניסה לשולחן עם ${amt} ש"ח</button>
       <button data-entry-cancel style="display:block;width:100%;background:none;border:none;color:var(--muted);font-size:18px;font-weight:600;margin-top:10px;padding:6px;cursor:pointer;font-family:inherit;text-decoration:underline;text-underline-offset:3px;">ביטול</button>`;
+  } else if (m.type === "inviteOptions") {
+    const g = getGame(m.gameId);
+    const c = g && getCommunity(g.communityId);
+    title = "הזמנת שחקן";
+    if (!g || !c) {
+      body = `<p style="color:var(--muted);text-align:center;">משחק לא נמצא</p>`;
+    } else if (m.showQr) {
+      // Others scan this with their phone camera and land on this table (same link the
+      // WhatsApp invite sends).
+      const url = gameInviteUrl(g, c);
+      body = `
+        <p style="text-align:center;font-size:18px;margin:0 0 12px;">צלמו את הקוד עם מצלמת הטלפון כדי להצטרף ל<b>${esc(g.name || g.date)}</b></p>
+        <div style="background:#fff;border-radius:16px;padding:12px;margin:0 auto;max-width:300px;"><img src="/api/qr?text=${encodeURIComponent(url)}" alt="QR" style="display:block;width:100%;height:auto;"></div>
+        <p style="text-align:center;color:var(--muted);font-size:15px;margin:12px 0 0;">${esc(c.name)}</p>`;
+    } else {
+      body = `
+        <p style="text-align:center;font-size:18px;margin:0 0 14px;">איך להזמין ל<b>${esc(g.name || g.date)}</b>?</p>
+        <button class="btn btn-block" data-invite-whatsapp style="background:#25D366;color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:10px;">${icon('share')} שליחה בוואטסאפ</button>
+        <button class="btn btn-primary btn-block" data-invite-qr style="font-size:20px;">הצגת QR לסריקה</button>`;
+    }
   } else if (m.type === "playerNight") {
     const g = getGame(m.gameId) || {players:[], cashouts:{}};
     const p = (g.players||[]).find(pl => pl.id === m.playerId);
@@ -8508,7 +8541,13 @@ function attachHandlers(){
   });
   app.querySelectorAll("[data-delete-game]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type:"deleteGame", gameId: el.dataset.deleteGame}); });
   app.querySelectorAll("[data-invite-club]").forEach(el => el.onclick = (e) => { e.stopPropagation(); inviteToClub(el.dataset.inviteClub); });
-  app.querySelectorAll("[data-invite-game]").forEach(el => el.onclick = (e) => { e.stopPropagation(); inviteToGame(el.dataset.inviteGame); });
+  app.querySelectorAll("[data-invite-game]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type: "inviteOptions", gameId: el.dataset.inviteGame}); });
+  if (modal && modal.type === "inviteOptions") {
+    const waBtn = app.querySelector("[data-invite-whatsapp]");
+    if (waBtn) waBtn.onclick = () => { const gid = modal.gameId; closeModal(); inviteToGame(gid); };
+    const qrBtn = app.querySelector("[data-invite-qr]");
+    if (qrBtn) qrBtn.onclick = () => updateModal({showQr: true});
+  }
   const shareAppBtn = app.querySelector("[data-share-app]");
   if (shareAppBtn) shareAppBtn.onclick = async () => {
     const url = location.origin + location.pathname;
@@ -11198,8 +11237,22 @@ window.addEventListener("popstate", async () => {
   state.communities = state.communities.filter(c => c.createdBy);
   state.games = state.games.filter(g => keepIds.has(g.communityId));
   if (hadLegacy) saveState();
-  const inviteGameId = new URLSearchParams(location.search).get("game");
-  const inviteCommunityId = new URLSearchParams(location.search).get("community");
+  // A refresh (same tab) stays on the page it was on: the invite link in the address bar
+  // was already followed once in this tab, so it's not followed again, and the "land in
+  // my one open table" jump doesn't run either.
+  const savedNav = SAVED_NAV_AT_LOAD;
+  let inviteFollowed = false;
+  try { inviteFollowed = !!location.search && sessionStorage.getItem("poker-invite-followed") === location.search; } catch(e) {}
+  const restoredNav = savedNav && (
+    savedNav.screen === "home" ? {screen: "home", communityId: null, gameId: null}
+    : savedNav.screen === "community" && getCommunity(savedNav.communityId) ? {screen: "community", communityId: savedNav.communityId, gameId: null}
+    : savedNav.screen === "table" && getGame(savedNav.gameId) ? {screen: "table", communityId: getGame(savedNav.gameId).communityId, gameId: savedNav.gameId}
+    : null);
+  if (restoredNav && (inviteFollowed || !location.search)) nav = restoredNav;
+  const followInvite = !inviteFollowed;
+  try { if (location.search) sessionStorage.setItem("poker-invite-followed", location.search); } catch(e) {}
+  const inviteGameId = followInvite ? new URLSearchParams(location.search).get("game") : null;
+  const inviteCommunityId = followInvite ? new URLSearchParams(location.search).get("community") : null;
   // A club code - on its own (a club invite) or riding along with a table invite - joins
   // the visitor to that club's roster first, so someone new is a club member before they
   // ever sit at the table. Only a club-only invite lands on the club screen.
@@ -11240,7 +11293,7 @@ window.addEventListener("popstate", async () => {
   // instead of the communities list, same as if they'd followed that game's own invite
   // link. Seated at two or more: no guessing which - stay on the home screen, where the
   // quick-access bar at the bottom lists every one of them.
-  if (!inviteGameId && !inviteCommunityId) {
+  if (!inviteGameId && !inviteCommunityId && !(restoredNav && nav === restoredNav)) {
     const myActiveGames = state.games.filter(g => {
       const pid = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
       return !g.closed && pid && (g.seats || []).includes(pid) && !(pid in (g.cashouts || {}));

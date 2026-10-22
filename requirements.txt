@@ -3,3 +3,4 @@ anthropic>=0.40
 python-dotenv>=1.0
 psycopg2-binary>=2.9
 webauthn>=2.0,<4
+segno>=1.6
