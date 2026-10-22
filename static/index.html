@@ -5773,10 +5773,13 @@ function monthLabel(ym){
 }
 const PLACE_MARKS = ["🏆", "🥈", "🥉"];
 const PLACE_NAMES = ["מקום ראשון", "מקום שני", "מקום שלישי"];
-const signedShekel = v => `${v > 0 ? "+" : v < 0 ? "-" : ""}₪${Math.abs(v)}`;
-// The ready-to-send WhatsApp text: the top three with a trophy and silver/bronze medals.
+// No "+" - the podium is winners only; a loss (in the rest of the list) keeps its "-".
+const signedShekel = v => `${v < 0 ? "-" : ""}₪${Math.abs(v)}`;
+// The podium: the top three who ended the month ahead - nobody in a loss gets a place.
+const podiumOf = st => st.list.filter(r => r.profit > 0).slice(0, 3);
+// The ready-to-send WhatsApp text: the podium with a trophy and silver/bronze medals.
 function monthlyReportText(c, ym, st){
-  const top = st.list.slice(0, 3).map((r, i) => `${PLACE_MARKS[i]} ${PLACE_NAMES[i]}: ${r.name} (${signedShekel(r.profit)})`);
+  const top = podiumOf(st).map((r, i) => `${PLACE_MARKS[i]} ${PLACE_NAMES[i]}: ${r.name} (${signedShekel(r.profit)})`);
   return `🏆 המנצחים של ${c.name} - ${monthLabel(ym)}\n\n${top.join("\n")}\n\n${st.nights === 1 ? "ערב משחק אחד" : `${st.nights} ערבי משחק`} החודש`;
 }
 
@@ -8289,15 +8292,15 @@ function renderModal(m){
         <div class="field"><label>חודש</label>
           <select id="monthly-report-month" style="width:100%;font-size:18px;">${months.map(x => `<option value="${x}"${x === ym ? " selected" : ""}>${esc(monthLabel(x))}</option>`).join("")}</select>
         </div>
-        ${st.list.length ? `
-        <div class="monthly-podium">${st.list.slice(0, 3).map((r, i) => `
+        ${podiumOf(st).length ? `
+        <div class="monthly-podium">${podiumOf(st).map((r, i) => `
           <div class="monthly-place place-${i + 1}"><span class="monthly-mark">${PLACE_MARKS[i]}</span><span class="flex1"><b>${esc(r.name)}</b><small>${PLACE_NAMES[i]}</small></span><span class="monthly-sum" dir="ltr" style="color:${profitColor(r.profit)};">${signedShekel(r.profit)}</span></div>`).join("")}
         </div>
-        ${st.list.length > 3 ? `<div class="monthly-rest">${st.list.slice(3).map((r, i) => `<div><span>${i + 4}. ${esc(r.name)}</span><span dir="ltr" style="color:${profitColor(r.profit)};">${signedShekel(r.profit)}</span></div>`).join("")}</div>` : ""}
+        ${st.list.length > podiumOf(st).length ? `<div class="monthly-rest">${st.list.slice(podiumOf(st).length).map((r, i) => `<div><span>${i + podiumOf(st).length + 1}. ${esc(r.name)}</span><span dir="ltr" style="color:${profitColor(r.profit)};">${signedShekel(r.profit)}</span></div>`).join("")}</div>` : ""}
         <p style="color:var(--muted);text-align:center;font-size:15px;margin:10px 0 14px;">${st.nights === 1 ? "ערב משחק אחד" : `${st.nights} ערבי משחק`} ב${esc(monthLabel(ym))}</p>
         <button class="btn btn-block" data-monthly-share style="background:#25D366;color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;gap:8px;">${icon('share')} שליחה בוואטסאפ</button>
         <div class="monthly-preview">${esc(monthlyReportText(c, ym, st)).replace(/\n/g, "<br>")}</div>`
-        : `<p style="color:var(--muted);text-align:center;">באף ערב בחודש הזה עוד לא נרשם סיום לשחקנים.</p>`}`;
+        : `<p style="color:var(--muted);text-align:center;">${st.list.length ? "אף שחקן לא סיים את החודש ברווח." : "באף ערב בחודש הזה עוד לא נרשם סיום לשחקנים."}</p>`}`;
     }
   } else if (m.type === "playerNight") {
     const g = getGame(m.gameId) || {players:[], cashouts:{}};
