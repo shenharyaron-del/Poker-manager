@@ -3865,9 +3865,13 @@ async function takeSeatAt(g, idx){
     } else if (!p.clientId) {
       await v2LinkRosterPlayer(c.id, p.id, myIdentity.id);
     }
+    // The first one to sit down stays on the table view (the others still have to come
+    // and sit); anyone joining a table that already has players moves to the game tab.
+    const firstAtTable = !((getGame(g.id) || g).seats || []).some(s => s && s !== p.id);
     const ok = await v2ClaimSeat(g.id, idx, p.id, p.name);
     if (!ok) { showAlert("המושב הזה כבר תפוס - בחרו מושב אחר."); return; }
-    tableSubView = "player";
+    tableSubView = firstAtTable ? "table" : "player";
+    if (firstAtTable) setTableView("table");
     render();
   } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
 }
