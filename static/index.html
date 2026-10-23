@@ -4528,6 +4528,13 @@ function maybeAutoCloseNight(g){
   const shouldClose = seated.length >= 2 && seated.every(pid => pid in g.cashouts);
   if (shouldClose && !g.closed) { g.closed = true; logGameEvent(g, "night_closed", null, null, undefined); }
 }
+// Home-screen club card: how many tables the club has, and how many are still open.
+function clubTablesLabel(cid){
+  const games = gamesForCommunity(cid);
+  const open = games.filter(g => !g.closed).length;
+  const total = !games.length ? "אין עדיין שולחנות" : games.length === 1 ? "שולחן אחד" : `${games.length} שולחנות`;
+  return total + (open ? ` · ${open === 1 ? "פעיל אחד" : open + " פעילים"}` : "");
+}
 function gamesForCommunity(id){ return state.games.filter(g => g.communityId === id).sort((a,b)=> a.date < b.date ? 1 : -1); }
 
 // ---------- Player selfie photos (double-tap a seated player's circle) ----------
@@ -5562,6 +5569,7 @@ function renderHome(){
       <div class="flex1" style="min-width:0;">
         <div class="name serif" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c.name)}</div>
         <div class="meta" style="display:flex;align-items:center;gap:4px;min-width:0;"><span style="flex-shrink:0;line-height:0;">${icon('users')}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">נוצר ע"י ${esc(c.createdByName || "לא ידוע")}</span></div>
+        <div class="meta" style="display:flex;align-items:center;gap:4px;"><span style="flex-shrink:0;line-height:0;">${icon('chip')}</span><span>${clubTablesLabel(c.id)}</span></div>
       </div>
             <div class="chev">${icon('chev')}</div>
     </div>`;
