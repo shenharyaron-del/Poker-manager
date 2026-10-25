@@ -1113,18 +1113,26 @@ html.theme-light .monthly-preview{background:rgba(0,0,0,.06);}
 html.theme-light .felt-odds .odds-label{color:#5b3708!important;text-shadow:0 0 4px rgba(255,255,255,.85),0 1px 1px rgba(255,255,255,.9);}
 .tv-seg button{background:transparent;border:none;color:var(--text);font-family:inherit;font-size:17px;padding:7px 14px;cursor:pointer;}
 .tv-seg button.on{background:var(--gold);color:var(--gold-text);font-weight:700;}
-/* Player boxes (player screen): raised 3-D buttons that stand off the page - felt green
+/* Timeline name chips: at most two rows (see renderTableTimeline). */
+.ttl-chips{display:grid;gap:6px;margin:8px 0 4px;}
+.ttl-chip{font-family:inherit;font-size:inherit;padding:8px 6px;text-align:center;border-radius:999px;border:1px solid var(--card-b);background:transparent;color:var(--muted);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ttl-chip.me{border-color:var(--gold);color:var(--gold);font-weight:700;}
+.ttl-chip.sel{border-color:#3b82f6;color:#3b82f6;font-weight:700;}
+/* Player boxes (player screen) and timeline name chips: raised 3-D buttons that stand off the page - felt green
    with a gold rim on the dark theme, cream with a gold rim on sand / blue. The one being
    looked at is gold. */
-.pp-tile{background:linear-gradient(180deg,#2f7a58 0%,#1a5a3f 55%,#0f3d2b 100%);border:1px solid #d4af37;border-style:solid;color:#fdf6e3;border-radius:12px;box-shadow:0 3px 0 #0a2a1d,0 5px 8px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);}
+.pp-tile,.ttl-chip{background:linear-gradient(180deg,#2f7a58 0%,#1a5a3f 55%,#0f3d2b 100%);border:1px solid #d4af37;border-style:solid;color:#fdf6e3;border-radius:12px;box-shadow:0 3px 0 #0a2a1d,0 5px 8px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.25);}
 .pp-tile small{color:#e9d8bd;}
 .pp-tile[data-pp-view]::after{border-color:#f2c14e;}
 .pp-tile-invite{color:#f2c14e;}
-html.theme-light .pp-tile,html.theme-light.theme-blue .pp-tile{background:linear-gradient(180deg,#fffaf0 0%,#f1e3c6 100%);border:1px solid #c9a46a;color:#3a2614;box-shadow:0 3px 0 #b08a52,0 5px 8px rgba(0,0,0,.25),inset 0 1px 0 #fff;}
+.ttl-chip.me{color:#f2c14e;}
+html.theme-light .pp-tile,html.theme-light.theme-blue .pp-tile,html.theme-light .ttl-chip{background:linear-gradient(180deg,#fffaf0 0%,#f1e3c6 100%);border:1px solid #c9a46a;color:#3a2614;box-shadow:0 3px 0 #b08a52,0 5px 8px rgba(0,0,0,.25),inset 0 1px 0 #fff;}
 html.theme-light .pp-tile small{color:#7a5a3a;}
 html.theme-light .pp-tile[data-pp-view]::after{border-color:#a86a12;}
 html.theme-light .pp-tile-invite{color:#9a5f12;}
+html.theme-light .ttl-chip.me{color:#9a5f12;}
 .pp-tile.on,html.theme-light .pp-tile.on{background:linear-gradient(180deg,#fde68a,#e9b949);color:#2a1d05;border-color:#a87412;box-shadow:0 3px 0 #a87412,0 5px 8px rgba(0,0,0,.25),inset 0 1px 0 #fff7d6;}
+.ttl-chip.sel,html.theme-light .ttl-chip.sel{background:linear-gradient(180deg,#60a5fa,#2563eb);color:#fff;border-color:#1e40af;box-shadow:0 3px 0 #1e3a8a,0 5px 8px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.35);}
 /* The table screen is sized to the phone (no page scroll), so the timeline view fills what's
    left under the header and "מה קרה בערב" takes the rest, scrolling inside its own box -
    it always ends at the bottom of the screen, whatever the phone's height. */
@@ -6804,7 +6812,7 @@ function renderTable(gameId){
 // A name too long for its box steps its font down (to 11px) before it ever gets "…" -
 // the timeline's name chips, the player screen's player boxes and the chips-left label.
 function fitNameBoxes(){
-  document.querySelectorAll(".pp-tile bdi, .pp-tile-invite span, .lv-amount-label, .fit-line").forEach(el => {
+  document.querySelectorAll(".ttl-chip, .pp-tile bdi, .pp-tile-invite span, .lv-amount-label, .fit-line").forEach(el => {
     let fs = parseFloat(getComputedStyle(el).fontSize);
     while (el.scrollWidth > el.clientWidth + 1 && fs > 11) { fs -= 1; el.style.fontSize = fs + "px"; }
   });
@@ -6821,6 +6829,7 @@ function nameInitials(name){
   if (letters.length < 2) return letters.join("");
   return /[\u0590-\u05FF]/.test(letters.join("")) ? letters[0] + "״" + letters[1] : letters.join("").toUpperCase();
 }
+let timelineHighlight = {}; // gameId -> the player tapped in the chips row (shown in blue)
 function tableTimelineOn(){ try { return localStorage.getItem("poker-table-view") === "timeline"; } catch(e) { return false; } }
 function setTableView(v){ try { localStorage.setItem("poker-table-view", v); } catch(e) {} }
 // Opening the app (e.g. straight into a table from an invite link) starts on the seats too.
@@ -6843,6 +6852,14 @@ function renderTableTimeline(g, c, myPlayerId){
   const fem = id => playerIsFemale(g, c, id);
   const cashouts = g.cashouts || {};
   const events = g.events || [];
+  // Name chips over the list, in tonight's entry order - tapping one lights up that
+  // player's times in the list. Never more than two rows.
+  const order = [];
+  buyins.forEach(b => { if (!order.includes(b.playerId)) order.push(b.playerId); });
+  const sel = timelineHighlight[g.id];
+  const chips = order.map(pid => `<button type="button" class="ttl-chip${pid === myPlayerId ? ' me' : ''}${pid === sel && pid !== myPlayerId ? ' sel' : ''}" data-timeline-pick="${pid}"><bdi>${esc(name(pid))}</bdi></button>`).join("");
+  const chipCols = order.length <= 4 ? Math.max(order.length, 3) : Math.ceil(order.length / 2);
+
   // Activity list, from 0:00 down. A cancelled buy-in is simply gone from g.buyins, and
   // its cancellation event is skipped - neither shows. The pot fix shows as one line
   // (its own buy-ins, by the same person within a minute of it, are folded into it).
@@ -6883,9 +6900,10 @@ function renderTableTimeline(g, c, myPlayerId){
   // A pre-start row has no time - its text starts where the start line's 0:00 does.
   const list = rows.map(r => r.pre
     ? `<div class="ttl-row ttl-pre"><span class="ttl-text">${r.text}</span></div>`
-    : `<div class="ttl-row${r.start ? ' ttl-start' : ''}"><span class="ttl-time">${fmtElapsed((r.ts || t0) - t0)}</span><span class="ttl-text">${r.text}</span></div>`).join("");
+    : `<div class="ttl-row${r.start ? ' ttl-start' : ''}"><span class="ttl-time${sel && r.pid === sel ? ' hl' : ''}">${fmtElapsed((r.ts || t0) - t0)}</span><span class="ttl-text">${r.text}</span></div>`).join("");
   return `
     <div class="px5 ttl-wrap">
+      <div class="ttl-chips" style="grid-template-columns:repeat(${chipCols},1fr);font-size:${chipCols >= 5 ? 15 : chipCols === 4 ? 16 : 18}px;">${chips}</div>
       <fieldset class="leave-frame stats-frame ttl-list-frame"><legend>מה קרה בערב</legend>
         <div class="ttl-list" data-ttl-list="${g.id}">${list}</div>
       </fieldset>
@@ -8985,6 +9003,11 @@ function attachHandlers(){
     const gid = el.dataset.ttlList;
     if (timelineListScroll[gid]) el.scrollTop = timelineListScroll[gid];
     el.onscroll = () => { timelineListScroll[gid] = el.scrollTop; };
+  });
+  app.querySelectorAll("[data-timeline-pick]").forEach(el => el.onclick = () => {
+    const gid = nav.gameId, pid = el.dataset.timelinePick;
+    timelineHighlight[gid] = timelineHighlight[gid] === pid ? null : pid;
+    render();
   });
   fitNameBoxes();
   app.querySelectorAll("[data-pp-view]").forEach(el => el.onclick = () => {
