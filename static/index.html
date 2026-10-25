@@ -1051,6 +1051,9 @@ html.theme-light.theme-sand .rb-confirm{background:linear-gradient(180deg,#bf8a4
 .extra-seat-plus{position:absolute;transform:translate(-50%,-50%);z-index:4;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;padding:0;color:var(--gold);font-family:inherit;cursor:pointer;opacity:.8;}
 .extra-seat-plus .esp-circle{width:34px;height:34px;border-radius:50%;border:1.5px dashed rgba(212,175,55,.6);background:rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;font-size:20px;line-height:1;}
 .extra-seat-plus .esp-label{font-size:11px;font-weight:700;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.7);}
+.extra-seat-plus.taken{cursor:default;opacity:1;}
+.extra-seat-plus.taken .esp-circle{border:1.5px solid var(--gold);background:#0b3d2a;color:#f3d27a;font-size:13px;font-weight:800;}
+.extra-seat-plus.taken.out{opacity:.55;}
 html.theme-light .extra-seat-plus .esp-label{color:#5b3708;text-shadow:0 0 3px rgba(255,255,255,.8);}
 .pp-back-me{grid-column:4;min-width:0;min-height:44px;padding:6px 6px;border-radius:12px;border:2px solid #93c5fd;background:#1d4ed8;color:#fff;font-family:inherit;font-size:16px;font-weight:800;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.35);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 /* Name field + a small ז / נ (male / female) pick on the same row. */
@@ -6261,6 +6264,18 @@ function renderPlayerScreen(gameId){
   const adminPlayerActions = (isAdminView && pid) ? (cashedOut
     ? `<button class="btn btn-ghost co-act" data-admin-return-to-game="${pid}">${icon('undo')} החזרה לשולחן</button>`
     : ((viewingOther && !armed) ? `<button class="btn btn-ghost btn-block" style="margin-top:4px;font-size:17px;" data-admin-remove-seat="${pid}">הסרת ${esc(p ? p.name : "השחקן")} מהשולחן</button>` : "")) : "";
+  // Everyone but me who entered tonight (tonight's entry order), each a tile that opens
+  // their screen - the one being looked at is highlighted. With 10 at the table, one of
+  // them sits in a box right of the name instead (the 10th seat's player, or - when the
+  // 10th is me - the last of the other 9), so the tiles stay at 8, two rows, on every phone.
+  const extraSeatId = (g.seats||[])[EXTRA_SEAT];
+  const othersTonight = g.players.filter(pl => pl.id !== myPlayerId && pl.id !== extraSeatId && ((g.seats||[]).includes(pl.id) || pl.id in (g.cashouts||{}))).map(pl => pl.id);
+  const sideId = extraSeatId && extraSeatId !== myPlayerId ? extraSeatId
+    : othersTonight.length > 8 ? othersTonight[othersTonight.length - 1] : null;
+  const playerTile = (id, cls) => {
+    const out = id in (g.cashouts||{});
+    return `<button type="button" class="pp-tile${cls || ""}${id===pid?' on':''}${out?' out':''}" data-pp-view="${id}"><bdi>${esc(tableShortName(g, id))}</bdi>${out?'<small>יצא</small>':''}</button>`;
+  };
   // Name line: the viewed player's name in a frame (no dropdown any more - an admin picks
   // whose screen to see from the tiles above it).
   const nameHtml = (() => {
@@ -6273,37 +6288,23 @@ function renderPlayerScreen(gameId){
     const me = myPlayerId && g.players.find(x => x.id === myPlayerId);
     // Same 4-column grid as the tiles above: the name spans the 2nd-3rd columns, my own
     // name button (when looking at someone else) sits in the 4th.
-    // The 10th seat's player (unless that's me), right of the name. Sitting there is only
-    // from the table tab (the small "+" in its corner).
-    const extraId = (g.seats||[])[EXTRA_SEAT];
-    const extraBox = extraId && extraId !== myPlayerId
-      ? (() => { const out = extraId in (g.cashouts||{});
-          return `<button type="button" class="pp-tile pp-extra${extraId===pid?' on':''}${out?' out':''}" data-pp-view="${extraId}"><bdi>${esc(tableShortName(g, extraId))}</bdi>${out?'<small>יצא</small>':''}</button>`; })()
-      : "";
+    // The box right of the name (see sideId).
+    const extraBox = sideId ? playerTile(sideId, " pp-extra") : "";
     return `<div class="pp-name-row">${extraBox}${box}${viewingOther && me ? `<button type="button" class="pp-back-me" data-pp-back-me title="חזרה למסך שלי"><bdi>${esc(tableShortName(g, me.id))}</bdi></button>` : ""}</div>`;
   })();
   // Tiles above the name: everyone who entered tonight, in order, then a "הזמן שחקן" tile
   // in the next free spot (it replaces the header's invite button here).
   // An admin taps a tile to see that player's screen; for everyone else they're a roster.
   const tilesHtml = (() => {
-    // Everyone but me, each in a fixed slot (tonight's entry order) - the one being looked
-    // at is highlighted; the way back to my own screen is the ↩ button by the name.
-    const extraId = (g.seats||[])[EXTRA_SEAT];
-    let entered = g.players.filter(pl => pl.id !== myPlayerId && pl.id !== extraId && ((g.seats||[]).includes(pl.id) || pl.id in (g.cashouts||{}))).map(pl => pl.id);
-    // 9 seats at most - no "הזמן שחקן" once they're all taken.
-    const canInvite = !g.closed && (g.seats||[]).slice(0, 9).filter(Boolean).length < 9;
-    const tile = id => {
-      const pl = g.players.find(x => x.id === id);
-      const out = id in (g.cashouts||{});
-      return `<button type="button" class="pp-tile${id===pid?' on':''}${out?' out':''}" data-pp-view="${id}"><bdi>${esc(tableShortName(g, id))}</bdi>${out?'<small>יצא</small>':''}</button>`;
-    };
+    // The way back to my own screen is the ↩ button by the name.
+    const entered = othersTonight.filter(id => id !== sideId);
     // At most 8 boxes (9 at a table, nobody replaces anyone: 8 others, or 7 + invite),
     // laid out like the timeline's name chips: never bigger than a third of the row (1-3
     // boxes sit from the right at that size, "הזמן שחקן" last), 4 in one row, 5-6 in rows
     // of 3, 7-8 in rows of 4 - the font sized to the box (long names shrink to fit, see
     // fitNameBoxes).
     // "הזמן שחקן" moved to the tabs row above (see gameTabsScreen).
-    const out = entered.map(tile).join("");
+    const out = entered.map(id => playerTile(id)).join("");
     const n = entered.length;
     const cols = n === 4 || n > 6 ? 4 : 3;
     const fs = cols === 3 ? 18 : 16;
@@ -6782,7 +6783,9 @@ function renderTable(gameId){
         <div class="poker-table-felt"></div>
         ${seatsHtml}
         <div id="settlement-overlay" style="position:absolute;inset:0;pointer-events:none;"></div>
-        ${extraSeatOpen(g) && (canTakeSeatHere(g) || admin) ? `<button type="button" class="extra-seat-plus" style="left:10%;top:91%;" data-take-extra-seat><span class="esp-circle">+</span><span class="esp-label">שחקן עשירי</span></button>` : ""}
+        ${extraSeatOpen(g) && (canTakeSeatHere(g) || admin) ? `<button type="button" class="extra-seat-plus" style="left:10%;top:91%;" data-take-extra-seat><span class="esp-circle">+</span><span class="esp-label">שחקן עשירי</span></button>`
+          : seats[EXTRA_SEAT] ? (() => { const xp = g.players.find(pl => pl.id === seats[EXTRA_SEAT]);
+              return `<div class="extra-seat-plus taken${seats[EXTRA_SEAT] in g.cashouts ? " out" : ""}" style="left:10%;top:91%;" title="${esc(xp ? xp.name : "")}"><span class="esp-circle">${esc(nameInitials(xp ? xp.name : ""))}</span><span class="esp-label">שחקן עשירי</span></div>`; })() : ""}
         <div style="position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);text-align:center;z-index:3;">
           <img src="/static/logo-p-crown.png" style="width:37px;height:auto;margin-bottom:8px;pointer-events:none;">
           <div style="color:var(--muted);font-size:12px;">סה"כ קנייה ₪${totalBuyinAll}</div>
@@ -6818,6 +6821,12 @@ function fitNameBoxes(){
     const min = Math.min(...lines.map(l => parseFloat(getComputedStyle(l).fontSize)));
     lines.forEach(l => { l.style.fontSize = min + "px"; });
   });
+}
+// "אורית שנהר" -> "א״ש", "Eyal" -> "E": the 10th seat's circle on the table.
+function nameInitials(name){
+  const letters = String(name || "").trim().split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]);
+  if (letters.length < 2) return letters.join("");
+  return /[\u0590-\u05FF]/.test(letters.join("")) ? letters[0] + "״" + letters[1] : letters.join("").toUpperCase();
 }
 function tableTimelineOn(){ try { return localStorage.getItem("poker-table-view") === "timeline"; } catch(e) { return false; } }
 function setTableView(v){ try { localStorage.setItem("poker-table-view", v); } catch(e) {} }
