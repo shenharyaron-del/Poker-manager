@@ -1150,6 +1150,8 @@ body.table-screen .ttl-list-frame .ttl-list{flex:1;min-height:0;max-height:none;
 .gs-wait{text-align:center;color:var(--muted);font-size:17px;padding:12px 0;flex-shrink:0;}
 .ttl-by,.feed-by{font-size:.8em;font-weight:400;opacity:.6;}
 .ttl-time.hl{color:#fff;background:#3b82f6;border-radius:6px;padding:0 5px;}
+/* Before "תחילת משחק" there's no time to light up - the picked player's name is marked instead. */
+.ttl-pre.hl .ttl-text b:first-child{color:#fff;background:#3b82f6;border-radius:6px;padding:0 5px;}
 /* "פתח בכרום" bar, only inside another app's built-in browser (see inAppBrowserBar). */
 .inapp-bar{position:fixed;top:0;left:0;right:0;z-index:400;display:flex;align-items:center;gap:8px;padding:8px 10px;padding-top:max(8px, env(safe-area-inset-top));background:#1d4ed8;color:#fff;font-size:12px;box-shadow:0 2px 10px rgba(0,0,0,.35);}
 .inapp-bar span{flex:1;min-width:0;}
@@ -6899,7 +6901,7 @@ function renderTableTimeline(g, c, myPlayerId){
   rows.sort((a, b) => rank(a) - rank(b) || (a.ts || 0) - (b.ts || 0));
   // A pre-start row has no time - its text starts where the start line's 0:00 does.
   const list = rows.map(r => r.pre
-    ? `<div class="ttl-row ttl-pre"><span class="ttl-text">${r.text}</span></div>`
+    ? `<div class="ttl-row ttl-pre${sel && r.pid === sel ? ' hl' : ''}"><span class="ttl-text">${r.text}</span></div>`
     : `<div class="ttl-row${r.start ? ' ttl-start' : ''}"><span class="ttl-time${sel && r.pid === sel ? ' hl' : ''}">${fmtElapsed((r.ts || t0) - t0)}</span><span class="ttl-text">${r.text}</span></div>`).join("");
   return `
     <div class="px5 ttl-wrap">
