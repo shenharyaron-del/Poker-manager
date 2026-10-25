@@ -5181,12 +5181,11 @@ function gameTabsScreen(g, c, seated){
 }
 // "משחק" before I've sat down: nothing of mine to show yet - point to the seats.
 function renderUnseatedGameTab(g){
-  const full = tableSeatsFull(g);
-  const extra = extraSeatOpen(g) && canTakeSeatHere(g);
+  // The 10th seat counts as free here - it's taken from the table tab, like any seat.
+  const full = !hasFreeSeat(g);
   return `<div class="unseated-game">
-    <p>${g.closed ? "הערב הזה כבר נסגר." : extra ? "כל 9 הכיסאות בשולחן תפוסים - נשאר מקום לשחקן עשירי." : full ? "השולחן מלא - אין כרגע כיסא פנוי." : "עוד לא התיישבת בשולחן.<br>בחרו כיסא פנוי (+) כדי להצטרף - ואז כאן עושים ריביי ומסיימים את הערב."}</p>
-    ${extra ? `<button class="btn btn-primary btn-block" data-take-extra-seat style="font-size:20px;">כניסה כשחקן עשירי</button>`
-      : !g.closed && !full ? `<button class="btn btn-primary btn-block" data-game-tab="table" style="font-size:20px;">לבחירת כיסא</button>` : ""}
+    <p>${g.closed ? "הערב הזה כבר נסגר." : full ? "השולחן מלא - אין כרגע כיסא פנוי." : "עוד לא התיישבת בשולחן.<br>בחרו כיסא פנוי (+) כדי להצטרף - ואז כאן עושים ריביי ומסיימים את הערב."}</p>
+    ${!g.closed && !full ? `<button class="btn btn-primary btn-block" data-game-tab="table" style="font-size:20px;">לבחירת כיסא</button>` : ""}
   </div>`;
 }
 // The "הזמנה" tab: the two ways to invite, right on the page - WhatsApp (share sheet) and
@@ -6271,14 +6270,13 @@ function renderPlayerScreen(gameId){
     const me = myPlayerId && g.players.find(x => x.id === myPlayerId);
     // Same 4-column grid as the tiles above: the name spans the 2nd-3rd columns, my own
     // name button (when looking at someone else) sits in the 4th.
-    // The 10th seat, right of the name: its player (unless that's me), or - while it's the
-    // only free seat - a "+" that seats someone there (admin) or opens the invite tab.
+    // The 10th seat's player (unless that's me), right of the name. Sitting there is only
+    // from the table tab (the small "+" in its corner).
     const extraId = (g.seats||[])[EXTRA_SEAT];
     const extraBox = extraId && extraId !== myPlayerId
       ? (() => { const out = extraId in (g.cashouts||{});
           return `<button type="button" class="pp-tile pp-extra${extraId===pid?' on':''}${out?' out':''}" data-pp-view="${extraId}"><bdi>${esc(tableShortName(g, extraId))}</bdi>${out?'<small>יצא</small>':''}</button>`; })()
-      : !extraId && extraSeatOpen(g)
-        ? `<button type="button" class="pp-tile pp-tile-invite pp-extra" data-extra-seat-add>${icon('plus')}<span>שחקן 10</span></button>` : "";
+      : "";
     return `<div class="pp-name-row">${extraBox}${box}${viewingOther && me ? `<button type="button" class="pp-back-me" data-pp-back-me title="חזרה למסך שלי"><bdi>${esc(tableShortName(g, me.id))}</bdi></button>` : ""}</div>`;
   })();
   // Tiles above the name: everyone who entered tonight, in order, then a "הזמן שחקן" tile
@@ -8876,12 +8874,6 @@ function attachHandlers(){
     if (!extraSeatOpen(g)) return;
     if (canTakeSeatHere(g)) { el.disabled = true; await takeSeatAt(g, EXTRA_SEAT); }
     else if (isTableAdmin(g, getCommunity(g.communityId))) openModal({type:"pickSeat", gameId: g.id, seatIndex: EXTRA_SEAT});
-  });
-  app.querySelectorAll("[data-extra-seat-add]").forEach(el => el.onclick = () => {
-    const g = getGame(nav.gameId);
-    if (!extraSeatOpen(g)) return;
-    if (isTableAdmin(g, getCommunity(g.communityId))) openModal({type:"pickSeat", gameId: g.id, seatIndex: EXTRA_SEAT});
-    else { tableSubView = "invite"; render(); }
   });
   app.querySelectorAll("[data-open-terms]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type: "terms", back: modal}); });
   app.querySelectorAll("[data-theme-toggle]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type: "themePicker"}); });
