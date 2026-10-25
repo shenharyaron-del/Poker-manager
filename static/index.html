@@ -6797,7 +6797,7 @@ function renderTable(gameId){
               const xprofit = Math.round((liveChips[xid] || 0) - xbuy);
               const xline = !xout ? `קנייה ₪${xbuy}`
                 : `<span class="${xprofit > 0 ? "pos" : xprofit < 0 ? "neg" : ""}">${xprofit > 0 ? "+" : ""}₪${xprofit}</span>`; // same as the seats' caption
-              return `<div class="extra-seat-plus taken${xout ? " out" : ""}" style="left:90%;top:90%;" title="${esc(xp ? xp.name : "")}"><span class="esp-circle">${esc(nameInitials(xp ? xp.name : ""))}</span><span class="esp-label">שחקן עשירי</span><span class="esp-label esp-amount">${xline}</span></div>`; })() : ""}
+              return `<div class="extra-seat-plus taken${xout ? " out" : ""}" style="left:90%;top:95%;" title="${esc(xp ? xp.name : "")}"><span class="esp-circle">${esc(nameInitials(xp ? xp.name : ""))}</span><span class="esp-label esp-amount">${xline}</span></div>`; })() : ""}
         <div style="position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);text-align:center;z-index:3;">
           <img src="/static/logo-p-crown.png" style="width:37px;height:auto;margin-bottom:8px;pointer-events:none;">
           <div style="color:var(--muted);font-size:12px;">סה"כ קנייה ₪${totalBuyinAll}</div>
