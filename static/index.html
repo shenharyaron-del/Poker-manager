@@ -6952,11 +6952,11 @@ function renderTableTimeline(g, c, myPlayerId){
     </div>`;
 }
 
-// Pre-filled name for a new table: "ערב פוקר" + the short Hebrew date, e.g. "ערב פוקר אוק 14".
+// Pre-filled name for a new table: the short Hebrew date, e.g. "אוק 14".
 const HE_MONTHS_SHORT = ["ינו","פבר","מרץ","אפר","מאי","יוני","יולי","אוג","ספט","אוק","נוב","דצמ"];
 function defaultGameName(isoDate){
   const d = isoDate ? new Date(isoDate + "T12:00:00") : new Date();
-  return `ערב פוקר ${HE_MONTHS_SHORT[d.getMonth()]} ${d.getDate()}`;
+  return `${HE_MONTHS_SHORT[d.getMonth()]} ${d.getDate()}`;
 }
 // One player's night as rows, oldest first: the entry ("קנייה ראשונית"), numbered rebuys,
 // cancelled rebuys struck through at the time they were cancelled (game_events only keep
