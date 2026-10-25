@@ -1053,7 +1053,13 @@ html.theme-light.theme-sand .rb-confirm{background:linear-gradient(180deg,#bf8a4
 .extra-seat-plus .esp-label{font-size:11px;font-weight:700;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.7);}
 .extra-seat-plus.taken{cursor:default;opacity:1;}
 .extra-seat-plus.taken .esp-circle{border:1.5px solid var(--gold);background:#0b3d2a;color:#f3d27a;font-size:13px;font-weight:800;}
-.extra-seat-plus.taken.out{opacity:.55;}
+.extra-seat-plus.taken.out .esp-circle{opacity:.55;}
+.extra-seat-plus .esp-amount{color:var(--text);font-size:12px;}
+.extra-seat-plus .esp-amount .pos{color:#6ee7b7;}
+.extra-seat-plus .esp-amount .neg{color:#fda4af;}
+html.theme-light .extra-seat-plus .esp-amount{color:var(--text);}
+html.theme-light .extra-seat-plus .esp-amount .pos{color:#047857;}
+html.theme-light .extra-seat-plus .esp-amount .neg{color:#b91c1c;}
 html.theme-light .extra-seat-plus .esp-label{color:#5b3708;text-shadow:0 0 3px rgba(255,255,255,.8);}
 .pp-back-me{grid-column:4;min-width:0;min-height:44px;padding:6px 6px;border-radius:12px;border:2px solid #93c5fd;background:#1d4ed8;color:#fff;font-family:inherit;font-size:16px;font-weight:800;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.35);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 /* Name field + a small ז / נ (male / female) pick on the same row. */
@@ -6783,9 +6789,15 @@ function renderTable(gameId){
         <div class="poker-table-felt"></div>
         ${seatsHtml}
         <div id="settlement-overlay" style="position:absolute;inset:0;pointer-events:none;"></div>
-        ${extraSeatOpen(g) && (canTakeSeatHere(g) || admin) ? `<button type="button" class="extra-seat-plus" style="left:10%;top:91%;" data-take-extra-seat><span class="esp-circle">+</span><span class="esp-label">שחקן עשירי</span></button>`
+        ${extraSeatOpen(g) && (canTakeSeatHere(g) || admin) ? `<button type="button" class="extra-seat-plus" style="left:90%;top:90%;" data-take-extra-seat><span class="esp-circle">+</span><span class="esp-label">שחקן עשירי</span></button>`
           : seats[EXTRA_SEAT] ? (() => { const xp = g.players.find(pl => pl.id === seats[EXTRA_SEAT]);
-              return `<div class="extra-seat-plus taken${seats[EXTRA_SEAT] in g.cashouts ? " out" : ""}" style="left:10%;top:91%;" title="${esc(xp ? xp.name : "")}"><span class="esp-circle">${esc(nameInitials(xp ? xp.name : ""))}</span><span class="esp-label">שחקן עשירי</span></div>`; })() : ""}
+              // Under it, like the seats: what they bought in for, then - once they've left -
+              // their profit or loss.
+              const xid = seats[EXTRA_SEAT], xout = xid in g.cashouts, xbuy = buyinTotals[xid] || 0;
+              const xprofit = Math.round((liveChips[xid] || 0) - xbuy);
+              const xline = !xout ? `קנייה ₪${xbuy}`
+                : `<span class="${xprofit > 0 ? "pos" : xprofit < 0 ? "neg" : ""}">${xprofit > 0 ? "+" : ""}₪${xprofit}</span>`; // same as the seats' caption
+              return `<div class="extra-seat-plus taken${xout ? " out" : ""}" style="left:90%;top:90%;" title="${esc(xp ? xp.name : "")}"><span class="esp-circle">${esc(nameInitials(xp ? xp.name : ""))}</span><span class="esp-label">שחקן עשירי</span><span class="esp-label esp-amount">${xline}</span></div>`; })() : ""}
         <div style="position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);text-align:center;z-index:3;">
           <img src="/static/logo-p-crown.png" style="width:37px;height:auto;margin-bottom:8px;pointer-events:none;">
           <div style="color:var(--muted);font-size:12px;">סה"כ קנייה ₪${totalBuyinAll}</div>
