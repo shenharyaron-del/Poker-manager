@@ -433,9 +433,9 @@ def _valid_id(value):
     return isinstance(value, str) and 0 < len(value) <= 64
 
 
-# A table seats 9. Seat index 9 (a 10th "overflow" seat) is no longer handed out; it's
-# still accepted where a seat is cleared or swapped away, for tables from before.
-_MAX_SEATS = 9
+# A table seats 9 around the felt, plus a 10th seat (index 9) the client opens once those
+# 9 are taken (shown on the player screen only, never on the table).
+_MAX_SEATS = 10
 _LEGACY_MAX_SEATS = 10
 
 

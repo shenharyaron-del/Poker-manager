@@ -1046,6 +1046,8 @@ html.theme-light.theme-sand .rb-confirm{background:linear-gradient(180deg,#bf8a4
 .pp-name-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;align-items:stretch;}
 .pp-name-row .pp-name-box{grid-column:2 / span 2;min-width:0;max-width:none;width:100%;padding:6px 8px;display:flex;align-items:center;justify-content:center;}
 .pp-name-row .pp-name-box bdi{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pp-name-row .pp-extra{grid-column:1;grid-row:1;padding:6px 6px;font-size:16px;}
+.extra-seat-btn{display:block;margin:0 auto 6px;font-size:17px;padding:8px 16px;}
 .pp-back-me{grid-column:4;min-width:0;min-height:44px;padding:6px 6px;border-radius:12px;border:2px solid #93c5fd;background:#1d4ed8;color:#fff;font-family:inherit;font-size:16px;font-weight:800;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.35);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 /* Name field + a small ז / נ (male / female) pick on the same row. */
 .gender-name-row{display:flex;align-items:stretch;gap:6px;}
@@ -2164,10 +2166,10 @@ async function v2SeatPlayerIfRoom(gameId, playerId, name){
   for (let attempt = 0; attempt < 3; attempt++) {
     const freshSeats = attempt === 0 ? g.seats : (await v2LoadGameFull(gameId)).seats;
     if (freshSeats.includes(playerId)) return true;
-    // 9 seats per table - the old 10th "overflow" seat (index 9) is no longer handed out.
-    let emptyIdx = freshSeats.findIndex((s,i) => i < 9 && !s);
-    if (emptyIdx === -1 && freshSeats.length < 9) emptyIdx = freshSeats.length;
-    if (emptyIdx === -1) return false; // table full (9/9)
+    // The 9 table seats first; the 10th (index 9) only once they're all taken.
+    let emptyIdx = freshSeats.findIndex((s,i) => i < 10 && !s);
+    if (emptyIdx === -1 && freshSeats.length < 10) emptyIdx = freshSeats.length;
+    if (emptyIdx === -1) return false; // table full (10/10)
     if (await v2ClaimSeat(gameId, emptyIdx, playerId, name)) return true;
     // Conflict - someone else claimed that exact seat between our read and our claim;
     // loop re-fetches and tries the next empty one.
@@ -3809,8 +3811,9 @@ function seatPlayerIfRoom(g, playerId, p){
   if (!g.seats) g.seats = new Array(9).fill(null);
   if (g.seats.includes(playerId)) return true;
   while (g.seats.length < 9) g.seats.push(null);
-  const emptyIdx = g.seats.findIndex((s,i) => i < 9 && !s);
-  if (emptyIdx === -1) return false; // table full (9/9)
+  let emptyIdx = g.seats.findIndex((s,i) => i < 10 && !s);
+  if (emptyIdx === -1 && g.seats.length < 10) emptyIdx = g.seats.length;
+  if (emptyIdx === -1) return false; // table full (10/10)
   g.seats[emptyIdx] = playerId;
   if (!g.players.some(gp => gp.id === playerId)) g.players.push({id:p.id, name:p.name});
   if (!g.liveChips) g.liveChips = {};
@@ -5129,6 +5132,15 @@ const SCREEN_NAMES = {
 // table nav's default face) only makes sense for someone actually playing; anyone else
 // (an admin just checking in, a spectator) always gets the classic circles view instead,
 // regardless of tableSubView.
+// 9 seats around the felt, plus a 10th (index 9) that opens only once those 9 are taken.
+// Its player isn't drawn on the table - they appear on the player screen, in a box to the
+// right of the main name - and they keep that seat all night (nobody moves when someone
+// leaves).
+const EXTRA_SEAT = 9;
+function tableSeatsFull(g){ return (g.seats || []).slice(0, 9).filter(Boolean).length >= 9; }
+function extraSeatOpen(g){ return !!g && !g.closed && tableSeatsFull(g) && !(g.seats || [])[EXTRA_SEAT]; }
+function hasFreeSeat(g){ return !!g && !g.closed && (!tableSeatsFull(g) || !(g.seats || [])[EXTRA_SEAT]); }
+function seatsLeftCount(g){ return 10 - (g.seats || []).slice(0, 10).filter(Boolean).length; }
 function isSeatedInGame(g){
   if (!g) return false;
   const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
@@ -5138,7 +5150,7 @@ function isSeatedInGame(g){
 // "שולחן" (the seats), "ציר זמן" and "הזמנה" (while there's a free seat). Replaces the
 // old swipe between the player and table pages.
 function gameTabsScreen(g, c, seated){
-  const canInvite = !g.closed && (g.seats || []).slice(0, 9).filter(Boolean).length < 9;
+  const canInvite = hasFreeSeat(g);
   const tab = tableSubView === "invite" && canInvite ? "invite"
     : tableSubView === "player" ? "game" : (tableTimelineOn() ? "timeline" : "table");
   // One tab pulses to draw the eye: "הזמנה" until the game starts or it's been opened once
@@ -5168,17 +5180,19 @@ function gameTabsScreen(g, c, seated){
 }
 // "משחק" before I've sat down: nothing of mine to show yet - point to the seats.
 function renderUnseatedGameTab(g){
-  const full = (g.seats || []).slice(0, 9).filter(Boolean).length >= 9;
+  const full = tableSeatsFull(g);
+  const extra = extraSeatOpen(g) && canTakeSeatHere(g);
   return `<div class="unseated-game">
-    <p>${g.closed ? "הערב הזה כבר נסגר." : full ? "השולחן מלא - אין כרגע כיסא פנוי." : "עוד לא התיישבת בשולחן.<br>בחרו כיסא פנוי (+) כדי להצטרף - ואז כאן עושים ריביי ומסיימים את הערב."}</p>
-    ${!g.closed && !full ? `<button class="btn btn-primary btn-block" data-game-tab="table" style="font-size:20px;">לבחירת כיסא</button>` : ""}
+    <p>${g.closed ? "הערב הזה כבר נסגר." : extra ? "כל 9 הכיסאות בשולחן תפוסים - נשאר מקום לשחקן עשירי." : full ? "השולחן מלא - אין כרגע כיסא פנוי." : "עוד לא התיישבת בשולחן.<br>בחרו כיסא פנוי (+) כדי להצטרף - ואז כאן עושים ריביי ומסיימים את הערב."}</p>
+    ${extra ? `<button class="btn btn-primary btn-block" data-take-extra-seat style="font-size:20px;">כניסה כשחקן עשירי</button>`
+      : !g.closed && !full ? `<button class="btn btn-primary btn-block" data-game-tab="table" style="font-size:20px;">לבחירת כיסא</button>` : ""}
   </div>`;
 }
 // The "הזמנה" tab: the two ways to invite, right on the page - WhatsApp (share sheet) and
 // a QR code others scan to land on this table (the same link either way).
 function renderInviteTab(g, c){
   const url = gameInviteUrl(g, c);
-  const seatsLeft = 9 - (g.seats || []).slice(0, 9).filter(Boolean).length;
+  const seatsLeft = seatsLeftCount(g);
   return `
     <div class="invite-tab">
       <p class="invite-tab-lead">הזמנת שחקנים ל<b>${esc(g.name || g.date)}</b> · ${seatsLeft === 1 ? "נשאר מקום אחד" : `נשארו ${seatsLeft} מקומות`}</p>
@@ -5272,7 +5286,7 @@ function render(){
     const pid = myPid(g);
     if (!pid || g.closed || (g.seats || []).includes(pid) || !openedRecently(g)) return false;
     const st = gameStatus(g).key;
-    return (st === "waiting" || st === "notStarted" || st === "active") && (g.seats || []).filter(Boolean).length < 9;
+    return (st === "waiting" || st === "notStarted" || st === "active") && hasFreeSeat(g);
   });
   const barGames = [...activeGames, ...openGames];
   document.body.classList.toggle("has-active-games", barGames.length > 0);
@@ -6256,7 +6270,15 @@ function renderPlayerScreen(gameId){
     const me = myPlayerId && g.players.find(x => x.id === myPlayerId);
     // Same 4-column grid as the tiles above: the name spans the 2nd-3rd columns, my own
     // name button (when looking at someone else) sits in the 4th.
-    return `<div class="pp-name-row">${box}${viewingOther && me ? `<button type="button" class="pp-back-me" data-pp-back-me title="חזרה למסך שלי"><bdi>${esc(tableShortName(g, me.id))}</bdi></button>` : ""}</div>`;
+    // The 10th seat, right of the name: its player (unless that's me), or - while it's the
+    // only free seat - a "+" that seats someone there (admin) or opens the invite tab.
+    const extraId = (g.seats||[])[EXTRA_SEAT];
+    const extraBox = extraId && extraId !== myPlayerId
+      ? (() => { const out = extraId in (g.cashouts||{});
+          return `<button type="button" class="pp-tile pp-extra${extraId===pid?' on':''}${out?' out':''}" data-pp-view="${extraId}"><bdi>${esc(tableShortName(g, extraId))}</bdi>${out?'<small>יצא</small>':''}</button>`; })()
+      : !extraId && extraSeatOpen(g)
+        ? `<button type="button" class="pp-tile pp-tile-invite pp-extra" data-extra-seat-add>${icon('plus')}<span>שחקן 10</span></button>` : "";
+    return `<div class="pp-name-row">${extraBox}${box}${viewingOther && me ? `<button type="button" class="pp-back-me" data-pp-back-me title="חזרה למסך שלי"><bdi>${esc(tableShortName(g, me.id))}</bdi></button>` : ""}</div>`;
   })();
   // Tiles above the name: everyone who entered tonight, in order, then a "הזמן שחקן" tile
   // in the next free spot (it replaces the header's invite button here).
@@ -6264,7 +6286,8 @@ function renderPlayerScreen(gameId){
   const tilesHtml = (() => {
     // Everyone but me, each in a fixed slot (tonight's entry order) - the one being looked
     // at is highlighted; the way back to my own screen is the ↩ button by the name.
-    let entered = g.players.filter(pl => pl.id !== myPlayerId && ((g.seats||[]).includes(pl.id) || pl.id in (g.cashouts||{}))).map(pl => pl.id);
+    const extraId = (g.seats||[])[EXTRA_SEAT];
+    let entered = g.players.filter(pl => pl.id !== myPlayerId && pl.id !== extraId && ((g.seats||[]).includes(pl.id) || pl.id in (g.cashouts||{}))).map(pl => pl.id);
     // 9 seats at most - no "הזמן שחקן" once they're all taken.
     const canInvite = !g.closed && (g.seats||[]).slice(0, 9).filter(Boolean).length < 9;
     const tile = id => {
@@ -6619,9 +6642,9 @@ function renderTable(gameId){
     });
   }
   const seatsHtml = seats.map((pid, i) => {
+    if (i === EXTRA_SEAT) return ""; // the 10th seat isn't on the table (see EXTRA_SEAT)
     const [x,y] = SEAT_POS[visualPos(i)];
     if (!pid) {
-      if (i === 9) return ""; // the 10th slot's empty state is handled by the dedicated "add extra player" button instead
       if (allCashedOut) return ""; // once the night is over, empty seats are just clutter
       // Only the table/community creator can seat a guest into an empty seat - everyone
       // else gets a plain circle (no +) that's still a valid drop target for repositioning
@@ -6751,7 +6774,8 @@ function renderTable(gameId){
 
   return `
     ${watchStripHtml(g)}
-    ${canTakeSeatHere(g) && !tableTimelineOn() && (g.seats||[]).slice(0, 9).some(sid => !sid) ? `<div class="pick-seat-hint">לחצו על כיסא פנוי (+) כדי להתיישב</div>` : ""}
+    ${canTakeSeatHere(g) && !tableTimelineOn() && !tableSeatsFull(g) ? `<div class="pick-seat-hint">לחצו על כיסא פנוי (+) כדי להתיישב</div>` : ""}
+    ${canTakeSeatHere(g) && extraSeatOpen(g) ? `<button class="btn btn-primary extra-seat-btn" data-take-extra-seat>השולחן מלא · כניסה כשחקן עשירי</button>` : ""}
     ${tableTimelineOn() ? renderTableTimeline(g, c, myPlayerId) : `<div class="poker-table-wrap">
       <div class="poker-table-inner ${cropClass}">
         <div class="poker-table-felt"></div>
@@ -8845,6 +8869,18 @@ function attachHandlers(){
     } catch (err) {
       if (modal && modal.type === "playerNight" && modal.playerId === playerId) updateModal({error: "הטעינה נכשלה"});
     }
+  });
+  app.querySelectorAll("[data-take-extra-seat]").forEach(el => el.onclick = async () => {
+    const g = getGame(nav.gameId);
+    if (!extraSeatOpen(g) || !canTakeSeatHere(g)) return;
+    el.disabled = true;
+    await takeSeatAt(g, EXTRA_SEAT);
+  });
+  app.querySelectorAll("[data-extra-seat-add]").forEach(el => el.onclick = () => {
+    const g = getGame(nav.gameId);
+    if (!extraSeatOpen(g)) return;
+    if (isTableAdmin(g, getCommunity(g.communityId))) openModal({type:"pickSeat", gameId: g.id, seatIndex: EXTRA_SEAT});
+    else { tableSubView = "invite"; render(); }
   });
   app.querySelectorAll("[data-open-terms]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type: "terms", back: modal}); });
   app.querySelectorAll("[data-theme-toggle]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type: "themePicker"}); });
