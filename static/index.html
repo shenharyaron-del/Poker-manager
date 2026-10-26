@@ -5211,7 +5211,12 @@ function renderInviteTab(g, c){
 function rememberNav(){
   try { sessionStorage.setItem("poker-nav", JSON.stringify({screen: nav.screen, communityId: nav.communityId || null, gameId: nav.gameId || null})); } catch(e) { /* storage blocked - a refresh just starts over */ }
 }
+// False until init() has decided where the app opens (login, the invited table, my open
+// table or home) - the invite steps along the way used to paint the home screen for a few
+// seconds before the login or the table replaced it. Until then the loading text stays.
+let appReady = false;
 function render(){
+  if (!appReady) return;
   rememberNav();
   const app = document.getElementById("app");
   document.body.classList.toggle("table-screen", nav.screen === "table");
@@ -11511,6 +11516,7 @@ window.addEventListener("popstate", async () => {
     modal = {type:"loginRequired"};
   }
   else if (!myIdentity.name) modal = {type:"identityName", forced:true};
+  appReady = true;
   render();
   scheduleAutoRefresh();
   connectLiveSync();
