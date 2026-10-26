@@ -930,8 +930,9 @@ def _guard(community_id=None, game_id=None, need="member", players=None):
 def _roster_patch_denied(community_id, player_id, body):
     # isAdmin: a community admin's toggle. clientId (linking a row to a person): a
     # community admin; or the caller linking a row to themself, when that row isn't
-    # already someone else's; or a table admin's pre-registered guest, whose new unlinked
-    # row is linked to its own id (see v2PreRegisterPlayer).
+    # already someone else's (a pre-registered row, linked to its own id, isn't anyone's
+    # yet); or a table admin's pre-registered guest, whose new unlinked row is linked to its
+    # own id (pre-registered with an email by an earlier version of the "add player" form).
     if "isAdmin" in body:
         denied = _guard(community_id=community_id, need="community_admin")
         if denied:
@@ -955,6 +956,10 @@ def _roster_patch_denied(community_id, player_id, body):
         if new in caller["ids"] and (not current or current in caller["ids"]):
             return None
         if not current and new == player_id:
+            return None
+        # A player someone added to the club (pre-registered: linked to its own id, no
+        # device yet) is taken by the first device that joins under that name.
+        if new in caller["ids"] and current == player_id:
             return None
         return _forbidden()
     return None
