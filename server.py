@@ -244,10 +244,27 @@ _INIT_STATEMENTS = (
     # the server down (the in-app ping only runs while someone has the app open). Added
     # once, by name, at the end of the list; the Super Admin fills in the login from the
     # list's own edit button.
+    # A device asking to be a club's existing player (same name, already linked to someone
+    # else's phone) - it waits until someone sitting at an open table in that club (or a
+    # club admin) approves or rejects it. See the join-request endpoints.
+    "CREATE TABLE IF NOT EXISTS join_requests ("
+    "  id TEXT PRIMARY KEY,"
+    "  community_id TEXT REFERENCES communities(id) ON DELETE CASCADE,"
+    "  game_id TEXT,"
+    "  player_id TEXT NOT NULL,"
+    "  client_id TEXT NOT NULL,"
+    "  name TEXT NOT NULL,"
+    "  status TEXT NOT NULL DEFAULT 'pending',"
+    "  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),"
+    "  decided_by_name TEXT,"
+    "  decided_at TIMESTAMPTZ"
+    ")",
+    "CREATE INDEX IF NOT EXISTS join_requests_community_idx ON join_requests(community_id)",
     "INSERT INTO third_party_services (id, name, url, category, sort_order) "
     "SELECT 'cronjob-keepalive', 'cron-job.org', 'https://console.cron-job.org/jobs', 'Keep-alive', "
     "COALESCE(MAX(sort_order), -1) + 1 FROM third_party_services "
-    "WHERE NOT EXISTS (SELECT 1 FROM third_party_services WHERE name = 'cron-job.org')",
+    "WHERE NOT EXISTS (SELECT 1 FROM third_party_services WHERE name = 'cron-job.org') "
+    "ON CONFLICT (id) DO NOTHING",
 )
 
 
@@ -304,11 +321,20 @@ def _ensure_schema(conn):
             # ever bound to a port. Logged (not silent) so a genuine DDL bug is still
             # visible, but never fatal - whichever instance actually wins converges the
             # schema either way, this one just moves on to the next statement.
+            #
+            # Each statement runs under its own savepoint: a plain rollback here undid every
+            # statement before the failing one too (they all share one transaction), so a
+            # new table listed before a statement that failed on this DB was never created.
             for statement in _INIT_STATEMENTS:
                 try:
+                    cur.execute("SAVEPOINT schema_stmt")
                     cur.execute(statement)
+                    cur.execute("RELEASE SAVEPOINT schema_stmt")
                 except psycopg2.Error as e:
-                    conn.rollback()
+                    try:
+                        cur.execute("ROLLBACK TO SAVEPOINT schema_stmt")
+                    except psycopg2.Error:
+                        conn.rollback()
                     if not isinstance(e, (psycopg2.errors.DuplicateTable, psycopg2.errors.UniqueViolation)):
                         app.logger.warning("_ensure_schema: statement failed, continuing: %s", e)
         finally:
@@ -2044,6 +2070,141 @@ def v2_clear_seat(game_id, seat_index):
                 )
         conn.commit()
     return jsonify({"ok": True, "updatedAt": updated_at.isoformat()})
+
+
+# ---------- Join requests: "I'm the club's existing <name>" from a new device ----------
+# Entering the app takes only a name now. A name that matches a roster row already linked
+# to another device asks to become that player; anyone seated (not cashed out) at an open
+# table in the club, or a club admin, approves or rejects. Until then the requester waits.
+_JOIN_REQUEST_TTL = "1 day"
+
+
+def _can_decide_joins(cur, caller, community_id):
+    r = _rights(cur, caller, community_id)
+    if r["community_admin"]:
+        return True
+    if not r["my_players"]:
+        return False
+    cur.execute(
+        "SELECT g.id, g.seats FROM games g WHERE g.community_id = %s AND NOT g.closed", (community_id,)
+    )
+    for gid, seats in cur.fetchall():
+        sitting = [pid for pid in (seats or []) if pid in r["my_players"]]
+        if not sitting:
+            continue
+        cur.execute("SELECT player_id FROM cashouts WHERE game_id = %s AND player_id = ANY(%s)", (gid, sitting))
+        if len(cur.fetchall()) < len(sitting):
+            return True
+    return False
+
+
+def _join_request_json(row):
+    rid, community_id, game_id, player_id, name, status, decided_by_name = row
+    return {"id": rid, "communityId": community_id, "gameId": game_id, "playerId": player_id,
+            "name": name, "status": status, "decidedByName": decided_by_name}
+
+
+@app.route("/api/v2/communities/<community_id>/join-requests", methods=["POST"])
+def v2_create_join_request(community_id):
+    denied = _guard(community_id=community_id)
+    if denied:
+        return denied
+    caller = _caller()
+    if not caller["client_id"]:
+        return jsonify({"error": "client id required"}), 400
+    body = request.get_json(silent=True) or {}
+    player_id, game_id = body.get("playerId"), body.get("gameId")
+    if not _valid_id(player_id) or (game_id is not None and not _valid_id(game_id)):
+        return jsonify({"error": "playerId required"}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT name FROM roster_players WHERE id = %s AND community_id = %s", (player_id, community_id)
+            )
+            row = cur.fetchone()
+            if not row:
+                conn.commit()
+                return jsonify({"error": "not found"}), 404
+            # One open request per device per club - asking again replaces the last one.
+            cur.execute(
+                "DELETE FROM join_requests WHERE community_id = %s AND client_id = %s AND status <> 'approved'",
+                (community_id, caller["client_id"]),
+            )
+            rid = secrets.token_hex(8)
+            cur.execute(
+                "INSERT INTO join_requests (id, community_id, game_id, player_id, client_id, name) "
+                "VALUES (%s, %s, %s, %s, %s, %s)",
+                (rid, community_id, game_id, player_id, caller["client_id"], row[0]),
+            )
+        conn.commit()
+    _broadcast_state_changed()
+    return jsonify({"id": rid, "status": "pending"})
+
+
+@app.route("/api/v2/join-requests/<request_id>", methods=["GET"])
+def v2_get_join_request(request_id):
+    # Only the device that asked can follow its own request.
+    caller = _caller()
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, community_id, game_id, player_id, name, status, decided_by_name FROM join_requests "
+                "WHERE id = %s AND client_id = %s",
+                (request_id, caller["client_id"]),
+            )
+            row = cur.fetchone()
+        conn.commit()
+    if not row:
+        return jsonify({"error": "not found"}), 404
+    return jsonify(_join_request_json(row))
+
+
+@app.route("/api/v2/join-requests/pending", methods=["GET"])
+def v2_pending_join_requests():
+    # The requests this caller may decide on - for the approve/reject window.
+    caller = _caller()
+    out = []
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, community_id, game_id, player_id, name, status, decided_by_name, client_id FROM join_requests "
+                f"WHERE status = 'pending' AND created_at > now() - interval '{_JOIN_REQUEST_TTL}' ORDER BY created_at"
+            )
+            rows = cur.fetchall()
+            allowed = {}
+            for row in rows:
+                if row[7] == caller["client_id"]:
+                    continue
+                cid = row[1]
+                if cid not in allowed:
+                    allowed[cid] = _can_decide_joins(cur, caller, cid)
+                if allowed[cid]:
+                    out.append(_join_request_json(row[:7]))
+        conn.commit()
+    return jsonify(out)
+
+
+@app.route("/api/v2/join-requests/<request_id>/decide", methods=["POST"])
+def v2_decide_join_request(request_id):
+    caller = _caller()
+    approve = bool((request.get_json(silent=True) or {}).get("approve"))
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT community_id, client_id FROM join_requests WHERE id = %s AND status = 'pending'", (request_id,))
+            row = cur.fetchone()
+            if not row:
+                conn.commit()
+                return jsonify({"error": "not found"}), 404
+            if row[1] == caller["client_id"] or not _can_decide_joins(cur, caller, row[0]):
+                conn.commit()
+                return _forbidden()
+            cur.execute(
+                "UPDATE join_requests SET status = %s, decided_by_name = %s, decided_at = now() WHERE id = %s",
+                ("approved" if approve else "rejected", caller.get("name"), request_id),
+            )
+        conn.commit()
+    _broadcast_state_changed()
+    return jsonify({"ok": True})
 
 
 @app.route("/api/v2/games/<game_id>/seats/swap", methods=["PUT"])

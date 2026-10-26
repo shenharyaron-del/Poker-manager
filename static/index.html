@@ -559,6 +559,13 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .terms-body ul{margin:4px 0;padding-inline-start:20px;}
 .terms-body li{margin:4px 0;}
 .terms-date{color:var(--muted);font-size:15px;}
+.login-alt{text-align:center;margin-top:14px;}
+.login-alt button{background:none;border:none;padding:0;font:inherit;font-size:14px;color:var(--muted);text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
+.join-wait-dots{display:flex;justify-content:center;gap:8px;margin:4px 0 18px;}
+.join-wait-dots span{width:10px;height:10px;border-radius:50%;background:var(--gold);animation:jwdot 1.2s ease-in-out infinite;}
+.join-wait-dots span:nth-child(2){animation-delay:.2s;}
+.join-wait-dots span:nth-child(3){animation-delay:.4s;}
+@keyframes jwdot{0%,100%{opacity:.25}50%{opacity:1}}
 .terms-link{text-align:center;font-size:14px;color:var(--muted);margin-top:16px;}
 .terms-link a{color:inherit;text-underline-offset:3px;}
 .terms-sep{margin:0 8px;}
@@ -3864,6 +3871,8 @@ async function takeSeatAt(g, idx){
     if (!p) {
       if (!myIdentity.name) { showAlert("צריך להזין שם לפני שמתיישבים."); return; }
       p = findMyRosterRow(c);
+      const taken = !p && nameTakenInClub(c);
+      if (taken) { await requestJoinAs(c, taken, g.id); return; }
       if (!p) { p = {id: uid(), name: myIdentity.name}; await v2AddRosterPlayer(c.id, p.id, p.name); }
       await v2LinkRosterPlayer(c.id, p.id, myIdentity.id);
       if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
@@ -3953,6 +3962,68 @@ function autoSeatSelf(gameId){
 // copy of state, and whoever's save landed second would silently overwrite the first
 // person's brand new roster entry/seat instead of merging with it, typically clobbering
 // whoever had just taken the first empty seat.
+// ---------- Joining under a name that's already in the club ----------
+// Entering the app takes just a name. If the club already has a player by that name whose
+// row belongs to another device, this device asks to be that player: someone sitting at an
+// open table in the club (or a club admin) approves or rejects, and until then the
+// "joinWait" window stays up - also across a refresh (kept in localStorage).
+const sameName = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+function nameTakenInClub(c){
+  if (!myIdentity.name) return null;
+  const ids = myIdSet();
+  return ((c && c.roster) || []).find(r => r.clientId && !ids.has(r.clientId) && sameName(r.name, myIdentity.name)) || null;
+}
+let joinWait = (() => { try { return JSON.parse(localStorage.getItem("poker-join-wait") || "null"); } catch(e) { return null; } })();
+function setJoinWait(jw){
+  joinWait = jw;
+  try { jw ? localStorage.setItem("poker-join-wait", JSON.stringify(jw)) : localStorage.removeItem("poker-join-wait"); } catch(e) {}
+}
+async function requestJoinAs(c, row, gameId){
+  const res = await v2Fetch("POST", `/communities/${c.id}/join-requests`, {playerId: row.id, gameId: gameId || null});
+  setJoinWait({requestId: res.id, communityId: c.id, gameId: gameId || null, playerId: row.id, name: row.name, status: "pending"});
+  openModal({type: "joinWait"});
+}
+// Approved: this device becomes that player. Rejected: the window offers "נסה שוב" or a
+// different name.
+async function checkMyJoinRequest(){
+  if (!joinWait || joinWait.status !== "pending") return;
+  let r;
+  try { r = await v2Fetch("GET", `/join-requests/${joinWait.requestId}`); } catch(e) { return; }
+  if (!r || r.status === "pending" || !joinWait) return;
+  if (r.status === "approved") {
+    const jw = joinWait;
+    setJoinWait(null);
+    if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
+    myIdentity.myPlayers[jw.communityId] = jw.playerId;
+    await saveIdentity();
+    if (modal && modal.type === "joinWait") modal = null;
+    if (jw.gameId && getGame(jw.gameId)) go("table", {gameId: jw.gameId, communityId: jw.communityId});
+    else go("community", {communityId: jw.communityId});
+    showAlert(`אושר - נכנסת בתור ${jw.name} ✓`);
+  } else {
+    setJoinWait({...joinWait, status: "rejected", decidedByName: r.decidedByName || null});
+    if (!modal || modal.type === "joinWait") openModal({type: "joinWait"});
+  }
+}
+// Someone at the table: requests waiting on me, one window at a time.
+let pendingJoinRequests = [];
+async function checkJoinRequestsToDecide(){
+  if (!myIdentity.name || !USE_RELATIONAL_API) return;
+  try { pendingJoinRequests = await v2Fetch("GET", "/join-requests/pending") || []; } catch(e) { return; }
+  if (modal && modal.type === "joinApprove" && !pendingJoinRequests.some(r => r.id === modal.req.id)) { closeModal(); return; }
+  if (!modal && pendingJoinRequests.length) openModal({type: "joinApprove", req: pendingJoinRequests[0]});
+}
+function joinRequestsTick(){ checkMyJoinRequest(); checkJoinRequestsToDecide(); }
+// Retry the club / table join after a new name (see the joinWait window).
+async function rejoinAfterNameChange(jw){
+  if (jw.gameId && getGame(jw.gameId)) {
+    go("table", {gameId: jw.gameId, communityId: jw.communityId});
+    await autoJoinViaInvite(jw.gameId);
+  } else {
+    go("community", {communityId: jw.communityId});
+    await autoJoinViaCommunityInvite(jw.communityId);
+  }
+}
 async function autoJoinViaInvite(gameId){
   if (USE_RELATIONAL_API) {
     const g = getGame(gameId);
@@ -3965,6 +4036,8 @@ async function autoJoinViaInvite(gameId){
       if (!p) {
         if (!myIdentity.name) { render(); return; } // no name yet - forced onboarding will ask, then retry
         p = findMyRosterRow(c);
+        const taken = !p && nameTakenInClub(c);
+        if (taken) { await requestJoinAs(c, taken, gameId); return; }
         if (!p) { p = {id: uid(), name: myIdentity.name}; await v2AddRosterPlayer(g.communityId, p.id, p.name); }
         await v2LinkRosterPlayer(g.communityId, p.id, myIdentity.id);
         if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
@@ -4014,6 +4087,8 @@ async function autoJoinViaCommunityInvite(communityId){
       if (!p) {
         if (!myIdentity.name) { render(); return; }
         p = findMyRosterRow(c);
+        const taken = !p && nameTakenInClub(c);
+        if (taken) { await requestJoinAs(c, taken, null); return; }
         if (!p) { p = {id: uid(), name: myIdentity.name}; await v2AddRosterPlayer(communityId, p.id, p.name); }
         await v2LinkRosterPlayer(communityId, p.id, myIdentity.id);
         if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
@@ -7055,7 +7130,16 @@ function renderModal(m){
         ${loginErr("email")}
         <button type="submit" class="btn ${btnClass} btn-block" data-send-login-code>${label}</button>
       </form>`;
-    body = m.loginStep === "deviceChoice" ? `
+    body = !m.loginStep && m.loginMode !== "email" ? `
+      <form action="#" onsubmit="return false;">
+        <label class="login-label" for="name-login-input" style="font-size:18px;">מה השם שלך?</label>
+        <input type="text" id="name-login-input" value="${esc(m.signupName || "")}" maxlength="40" autocomplete="name" style="width:100%;margin:6px 0 8px;font-size:18px;" autofocus>
+        ${loginErr("name")}
+        <button type="submit" class="btn btn-primary btn-block" data-name-login style="font-size:19px;">כניסה</button>
+      </form>
+      <div class="login-alt"><button type="button" data-login-mode="email">כניסה עם אימייל</button></div>
+      ${termsLinkHtml("בשימוש באפליקציה אתה מסכים ל")}
+    ` : m.loginStep === "deviceChoice" ? `
       <p style="color:var(--muted);font-size:17px;margin-bottom:14px;">הכתובת <span dir="ltr">${esc(m.loginEmail)}</span> כבר רשומה במערכת עם מכשיר מחובר. האם להתחבר ממכשיר זה?</p>
       <button class="btn btn-primary btn-block" style="margin-bottom:8px;" data-device-choice="replace">המשך</button>
       <button class="btn btn-ghost btn-block" data-device-choice-cancel>ביטול</button>
@@ -7084,12 +7168,14 @@ function renderModal(m){
       <fieldset class="leave-frame login-frame"><legend>כניסה או הרשמה עם אימייל</legend>
         ${emailForm("btn-ghost", "המשך עם אימייל")}
       </fieldset>
+      <div class="login-alt"><button type="button" data-login-mode="name">חזרה - כניסה עם שם בלבד</button></div>
       ${termsLinkHtml("בהרשמה ובשימוש באפליקציה אתה מסכים ל")}
     ` : `
       <p style="color:var(--muted);font-size:17px;margin-bottom:12px;">${authSettings.requireVerifyExistingEmail
         ? "כדי להשתמש באפליקציה, התחברו עם האימייל שלכם - משתמשים חדשים ייכנסו ישר, ולחשבון קיים נשלח קוד בן 6 ספרות."
         : "כדי להשתמש באפליקציה, התחברו עם האימייל שלכם."}</p>
       ${emailForm("btn-primary", authSettings.requireVerifyExistingEmail ? `${icon('share')} שלח קוד כניסה` : "כנס ל-Poker Manager")}
+      <div class="login-alt"><button type="button" data-login-mode="name">חזרה - כניסה עם שם בלבד</button></div>
       ${termsLinkHtml("בהרשמה ובשימוש באפליקציה אתה מסכים ל")}
     `;
   } else if (m.type === "addEmail") {
@@ -7843,6 +7929,29 @@ function renderModal(m){
   } else if (m.type === "potFix") {
     title = "סידור קופה";
     body = renderPotFix(m.gameId);
+  } else if (m.type === "joinWait") {
+    const jw = joinWait || {};
+    const club = (getCommunity(jw.communityId) || {}).name || "";
+    const rejected = jw.status === "rejected";
+    title = rejected ? "הבקשה נדחתה" : "ממתין לאישור";
+    body = `
+      <p style="font-size:17px;line-height:1.6;margin:0 0 12px;">${rejected
+        ? `הבקשה להיכנס בתור <b>${esc(jw.name || "")}</b>${jw.decidedByName ? ` נדחתה ע"י ${esc(jw.decidedByName)}` : " נדחתה"}.`
+        : `השם <b>${esc(jw.name || "")}</b> כבר קיים במועדון <b>${esc(club)}</b>.<br>ביקשנו ממי שיושב בשולחן לאשר שזה אתה. אם אף אחד לא יושב עכשיו - הבקשה תחכה עד שמישהו ייכנס.`}</p>
+      ${rejected ? `<button class="btn btn-primary btn-block" data-join-retry style="margin-bottom:14px;">נסה שוב</button>` : `<div class="join-wait-dots"><span></span><span></span><span></span></div>`}
+      <div class="section-title" style="padding:0;margin:4px 0 6px;">או כניסה בשם אחר</div>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="join-new-name" maxlength="40" placeholder="למשל ${esc((jw.name || "שם").split(" ")[0])} ש." style="flex:1;min-width:0;">
+        <button class="btn btn-ghost" data-join-rename>המשך</button>
+      </div>`;
+  } else if (m.type === "joinApprove") {
+    const r = m.req || {};
+    const club = (getCommunity(r.communityId) || {}).name || "";
+    title = "מישהו מבקש להיכנס";
+    body = `
+      <p style="font-size:18px;line-height:1.6;margin:0 0 14px;">מישהו נכנס מטלפון חדש בשם <b>${esc(r.name || "")}</b>, שכבר קיים במועדון <b>${esc(club)}</b>.<br>זה באמת ${esc(r.name || "")}?</p>
+      <button class="btn btn-primary btn-block" data-join-decide="1" style="margin-bottom:8px;">כן, זה הוא - אישור</button>
+      <button class="btn btn-ghost btn-block" data-join-decide="0">לא - דחייה</button>`;
   } else if (m.type === "terms") {
     title = "תנאי שימוש ופרטיות";
     body = `<div class="terms-body">${TERMS_HTML}</div>
@@ -8413,7 +8522,7 @@ function renderModal(m){
   // directPay (item 15): closes only by picking a recipient or tapping "הערב נגמר",
   // never by dismissing - someone who left owing money shouldn't be able to just back
   // out of saying who they paid.
-  const dismissable = m.type !== "loginRequired" && !(m.type === "identityName" && m.forced) && m.type !== "directPay" && m.type !== "entryBuyin";
+  const dismissable = m.type !== "loginRequired" && !(m.type === "identityName" && m.forced) && m.type !== "directPay" && m.type !== "entryBuyin" && m.type !== "joinWait" && m.type !== "joinApprove";
   const topAnchored = m.type === "seatChips" || m.type === "loginRequired" || m.type === "newCommunity";
   // The photo-count tab needs real room - a full-width photo plus the per-color table
   // below it never fit in the normal 480px/85vh modal without heavy scrolling, reported
@@ -8845,6 +8954,39 @@ function attachHandlers(){
       if (modal && modal.type === "playerNight" && modal.playerId === playerId) updateModal({error: "הטעינה נכשלה"});
     }
   });
+  if (modal && modal.type === "joinWait") {
+    const retryBtn = app.querySelector("[data-join-retry]");
+    if (retryBtn) retryBtn.onclick = async () => {
+      const jw = joinWait, c = jw && getCommunity(jw.communityId);
+      const row = c && (c.roster || []).find(r => r.id === jw.playerId);
+      if (!row) { setJoinWait(null); closeModal(); return; }
+      retryBtn.disabled = true;
+      try { await requestJoinAs(c, row, jw.gameId); } catch(e) { retryBtn.disabled = false; showAlert("השליחה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+    };
+    const renameBtn = app.querySelector("[data-join-rename]");
+    if (renameBtn) renameBtn.onclick = async () => {
+      const name = (document.getElementById("join-new-name").value || "").trim();
+      if (!name) return;
+      const jw = joinWait;
+      renameBtn.disabled = true;
+      myIdentity.name = name;
+      await saveIdentity();
+      setJoinWait(null);
+      modal = null;
+      if (jw) await rejoinAfterNameChange(jw); else render();
+    };
+  }
+  if (modal && modal.type === "joinApprove") {
+    app.querySelectorAll("[data-join-decide]").forEach(el => el.onclick = async () => {
+      const req = modal.req;
+      app.querySelectorAll("[data-join-decide]").forEach(b => b.disabled = true);
+      try { await v2Fetch("POST", `/join-requests/${req.id}/decide`, {approve: el.dataset.joinDecide === "1"}); }
+      catch(e) { showAlert("השליחה נכשלה - נסו שוב."); }
+      pendingJoinRequests = pendingJoinRequests.filter(r => r.id !== req.id);
+      closeModal();
+      checkJoinRequestsToDecide();
+    });
+  }
   app.querySelectorAll("[data-take-extra-seat]").forEach(el => el.onclick = async () => {
     const g = getGame(nav.gameId);
     if (!extraSeatOpen(g)) return;
@@ -9628,6 +9770,22 @@ function attachHandlers(){
       } catch(e) {
         updateModal({loginError: e.message, loginErrorAt: "email"});
       }
+    };
+    app.querySelectorAll("[data-login-mode]").forEach(el => el.onclick = () => updateModal({loginMode: el.dataset.loginMode, loginError: null}));
+    // Name only: saved on this device (and its identity on the server) - no email, no
+    // fingerprint. Then the invite join that bailed out for lack of a name runs again.
+    const nameLoginBtn = app.querySelector("[data-name-login]");
+    if (nameLoginBtn) nameLoginBtn.onclick = async () => {
+      const name = (document.getElementById("name-login-input").value || "").trim();
+      if (!name) { updateModal({loginError: "רשום את השם שלך", loginErrorAt: "name"}); return; }
+      nameLoginBtn.disabled = true;
+      showButtonLoading(nameLoginBtn);
+      myIdentity.name = name;
+      await saveIdentity();
+      modal = null;
+      await retryInviteJoinIfNeeded();
+      if (nav.screen === "table") tableSubView = isSeatedInGame(getGame(nav.gameId)) ? "player" : "table";
+      render();
     };
     const signupNameNow = () => { const el = document.getElementById("signup-name-input"); return el ? el.value.trim() : (modal.signupName || ""); };
     const sendLoginBtn = app.querySelector("[data-send-login-code]");
@@ -11511,14 +11669,20 @@ window.addEventListener("popstate", async () => {
   // can be stale (e.g. set by a pre-login version of this app that let people type an
   // email locally with no server verification at all) or just unrecoverable after a
   // trusted_devices/account deletion, letting an unverified device silently skip the gate.
+  // A name is enough to get in now (see the login window's name step); email/fingerprint
+  // login stays as an option. A device that isn't logged in keeps no email/role.
   if (!hasVerifiedSession) {
     if (myIdentity.email || myIdentity.role) { myIdentity.email = null; myIdentity.role = null; saveIdentity(); }
-    modal = {type:"loginRequired"};
+    if (!myIdentity.name) modal = {type:"loginRequired"};
   }
   else if (!myIdentity.name) modal = {type:"identityName", forced:true};
+  // Still waiting on (or just turned down for) a join under an existing name.
+  if (joinWait && myIdentity.name && (!modal || modal.type !== "loginRequired")) modal = {type:"joinWait"};
   appReady = true;
   render();
   scheduleAutoRefresh();
+  setInterval(joinRequestsTick, 4000);
+  joinRequestsTick();
   connectLiveSync();
   prefetchAvatars();
   // No keep-alive ping from here: an external cron-job.org job hits /api/version every
