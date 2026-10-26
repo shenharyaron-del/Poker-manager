@@ -2017,8 +2017,10 @@ def v2_claim_seat(game_id, seat_index):
                 "WHERE id = %s AND ("
                 "  jsonb_array_length(seats) = %s "
                 "  OR (jsonb_array_length(seats) > %s AND seats -> %s = 'null'::jsonb)"
-                ") RETURNING seats, updated_at",
-                ([str(seat_index)], json.dumps(player_id), game_id, seat_index, seat_index, seat_index),
+                # Never the same player in two seats (a second device of the same person,
+                # or a stale screen) - that's a conflict like a taken seat.
+                ") AND NOT (seats @> %s::jsonb) RETURNING seats, updated_at",
+                ([str(seat_index)], json.dumps(player_id), game_id, seat_index, seat_index, seat_index, json.dumps([player_id])),
             )
             row = cur.fetchone()
             if not row:
