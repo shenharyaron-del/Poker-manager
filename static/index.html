@@ -4038,13 +4038,23 @@ async function checkMyJoinRequest(){
     setJoinWait(null);
     if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
     myIdentity.myPlayers[jw.communityId] = jw.playerId;
+    // The same person's players in their other clubs come back with this one approval.
+    const others = (r.otherPlayers || []).filter(o => !myIdentity.myPlayers[o.communityId]);
+    others.forEach(o => { myIdentity.myPlayers[o.communityId] = o.playerId; });
     await saveIdentity();
+    if (others.length) {
+      try {
+        state.communities = await v2Fetch("GET", "/communities");
+        const summaries = await fetchGameSummaries(state.communities);
+        state.games = await Promise.all(summaries.map(g => v2Fetch("GET", `/games/${g.id}`)));
+      } catch(e) { /* the next refresh brings them */ }
+    }
     const row = ((getCommunity(jw.communityId) || {}).roster || []).find(r => r.id === jw.playerId);
     if (row && (!row.clientId || row.clientId === row.id)) { try { await v2LinkRosterPlayer(jw.communityId, row.id, myIdentity.id); } catch(e) { /* the myPlayers link above is enough to play */ } }
     if (modal && modal.type === "joinWait") modal = null;
     if (jw.gameId && getGame(jw.gameId)) go("table", {gameId: jw.gameId, communityId: jw.communityId});
     else go("community", {communityId: jw.communityId});
-    showAlert(`אושר - נכנסת בתור ${jw.name} ✓`);
+    showAlert(`אושר - נכנסת בתור ${jw.name} ✓${others.length ? ` (וחזרו אליך עוד ${others.length === 1 ? "מועדון אחד" : others.length + " מועדונים"})` : ""}`);
   } else {
     setJoinWait({...joinWait, status: "rejected", decidedByName: r.decidedByName || null});
     if (!modal || modal.type === "joinWait") openModal({type: "joinWait"});
@@ -5700,6 +5710,8 @@ function renderHome(){
   // since they're managing the whole app, not just their own games.
   const myCommunities = (isSuperAdmin() ? state.communities : state.communities.filter(c =>
     c.createdBy === myIdentity.id || c.roster.some(p => p.clientId === myIdentity.id)
+    // or a club player this device was approved as (see the join requests)
+    || !!(myIdentity.myPlayers && myIdentity.myPlayers[c.id] && c.roster.some(p => p.id === myIdentity.myPlayers[c.id]))
   // Clubs this user created come first; within each group, newest first by creation date
   // (createdAt, or the club's first game's date when that's earlier - clubs that existed
   // before createdAt was recorded all share the migration time).
