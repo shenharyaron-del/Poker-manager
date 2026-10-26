@@ -2150,8 +2150,11 @@ def v2_create_join_request(community_id):
 
 @app.route("/api/v2/join-requests/<request_id>", methods=["GET"])
 def v2_get_join_request(request_id):
-    # Only the device that asked can follow its own request.
+    # Only the device that asked can follow its own request. Once approved, it also gets
+    # the same person's players in their other clubs (rows linked to the same device or
+    # account as the approved one) - one approval brings all of them back.
     caller = _caller()
+    others = []
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -2160,10 +2163,18 @@ def v2_get_join_request(request_id):
                 (request_id, caller["client_id"]),
             )
             row = cur.fetchone()
+            if row and row[5] == "approved":
+                cur.execute(
+                    "SELECT o.community_id, o.id FROM roster_players r "
+                    "JOIN roster_players o ON o.client_id = r.client_id AND o.community_id <> r.community_id "
+                    "WHERE r.id = %s AND r.community_id = %s AND r.client_id IS NOT NULL AND r.client_id <> r.id",
+                    (row[3], row[1]),
+                )
+                others = [{"communityId": c, "playerId": pid} for c, pid in cur.fetchall()]
         conn.commit()
     if not row:
         return jsonify({"error": "not found"}), 404
-    return jsonify(_join_request_json(row))
+    return jsonify({**_join_request_json(row), "otherPlayers": others})
 
 
 @app.route("/api/v2/join-requests/pending", methods=["GET"])
@@ -2643,6 +2654,9 @@ def save_identity():
                 (client_id, data),
             )
         conn.commit()
+    # Its clubs may have just changed (a new club player) - don't serve the old ones for
+    # the next _CALLER_CACHE_SECONDS.
+    _forget_caller(client_id)
     return jsonify({"ok": True})
 
 
