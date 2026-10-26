@@ -561,7 +561,7 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .terms-date{color:var(--muted);font-size:15px;}
 .name-pair{display:flex;gap:8px;margin:6px 0 8px;}
 .name-pair input{flex:1;min-width:0;width:auto;font-size:18px;}
-.new-kind-seg button{flex:1;font-size:15px;padding:7px 6px;}
+.gender-seg.new-kind-seg button{width:auto;flex:1;font-size:15px;padding:7px 6px;}
 .login-alt{text-align:center;margin-top:14px;}
 .login-alt button{background:none;border:none;padding:0;font:inherit;font-size:14px;color:var(--muted);text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
 .join-wait-dots{display:flex;justify-content:center;gap:8px;margin:4px 0 18px;}
@@ -8157,7 +8157,7 @@ function renderModal(m){
       </div>
       <div style="display:flex;gap:8px;align-items:stretch;margin-bottom:8px;">
         <div class="gender-seg" role="group" aria-label="מין"><button type="button" class="on" data-new-gender="male" title="זכר">ז</button><button type="button" data-new-gender="female" title="נקבה">נ</button></div>
-        <div class="tv-seg new-kind-seg" role="group" aria-label="סוג שחקן" style="flex:1;"><button type="button" class="on" data-new-kind="temp">זמני - לערב הזה</button><button type="button" data-new-kind="perm">קבוע במועדון</button></div>
+        <div class="gender-seg new-kind-seg" role="group" aria-label="סוג שחקן" style="flex:1;"><button type="button" class="on" data-new-kind="temp">זמני - לערב הזה</button><button type="button" data-new-kind="perm">קבוע במועדון</button></div>
       </div>
       <p style="color:var(--muted);font-size:15px;margin:0 0 10px;" data-new-kind-note>${"שחקן לערב הזה בלבד - לא נכנס לרשימת השחקנים של המועדון."}</p>
       <button class="btn btn-primary btn-block" data-add-new-seat>${icon('plus')} הוסף לשולחן</button>
@@ -11020,6 +11020,12 @@ function attachHandlers(){
     if (addNewBtn) addNewBtn.onclick = async () => {
       const name = nameFromInputs("pick-seat-new-first", "pick-seat-new-last");
       if (!splitName(name)[0]) { showAlert("צריך להזין שם."); return; }
+      // Never a second player with the same name - pick the existing one from the list.
+      const g0 = getGame(modal.gameId), c0 = getCommunity(g0.communityId);
+      if (((c0 && c0.roster) || []).some(r => sameName(r.name, name)) || (g0.players || []).some(pl => sameName(pl.name, name))) {
+        showAlert(`השם ${name} כבר קיים במועדון - בחרו אותו מהרשימה למעלה.`);
+        return;
+      }
       const genderBtn = app.querySelector("[data-new-gender].on");
       const gender = genderBtn ? genderBtn.dataset.newGender : "male";
       const permanent = !!app.querySelector('[data-new-kind="perm"].on');
