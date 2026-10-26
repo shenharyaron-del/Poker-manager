@@ -3855,7 +3855,28 @@ function canTakeSeatHere(g){
 // it, same as an invite join), then claims the seat - which opens the entry-amount window.
 async function takeSeatAt(g, idx){
   const c = getCommunity(g.communityId);
+  if (isSeatedInGame(g)) return;
   try {
+    // Someone added me to this table already (a temporary guest, or a club player no
+    // device has yet) - that seat is mine: become that player instead of sitting twice.
+    // If I already have a different player in this club, don't create a second "me".
+    const mine0 = myIdentity.myPlayers && myIdentity.myPlayers[c.id];
+    const twin = seatedNamesake(g, mine0);
+    if (twin) {
+      const row = c.roster.find(r => r.id === twin.id);
+      if (mine0 || (row && !rosterRowIsClaimable(row))) {
+        showAlert(`כבר יושב בשולחן שחקן בשם ${twin.name}. אם זה אתה - בקשו ממי שהוסיף אותו להסיר אותו מהשולחן, ואז שבו.`);
+        return;
+      }
+      if (!row) await v2AddRosterPlayer(c.id, twin.id, twin.name, twin.gender);
+      await v2LinkRosterPlayer(c.id, twin.id, myIdentity.id);
+      if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
+      myIdentity.myPlayers[c.id] = twin.id;
+      saveIdentity();
+      tableSubView = "player";
+      render();
+      return;
+    }
     let pid = myIdentity.myPlayers && myIdentity.myPlayers[c.id];
     let p = pid ? c.roster.find(pl => pl.id === pid) : null;
     if (!p) {
@@ -3973,7 +3994,27 @@ function nameTakenInClub(c){
 function myGuestAtTable(g, c){
   if (!g || !myIdentity.name) return null;
   const rosterIds = new Set(((c && c.roster) || []).map(r => r.id));
-  return (g.players || []).find(pl => !rosterIds.has(pl.id) && sameName(pl.name, myIdentity.name)) || null;
+  return (g.players || []).find(pl => !rosterIds.has(pl.id) && namesakeOfMe(pl.name)) || null;
+}
+// The same, at any open table in club c (joining from a club link, not a table link).
+function myGuestInClub(c){
+  for (const g of (state.games || [])) {
+    if (g.communityId !== c.id || g.closed) continue;
+    const guest = myGuestAtTable(g, c);
+    if (guest && (g.seats || []).includes(guest.id)) return guest;
+  }
+  return null;
+}
+// My name - or, for someone added by first name only ("דנה" while I'm "דנה לוי"), my
+// first name.
+function namesakeOfMe(name){
+  if (!myIdentity.name) return false;
+  return sameName(name, myIdentity.name)
+    || (!String(name || "").trim().includes(" ") && sameName(name, splitName(myIdentity.name)[0]));
+}
+// Someone already seated at this table under my name who isn't me.
+function seatedNamesake(g, myPid){
+  return (g.players || []).find(pl => pl.id !== myPid && (g.seats || []).includes(pl.id) && namesakeOfMe(pl.name)) || null;
 }
 let joinWait = (() => { try { return JSON.parse(localStorage.getItem("poker-join-wait") || "null"); } catch(e) { return null; } })();
 function setJoinWait(jw){
@@ -4093,6 +4134,8 @@ async function autoJoinViaCommunityInvite(communityId){
       if (!p) {
         if (!myIdentity.name) { render(); return; }
         p = findMyRosterRow(c);
+        const guest = !p && myGuestInClub(c);
+        if (guest) { p = {id: guest.id, name: guest.name}; await v2AddRosterPlayer(communityId, p.id, p.name, guest.gender); }
         const taken = !p && nameTakenInClub(c);
         if (taken) { await requestJoinAs(c, taken, null); return; }
         if (!p) { p = {id: uid(), name: myIdentity.name}; await v2AddRosterPlayer(communityId, p.id, p.name); }
@@ -11019,7 +11062,8 @@ function attachHandlers(){
     const addNewBtn = app.querySelector("[data-add-new-seat]");
     if (addNewBtn) addNewBtn.onclick = async () => {
       const name = nameFromInputs("pick-seat-new-first", "pick-seat-new-last");
-      if (!splitName(name)[0]) { showAlert("צריך להזין שם."); return; }
+      const [newFirst, newLast] = splitName(name);
+      if (!newFirst || !newLast) { showAlert("צריך להזין שם פרטי ושם משפחה."); return; }
       // Never a second player with the same name - pick the existing one from the list.
       const g0 = getGame(modal.gameId), c0 = getCommunity(g0.communityId);
       if (((c0 && c0.roster) || []).some(r => sameName(r.name, name)) || (g0.players || []).some(pl => sameName(pl.name, name))) {
