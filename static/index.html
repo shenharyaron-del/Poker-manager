@@ -559,6 +559,9 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .terms-body ul{margin:4px 0;padding-inline-start:20px;}
 .terms-body li{margin:4px 0;}
 .terms-date{color:var(--muted);font-size:15px;}
+.name-pair{display:flex;gap:8px;margin:6px 0 8px;}
+.name-pair input{flex:1;min-width:0;width:auto;font-size:18px;}
+.new-kind-seg button{flex:1;font-size:15px;padding:7px 6px;}
 .login-alt{text-align:center;margin-top:14px;}
 .login-alt button{background:none;border:none;padding:0;font:inherit;font-size:14px;color:var(--muted);text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
 .join-wait-dots{display:flex;justify-content:center;gap:8px;margin:4px 0 18px;}
@@ -1595,7 +1598,7 @@ function healMyPlayerLinks(){
     // every club, where a same-named row may well be somebody else).
     let p = findMyRosterRow(c, true);
     if (!p && myIdentity.name && !isSuperAdmin()) {
-      const byName = roster.filter(r => r.name === myIdentity.name && rosterRowIsClaimable(r));
+      const byName = roster.filter(r => sameName(r.name, myIdentity.name) && rosterRowIsClaimable(r));
       if (byName.length === 1) p = byName[0];
     }
     if (p) { myIdentity.myPlayers = {...(myIdentity.myPlayers || {}), [c.id]: p.id}; changed = true; }
@@ -1908,29 +1911,6 @@ function setGenderEverywhere(clientId, gender){
   });
 }
 
-// Adds a NEW permanent roster player already linked to an account for the given email,
-// instead of the one-off "guest" path (see pickSeat) that never touches the roster at all.
-// Refuses (throws with .status 409) if that email is already registered - this is for
-// bringing in a genuinely new person, not for silently repointing an existing account.
-// Three calls, not one - the server side deliberately stays three small, already-existing
-// pieces (account pre-registration, roster insert, roster/account link) rather than one
-// new endpoint that duplicates what v2AddRosterPlayer/v2LinkRosterPlayer already do.
-async function v2PreRegisterPlayer(communityId, name, email, gender){
-  const playerId = uid();
-  const res = await fetch("/api/auth/pre-register", {
-    method: "POST", headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({email, name, playerId}),
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const err = new Error(body.error || "pre-register failed");
-    err.status = res.status;
-    throw err;
-  }
-  await v2AddRosterPlayer(communityId, playerId, name, gender);
-  await v2LinkRosterPlayer(communityId, playerId, playerId);
-  return playerId;
-}
 
 async function v2RenamePlayerEverywhere(clientId, name){
   await v2Fetch("PATCH", `/players/${clientId}/name`, {name});
@@ -3089,9 +3069,19 @@ function isGameCreator(g){
   if (g.createdBy) return isMeById(g.createdBy, g.communityId);
   return !!(myIdentity.name && myIdentity.name === g.createdByName);
 }
-// A roster row I may take as "me": one already linked to one of my ids, or one nobody is
-// linked to yet. A row linked to someone else is never mine just because the name matches.
-function rosterRowIsClaimable(r){ return !r.clientId || myIdSet().has(r.clientId); }
+// A roster row I may take as "me": one already linked to one of my ids, or one no device
+// has yet - unlinked, or pre-registered with an email by an earlier version of the "add
+// player" form (linked to its own id). A row linked to someone else's device is never mine just because
+// the name matches (that goes through a join request - see nameTakenInClub).
+function rosterRowIsClaimable(r){ return !r.clientId || r.clientId === r.id || myIdSet().has(r.clientId); }
+function sameName(a, b){ return String(a || "").trim().replace(/\s+/g, " ").toLowerCase() === String(b || "").trim().replace(/\s+/g, " ").toLowerCase(); }
+// Names are "first last" in one string; the name screens edit the two parts separately.
+function splitName(n){ const t = String(n || "").trim(); const i = t.indexOf(" "); return i < 0 ? [t, ""] : [t.slice(0, i), t.slice(i + 1).trim()]; }
+function joinName(first, last){ return [String(first || "").trim(), String(last || "").trim()].filter(Boolean).join(" "); }
+function nameFromInputs(firstId, lastId){
+  const f = document.getElementById(firstId), l = document.getElementById(lastId);
+  return joinName(f ? f.value : "", l ? l.value : "");
+}
 // My roster row in club c when this device has no link for it: by id first, then (unless
 // noNameMatch) a same-named row nobody else is linked to.
 function findMyRosterRow(c, noNameMatch){
@@ -3099,7 +3089,7 @@ function findMyRosterRow(c, noNameMatch){
   const ids = myIdSet();
   const byId = roster.find(r => r.clientId && ids.has(r.clientId));
   if (byId || noNameMatch || !myIdentity.name) return byId || null;
-  return roster.find(r => r.name === myIdentity.name && rosterRowIsClaimable(r)) || null;
+  return roster.find(r => sameName(r.name, myIdentity.name) && rosterRowIsClaimable(r)) || null;
 }
 function isCommunityAdmin(c){
   if (!c) return false;
@@ -3967,11 +3957,23 @@ function autoSeatSelf(gameId){
 // row belongs to another device, this device asks to be that player: someone sitting at an
 // open table in the club (or a club admin) approves or rejects, and until then the
 // "joinWait" window stays up - also across a refresh (kept in localStorage).
-const sameName = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
 function nameTakenInClub(c){
   if (!myIdentity.name) return null;
   const ids = myIdSet();
-  return ((c && c.roster) || []).find(r => r.clientId && !ids.has(r.clientId) && sameName(r.name, myIdentity.name)) || null;
+  const roster = (c && c.roster) || [];
+  const first = splitName(myIdentity.name)[0];
+  // My full name on someone else's device; or an older row saved with a first name only
+  // ("אורן" while I'm "אורן כהן") - maybe me, so someone at the table confirms.
+  return roster.find(r => r.clientId && r.clientId !== r.id && !ids.has(r.clientId) && sameName(r.name, myIdentity.name))
+    || (first !== myIdentity.name.trim() && roster.find(r => !ids.has(r.clientId) && !String(r.name || "").trim().includes(" ") && sameName(r.name, first)))
+    || null;
+}
+// A one-off guest someone seated at this table under my name (not on the club's roster):
+// joining under that name makes me that guest - same id, so their seat and buy-ins are mine.
+function myGuestAtTable(g, c){
+  if (!g || !myIdentity.name) return null;
+  const rosterIds = new Set(((c && c.roster) || []).map(r => r.id));
+  return (g.players || []).find(pl => !rosterIds.has(pl.id) && sameName(pl.name, myIdentity.name)) || null;
 }
 let joinWait = (() => { try { return JSON.parse(localStorage.getItem("poker-join-wait") || "null"); } catch(e) { return null; } })();
 function setJoinWait(jw){
@@ -3996,6 +3998,8 @@ async function checkMyJoinRequest(){
     if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
     myIdentity.myPlayers[jw.communityId] = jw.playerId;
     await saveIdentity();
+    const row = ((getCommunity(jw.communityId) || {}).roster || []).find(r => r.id === jw.playerId);
+    if (row && (!row.clientId || row.clientId === row.id)) { try { await v2LinkRosterPlayer(jw.communityId, row.id, myIdentity.id); } catch(e) { /* the myPlayers link above is enough to play */ } }
     if (modal && modal.type === "joinWait") modal = null;
     if (jw.gameId && getGame(jw.gameId)) go("table", {gameId: jw.gameId, communityId: jw.communityId});
     else go("community", {communityId: jw.communityId});
@@ -4036,6 +4040,8 @@ async function autoJoinViaInvite(gameId){
       if (!p) {
         if (!myIdentity.name) { render(); return; } // no name yet - forced onboarding will ask, then retry
         p = findMyRosterRow(c);
+        const guest = !p && myGuestAtTable(g, c);
+        if (guest) { p = {id: guest.id, name: guest.name}; await v2AddRosterPlayer(g.communityId, p.id, p.name, guest.gender); }
         const taken = !p && nameTakenInClub(c);
         if (taken) { await requestJoinAs(c, taken, gameId); return; }
         if (!p) { p = {id: uid(), name: myIdentity.name}; await v2AddRosterPlayer(g.communityId, p.id, p.name); }
@@ -4043,7 +4049,7 @@ async function autoJoinViaInvite(gameId){
         if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
         myIdentity.myPlayers[g.communityId] = p.id;
         saveIdentity();
-      } else if (!p.clientId) {
+      } else if (!p.clientId || p.clientId === p.id) {
         await v2LinkRosterPlayer(g.communityId, p.id, myIdentity.id);
       }
       // Not seated here - they pick a free seat on the table themselves.
@@ -7133,7 +7139,10 @@ function renderModal(m){
     body = !m.loginStep && m.loginMode !== "email" ? `
       <form action="#" onsubmit="return false;">
         <label class="login-label" for="name-login-input" style="font-size:18px;">מה השם שלך?</label>
-        <input type="text" id="name-login-input" value="${esc(m.signupName || "")}" maxlength="40" autocomplete="name" style="width:100%;margin:6px 0 8px;font-size:18px;" autofocus>
+        <div class="name-pair">
+          <input type="text" id="name-login-input" value="${esc(splitName(m.signupName)[0])}" maxlength="30" autocomplete="given-name" placeholder="שם פרטי" autofocus>
+          <input type="text" id="name-login-last" value="${esc(splitName(m.signupName)[1])}" maxlength="30" autocomplete="family-name" placeholder="שם משפחה">
+        </div>
         ${loginErr("name")}
         <button type="submit" class="btn btn-primary btn-block" data-name-login style="font-size:19px;">כניסה</button>
       </form>
@@ -7254,7 +7263,10 @@ function renderModal(m){
         <button class="btn btn-ghost btn-sm" data-change-avatar>${icon('pencil')} שנה אווטאר</button>
       </div>
       <div style="margin-bottom:12px;">
-        <input type="text" id="identity-name-input" value="${esc(myIdentity.name || '')}" placeholder="השם שלך" style="width:100%;" autofocus>
+        <div class="name-pair">
+          <input type="text" id="identity-name-input" value="${esc(splitName(myIdentity.name)[0])}" placeholder="שם פרטי" autofocus>
+          <input type="text" id="identity-last-name-input" value="${esc(splitName(myIdentity.name)[1])}" placeholder="שם משפחה">
+        </div>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:14px;">
         <button class="btn ${myGender==='male'?'btn-primary':'btn-ghost'} flex1" data-identity-gender="male">זכר</button>
@@ -8138,22 +8150,17 @@ function renderModal(m){
           ${avail.map(p => `<div class="checkbox-row" data-pick-player="${p.id}"><span class="flex1">${esc(p.name)}</span></div>`).join("")}
         </div>
       ` : `<div class="empty" style="padding:12px 0;">כל השחקנים במועדון כבר יושבים בשולחן.</div>`}
-      <div class="section-title" style="padding:0;margin:10px 0 8px;">או הוסיפו שחקן אורח</div>
-      <p style="color:var(--muted);font-size:15px;margin:0 0 8px;">שחקן חד-פעמי למשחק הזה בלבד - לא יתווסף לרשימת השחקנים הקבועה של המועדון.</p>
-      <div class="gender-name-row" style="margin-bottom:14px;">
-        <input type="text" id="pick-seat-guest-name" placeholder="שם האורח">
-        <div class="gender-seg" role="group" aria-label="מין"><button type="button" class="on" data-guest-gender="male" title="זכר">ז</button><button type="button" data-guest-gender="female" title="נקבה">נ</button></div>
-        <button class="btn btn-primary" data-add-guest-seat>${icon('plus')}</button>
+      <div class="section-title" style="padding:0;margin:10px 0 8px;">או הוסיפו שחקן חדש</div>
+      <div class="name-pair" style="margin-bottom:8px;">
+        <input type="text" id="pick-seat-new-first" placeholder="שם פרטי">
+        <input type="text" id="pick-seat-new-last" placeholder="שם משפחה">
       </div>
-      <div class="section-title" style="padding:0;margin:0 0 8px;">או הוסיפו שחקן קבוע למועדון</div>
-      <p style="color:var(--muted);font-size:15px;margin:0 0 8px;">יתווסף לרשימת השחקנים הקבועה, ויוכל להתחבר בעתיד עם האימייל הזה.</p>
-      <div class="field gender-name-row">
-        <input type="text" id="pick-seat-permanent-name" placeholder="שם השחקן">
-        <div class="gender-seg" role="group" aria-label="מין"><button type="button" class="on" data-perm-gender="male" title="זכר">ז</button><button type="button" data-perm-gender="female" title="נקבה">נ</button></div>
+      <div style="display:flex;gap:8px;align-items:stretch;margin-bottom:8px;">
+        <div class="gender-seg" role="group" aria-label="מין"><button type="button" class="on" data-new-gender="male" title="זכר">ז</button><button type="button" data-new-gender="female" title="נקבה">נ</button></div>
+        <div class="tv-seg new-kind-seg" role="group" aria-label="סוג שחקן" style="flex:1;"><button type="button" class="on" data-new-kind="temp">זמני - לערב הזה</button><button type="button" data-new-kind="perm">קבוע במועדון</button></div>
       </div>
-      <div class="field"><input type="email" id="pick-seat-permanent-email" placeholder="אימייל" dir="ltr"></div>
-      ${m.permanentError ? `<p style="color:#fda4af;font-size:16px;margin-bottom:8px;">${esc(m.permanentError)}</p>` : ""}
-      <button class="btn btn-primary btn-block" data-add-permanent-seat>${icon('plus')} הוסף שחקן קבוע</button>
+      <p style="color:var(--muted);font-size:15px;margin:0 0 10px;" data-new-kind-note>${"שחקן לערב הזה בלבד - לא נכנס לרשימת השחקנים של המועדון."}</p>
+      <button class="btn btn-primary btn-block" data-add-new-seat>${icon('plus')} הוסף לשולחן</button>
     `;
   } else if (m.type === "seatChips") {
     const g = getGame(m.gameId);
@@ -9665,8 +9672,8 @@ function attachHandlers(){
   if (modal && modal.type === "identityName") {
     const confirmBtn = app.querySelector("[data-confirm-identity-name]");
     if (confirmBtn) confirmBtn.onclick = async () => {
-      const name = document.getElementById("identity-name-input").value.trim();
-      if (!name) { showAlert("צריך להזין שם."); return; }
+      const name = nameFromInputs("identity-name-input", "identity-last-name-input");
+      if (!splitName(name)[0]) { showAlert("צריך להזין שם."); return; }
       confirmBtn.disabled = true;
       showButtonLoading(confirmBtn);
       myIdentity.name = name;
@@ -9694,8 +9701,7 @@ function attachHandlers(){
       // this whole screen from myIdentity.name, which would otherwise silently discard
       // whatever's typed but not yet written back via the "שמור" button (confirmed bug:
       // type a new name, tap a seat position, the name reverted to the old one).
-      const nameInput = document.getElementById("identity-name-input");
-      if (nameInput) myIdentity.name = nameInput.value;
+      if (document.getElementById("identity-name-input")) myIdentity.name = nameFromInputs("identity-name-input", "identity-last-name-input");
       // Re-syncs this handful of fields immediately before writing one of them - see
       // syncLegacyOnlyFields's own comment on the lost-update race this closes.
       await syncLegacyOnlyFields();
@@ -9706,8 +9712,7 @@ function attachHandlers(){
     app.querySelectorAll("[data-identity-gender]").forEach(el => el.onclick = async () => {
       // Preserve an unsaved name edit across the re-render below, same reasoning as the
       // seat-position picker just above.
-      const nameInput = document.getElementById("identity-name-input");
-      if (nameInput) myIdentity.name = nameInput.value;
+      if (document.getElementById("identity-name-input")) myIdentity.name = nameFromInputs("identity-name-input", "identity-last-name-input");
       const gender = el.dataset.identityGender;
       // Kept on the identity too, not only on roster rows: someone not in any group yet
       // (first visit via an invite) has no row to update, so the choice was lost and the
@@ -9776,8 +9781,10 @@ function attachHandlers(){
     // fingerprint. Then the invite join that bailed out for lack of a name runs again.
     const nameLoginBtn = app.querySelector("[data-name-login]");
     if (nameLoginBtn) nameLoginBtn.onclick = async () => {
-      const name = (document.getElementById("name-login-input").value || "").trim();
-      if (!name) { updateModal({loginError: "רשום את השם שלך", loginErrorAt: "name"}); return; }
+      const first = (document.getElementById("name-login-input").value || "").trim();
+      const last = (document.getElementById("name-login-last").value || "").trim();
+      const name = joinName(first, last);
+      if (!first || !last) { updateModal({signupName: name, loginError: "רשום שם פרטי ושם משפחה", loginErrorAt: "name"}); return; }
       nameLoginBtn.disabled = true;
       showButtonLoading(nameLoginBtn);
       myIdentity.name = name;
@@ -10995,24 +11002,34 @@ function attachHandlers(){
       });
       closeModal();
     });
-    app.querySelectorAll("[data-guest-gender]").forEach(el => el.onclick = () => {
-      app.querySelectorAll("[data-guest-gender]").forEach(b => b.classList.toggle("on", b === el));
+    // ז / נ and זמני / קבוע - toggled in place (a re-render would wipe what's typed).
+    app.querySelectorAll("[data-new-gender]").forEach(el => el.onclick = () => {
+      app.querySelectorAll("[data-new-gender]").forEach(b => b.classList.toggle("on", b === el));
     });
-    const addGuestBtn = app.querySelector("[data-add-guest-seat]");
-    if (addGuestBtn) addGuestBtn.onclick = async () => {
-      const nameInput = document.getElementById("pick-seat-guest-name");
-      const name = nameInput.value.trim();
-      if (!name) { showAlert("צריך להזין שם."); return; }
-      addGuestBtn.disabled = true;
-      showButtonLoading(addGuestBtn);
+    app.querySelectorAll("[data-new-kind]").forEach(el => el.onclick = () => {
+      app.querySelectorAll("[data-new-kind]").forEach(b => b.classList.toggle("on", b === el));
+      const note = app.querySelector("[data-new-kind-note]");
+      if (note) note.textContent = el.dataset.newKind === "perm"
+        ? "נכנס לרשימת השחקנים של המועדון. כשיתחבר בעצמו עם אותו שם - יקבל את השחקן הזה."
+        : "שחקן לערב הזה בלבד - לא נכנס לרשימת השחקנים של המועדון.";
+    });
+    // A new player, no email: temporary (this game only - no roster row; game_players
+    // isn't keyed to the roster, see schema.sql) or permanent (a roster row nobody's device
+    // has yet - whoever later joins under the same name takes it, see findMyRosterRow).
+    const addNewBtn = app.querySelector("[data-add-new-seat]");
+    if (addNewBtn) addNewBtn.onclick = async () => {
+      const name = nameFromInputs("pick-seat-new-first", "pick-seat-new-last");
+      if (!splitName(name)[0]) { showAlert("צריך להזין שם."); return; }
+      const genderBtn = app.querySelector("[data-new-gender].on");
+      const gender = genderBtn ? genderBtn.dataset.newGender : "male";
+      const permanent = !!app.querySelector('[data-new-kind="perm"].on');
+      addNewBtn.disabled = true;
+      showButtonLoading(addNewBtn);
       if (USE_RELATIONAL_API) {
-        // A one-off guest for this game only - not added to the community's roster (no
-        // roster_players row at all - game_players.player_id isn't a foreign key into it
-        // by design, see schema.sql), so they won't show up as a permanent group member.
-        const guestId = uid();
+        const playerId = uid();
         try {
-          const gBtn = app.querySelector("[data-guest-gender].on");
-          const ok = await v2ClaimSeat(modal.gameId, modal.seatIndex, guestId, name, gBtn ? gBtn.dataset.guestGender : "male");
+          if (permanent) await v2AddRosterPlayer(getGame(modal.gameId).communityId, playerId, name, gender);
+          const ok = await v2ClaimSeat(modal.gameId, modal.seatIndex, playerId, name, gender);
           if (!ok) showAlert("המושב הזה כבר תפוס - בחרו מושב אחר.");
         } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
         closeModal();
@@ -11020,9 +11037,8 @@ function attachHandlers(){
       }
       await mutateAndSave(() => {
         const g = getGame(modal.gameId);
-        // A one-off guest for this game only - not added to the community's roster, so
-        // they won't show up as a permanent member of the group.
         const guest = {id: uid(), name};
+        if (permanent) { const c = getCommunity(g.communityId); if (c) c.roster.push({id: guest.id, name, gender}); }
         if (!g.seats) g.seats = new Array(9).fill(null);
         g.seats[modal.seatIndex] = guest.id;
         g.players.push(guest);
@@ -11030,31 +11046,6 @@ function attachHandlers(){
         g.liveChips[guest.id] = 0;
       });
       closeModal();
-    };
-    // ז / נ next to the name - toggled in place (a re-render would wipe what's typed).
-    app.querySelectorAll("[data-perm-gender]").forEach(el => el.onclick = () => {
-      app.querySelectorAll("[data-perm-gender]").forEach(b => b.classList.toggle("on", b === el));
-    });
-    const addPermanentBtn = app.querySelector("[data-add-permanent-seat]");
-    if (addPermanentBtn) addPermanentBtn.onclick = async () => {
-      const name = document.getElementById("pick-seat-permanent-name").value.trim();
-      const email = document.getElementById("pick-seat-permanent-email").value.trim().toLowerCase();
-      const genderBtn = app.querySelector("[data-perm-gender].on");
-      const gender = genderBtn ? genderBtn.dataset.permGender : "male";
-      if (!name) { showAlert("צריך להזין שם."); return; }
-      if (!email || !email.includes("@")) { showAlert("כתובת אימייל לא תקינה."); return; }
-      addPermanentBtn.disabled = true;
-      showButtonLoading(addPermanentBtn);
-      if (!USE_RELATIONAL_API) { showAlert("לא זמין במצב הזה."); addPermanentBtn.disabled = false; return; }
-      try {
-        const playerId = await v2PreRegisterPlayer(getGame(modal.gameId).communityId, name, email, gender);
-        const ok = await v2ClaimSeat(modal.gameId, modal.seatIndex, playerId, name);
-        if (!ok) showAlert("המושב הזה כבר תפוס - בחרו מושב אחר.");
-        closeModal();
-      } catch(e) {
-        if (e.status === 409) { updateModal({permanentError: "האימייל הזה כבר רשום במערכת."}); addPermanentBtn.disabled = false; }
-        else { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); addPermanentBtn.disabled = false; }
-      }
     };
   }
 
