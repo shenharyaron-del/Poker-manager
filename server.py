@@ -1655,23 +1655,58 @@ def v2_rename_player_everywhere(client_id):
                 (caller["ids"], caller["roster_ids"]),
             )
             mine = cur.fetchall()
-            for pid, community_id, old_name in mine:
-                cur.execute("UPDATE roster_players SET name = %s WHERE id = %s AND community_id = %s",
-                            (name, pid, community_id))
-                # The name each night saved for them too - past nights included - and the
-                # nights they played as a one-off guest under the old name in this club,
-                # so results, the winners report and stats keep seeing one person.
-                cur.execute(
-                    "UPDATE game_players gp SET name = %s FROM games g "
-                    "WHERE gp.game_id = g.id AND g.community_id = %s AND ("
-                    "  gp.player_id = %s OR ("
-                    "    lower(btrim(gp.name)) = lower(btrim(%s)) "
-                    "    AND gp.player_id NOT IN (SELECT id FROM roster_players WHERE community_id = %s)"
-                    "  ))",
-                    (name, community_id, pid, old_name or "", community_id),
-                )
+            _rename_roster_rows(cur, mine, name)
         conn.commit()
     return jsonify({"ok": True, "updated": len(mine)})
+
+
+def _rename_roster_rows(cur, rows, name):
+    """rows: (player_id, community_id, old_name) - renames each club player, and the name
+    each night saved for them too - past nights included - plus the nights they played as a
+    one-off guest under the old name in that club, so results, the winners report and stats
+    keep seeing one person."""
+    for pid, community_id, old_name in rows:
+        cur.execute("UPDATE roster_players SET name = %s WHERE id = %s AND community_id = %s",
+                    (name, pid, community_id))
+        cur.execute(
+            "UPDATE game_players gp SET name = %s FROM games g "
+            "WHERE gp.game_id = g.id AND g.community_id = %s AND ("
+            "  gp.player_id = %s OR ("
+            "    lower(btrim(gp.name)) = lower(btrim(%s)) "
+            "    AND gp.player_id NOT IN (SELECT id FROM roster_players WHERE community_id = %s)"
+            "  ))",
+            (name, community_id, pid, old_name or "", community_id),
+        )
+
+
+@app.route("/api/v2/communities/<community_id>/roster/<player_id>/name", methods=["PATCH"])
+def v2_rename_roster_player(community_id, player_id):
+    # Super admin: rename any club player - in this club and, when the row belongs to a
+    # device/account, that same person's rows in their other clubs - every night included.
+    if not _caller()["is_super"]:
+        return _forbidden()
+    name = ((request.get_json(silent=True) or {}).get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "name required"}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT client_id FROM roster_players WHERE id = %s AND community_id = %s",
+                        (player_id, community_id))
+            row = cur.fetchone()
+            if not row:
+                conn.commit()
+                return jsonify({"error": "not found"}), 404
+            client_id = row[0]
+            if client_id and client_id != player_id:
+                cur.execute("SELECT id, community_id, name FROM roster_players WHERE client_id = %s", (client_id,))
+            else:
+                cur.execute("SELECT id, community_id, name FROM roster_players WHERE id = %s AND community_id = %s",
+                            (player_id, community_id))
+            rows = cur.fetchall()
+            _rename_roster_rows(cur, rows, name)
+        conn.commit()
+    _broadcast_state_changed()
+    return jsonify({"ok": True, "updated": len(rows)})
 
 
 @app.route("/api/v2/players/<client_id>/gender", methods=["PATCH"])
