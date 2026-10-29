@@ -4852,12 +4852,21 @@ function renderProfitTimeline(series, type, skip){
 function tlPref(key, fallback){ try { const v = localStorage.getItem("poker-tl-" + key); return v == null ? fallback : v; } catch(e) { return fallback; } }
 function setTlPref(key, v){ try { localStorage.setItem("poker-tl-" + key, v); } catch(e) {} }
 
+// A club player's result over every night they ended in this club - including nights
+// they played as a one-off guest under the same name (a guest gets a new id at every
+// table, so going by id alone missed those), same as the winners report.
 function playerNetProfit(communityId, playerId){
+  const c = getCommunity(communityId);
+  const roster = (c && c.roster) || [];
+  const row = roster.find(r => r.id === playerId);
+  const rosterIds = new Set(roster.map(r => r.id));
   let net = 0, count = 0;
   gamesForCommunity(communityId).forEach(g => {
-    const co = g.cashouts[playerId];
+    const pid = g.cashouts[playerId] ? playerId
+      : row && ((g.players || []).find(pl => !rosterIds.has(pl.id) && g.cashouts[pl.id] && sameName(pl.name, row.name)) || {}).id;
+    const co = pid && g.cashouts[pid];
     if (!co) return;
-    const buyins = g.buyins.filter(b=>b.playerId===playerId).reduce((s,b)=>s+b.amount,0);
+    const buyins = g.buyins.filter(b=>b.playerId===pid).reduce((s,b)=>s+b.amount,0);
     net += (co.amount - buyins);
     count++;
   });
