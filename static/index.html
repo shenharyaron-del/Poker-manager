@@ -1914,9 +1914,14 @@ function setGenderEverywhere(clientId, gender){
 }
 
 
+// Renames me in every club and in every night saved for me (past ones too - see the
+// server endpoint); the local copy follows on the next refresh, the roster right away.
 async function v2RenamePlayerEverywhere(clientId, name){
   await v2Fetch("PATCH", `/players/${clientId}/name`, {name});
-  state.communities.forEach(c => c.roster.forEach(p => { if (p.clientId === clientId) p.name = name; }));
+  state.communities.forEach(c => c.roster.forEach(p => {
+    if (p.clientId === clientId || (myIdentity.myPlayers && myIdentity.myPlayers[c.id] === p.id)) p.name = name;
+  }));
+  setTimeout(() => doRefreshNow("rename"), 0);
 }
 
 // Retries an update-with-conflict-token call once after a 409 instead of leaving the
