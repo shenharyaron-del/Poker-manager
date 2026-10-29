@@ -1641,15 +1641,37 @@ def v2_rename_player_everywhere(client_id):
     if client_id not in _caller()["ids"]:
         return _forbidden()
     body = request.get_json(silent=True) or {}
-    name = body.get("name")
+    name = (body.get("name") or "").strip()
     if not name:
         return jsonify({"error": "name required"}), 400
+    caller = _caller()
     with get_db() as conn:
         with conn.cursor() as cur:
-            cur.execute("UPDATE roster_players SET name = %s WHERE client_id = %s", (name, client_id))
-            updated = cur.rowcount
+            # Every club player that's the caller's - linked to one of their ids, or one
+            # their device was approved as (identity myPlayers) - not only rows linked to
+            # this exact id.
+            cur.execute(
+                "SELECT id, community_id, name FROM roster_players WHERE client_id = ANY(%s) OR id = ANY(%s)",
+                (caller["ids"], caller["roster_ids"]),
+            )
+            mine = cur.fetchall()
+            for pid, community_id, old_name in mine:
+                cur.execute("UPDATE roster_players SET name = %s WHERE id = %s AND community_id = %s",
+                            (name, pid, community_id))
+                # The name each night saved for them too - past nights included - and the
+                # nights they played as a one-off guest under the old name in this club,
+                # so results, the winners report and stats keep seeing one person.
+                cur.execute(
+                    "UPDATE game_players gp SET name = %s FROM games g "
+                    "WHERE gp.game_id = g.id AND g.community_id = %s AND ("
+                    "  gp.player_id = %s OR ("
+                    "    lower(btrim(gp.name)) = lower(btrim(%s)) "
+                    "    AND gp.player_id NOT IN (SELECT id FROM roster_players WHERE community_id = %s)"
+                    "  ))",
+                    (name, community_id, pid, old_name or "", community_id),
+                )
         conn.commit()
-    return jsonify({"ok": True, "updated": updated})
+    return jsonify({"ok": True, "updated": len(mine)})
 
 
 @app.route("/api/v2/players/<client_id>/gender", methods=["PATCH"])
