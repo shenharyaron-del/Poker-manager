@@ -564,6 +564,8 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .report-mode-seg{margin:0 0 12px;}
 .report-mode-seg button{width:auto;flex:1;font-size:16px;padding:8px 6px;}
 .gender-seg.new-kind-seg button{width:auto;flex:1;font-size:15px;padding:7px 6px;}
+.roster-stats-link{display:inline-flex;align-items:center;gap:6px;background:none;border:none;padding:0;font:inherit;color:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:3px;}
+.roster-stats-link svg{width:16px;height:16px;color:var(--gold);flex-shrink:0;}
 .login-alt{text-align:center;margin-top:14px;}
 .login-alt button{background:none;border:none;padding:0;font:inherit;font-size:14px;color:var(--muted);text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
 .join-wait-dots{display:flex;justify-content:center;gap:8px;margin:4px 0 18px;}
@@ -4192,7 +4194,7 @@ async function autoJoinViaCommunityInvite(communityId){
   render();
 }
 function openModal(m){ if (!isSetupModal(m)) setupDraft = null; modal = m; render(); }
-function closeModal(){ const back = modal && modal.type === "terms" ? modal.back : null; setupDraft = null; modal = back || null; render(); }
+function closeModal(){ const back = modal && modal.back; setupDraft = null; modal = back || null; render(); }
 // The community-setup flow (chips / payments / ריביי tabs) keeps unsaved edits from ALL
 // three tabs in one draft while the user switches between them, so the single
 // "שמור שינויים" under the tabs saves everything at once (see saveAllSetup). The draft
@@ -7855,7 +7857,9 @@ function renderModal(m){
         ? `<button class="icon-btn${isAdminRow?' gold':''}" data-toggle-roster-admin="${p.id}" data-roster-admin-next="${isAdminRow?'0':'1'}" title="${isAdminRow?'הסר הרשאת אדמין':'הפוך לאדמין'}">${roleIcon}</button>`
         : `<span class="icon-btn${isAdminRow?' gold':''}" style="cursor:default;" title="${isAdminRow?'אדמין':'שחקן'}">${roleIcon}</span>`;
       return `<div class="roster-row">
-        <div class="row" style="gap:8px;"><span>${esc(p.name)}</span>${netBadge(playerNetProfit(m.communityId, p.id))}</div>
+        <div class="row" style="gap:8px;">${isSuperAdmin()
+          ? `<button type="button" class="roster-stats-link" data-player-stats="${p.id}" title="הביצועים של ${esc(p.name)}">${icon('bar')}<span>${esc(p.name)}</span></button>`
+          : `<span>${esc(p.name)}</span>`}${netBadge(playerNetProfit(m.communityId, p.id))}</div>
         <div class="row" style="gap:4px;">
           ${roleBtn}
           ${viewerIsAdmin ? `<button class="icon-btn danger" data-remove-player="${p.id}">${icon('trash')}</button>` : ""}
@@ -7885,12 +7889,18 @@ function renderModal(m){
     // whichever real person is asking - every community they've self-joined via clientId,
     // not just one. A community picker (plus "הכל") only makes sense to show when there's
     // more than one to choose between.
+    // Or (m.playerId + m.communityId) one club player's - the super admin opens any
+    // player's from the club's player list.
     const clientId = m.clientId;
-    const myCommunities = state.communities.filter(c => c.roster.some(p => p.clientId === clientId));
-    const displayName = (myCommunities[0] && (myCommunities[0].roster.find(p=>p.clientId===clientId)||{}).name) || myIdentity.name || "שחקן";
+    const statsPlayerOf = c => m.playerId ? (c.id === m.communityId ? c.roster.find(p => p.id === m.playerId) : null)
+      : c.roster.find(p => p.clientId === clientId)
+        || (clientId === myIdentity.id && myIdentity.myPlayers && c.roster.find(p => p.id === myIdentity.myPlayers[c.id]));
+    const myCommunities = state.communities.filter(c => statsPlayerOf(c));
+    const viewingOtherStats = !!m.playerId;
+    const displayName = (myCommunities[0] && statsPlayerOf(myCommunities[0]).name) || myIdentity.name || "שחקן";
     title = `סטטיסטיקות — ${esc(displayName)}`;
     if (!myCommunities.length) {
-      body = `<div class="empty" style="padding:20px 0;">עדיין לא הצטרפת לאף מועדון.</div>`;
+      body = `<div class="empty" style="padding:20px 0;">${viewingOtherStats ? "השחקן לא נמצא במועדון." : "עדיין לא הצטרפת לאף מועדון."}</div>`;
     } else {
       // Only one group: that's the selection (no "הכל" picker, and its rank shows below).
       const selected = myCommunities.length === 1 ? myCommunities[0].id
@@ -7907,7 +7917,7 @@ function renderModal(m){
       let best=null, worst=null;
       const timeline = [];
       activeCommunities.forEach(c => {
-        const player = c.roster.find(p => p.clientId === clientId);
+        const player = statsPlayerOf(c);
         if (!player) return;
         // A night I'm still sitting at (not cashed out yet) isn't counted anywhere here -
         // not as a night of the club, not on the timeline - until I've left the table.
@@ -7941,7 +7951,7 @@ function renderModal(m){
       let rankHtml = "";
       if (selected !== "all") {
         const sc = myCommunities.find(c => c.id === selected);
-        const me = sc && sc.roster.find(p => p.clientId === clientId);
+        const me = sc && statsPlayerOf(sc);
         if (me) {
           // Only regulars are ranked: players who finished more than 40% of the group's
           // nights - a one-time guest with one lucky night shouldn't top the table.
@@ -7952,7 +7962,7 @@ function renderModal(m){
           const place = ranked.findIndex(x => x.id === me.id) + 1;
           // Shown only to a ranked player in the top half by profit - anyone else (not a
           // regular, or in the bottom half) gets no rank row at all.
-          if (place > 0 && place <= Math.ceil(ranked.length / 2)) rankHtml = `<div class="roster-row"><span>המקום שלי במועדון</span><span style="font-weight:700;white-space:nowrap;">${place===1?'🏆 ':''}${place} מתוך ${ranked.length}</span></div>`;
+          if (place > 0 && place <= Math.ceil(ranked.length / 2)) rankHtml = `<div class="roster-row"><span>${viewingOtherStats ? "המקום במועדון" : "המקום שלי במועדון"}</span><span style="font-weight:700;white-space:nowrap;">${place===1?'🏆 ':''}${place} מתוך ${ranked.length}</span></div>`;
         }
       }
       const tlType = ["bar","dot","line"].includes(tlPref("type","line")) ? tlPref("type","line") : "line";
@@ -8981,6 +8991,11 @@ function attachHandlers(){
   app.querySelectorAll("[data-install-app]").forEach(el => el.onclick = (e) => { e.stopPropagation(); startInstall(); });
   app.querySelectorAll("[data-open-pot-fix]").forEach(el => el.onclick = () => openModal({type: "potFix", gameId: nav.gameId}));
   // "הביצועים שלי" on the end-of-night screens (cashed-out player view, game results).
+  // Super admin: a player's stats from the club's player list (closing returns to the list).
+  app.querySelectorAll("[data-player-stats]").forEach(el => el.onclick = () => {
+    if (!modal || modal.type !== "roster") return;
+    openModal({type: "stats", playerId: el.dataset.playerStats, communityId: modal.communityId, back: modal});
+  });
   app.querySelectorAll("[data-open-my-stats]").forEach(el => el.onclick = () => openModal({type:"stats", clientId: myIdentity.id}));
   if (modal && modal.type === "entryBuyin") {
     const {gameId, playerId} = modal;
