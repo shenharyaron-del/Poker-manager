@@ -561,6 +561,8 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .terms-date{color:var(--muted);font-size:15px;}
 .name-pair{display:flex;gap:8px;margin:6px 0 8px;}
 .name-pair input{flex:1;min-width:0;width:auto;font-size:18px;}
+.report-mode-seg{margin:0 0 12px;}
+.report-mode-seg button{width:auto;flex:1;font-size:16px;padding:8px 6px;}
 .gender-seg.new-kind-seg button{width:auto;flex:1;font-size:15px;padding:7px 6px;}
 .login-alt{text-align:center;margin-top:14px;}
 .login-alt button{background:none;border:none;padding:0;font:inherit;font-size:14px;color:var(--muted);text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
@@ -5914,17 +5916,20 @@ function renderCommunity(communityId){
       <button class="btn btn-ghost btn-sm" data-show-roster style="display:flex;align-items:center;gap:6px;flex-shrink:0;">${icon('users')} שחקנים (${c.roster.length})</button>
       <div style="color:var(--muted);font-size:14px;line-height:1.4;">דרך כפתור "שחקנים"<br>ניתן למנות אדמינים</div>
     </div>
-    <div class="px5" style="margin:0 0 14px;"><button class="btn btn-ghost btn-block monthly-report-btn" data-monthly-report="${c.id}">🏆 דוח מנצחים חודשי</button></div>
+    <div class="px5" style="margin:0 0 14px;"><button class="btn btn-ghost btn-block monthly-report-btn" data-monthly-report="${c.id}">🏆 דוח מנצחים</button></div>
     <div class="section-title" style="font-size:14px;">ערבי משחק</div>
     <div class="px5" style="margin-bottom:20px;">${gamesHtml}</div>
   `;
 }
 
-// ---------- Monthly winners report (club screen) ----------
-// Each player's total profit over one month's game nights in this club (cash-out minus
-// everything they bought in, for every night they ended), best first - one row per name.
-function monthlyStandings(communityId, ym){
-  const games = gamesForCommunity(communityId).filter(g => g.date && g.date.startsWith(ym));
+// ---------- Winners report (club screen) ----------
+// Each player's total profit over one month's game nights in this club - or every night
+// since the club started counting (period "all") - cash-out minus everything they bought
+// in, for every night they ended; one row per name. Ranked by total profit, or (mode
+// "avg") by profit per night played.
+const ALL_TIME = "all";
+function monthlyStandings(communityId, ym, mode){
+  const games = gamesForCommunity(communityId).filter(g => g.date && (ym === ALL_TIME || g.date.startsWith(ym)));
   const rows = {};
   games.forEach(g => {
     const bought = {};
@@ -5939,12 +5944,19 @@ function monthlyStandings(communityId, ym){
       r.nights += 1;
     });
   });
-  const list = Object.values(rows).map(r => ({...r, profit: Math.round(r.profit * 100) / 100})).sort((a, b) => b.profit - a.profit);
-  return {list, nights: games.length};
+  const list = Object.values(rows)
+    .map(r => ({...r, profit: Math.round(r.profit * 100) / 100, avg: Math.round(r.profit / r.nights)}))
+    .sort((a, b) => mode === "avg" ? (b.avg - a.avg || b.nights - a.nights) : b.profit - a.profit);
+  return {list, nights: games.length, mode};
 }
 // Months (YYYY-MM) this club has game nights in, newest first.
 function clubMonths(communityId){
   return [...new Set(gamesForCommunity(communityId).map(g => (g.date || "").slice(0, 7)).filter(Boolean))].sort().reverse();
+}
+// The report's period: a month (YYYY-MM) the club played in, or ALL_TIME.
+function reportPeriod(m){
+  const months = clubMonths(m.communityId);
+  return m.month === ALL_TIME || months.includes(m.month) ? m.month : months[0];
 }
 function monthLabel(ym){
   const [y, m] = ym.split("-").map(Number);
@@ -5955,15 +5967,20 @@ const PLACE_NAMES = ["מקום ראשון", "מקום שני", "מקום שלי�
 // No "+" - the podium is winners only; a loss (in the rest of the list) keeps its "-".
 const signedShekel = v => `${v < 0 ? "-" : ""}₪${Math.abs(v)}`;
 // The podium: the top three who ended the month ahead - nobody in a loss gets a place.
-const podiumOf = st => st.list.filter(r => r.profit > 0).slice(0, 3);
+const podiumOf = st => st.list.filter(r => (st.mode === "avg" ? r.avg : r.profit) > 0).slice(0, 3);
 // The ready-to-send WhatsApp text: the podium with a trophy and silver/bronze medals.
 function monthlyReportText(c, ym, st){
   // A name in English (Latin letters) would otherwise pull the "(₪…)" after it into a
   // left-to-right run and flip the line around - isolating it (FSI…PDI) plus a right-to-
   // left mark keeps every line in the same order as a Hebrew name.
   const nameIso = n => `\u2068${n}\u2069\u200F`;
-  const top = podiumOf(st).map((r, i) => `${PLACE_MARKS[i]} ${PLACE_NAMES[i]}: ${nameIso(r.name)} (${signedShekel(r.profit)})`);
-  return `🏆 המנצחים של ${c.name} - ${monthLabel(ym)}\n\n${top.join("\n")}\n\n${st.nights === 1 ? "ערב משחק אחד" : `${st.nights} ערבי משחק`} החודש`;
+  const avg = st.mode === "avg";
+  const top = podiumOf(st).map((r, i) => `${PLACE_MARKS[i]} ${PLACE_NAMES[i]}: ${nameIso(r.name)} (${avg
+    ? `${signedShekel(r.avg)} לערב · ${r.nights === 1 ? "ערב אחד" : `${r.nights} ערבים`}`
+    : signedShekel(r.profit)})`);
+  const period = ym === ALL_TIME ? "מתחילת הספירה" : monthLabel(ym);
+  const nights = st.nights === 1 ? "ערב משחק אחד" : `${st.nights} ערבי משחק`;
+  return `🏆 המנצחים של ${c.name} - ${period}${avg ? " (ממוצע לערב)" : ""}\n\n${top.join("\n")}\n\n${nights} ${ym === ALL_TIME ? "עד היום" : "החודש"}`;
 }
 
 // Percentage [x,y] position of each of the 9 main seat slots around the oval table -
@@ -8544,20 +8561,24 @@ function renderModal(m){
   } else if (m.type === "monthlyReport") {
     const c = getCommunity(m.communityId) || {name: ""};
     const months = clubMonths(m.communityId);
-    title = "דוח מנצחים חודשי";
+    title = "דוח מנצחים";
     if (!months.length) {
       body = `<p style="color:var(--muted);text-align:center;">עוד אין ערבי משחק במועדון.</p>`;
     } else {
-      const ym = months.includes(m.month) ? m.month : months[0];
-      const st = monthlyStandings(m.communityId, ym);
+      const ym = reportPeriod(m);
+      const mode = m.mode === "avg" ? "avg" : "profit";
+      const st = monthlyStandings(m.communityId, ym, mode);
       body = `
-        <div class="field"><label>חודש</label>
-          <select id="monthly-report-month" style="width:100%;font-size:18px;">${months.map(x => `<option value="${x}"${x === ym ? " selected" : ""}>${esc(monthLabel(x))}</option>`).join("")}</select>
+        <div class="field"><label>תקופה</label>
+          <select id="monthly-report-month" style="width:100%;font-size:18px;">${months.map(x => `<option value="${x}"${x === ym ? " selected" : ""}>${esc(monthLabel(x))}</option>`).join("")}<option value="${ALL_TIME}"${ym === ALL_TIME ? " selected" : ""}>מתחילת הספירה (עד היום)</option></select>
+        </div>
+        <div class="gender-seg report-mode-seg" role="group" aria-label="דירוג לפי">
+          <button type="button" class="${mode === "profit" ? "on" : ""}" data-report-mode="profit">רווח כולל</button><button type="button" class="${mode === "avg" ? "on" : ""}" data-report-mode="avg">ממוצע לערב</button>
         </div>
         ${podiumOf(st).length ? `
         <div class="monthly-preview">${esc(monthlyReportText(c, ym, st)).replace(/\n/g, "<br>")}</div>
         <button class="btn btn-block" data-monthly-share style="background:#25D366;color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:14px;">${icon('share')} שליחה בוואטסאפ</button>`
-        : `<p style="color:var(--muted);text-align:center;">${st.list.length ? "אף שחקן לא סיים את החודש ברווח." : "באף ערב בחודש הזה עוד לא נרשם סיום לשחקנים."}</p>`}`;
+        : `<p style="color:var(--muted);text-align:center;">${st.list.length ? `אף שחקן לא סיים ${ym === ALL_TIME ? "עד היום" : "את החודש"} ברווח.` : `באף ערב ${ym === ALL_TIME ? "" : "בחודש הזה "}עוד לא נרשם סיום לשחקנים.`}</p>`}`;
     }
   } else if (m.type === "playerNight") {
     const g = getGame(m.gameId) || {players:[], cashouts:{}};
@@ -9196,12 +9217,12 @@ function attachHandlers(){
   if (modal && modal.type === "monthlyReport") {
     const sel = app.querySelector("#monthly-report-month");
     if (sel) sel.onchange = () => updateModal({month: sel.value});
+    app.querySelectorAll("[data-report-mode]").forEach(el => el.onclick = () => updateModal({mode: el.dataset.reportMode}));
     const shareBtn = app.querySelector("[data-monthly-share]");
     if (shareBtn) shareBtn.onclick = async () => {
       const c = getCommunity(modal.communityId);
-      const months = clubMonths(modal.communityId);
-      const ym = months.includes(modal.month) ? modal.month : months[0];
-      const text = monthlyReportText(c, ym, monthlyStandings(modal.communityId, ym));
+      const ym = reportPeriod(modal);
+      const text = monthlyReportText(c, ym, monthlyStandings(modal.communityId, ym, modal.mode === "avg" ? "avg" : "profit"));
       // Same as the other invites: the phone's share sheet (WhatsApp is right there),
       // else a wa.me link with the text.
       if (navigator.share) { try { await navigator.share({text}); } catch(e) { /* cancelled */ } }
