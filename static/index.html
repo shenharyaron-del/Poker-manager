@@ -3081,7 +3081,12 @@ function isGameCreator(g){
 // player" form (linked to its own id). A row linked to someone else's device is never mine just because
 // the name matches (that goes through a join request - see nameTakenInClub).
 function rosterRowIsClaimable(r){ return !r.clientId || r.clientId === r.id || myIdSet().has(r.clientId); }
-function sameName(a, b){ return String(a || "").trim().replace(/\s+/g, " ").toLowerCase() === String(b || "").trim().replace(/\s+/g, " ").toLowerCase(); }
+// Names compare loosely: case, extra spaces, and invisible direction / no-break characters
+// a phone keyboard or a copy-paste can leave in don't make two people.
+function nameKey(n){
+  return String(n || "").normalize("NFKC").replace(/[\u00A0\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+}
+function sameName(a, b){ return nameKey(a) === nameKey(b); }
 // Names are "first last" in one string; the name screens edit the two parts separately.
 function splitName(n){ const t = String(n || "").trim(); const i = t.indexOf(" "); return i < 0 ? [t, ""] : [t.slice(0, i), t.slice(i + 1).trim()]; }
 function joinName(first, last){ return [String(first || "").trim(), String(last || "").trim()].filter(Boolean).join(" "); }
@@ -5944,16 +5949,21 @@ function renderCommunity(communityId){
 const ALL_TIME = "all";
 function monthlyStandings(communityId, ym, mode){
   const games = gamesForCommunity(communityId).filter(g => g.date && (ym === ALL_TIME || g.date.startsWith(ym)));
+  const roster = (getCommunity(communityId) || {}).roster || [];
+  const rosterById = new Map(roster.map(r => [r.id, r]));
+  const rosterByName = new Map(roster.map(r => [nameKey(r.name), r]));
   const rows = {};
   games.forEach(g => {
     const bought = {};
     (g.buyins || g.buyinTotals || []).forEach(b => { bought[b.playerId] = (bought[b.playerId] || 0) + (b.amount || 0); });
     Object.entries(g.cashouts || {}).forEach(([pid, co]) => {
       const name = ((g.players || []).find(pl => pl.id === pid) || {}).name || "?";
-      // By name, not player id: a guest gets a new id at every table (and someone can be
-      // a guest one night and a club player the next), which split one person in two.
-      const key = name.trim().toLowerCase();
-      const r = rows[key] || (rows[key] = {id: pid, name: name.trim(), profit: 0, nights: 0});
+      // One row per person: a club player by their club player (whatever name that night
+      // saved - it may be an older spelling), and a guest - a new id at every table - by
+      // name, joined to the club player with that name when there is one.
+      const club = rosterById.get(pid) || rosterByName.get(nameKey(name));
+      const key = club ? "r:" + club.id : "n:" + nameKey(name);
+      const r = rows[key] || (rows[key] = {id: club ? club.id : pid, name: (club ? club.name : name).trim(), profit: 0, nights: 0});
       r.profit += (co.amount || 0) - (bought[pid] || 0);
       r.nights += 1;
     });
