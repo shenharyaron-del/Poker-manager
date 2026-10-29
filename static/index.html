@@ -4056,13 +4056,7 @@ async function checkMyJoinRequest(){
     const others = (r.otherPlayers || []).filter(o => !myIdentity.myPlayers[o.communityId]);
     others.forEach(o => { myIdentity.myPlayers[o.communityId] = o.playerId; });
     await saveIdentity();
-    if (others.length) {
-      try {
-        state.communities = await v2Fetch("GET", "/communities");
-        const summaries = await fetchGameSummaries(state.communities);
-        state.games = await Promise.all(summaries.map(g => v2Fetch("GET", `/games/${g.id}`)));
-      } catch(e) { /* the next refresh brings them */ }
-    }
+    if (others.length) { try { await reloadV2Data(); } catch(e) { /* the next refresh brings them */ } }
     const row = ((getCommunity(jw.communityId) || {}).roster || []).find(r => r.id === jw.playerId);
     if (row && (!row.clientId || row.clientId === row.id)) { try { await v2LinkRosterPlayer(jw.communityId, row.id, myIdentity.id); } catch(e) { /* the myPlayers link above is enough to play */ } }
     if (modal && modal.type === "joinWait") modal = null;
@@ -4073,6 +4067,12 @@ async function checkMyJoinRequest(){
     setJoinWait({...joinWait, status: "rejected", decidedByName: r.decidedByName || null});
     if (!modal || modal.type === "joinWait") openModal({type: "joinWait"});
   }
+}
+// Clubs and every game, fresh from the server - after a change that touches many of them.
+async function reloadV2Data(){
+  state.communities = await v2Fetch("GET", "/communities");
+  const summaries = await fetchGameSummaries(state.communities);
+  state.games = await Promise.all(summaries.map(g => v2Fetch("GET", `/games/${g.id}`)));
 }
 // Someone at the table: requests waiting on me, one window at a time.
 let pendingJoinRequests = [];
@@ -7861,6 +7861,7 @@ function renderModal(m){
           ? `<button type="button" class="roster-stats-link" data-player-stats="${p.id}" title="הביצועים של ${esc(p.name)}">${icon('bar')}<span>${esc(p.name)}</span></button>`
           : `<span>${esc(p.name)}</span>`}${netBadge(playerNetProfit(m.communityId, p.id))}</div>
         <div class="row" style="gap:4px;">
+          ${isSuperAdmin() ? `<button class="icon-btn" data-rename-player="${p.id}" title="שינוי שם">${icon('pencil')}</button>` : ""}
           ${roleBtn}
           ${viewerIsAdmin ? `<button class="icon-btn danger" data-remove-player="${p.id}">${icon('trash')}</button>` : ""}
         </div>
@@ -8047,6 +8048,18 @@ function renderModal(m){
   } else if (m.type === "potFix") {
     title = "סידור קופה";
     body = renderPotFix(m.gameId);
+  } else if (m.type === "renamePlayer") {
+    const c = getCommunity(m.communityId) || {roster: []};
+    const p = c.roster.find(r => r.id === m.playerId) || {name: ""};
+    const [f, l] = splitName(p.name);
+    title = "שינוי שם שחקן";
+    body = `
+      <p style="color:var(--muted);font-size:16px;margin:0 0 10px;">השם משתנה בכל המועדונים של השחקן ובכל הערבים שלו - גם בערבים שכבר שוחקו.</p>
+      <div class="name-pair">
+        <input type="text" id="rename-first" value="${esc(f)}" placeholder="שם פרטי" maxlength="30">
+        <input type="text" id="rename-last" value="${esc(l)}" placeholder="שם משפחה" maxlength="30">
+      </div>
+      <button class="btn btn-primary btn-block" data-rename-save style="margin-top:6px;">שמירה</button>`;
   } else if (m.type === "joinWait") {
     const jw = joinWait || {};
     const club = (getCommunity(jw.communityId) || {}).name || "";
@@ -8991,6 +9004,27 @@ function attachHandlers(){
   app.querySelectorAll("[data-install-app]").forEach(el => el.onclick = (e) => { e.stopPropagation(); startInstall(); });
   app.querySelectorAll("[data-open-pot-fix]").forEach(el => el.onclick = () => openModal({type: "potFix", gameId: nav.gameId}));
   // "הביצועים שלי" on the end-of-night screens (cashed-out player view, game results).
+  // Super admin: rename a player (closing returns to the list).
+  app.querySelectorAll("[data-rename-player]").forEach(el => el.onclick = () => {
+    if (!modal || modal.type !== "roster") return;
+    openModal({type: "renamePlayer", playerId: el.dataset.renamePlayer, communityId: modal.communityId, back: modal});
+  });
+  if (modal && modal.type === "renamePlayer") {
+    const saveBtn = app.querySelector("[data-rename-save]");
+    if (saveBtn) saveBtn.onclick = async () => {
+      const name = nameFromInputs("rename-first", "rename-last");
+      if (!splitName(name)[0]) { showAlert("צריך להזין שם."); return; }
+      const c = getCommunity(modal.communityId);
+      if ((c.roster || []).some(r => r.id !== modal.playerId && sameName(r.name, name))) { showAlert(`השם ${name} כבר קיים במועדון.`); return; }
+      saveBtn.disabled = true;
+      showButtonLoading(saveBtn);
+      try {
+        await v2Fetch("PATCH", `/communities/${modal.communityId}/roster/${modal.playerId}/name`, {name});
+        await reloadV2Data();
+      } catch(e) { showAlert("השמירה נכשלה - נסו שוב."); saveBtn.disabled = false; return; }
+      closeModal();
+    };
+  }
   // Super admin: a player's stats from the club's player list (closing returns to the list).
   app.querySelectorAll("[data-player-stats]").forEach(el => el.onclick = () => {
     if (!modal || modal.type !== "roster") return;
