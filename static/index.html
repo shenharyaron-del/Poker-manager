@@ -1491,9 +1491,48 @@ async function loadState(){
 // All game summaries in one request (GET /game-summaries) instead of one request per
 // community on every refresh tick; only games of communities we actually loaded are kept,
 // same as the old per-community fetch produced.
-async function fetchGameSummaries(communities){
+async function fetchGameSummaries(communities, markGameIds){
   const ids = new Set(communities.map(c => c.id));
-  return (await v2Fetch("GET", "/game-summaries")).filter(gs => ids.has(gs.communityId));
+  allGameSummaries = (await v2Fetch("GET", "/game-summaries")).filter(gs => ids.has(gs.communityId));
+  // A table about to be opened (invite link, the page before a refresh) - its club's games
+  // load now even for the super admin (see clubGamesWanted).
+  (markGameIds || []).forEach(gid => { const gs = allGameSummaries.find(x => x.id === gid); if (gs) lazyLoadedClubIds.add(gs.communityId); });
+  return allGameSummaries.filter(gs => clubGamesWanted(gs.communityId));
+}
+// The super admin sees every club in the app - loading every game of all of them at startup
+// was the heaviest load anyone had. For them only their own clubs' games load up front;
+// another club's load when it's opened (see go / ensureClubGames). Everyone else is a member
+// of every club they see, so this changes nothing for them. allGameSummaries (cheap - no
+// buy-ins) covers every club, for the home screen's table counts.
+let lazyClubGames = false;
+const lazyLoadedClubIds = new Set();
+const clubGamesLoading = new Set();
+let allGameSummaries = [];
+function isMyOwnClub(c){
+  if (!c) return false;
+  const ids = myIdSet();
+  return (c.createdBy && ids.has(c.createdBy)) || (c.roster || []).some(r => r.clientId && ids.has(r.clientId))
+    || !!(myIdentity.myPlayers && myIdentity.myPlayers[c.id]);
+}
+function clubGamesWanted(cid){
+  return !lazyClubGames || lazyLoadedClubIds.has(cid) || isMyOwnClub(getCommunity(cid));
+}
+async function ensureClubGames(cid){
+  if (!cid || clubGamesWanted(cid) || clubGamesLoading.has(cid)) return;
+  clubGamesLoading.add(cid);
+  try {
+    const ids = allGameSummaries.filter(gs => gs.communityId === cid).map(gs => gs.id);
+    const games = await fetchGamesFull(ids);
+    lazyLoadedClubIds.add(cid);
+    const have = new Set(games.map(g => g.id));
+    state.games = state.games.filter(g => !have.has(g.id)).concat(games);
+  } catch(e) { /* the screen says so; opening the club again retries */ }
+  clubGamesLoading.delete(cid);
+  if (appReady && !modal) render();
+}
+// A table screen whose game isn't here (yet): still loading its club, or really gone.
+function missingGameHtml(){
+  return `<div class="empty">${clubGamesLoading.size ? "טוען..." : "משחק לא נמצא"}</div>`;
 }
 // Full detail of many games in as few requests as possible (GET /games-full, up to 100
 // per request), in the order asked - the app used to open with one request per game.
@@ -1508,7 +1547,8 @@ async function fetchGamesFull(ids){
 async function loadStateV2(){
   const [communities, allSummaries] = await Promise.all([v2Fetch("GET", "/communities"), v2Fetch("GET", "/game-summaries")]);
   const communityIds = new Set(communities.map(c => c.id));
-  const gameSummaries = allSummaries.filter(gs => communityIds.has(gs.communityId));
+  allGameSummaries = allSummaries.filter(gs => communityIds.has(gs.communityId));
+  const gameSummaries = allGameSummaries.filter(gs => clubGamesWanted(gs.communityId));
   // Skip re-fetching a game's full detail (7 joined queries server-side - see
   // v2_get_game's own comment) when its updatedAt, already given for free by the cheap
   // summary list above, hasn't moved since we last had it in memory - this function runs
@@ -3694,6 +3734,10 @@ async function performBuyin(gameId, playerId, amount, opts){
 }
 
 function go(screen, extra){
+  if (lazyClubGames) {
+    const cid = (extra || {}).communityId || ((allGameSummaries.find(gs => gs.id === (extra || {}).gameId) || {}).communityId);
+    if (cid && !clubGamesWanted(cid)) setTimeout(() => ensureClubGames(cid), 0);
+  }
   if ((extra||{}).gameId !== nav.gameId) playerViewTarget = null; // admin's dropdown pick is per game
   nav = Object.assign({screen}, extra||{});
   modal = null;
@@ -4698,7 +4742,7 @@ function maybeAutoCloseNight(g){
 }
 // Home-screen club card: how many tables the club has, and how many are still open.
 function clubTablesLabel(cid){
-  const games = gamesForCommunity(cid);
+  const games = allGameSummaries.length ? allGameSummaries.filter(gs => gs.communityId === cid) : gamesForCommunity(cid);
   const open = games.filter(g => !g.closed).length;
   const total = !games.length ? "אין עדיין שולחנות" : games.length === 1 ? "שולחן אחד" : `${games.length} שולחנות`;
   return total + (open ? ` · ${open === 1 ? "פעיל אחד" : open + " פעילים"}` : "");
@@ -6205,7 +6249,7 @@ let undoRebuyTimer = null;
 const EASY_CHIP_RATIOS = [1, 2, 10, 100];
 function renderPlayerScreen(gameId){
   const g = getGame(gameId);
-  if (!g) return `<div class="empty">משחק לא נמצא</div>`;
+  if (!g) return missingGameHtml();
   const c = getCommunity(g.communityId) || {name:"מועדון", roster:[]};
   const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
   const isAdminView = isTableAdmin(g, c);
@@ -6576,7 +6620,7 @@ function playerScreenViewingOther(){
 // that one shared group link instead of player-to-player.
 function renderGameResultsScreen(gameId){
   const g = getGame(gameId);
-  if (!g) return `<div class="empty">משחק לא נמצא</div>`;
+  if (!g) return missingGameHtml();
   const c = getCommunity(g.communityId) || {name:"מועדון", roster:[]};
   // Works whether g came from v2LoadGameFull (g.buyins, individual rows) or
   // v2LoadGameSummary (g.buyinTotals, one aggregated row per player already) -
@@ -6701,7 +6745,7 @@ function renderGameResultsScreen(gameId){
 // buy-ins, pick who absorbs the difference.
 function renderPotFix(gameId){
   const g = getGame(gameId);
-  if (!g) return `<div class="empty">משחק לא נמצא</div>`;
+  if (!g) return missingGameHtml();
   const c = getCommunity(g.communityId) || {name:"מועדון", roster:[]};
   const seats = g.seats || new Array(9).fill(null);
   const buyinTotals = {};
@@ -6802,7 +6846,7 @@ function renderWatchFeed(gameId){
 
 function renderTable(gameId){
   const g = getGame(gameId);
-  if (!g) return `<div class="empty">משחק לא נמצא</div>`;
+  if (!g) return missingGameHtml();
   const aloneAtTable = !g.closed && (g.seats||[]).filter(Boolean).length === 1;
   const c = getCommunity(g.communityId) || {name:"מועדון", roster:[]};
   const seats = g.seats || new Array(9).fill(null);
@@ -11699,7 +11743,12 @@ window.addEventListener("popstate", async () => {
       if (attempt > 0) await new Promise(r => setTimeout(r, 1500 * attempt));
       try {
         state.communities = await v2Fetch("GET", "/communities");
-        const gameSummaries = await fetchGameSummaries(state.communities);
+        // Super admin: only their own clubs' games up front, plus the club of whatever this
+        // open is headed to (an invite link, or the page before a refresh).
+        lazyClubGames = !!(sessionResult.status === "fulfilled" && sessionResult.value && sessionResult.value.role === "superAdmin");
+        const openParams = new URLSearchParams(location.search);
+        [openParams.get("community"), SAVED_NAV_AT_LOAD && SAVED_NAV_AT_LOAD.communityId].forEach(cid => { if (cid) lazyLoadedClubIds.add(cid); });
+        const gameSummaries = await fetchGameSummaries(state.communities, [openParams.get("game"), SAVED_NAV_AT_LOAD && SAVED_NAV_AT_LOAD.gameId]);
         state.games = await fetchGamesFull(gameSummaries.map(g => g.id));
         v2Loaded = true;
         // Every buy-in that already existed the moment the app opened counts as "already
