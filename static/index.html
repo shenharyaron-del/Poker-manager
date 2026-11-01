@@ -5638,13 +5638,13 @@ function render(){
   document.documentElement.classList.toggle("has-install-chip", !!installChip);
   const cornerBtn = menuHead ? `<button type="button" class="theme-toggle game-menu-btn" data-game-menu>☰ תפריט</button>` : themeToggleHtml();
   html = screenTag.replace(/^<div class="screen-tag"/, installChip ? '<div class="screen-tag with-install"' : '<div class="screen-tag"').replace(/<\/div>$/, cornerBtn + installChip + '</div>') + html;
-  // Away from the table while still seated (not cashed out) at one or more games: a bar at
-  // the bottom with a quick way back to each of them. Taps go through [data-open-game],
-  // the same handler as the game cards on the club screen.
+  // Away from the table at a game I sat at that's still going - whether I'm still playing
+  // or already left it: a bar at the bottom with a quick way back to each of them. Taps go
+  // through [data-open-game], the same handler as the game cards on the club screen.
   const myPid = g => myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
   const activeGames = nav.screen === "table" ? [] : (state.games || []).filter(g => {
     const pid = myPid(g);
-    return pid && (g.seats || []).includes(pid) && !(pid in (g.cashouts || {}));
+    return pid && (g.seats || []).includes(pid) && (!(pid in (g.cashouts || {})) || !g.closed);
   });
   // Plus open tables in my clubs that I'm not at yet and that still have a free seat (9
   // max) - a quick way to join one. Only tables opened in the last 24 hours (createdAt;
@@ -5668,14 +5668,17 @@ function render(){
       <div class="agb-title"><span class="agb-live"></span>${barTitle}</div>
       ${barGames.map(g => {
         const cname = (getCommunity(g.communityId) || {}).name || "";
-        const seated = (g.seats || []).filter(Boolean).length;
+        // Still playing - whoever already left doesn't count.
+        const seated = (g.seats || []).filter(sid => sid && !(sid in (g.cashouts || {}))).length;
         const seatedText = seated === 0 ? "אין יושבים" : seated === 1 ? "יושב אחד" : `${seated} יושבים`;
         // The game's own name leads (a long club name used to push it off the end, so two
         // games in one club read the same); the club, how many sit there and the game's
         // status go on a small second line.
         // At a table I sit at, "you're sitting here" stands in for the status.
         const mine = activeGames.includes(g);
-        const statusText = mine ? (myIdentity.gender === "female" ? "את יושבת כאן" : "אתה יושב כאן") : gameStatus(g).label;
+        const iLeft = mine && myPid(g) in (g.cashouts || {});
+        const statusText = iLeft ? "יצאת · המשחק עדיין פעיל"
+          : mine ? (myIdentity.gender === "female" ? "את יושבת כאן" : "אתה יושב כאן") : gameStatus(g).label;
         return `<button type="button" class="btn btn-primary btn-block agb-game" data-open-game="${g.id}"><span class="agb-label"><span class="agb-name">${esc(g.name || g.date || "")}</span><span class="agb-club">${esc(cname)} · ${seatedText} · ${statusText}</span></span>${icon('chev')}</button>`;
       }).join("")}
     </div>`;
