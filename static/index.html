@@ -8138,11 +8138,16 @@ function renderModal(m){
   } else if (m.type === "gameMenu") {
     const g = nav.screen === "table" && getGame(nav.gameId);
     const club = g && getCommunity(g.communityId);
+    // The club's setup (chips, buy-ins, payments, permissions) - same people as the home
+    // card's "Setup": the club's creator and the super admin.
+    const setupClub = club || (nav.screen === "community" && getCommunity(nav.communityId));
+    const canSetupClub = setupClub && (isSuperAdmin() || isClubCreator(setupClub));
     title = "תפריט";
     body = `
       <div class="game-menu">
         <button class="btn btn-ghost btn-block" data-game-menu-go="home">🏠 מסך הבית</button>
         ${club ? `<button class="btn btn-ghost btn-block" data-game-menu-go="club">♣️ המועדון ${esc(club.name)}</button>` : ""}
+        ${canSetupClub ? `<button class="btn btn-ghost btn-block" data-open-chip-setup="${setupClub.id}">${icon('gear')} פרופיל מועדון</button>` : ""}
         <button class="btn btn-ghost btn-block" data-game-menu-go="profile">👤 הפרופיל שלי</button>
         <button class="btn btn-ghost btn-block" data-game-menu-go="stats">${icon('bar')} הביצועים שלי</button>
         <button class="btn btn-ghost btn-block" data-game-menu-go="theme">🎨 עיצוב</button>
