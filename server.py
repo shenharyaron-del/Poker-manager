@@ -1682,7 +1682,9 @@ def v2_update_roster_player(community_id, player_id):
 
 @app.route("/api/v2/communities/<community_id>/roster/<player_id>", methods=["DELETE"])
 def v2_remove_roster_player(community_id, player_id):
-    denied = _guard(community_id=community_id, need="community_admin")
+    # A club admin (the super admin included) removes anyone; a player may remove only
+    # their own row - leaving the club.
+    denied = _guard(community_id=community_id, need="community_admin", players=[player_id])
     if denied:
         return denied
     with get_db() as conn:

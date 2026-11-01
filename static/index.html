@@ -5997,6 +5997,7 @@ function renderCommunity(communityId){
     <div class="px5" style="margin:0 0 14px;"><button class="btn btn-ghost btn-block monthly-report-btn" data-monthly-report="${c.id}">🏆 דוח מנצחים</button></div>
     <div class="section-title" style="font-size:14px;">ערבי משחק</div>
     <div class="px5" style="margin-bottom:20px;">${gamesHtml}</div>
+    ${myIdentity.myPlayers && myIdentity.myPlayers[c.id] && !isClubCreator(c) ? `<div class="terms-link" style="margin-bottom:24px;"><button type="button" data-leave-club="${c.id}">יציאה מהמועדון</button></div>` : ""}
   `;
 }
 
@@ -7920,7 +7921,7 @@ function renderModal(m){
         <div class="row" style="gap:4px;">
           ${isSuperAdmin() ? `<button class="icon-btn" data-rename-player="${p.id}" title="שינוי שם">${icon('pencil')}</button>` : ""}
           ${roleBtn}
-          ${viewerIsAdmin ? `<button class="icon-btn danger" data-remove-player="${p.id}">${icon('trash')}</button>` : ""}
+          ${(viewerIsAdmin || isSuperAdmin()) && !isCreatorRow ? `<button class="icon-btn danger" data-remove-player="${p.id}" title="הורדה מהמועדון">${icon('trash')}</button>` : ""}
         </div>
       </div>`;
     }).join("");
@@ -9061,6 +9062,29 @@ function attachHandlers(){
   app.querySelectorAll("[data-install-app]").forEach(el => el.onclick = (e) => { e.stopPropagation(); startInstall(); });
   app.querySelectorAll("[data-open-pot-fix]").forEach(el => el.onclick = () => openModal({type: "potFix", gameId: nav.gameId}));
   // "הביצועים שלי" on the end-of-night screens (cashed-out player view, game results).
+  // Leaving a club: my roster row goes (my nights stay in its history); not while I'm
+  // still sitting at one of its open tables. The club's creator can't leave it.
+  app.querySelectorAll("[data-leave-club]").forEach(el => el.onclick = async () => {
+    const c = getCommunity(el.dataset.leaveClub);
+    const pid = c && myIdentity.myPlayers && myIdentity.myPlayers[c.id];
+    if (!pid) return;
+    if (state.games.some(g => g.communityId === c.id && !g.closed && (g.seats || []).includes(pid) && !(pid in (g.cashouts || {})))) {
+      showAlert("אתה עדיין יושב בשולחן פתוח במועדון - צריך קודם לצאת מהשולחן.");
+      return;
+    }
+    const ok = await showConfirm(`לצאת מהמועדון "${c.name}"? המועדון ייעלם ממסך הבית שלך. הערבים שכבר שיחקת נשארים בהיסטוריה.`, {okLabel: "יציאה מהמועדון", cancelLabel: "ביטול"});
+    if (!ok) return;
+    el.disabled = true;
+    try { await v2RemoveRosterPlayer(c.id, pid); }
+    catch(e) { showAlert("היציאה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); el.disabled = false; return; }
+    delete myIdentity.myPlayers[c.id];
+    await saveIdentity();
+    if (!isSuperAdmin()) {
+      state.communities = state.communities.filter(x => x.id !== c.id);
+      state.games = state.games.filter(g => g.communityId !== c.id);
+    }
+    go("home");
+  });
   // Super admin: rename a player (closing returns to the list).
   app.querySelectorAll("[data-rename-player]").forEach(el => el.onclick = () => {
     if (!modal || modal.type !== "roster") return;
@@ -10439,6 +10463,11 @@ function attachHandlers(){
     app.querySelectorAll("[data-remove-player]").forEach(el => el.onclick = async () => {
       const playerId = el.dataset.removePlayer;
       const communityId = modal.communityId;
+      const c = getCommunity(communityId);
+      const p = c && c.roster.find(r => r.id === playerId);
+      const seatedNow = state.games.some(g => g.communityId === communityId && !g.closed && (g.seats || []).includes(playerId) && !(playerId in (g.cashouts || {})));
+      const ok = await showConfirm(`להוריד את ${p ? p.name : "השחקן"} מהמועדון?${seatedNow ? " השחקן יושב עכשיו בשולחן פתוח." : ""} הערבים שכבר שיחק נשארים בהיסטוריה.`, {okLabel: "הורדה מהמועדון", cancelLabel: "ביטול"});
+      if (!ok) return;
       el.disabled = true;
       if (USE_RELATIONAL_API) {
         try { await v2RemoveRosterPlayer(communityId, playerId); }
