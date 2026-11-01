@@ -581,7 +581,7 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .night-result .nr-amount{font-weight:800;font-size:38px;line-height:1.2;margin:2px 0 6px;}
 .night-result .nr-note{font-size:17px;color:var(--muted);margin-bottom:8px;}
 .night-result .nr-still{font-size:19px;font-weight:700;color:var(--text);margin:10px 0 4px;}
-.night-result .nr-facts{display:flex;flex-direction:column;gap:8px;margin-top:14px;font-size:16px;font-weight:600;color:var(--text);}
+.night-result .nr-facts{display:flex;flex-direction:column;gap:8px;margin-top:16px;padding:10px 12px 12px;font-size:16px;font-weight:600;color:var(--text);text-align:center;}
 .menu-overlay{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.25);animation:menuShade .2s ease-out;}
 .menu-drop{position:fixed;width:min(260px,calc(100vw - 24px));background:var(--card);border:1px solid rgba(212,175,55,.6);border-radius:14px;padding:8px;box-shadow:0 12px 30px rgba(0,0,0,.5);transform-origin:top;animation:menuUnroll .28s cubic-bezier(.2,.8,.3,1);}
 @keyframes menuUnroll{from{clip-path:inset(0 0 100% 0 round 14px);transform:translateY(-6px);opacity:.4}to{clip-path:inset(0 0 0 0 round 14px);transform:none;opacity:1}}
@@ -8298,7 +8298,7 @@ function renderModal(m){
         <div class="nr-amount ${profit >= 0 ? "profit-win" : ""}" style="color:${profit >= 0 ? "#6ee7b7" : "#fda4af"};">${profit >= 0 ? "רווח" : "הפסד"} ${Math.abs(profit)} שח</div>
         ${note ? `<div class="nr-note">${note}</div>` : ""}
         ${stillPlaying ? `<div class="nr-still">${stillPlaying === 1 ? "שחקן אחד עדיין לא יצא" : `${stillPlaying} שחקנים עדיין לא יצאו`} · בקופה ₪${potLeft}</div>` : ""}
-        ${highlights.length ? `<div class="nr-facts">${highlights.map(t => `<div>${esc(t)}</div>`).join("")}</div>` : ""}
+        ${highlights.length ? `<fieldset class="leave-frame stats-frame nr-facts"><legend>הידעת?</legend>${highlights.map(t => `<div>${esc(t)}</div>`).join("")}</fieldset>` : ""}
         <button class="btn btn-primary btn-block" data-night-result-close style="margin-top:18px;font-size:19px;">סגור</button>
       </div>`;
   } else if (m.type === "gameMenu") {
