@@ -1113,9 +1113,11 @@ html.theme-light.theme-blue .modal .btn-primary,html.theme-light.theme-blue .mod
 .game-tabs-row{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:2px 12px 18px;flex-shrink:0;}
 /* One dark rounded track with the open tab as a gold pill inside it (a switch, so it
    doesn't read like the player tiles below). */
-.game-seg{flex:1;min-width:0;display:flex;gap:2px;background:rgba(0,0,0,.35);border-radius:999px;padding:4px;}
+.game-seg{position:relative;flex:1;min-width:0;display:flex;gap:2px;background:rgba(0,0,0,.35);border-radius:999px;padding:4px;}
+.seg-pill{position:absolute;top:4px;bottom:4px;left:4px;width:0;border-radius:999px;background:var(--gold);box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none;}
 .game-seg button{flex:1;min-width:0;padding:8px 2px;white-space:nowrap;border:none;border-radius:999px;background:none;color:var(--text);opacity:.8;font-family:inherit;font-size:16px;font-weight:600;cursor:pointer;}
-.game-seg button.on{background:var(--gold);color:var(--gold-text);opacity:1;font-weight:800;box-shadow:0 2px 8px rgba(0,0,0,.35);}
+.game-seg button{position:relative;z-index:1;}
+.game-seg button.on{color:var(--gold-text);opacity:1;font-weight:800;}
 html.theme-light .game-seg{background:rgba(0,0,0,.12);}
 /* "הביצועים שלי" - a round icon at the end of the tabs row: across all nights, not a
    view of tonight's table, so it isn't one of the tabs. */
@@ -1572,6 +1574,18 @@ function attachTabSwipe(app){
   if (!root || !page) return;
   const tabs = [...app.querySelectorAll(".game-seg [data-game-tab]")];
   const cur = tabs.findIndex(t => t.classList.contains("on"));
+  // The gold pill under the open tab is its own element, so it can travel: it sits under
+  // the open tab, and during a drag glides toward the tab being dragged in, in step with
+  // the page.
+  const pill = app.querySelector(".seg-pill");
+  const placePill = (from, to, t, animated) => {
+    if (!pill || !from) return;
+    to = to || from;
+    pill.style.transition = animated ? "left .2s ease, width .2s ease" : "none";
+    pill.style.left = (from.offsetLeft + (to.offsetLeft - from.offsetLeft) * t) + "px";
+    pill.style.width = (from.offsetWidth + (to.offsetWidth - from.offsetWidth) * t) + "px";
+  };
+  placePill(tabs[cur], null, 0, false);
   if (cur < 0 || tabs.length < 2) return;
   let sx = null, sy = 0, active = false, abandoned = false, dx = 0, swiped = 0;
   const neighbour = d => tabs[cur + (d < 0 ? -1 : 1)];   // d: drag direction (<0 = left)
@@ -1590,6 +1604,7 @@ function attachTabSwipe(app){
     if (e.cancelable) e.preventDefault();
     page.style.transition = "none";
     page.style.transform = `translateX(${neighbour(dx) ? dx : dx * 0.25}px)`;
+    placePill(tabs[cur], neighbour(dx), Math.min(1, Math.abs(dx) / page.offsetWidth), false);
   });
   const end = () => {
     if (sx == null) return;
@@ -1600,10 +1615,12 @@ function attachTabSwipe(app){
     if (!next) {
       page.style.transition = "transform .2s ease";
       page.style.transform = "";
+      placePill(tabs[cur], null, 0, true);
       return;
     }
     page.style.transition = "transform .16s ease-in";
     page.style.transform = `translateX(${dx < 0 ? "-" : ""}100%)`;
+    placePill(tabs[cur], next, 1, true);
     setTimeout(() => { tabSlideIn = dx < 0 ? "from-right" : "from-left"; swiped = 0; next.click(); }, 150);
   };
   root.addEventListener("pointerup", end);
@@ -1612,6 +1629,11 @@ function attachTabSwipe(app){
   root.addEventListener("dragstart", e => e.preventDefault());
   root.addEventListener("click", e => { if (Date.now() - swiped < 400) { e.stopPropagation(); e.preventDefault(); } }, true);
 }
+// The pill follows its tab when the tabs change width (rotating the phone).
+window.addEventListener("resize", () => {
+  const on = document.querySelector(".game-seg button.on"), pill = document.querySelector(".seg-pill");
+  if (on && pill) { pill.style.transition = "none"; pill.style.left = on.offsetLeft + "px"; pill.style.width = on.offsetWidth + "px"; }
+});
 // The ☰ menu rolls back up (the opening animation reversed) before whatever comes next.
 function closeMenuThen(next){
   const drop = document.querySelector(".menu-drop"), shade = document.querySelector(".menu-overlay");
@@ -5472,16 +5494,18 @@ function gameTabsScreen(g, c, seated){
   // the rest, with an icon. Shown even before I've sat down (it then points to the seats).
   const row = `
     <div class="game-tabs-row">
-      <div class="game-seg" role="tablist">${tabs.map(([k, label]) => `<button type="button" class="${tab === k ? "on" : ""}${k === "game" ? " seg-main" : ""}${(k === "invite" && invitePulse) || (k === "game" && gamePulse) ? " tab-hint" : ""}" data-game-tab="${k}">${k === "game" ? icon('user') : ""}${label}</button>`).join("")}</div>
+      <div class="game-seg" role="tablist"><span class="seg-pill" aria-hidden="true"></span>${tabs.map(([k, label]) => `<button type="button" class="${tab === k ? "on" : ""}${k === "game" ? " seg-main" : ""}${(k === "invite" && invitePulse) || (k === "game" && gamePulse) ? " tab-hint" : ""}" data-game-tab="${k}">${k === "game" ? icon('user') : ""}${label}</button>`).join("")}</div>
       <button type="button" class="game-stats-btn" data-open-my-stats title="הביצועים שלי" aria-label="הביצועים שלי">${icon('bar')}</button>
     </div>`;
   const content = tab === "game" ? (seated ? renderPlayerScreen(g.id) : renderUnseatedGameTab(g))
     : tab === "invite" ? renderInviteTab(g, c) : renderTable(g.id);
   const pageCls = tab === "game" ? ` player-page${playerScreenViewingOther() ? " pp-other" : ""}` : "";
+  // The tabs row stays put; only the page under it slides (see attachTabSwipe).
   return `<div class="table-swipe-root">
+    ${row}
     <div class="swipe-track-viewport">
       <div class="swipe-track">
-        <div class="swipe-page lux-page${pageCls}${tabSlideIn ? " tab-slide-" + tabSlideIn : ""}" data-tab-swipe>${row}${content}</div>
+        <div class="swipe-page lux-page${pageCls}${tabSlideIn ? " tab-slide-" + tabSlideIn : ""}" data-tab-swipe>${content}</div>
       </div>
     </div>
   </div>`;
