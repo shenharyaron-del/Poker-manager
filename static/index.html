@@ -992,7 +992,7 @@ html.theme-light .game-alert-line{color:#9a3412;}
 @keyframes club-peek{0%{transform:translateX(0)}35%{transform:translateX(-30%)}55%{transform:translateX(-30%)}100%{transform:translateX(0)}}
 .club-swipe .club-front.club-hint-peek{animation:club-peek 1.4s ease-in-out 1;}
 html.theme-light .tp-row{border-color:var(--card-b)!important;}
-/* Cashed-out view action buttons - one shared size (סידור קופה / הביצועים שלי / החזרה לשולחן) */
+/* Cashed-out view action buttons - one shared size (סידור קופה / הביצועים שלי) */
 .co-act{margin:12px auto 0;display:flex;align-items:center;justify-content:center;gap:6px;width:210px;max-width:80%;padding:10px 14px;font-size:14px;}
 .pot-fix-cta{position:relative;width:210px;max-width:80%;margin:14px auto 0;}
 .pot-fix-cta .co-act{margin:0;width:100%;max-width:none;}
@@ -1101,6 +1101,10 @@ html.theme-light .extra-seat-plus .esp-amount{color:var(--text);}
 html.theme-light .extra-seat-plus .esp-amount .pos{color:#047857;}
 html.theme-light .extra-seat-plus .esp-amount .neg{color:#b91c1c;}
 html.theme-light .extra-seat-plus .esp-label{color:#5b3708;text-shadow:0 0 3px rgba(255,255,255,.8);}
+.pp-name-box .pp-return-link{font-size:13px;}
+.pp-return-link{background:none;border:none;padding:0;font:inherit;font-size:.8em;font-weight:700;color:var(--gold);text-decoration:underline;text-underline-offset:3px;cursor:pointer;white-space:nowrap;}
+.pp-return-side{grid-column:4;display:flex;align-items:center;justify-content:center;}
+.pp-return-side .pp-return-link{font-size:15px;}
 .pp-back-me{grid-column:4;min-width:0;min-height:44px;padding:6px 6px;border-radius:12px;border:2px solid #93c5fd;background:#1d4ed8;color:#fff;font-family:inherit;font-size:16px;font-weight:800;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.35);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 /* Name field + a small ז / נ (male / female) pick on the same row. */
 .gender-name-row{display:flex;align-items:stretch;gap:6px;}
@@ -6639,8 +6643,9 @@ function renderPlayerScreen(gameId){
     </div>
   `;
   // Admin, looking at someone: the per-player actions the old admin page had.
-  const adminPlayerActions = (isAdminView && pid) ? (cashedOut
-    ? `<button class="btn btn-ghost co-act" data-admin-return-to-game="${pid}">${icon('undo')} החזרה לשולחן</button>`
+  // A cashed-out player is sent back to the table from a link by their name (see nameHtml),
+  // not a separate button.
+  const adminPlayerActions = (isAdminView && pid) ? (cashedOut ? ""
     : ((viewingOther && !armed) ? `<button class="btn btn-ghost btn-block" style="margin-top:4px;font-size:17px;" data-admin-remove-seat="${pid}">הסרת ${esc(p ? p.name : "השחקן")} מהשולחן</button>` : "")) : "";
   // Everyone but me who entered tonight (tonight's entry order), each a tile that opens
   // their screen - the one being looked at is highlighted. With 10 at the table, one of
@@ -6659,8 +6664,13 @@ function renderPlayerScreen(gameId){
   const nameHtml = (() => {
     const nm = p ? p.name : "";
     const len = nm.length + (cashedOut ? 6 : 0);
-    const font = len > 24 ? 17 : len > 18 ? 20 : null;
-    const box = `<div class="pp-name-box" dir="rtl"${font ? ` style="font-size:${font}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut ? ' · יצא' : ''}</div>`;
+    // With the "החזר למשחק" link in the box too, the line has to fit in it.
+    const font = cashedOut && isAdminView && viewingOther ? (nm.length > 8 ? 15 : 17) : len > 24 ? 17 : len > 18 ? 20 : null;
+    // An admin can send a cashed-out player back to the table: a link right after "יצא" in
+    // the name box - or, on the admin's own screen, beside the box on its left.
+    const canReturn = cashedOut && isAdminView;
+    const returnLink = `<button type="button" class="pp-return-link" data-admin-return-to-game="${pid}">החזר למשחק</button>`;
+    const box = `<div class="pp-name-box" dir="rtl"${font ? ` style="font-size:${font}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut ? ' · יצא' : ''}${canReturn && viewingOther ? ` · ${returnLink}` : ''}</div>`;
     // Looking at someone else: my own name, as a button beside theirs, takes me back to my
     // own screen.
     const me = myPlayerId && g.players.find(x => x.id === myPlayerId);
@@ -6668,7 +6678,7 @@ function renderPlayerScreen(gameId){
     // name button (when looking at someone else) sits in the 4th.
     // The box right of the name (see sideId).
     const extraBox = sideId ? playerTile(sideId, " pp-extra") : "";
-    return `<div class="pp-name-row">${extraBox}${box}${viewingOther && me ? `<button type="button" class="pp-back-me" data-pp-back-me title="חזרה למסך שלי"><bdi>${esc(tableShortName(g, me.id))}</bdi></button>` : ""}</div>`;
+    return `<div class="pp-name-row">${extraBox}${box}${viewingOther && me ? `<button type="button" class="pp-back-me" data-pp-back-me title="חזרה למסך שלי"><bdi>${esc(tableShortName(g, me.id))}</bdi></button>` : ""}${canReturn && !viewingOther ? `<div class="pp-return-side">${returnLink}</div>` : ""}</div>`;
   })();
   // Tiles above the name: everyone who entered tonight, in order, then a "הזמן שחקן" tile
   // in the next free spot (it replaces the header's invite button here).
