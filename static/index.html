@@ -577,6 +577,11 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .tab-slide-from-left{animation:tabFromLeft .2s ease-out;}
 @keyframes tabFromRight{from{transform:translateX(35%);opacity:.3}}
 @keyframes tabFromLeft{from{transform:translateX(-35%);opacity:.3}}
+.night-result{text-align:center;}
+.night-result .nr-amount{font-weight:800;font-size:38px;line-height:1.2;margin:2px 0 6px;}
+.night-result .nr-note{font-size:17px;color:var(--muted);margin-bottom:8px;}
+.night-result .nr-still{font-size:19px;font-weight:700;color:var(--text);margin:10px 0 4px;}
+.night-result .nr-facts{display:flex;flex-direction:column;gap:8px;margin-top:14px;font-size:16px;font-weight:600;color:var(--text);}
 .menu-overlay{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.25);animation:menuShade .2s ease-out;}
 .menu-drop{position:fixed;width:min(260px,calc(100vw - 24px));background:var(--card);border:1px solid rgba(212,175,55,.6);border-radius:14px;padding:8px;box-shadow:0 12px 30px rgba(0,0,0,.5);transform-origin:top;animation:menuUnroll .28s cubic-bezier(.2,.8,.3,1);}
 @keyframes menuUnroll{from{clip-path:inset(0 0 100% 0 round 14px);transform:translateY(-6px);opacity:.4}to{clip-path:inset(0 0 0 0 round 14px);transform:none;opacity:1}}
@@ -3146,9 +3151,16 @@ let autoOpenedDirectPay = new Set();
 function directPaidNet(g, playerId){
   return (g.playerPayments||[]).reduce((s,pp) => s + (pp.fromPlayerId===playerId ? pp.amount : 0) - (pp.toPlayerId===playerId ? pp.amount : 0), 0);
 }
-function maybeOpenDirectPayAfterCashout(gameId, playerId, chips){
+function maybeOpenDirectPayAfterCashout(gameId, playerId, chips, afterResult){
   const g = getGame(gameId);
   if (!g) return;
+  // My own night just ended: the result popup comes first (see "nightResult"); closing it
+  // calls back here for the rest.
+  if (!afterResult && myIdentity.myPlayers && myIdentity.myPlayers[g.communityId] === playerId) {
+    autoOpenedDirectPay.add(`${gameId}:${playerId}`);
+    openModal({type: "nightResult", gameId, playerId, chips});
+    return;
+  }
   const c = getCommunity(g.communityId);
   // Only for player-to-player settlement - with a group Paybox/Bit the money goes to the
   // group, so there's no "who did you pay" to ask.
@@ -6466,12 +6478,6 @@ function renderPlayerScreen(gameId){
       </div>
       ${profitLine}
     `;
-    const exitHighlights = computeExitHighlights(c, g, pid);
-    const exitHighlightsHtml = exitHighlights.length ? `
-      <div style="margin-top:18px;display:flex;flex-direction:column;gap:8px;flex-shrink:0;">
-        ${exitHighlights.map(t => `<div style="text-align:center;font-size:14px;font-weight:600;color:var(--text);">${esc(t)}</div>`).join("")}
-      </div>
-    ` : "";
     const activePayboxLink = getActivePayboxLink(c);
     const activeBitLink = getActiveBitLink(c);
     let statusHtml = "";
@@ -6520,7 +6526,9 @@ function renderPlayerScreen(gameId){
       <div class="still-playing-note" style="margin-top:12px;font-size:19px;font-weight:700;color:var(--text);">
         ${stillPlaying === 1 ? "שחקן אחד עדיין לא יצא" : `${stillPlaying} שחקנים עדיין לא יצאו`} · בקופה ₪${potLeft}
       </div>` : "";
-    cashedOutInfoHtml = breakdownHtml + paymentNotesHtml + statusHtml + stillPlayingHtml + exitHighlightsHtml
+    // The nice facts about my recent nights were in the end-of-night popup ("nightResult") -
+    // not repeated here.
+    cashedOutInfoHtml = breakdownHtml + paymentNotesHtml + statusHtml + stillPlayingHtml
       + ((isAdminView && allCashedOutForSettlement && !potBalancedForSettlement) ? `<div class="pot-fix-cta"><button class="btn btn-blue co-act" data-open-pot-fix>${icon('coins')} סידור קופה</button><span class="pot-fix-hand">👈</span></div>` : "")
       + (viewingOther ? "" : `<button class="btn btn-ghost co-act" data-open-my-stats>${icon('bar')} הביצועים שלי</button>`);
   }
@@ -8271,6 +8279,28 @@ function renderModal(m){
   } else if (m.type === "potFix") {
     title = "סידור קופה";
     body = renderPotFix(m.gameId);
+  } else if (m.type === "nightResult") {
+    // Right after I end my night: the result, who's still playing and the nice facts about
+    // my recent nights - one "סגור" button, no payment here (that's on the screen behind).
+    const g = getGame(m.gameId) || {buyins: [], cashouts: {}, seats: []};
+    const c = getCommunity(g.communityId) || {};
+    const bought = (g.buyins || []).filter(b => b.playerId === m.playerId).reduce((s2, b) => s2 + b.amount, 0);
+    const out = ((g.cashouts || {})[m.playerId] || {}).amount;
+    const profit = Math.round(((out != null ? out : m.chips) - bought) * 100) / 100;
+    const stillPlaying = (g.seats || []).filter(sid => sid && !(sid in (g.cashouts || {}))).length;
+    const potLeft = Math.round(((g.buyins || []).reduce((s2, b) => s2 + b.amount, 0) - Object.values(g.cashouts || {}).reduce((s2, co) => s2 + (co.amount || 0), 0)) * 100) / 100;
+    const groupPot = c.settlementDefault === "paybox" || c.settlementDefault === "bit";
+    const note = profit > 0.5 ? (groupPot ? "הרווח יחולק אחרי שכולם ישלמו לקבוצה" : stillPlaying ? "הרווח יישלח אליך בסוף הערב" : "") : "";
+    const highlights = c.id ? computeExitHighlights(c, g, m.playerId) : [];
+    title = "סיימת את הערב";
+    body = `
+      <div class="night-result">
+        <div class="nr-amount ${profit >= 0 ? "profit-win" : ""}" style="color:${profit >= 0 ? "#6ee7b7" : "#fda4af"};">${profit >= 0 ? "רווח" : "הפסד"} ${Math.abs(profit)} שח</div>
+        ${note ? `<div class="nr-note">${note}</div>` : ""}
+        ${stillPlaying ? `<div class="nr-still">${stillPlaying === 1 ? "שחקן אחד עדיין לא יצא" : `${stillPlaying} שחקנים עדיין לא יצאו`} · בקופה ₪${potLeft}</div>` : ""}
+        ${highlights.length ? `<div class="nr-facts">${highlights.map(t => `<div>${esc(t)}</div>`).join("")}</div>` : ""}
+        <button class="btn btn-primary btn-block" data-night-result-close style="margin-top:18px;font-size:19px;">סגור</button>
+      </div>`;
   } else if (m.type === "gameMenu") {
     const g = nav.screen === "table" && getGame(nav.gameId);
     const club = g && getCommunity(g.communityId);
@@ -8898,7 +8928,7 @@ function renderModal(m){
   if (m.type === "gameMenu") {
     return `<div class="menu-overlay" data-menu-outside><div class="menu-drop" style="top:${m.top || 56}px;right:${m.right == null ? 12 : m.right}px;" onclick="event.stopPropagation()">${body}</div></div>`;
   }
-  const dismissable = m.type !== "loginRequired" && !(m.type === "identityName" && m.forced) && m.type !== "directPay" && m.type !== "entryBuyin" && m.type !== "joinWait" && m.type !== "joinApprove";
+  const dismissable = m.type !== "loginRequired" && !(m.type === "identityName" && m.forced) && m.type !== "directPay" && m.type !== "entryBuyin" && m.type !== "joinWait" && m.type !== "joinApprove" && m.type !== "nightResult";
   const topAnchored = m.type === "seatChips" || m.type === "loginRequired" || m.type === "newCommunity";
   // The photo-count tab needs real room - a full-width photo plus the per-color table
   // below it never fit in the normal 480px/85vh modal without heavy scrolling, reported
@@ -8910,7 +8940,7 @@ function renderModal(m){
       return (sc.chipValues||[]).length > 0;
     })());
   return `
-    <div class="overlay${topAnchored ? ' overlay-top' : ''}${m.type === "entryBuyin" ? ' overlay-center' : ''}${isSetupFlow ? ' overlay-fullscreen' : ''}${m.type === "stats" || m.type === "terms" ? ' overlay-full' : ''}">
+    <div class="overlay${topAnchored ? ' overlay-top' : ''}${m.type === "entryBuyin" || m.type === "nightResult" ? ' overlay-center' : ''}${isSetupFlow ? ' overlay-fullscreen' : ''}${m.type === "stats" || m.type === "terms" ? ' overlay-full' : ''}">
       <div class="modal${["chipSetup","payboxSettings","buyinSetup","permSetup","seatChips"].includes(m.type) ? "" : " modal-big"}" onclick="event.stopPropagation()">
         <div class="modal-head"><h3 class="serif">${title}</h3>${dismissable ? `<button class="close-x" data-close-modal>${icon('x')}</button>` : ""}</div>
         ${body}${body.includes('class="mode-panel ' + SETUP_PANEL_MARK) ? '</div></div>' + SETUP_FOOTER_HTML : ''}
@@ -8940,7 +8970,9 @@ function attachHandlers(){
       const key = `${g.id}:${pid}`;
       if (!allOut && !g.closed && myProfit < -0.5 && !autoOpenedDirectPay.has(key)) {
         autoOpenedDirectPay.add(key);
-        setTimeout(() => openModal({type:"directPay", gameId: g.id, fromPlayerId: pid, amount: String(Math.round(Math.abs(myProfit)*100)/100)}), 0);
+        // Not over another window - after my own cash-out the result popup opens first, and
+        // closing it brings this up (see maybeOpenDirectPayAfterCashout).
+        setTimeout(() => { if (!modal) openModal({type:"directPay", gameId: g.id, fromPlayerId: pid, amount: String(Math.round(Math.abs(myProfit)*100)/100)}); }, 0);
       }
     }
     // Seated with nothing bought in (the entry window was left unanswered - app closed,
@@ -9272,6 +9304,11 @@ function attachHandlers(){
       state.games = state.games.filter(g => g.communityId !== c.id);
     }
     go("home");
+  });
+  app.querySelectorAll("[data-night-result-close]").forEach(el => el.onclick = () => {
+    const {gameId, playerId, chips} = modal;
+    closeModal();
+    maybeOpenDirectPayAfterCashout(gameId, playerId, chips, true);
   });
   app.querySelectorAll("[data-game-menu]").forEach(el => el.onclick = (e) => {
     e.stopPropagation();
