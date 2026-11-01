@@ -711,6 +711,8 @@ input:focus,.select-input:focus{border-color:var(--gold);}
    avatar's own visible edge. */
 .seat-info{display:flex;flex-direction:column;align-items:center;gap:1px;cursor:pointer;background:rgba(8,8,8,.82);border-radius:10px;padding:13px 10px 5px;margin-top:-13px;}
 .seat-name{font-size:11px;font-weight:700;color:var(--text);text-align:center;white-space:nowrap;max-width:78px;overflow:hidden;text-overflow:ellipsis;}
+.buyin-bar{align-self:stretch;height:6px;margin-top:3px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;direction:rtl;}
+.buyin-bar span{display:block;height:100%;border-radius:3px;}
 .seat-caption{font-size:13px;color:var(--gold);font-weight:700;text-align:center;line-height:1.35;white-space:nowrap;}
 .seat-history-toggle{position:absolute;top:3px;right:5px;background:none;border:none;color:var(--muted);cursor:pointer;padding:2px;display:inline-flex;z-index:2;}
 .seat-history-toggle svg{transition:transform .15s ease;}
@@ -6197,8 +6199,19 @@ function monthlyReportText(c, ym, st){
 // positioned separately. Shared between the real table render and the small preview in
 // the identityName "המיקום שלי בשולחן" picker, so both draw from the exact same layout.
 const SEAT_POS = [
-  [32,7],[68,7],[89,26],[89,52],[78,76],[38,92],[18,76],[7,52],[7,26],[3,90]
+  [32,7],[68,7],[86,26],[86,52],[78,76],[38,92],[18,76],[14,52],[14,26],[3,90]
 ];
+// A seat's buy-in bar (under the name and amount): as long as the player's buy-in
+// relative to whoever bought in the most tonight, and coloured by the amount itself in
+// ₪50 steps - green at ₪50 up to red at ₪300 and above - so a colour means the same
+// amount every night.
+const BUYIN_BAR_COLORS = ["#34d399", "#a3e635", "#fdba74", "#f97316", "#f87171", "#dc2626"];
+function buyinBarHtml(amount, max){
+  if (!(amount > 0) || !(max > 0)) return "";
+  const color = BUYIN_BAR_COLORS[Math.min(5, Math.max(0, Math.round(amount / 50) - 1))];
+  const pct = Math.max(6, Math.round(amount / max * 100));
+  return `<div class="buyin-bar"><span style="width:${pct}%;background:${color};box-shadow:0 0 5px ${color}99;"></span></div>`;
+}
 // The table screen's default face for a seated player: their own name/total up top, their
 // buy-in history, a one-tap buy-in row, a leave-the-table shortcut, and a WhatsApp-style
 // feed of the whole table's recent buy-ins. Swipe left (see attachHandlers) to reach the
@@ -7005,6 +7018,8 @@ function renderTable(gameId){
       if (d < best) { best = d; hintSeatIdx = i; }
     });
   }
+  // Each seat's buy-in bar is measured against whoever bought in the most tonight.
+  const maxSeatBuyin = Math.max(0, ...seats.filter(Boolean).map(pid => buyinTotals[pid] || 0));
   const seatsHtml = seats.map((pid, i) => {
     if (i === EXTRA_SEAT) return ""; // the 10th seat isn't on the table (see EXTRA_SEAT)
     const [x,y] = SEAT_POS[visualPos(i)];
@@ -7097,6 +7112,7 @@ function renderTable(gameId){
         ${historyToggleHtml}
         <div class="seat-name">${esc(name)}</div>
         <div class="seat-caption">${caption}</div>
+        ${buyinBarHtml(buyin, maxSeatBuyin)}
         ${historyPopupHtml}
       </div>
     </div>`;
