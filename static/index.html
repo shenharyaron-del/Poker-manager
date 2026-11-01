@@ -828,6 +828,10 @@ html.theme-light .lux-page .icon-btn.gold[data-invite-game]{background:linear-gr
 /* Inline mint/pink profit & accent text written for the dark page - deepen it on light. */
 html.theme-light [style*="color:#6ee7b7"]{color:#0f4c6b!important;}
 html.theme-light.theme-sand [style*="color:#6ee7b7"]{color:#6b4a1f!important;}
+/* A player's profit stays green in the light themes too (the rule above recolours every
+   mint text): dark green on the page, bright green inside the table's dark seat boxes. */
+html.theme-light .profit-win,html.theme-light.theme-sand .profit-win{color:#15803d!important;}
+html.theme-light .seat-co-profit.pos,html.theme-light.theme-sand .seat-co-profit.pos{color:#4ade80!important;}
 html.theme-light [style*="color:#fda4af"]{color:#be123c!important;}
 html.theme-light [style*="color:#f5f5f4"]{color:var(--text)!important;}
 /* Blue (felt-blue page, gold rebuy button) */
@@ -6445,7 +6449,7 @@ function renderPlayerScreen(gameId){
     // the history/feed sections below it are hidden once cashed out (item 8) - this is the
     // one number that freed-up space exists to foreground.
     const profitLine = profitForInfo >= 0
-      ? `<div style="font-weight:800;font-size:34px;color:#6ee7b7;margin-top:6px;">רווח ${profitForInfo} שח</div>`
+      ? `<div class="profit-win" style="font-weight:800;font-size:34px;color:#6ee7b7;margin-top:6px;">רווח ${profitForInfo} שח</div>`
       : `<div style="font-weight:800;font-size:34px;color:#fda4af;margin-top:6px;">הפסד ${Math.abs(profitForInfo)} שח</div>`;
     const breakdownHtml = `
       <div style="font-size:14px;color:var(--muted);line-height:1.6;margin-top:6px;">
