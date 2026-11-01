@@ -569,6 +569,7 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .login-alt{text-align:center;margin-top:14px;}
 .login-invite{font-size:18px;line-height:1.5;text-align:center;margin:0 0 14px;padding:10px 12px;border:1px solid rgba(212,175,55,.45);border-radius:12px;background:rgba(212,175,55,.08);}
 .game-focus-head{justify-content:center;font-size:15px;}
+.game-focus-head .crumb-here{flex-shrink:1;min-width:0;overflow:hidden;text-overflow:ellipsis;}
 .game-menu{display:flex;flex-direction:column;gap:8px;}
 .game-menu .btn{display:flex;align-items:center;justify-content:center;gap:8px;font-size:18px;}
 .login-alt button{background:none;border:none;padding:0;font:inherit;font-size:14px;color:var(--muted);text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
@@ -5496,24 +5497,20 @@ function render(){
   // › <this screen>, the first two linking home and to the club. One line: a long club
   // name gives way first ("…", down to nothing), never the current screen's name.
   const crumbGame = nav.screen === "table" && nav.gameId ? getGame(nav.gameId) : null;
-  // Playing (seated, not out yet) and not running the table: just the table's name and a
-  // ☰ menu (home, club, profile, stats, design) - nothing on screen that leaves the game
-  // by accident. Admins and the table's creator keep the full header.
-  const myGamePid = crumbGame && myIdentity.myPlayers && myIdentity.myPlayers[crumbGame.communityId];
-  const gameFocus = !!(crumbGame && seated && !resultsScreen && myGamePid && !(myGamePid in (crumbGame.cashouts || {}))
-    && !isTableAdmin(crumbGame, getCommunity(crumbGame.communityId)));
-  const screenTag = gameFocus
-    ? `<div class="screen-tag screen-tag-lg crumbs-row game-focus-head"><span class="crumb-here">${esc(crumbGame.name || crumbGame.date || "")}</span></div>`
-    : crumbGame
-    ? `<div class="screen-tag screen-tag-lg crumbs-row"><button type="button" class="crumb-link" data-crumb-home>בית</button><span class="crumb-sep">›</span><button type="button" class="crumb-link crumb-club" data-back-community="${crumbGame.communityId}">${esc((getCommunity(crumbGame.communityId) || {}).name || "")}</button>${crumbsStopAtClub ? "" : `<span class="crumb-sep">›</span><span class="crumb-here">${esc(screenLabel)}</span>`}</div>`
-    : nav.screen === "community"
-      ? `<div class="screen-tag screen-tag-lg crumbs-row"><button type="button" class="crumb-link" data-crumb-home>בית</button><span class="crumb-sep">›</span><span class="crumb-club">${esc((getCommunity(nav.communityId) || {}).name || "")}</span></div>`
-      : `<div class="screen-tag${nav.screen === "home" ? " screen-tag-lg" : ""}">${esc(screenLabel)}</div>`;
+  // Table and club screens: the screen's name and a ☰ menu (home, the club, profile, stats,
+  // design) in the corner, instead of "בית › מועדון" breadcrumbs - nothing on screen that
+  // leaves the game by accident. The home screen keeps its "עיצוב" button.
+  const menuHead = !!crumbGame || nav.screen === "community";
+  const headTitle = crumbGame ? (crumbGame.name || crumbGame.date || "") + (crumbsStopAtClub ? "" : ` · ${screenLabel}`)
+    : nav.screen === "community" ? (getCommunity(nav.communityId) || {}).name || "" : "";
+  const screenTag = menuHead
+    ? `<div class="screen-tag screen-tag-lg crumbs-row game-focus-head"><span class="crumb-here">${esc(headTitle)}</span></div>`
+    : `<div class="screen-tag${nav.screen === "home" ? " screen-tag-lg" : ""}">${esc(screenLabel)}</div>`;
   // "התקן אפליקציה" sits under the עיצוב button (not beside the screen name, which it
   // covered); the header grows a little to make room for it.
   const installChip = installChipHtml();
   document.documentElement.classList.toggle("has-install-chip", !!installChip);
-  const cornerBtn = gameFocus ? `<button type="button" class="theme-toggle game-menu-btn" data-game-menu>☰ תפריט</button>` : themeToggleHtml();
+  const cornerBtn = menuHead ? `<button type="button" class="theme-toggle game-menu-btn" data-game-menu>☰ תפריט</button>` : themeToggleHtml();
   html = screenTag.replace(/^<div class="screen-tag"/, installChip ? '<div class="screen-tag with-install"' : '<div class="screen-tag"').replace(/<\/div>$/, cornerBtn + installChip + '</div>') + html;
   // Away from the table while still seated (not cashed out) at one or more games: a bar at
   // the bottom with a quick way back to each of them. Taps go through [data-open-game],
@@ -8139,7 +8136,7 @@ function renderModal(m){
     title = "סידור קופה";
     body = renderPotFix(m.gameId);
   } else if (m.type === "gameMenu") {
-    const g = getGame(nav.gameId);
+    const g = nav.screen === "table" && getGame(nav.gameId);
     const club = g && getCommunity(g.communityId);
     title = "תפריט";
     body = `
@@ -8149,6 +8146,7 @@ function renderModal(m){
         <button class="btn btn-ghost btn-block" data-game-menu-go="profile">👤 הפרופיל שלי</button>
         <button class="btn btn-ghost btn-block" data-game-menu-go="stats">${icon('bar')} הביצועים שלי</button>
         <button class="btn btn-ghost btn-block" data-game-menu-go="theme">🎨 עיצוב</button>
+        ${installMode() ? `<button class="btn btn-ghost btn-block" data-install-app>📲 התקנת האפליקציה</button>` : ""}
       </div>`;
   } else if (m.type === "renamePlayer") {
     const c = getCommunity(m.communityId) || {roster: []};
