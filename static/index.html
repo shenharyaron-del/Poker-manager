@@ -1653,6 +1653,8 @@ window.addEventListener("resize", () => {
   const on = document.querySelector(".game-seg button.on"), pill = document.querySelector(".seg-pill");
   if (on && pill) { pill.style.transition = "none"; pill.style.left = on.offsetLeft + "px"; pill.style.width = on.offsetWidth + "px"; }
 });
+// Closes / reopens a night for everyone (set up in attachHandlers - see its own comment).
+let setNightClosed = async () => {};
 // The ☰ menu rolls back up (the opening animation reversed) before whatever comes next.
 function closeMenuThen(next){
   const drop = document.querySelector(".menu-drop"), shade = document.querySelector(".menu-overlay");
@@ -8309,6 +8311,9 @@ function renderModal(m){
     const club = g && getCommunity(g.communityId);
     // The club's setup (chips, buy-ins, payments, permissions) - same people as the home
     // card's "Setup": the club's creator and the super admin.
+    // The table's admins (creator, club admins, super admin) close the night for everyone -
+    // whatever the club's settlement - and only they can open it again.
+    const canCloseNight = g && club && isTableAdmin(g, club);
     const setupClub = club || (nav.screen === "community" && getCommunity(nav.communityId));
     const canSetupClub = setupClub && (isSuperAdmin() || isClubCreator(setupClub));
     title = "תפריט";
@@ -8316,6 +8321,9 @@ function renderModal(m){
       <div class="game-menu">
         <button class="btn btn-ghost btn-block" data-game-menu-go="home">🏠 מסך הבית</button>
         ${club ? `<button class="btn btn-ghost btn-block" data-game-menu-go="club">♣️ המועדון ${esc(club.name)}</button>` : ""}
+        ${canCloseNight ? (g.closed
+          ? `<button class="btn btn-ghost btn-block" data-game-menu-go="reopen">🔓 ביטול סגירת ערב</button>`
+          : `<button class="btn btn-ghost btn-block" data-game-menu-go="close">🔒 סגור משחק</button>`) : ""}
         ${canSetupClub ? `<button class="btn btn-ghost btn-block" data-open-chip-setup="${setupClub.id}">${icon('gear')} פרופיל מועדון</button>` : ""}
         <button class="btn btn-ghost btn-block" data-game-menu-go="profile">👤 הפרופיל שלי</button>
         <button class="btn btn-ghost btn-block" data-game-menu-go="stats">${icon('bar')} הביצועים שלי</button>
@@ -9327,6 +9335,7 @@ function attachHandlers(){
     else if (to === "profile") openModal({type: "identityName", forced: false});
     else if (to === "stats") openModal({type: "stats", clientId: myIdentity.id});
     else if (to === "theme") openModal({type: "themePicker"});
+    else if ((to === "close" || to === "reopen") && g) { closeModal(); setNightClosed(g.id, to === "close"); }
   }));
   // Super admin: rename a player (closing returns to the list).
   app.querySelectorAll("[data-rename-player]").forEach(el => el.onclick = () => {
@@ -9816,6 +9825,24 @@ function attachHandlers(){
   app.querySelectorAll("[data-admin-remove-seat]").forEach(el => el.onclick = () => openModal({type:"removeSeat", gameId: nav.gameId, playerId: el.dataset.adminRemoveSeat}));
   // "סיום ערב" checkbox - a plain manual toggle of g.closed (also settable from the
   // directPay modal's own "הערב נגמר" button, see data-confirm-end-night-button below).
+  // ☰ "סגור משחק" / "ביטול סגירת ערב" (table admins): asks first, then the same change as
+  // the "ערב סגור" box. A closed night ticks and locks everyone's "סיימתי את הערב".
+  setNightClosed = async (gameId, closing) => {
+    const sure = await showConfirm(closing
+      ? "לסגור את המשחק לכולם? כל מי שעדיין בשולחן יעבור לסיום הערב (הזנת הז'יטונים שנשארו), בלי אפשרות לבטל."
+      : "לבטל את סגירת הערב? השחקנים יוכלו להמשיך לשחק.",
+      {okLabel: closing ? "סגור משחק" : "ביטול הסגירה", cancelLabel: "חזרה"});
+    if (!sure) return;
+    try {
+      if (USE_RELATIONAL_API) {
+        await v2UpdateGame(gameId, {closed: closing});
+        v2AddGameEvent(gameId, closing ? "night_closed" : "night_reopened", null, myIdentity.name, undefined);
+      } else {
+        await mutateAndSave(() => { const gm = getGame(gameId); gm.closed = closing; logGameEvent(gm, closing ? "night_closed" : "night_reopened", null, myIdentity.name, undefined); });
+      }
+    } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+    render();
+  };
   app.querySelectorAll("[data-toggle-end-night]").forEach(el => el.onclick = async () => {
     const gameId = el.dataset.toggleEndNight;
     const g = getGame(gameId);
