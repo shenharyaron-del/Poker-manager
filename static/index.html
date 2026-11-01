@@ -1495,6 +1495,16 @@ async function fetchGameSummaries(communities){
   const ids = new Set(communities.map(c => c.id));
   return (await v2Fetch("GET", "/game-summaries")).filter(gs => ids.has(gs.communityId));
 }
+// Full detail of many games in as few requests as possible (GET /games-full, up to 100
+// per request), in the order asked - the app used to open with one request per game.
+async function fetchGamesFull(ids){
+  const byId = {};
+  for (let i = 0; i < ids.length; i += 100) {
+    const chunk = ids.slice(i, i + 100);
+    (await v2Fetch("GET", `/games-full?ids=${chunk.map(encodeURIComponent).join(",")}`)).forEach(g => { byId[g.id] = g; });
+  }
+  return ids.map(id => byId[id]).filter(Boolean);
+}
 async function loadStateV2(){
   const [communities, allSummaries] = await Promise.all([v2Fetch("GET", "/communities"), v2Fetch("GET", "/game-summaries")]);
   const communityIds = new Set(communities.map(c => c.id));
@@ -1508,11 +1518,10 @@ async function loadStateV2(){
   // source of the DB connection-pool contention found during the avatar-upload
   // investigation. Keeps the cached object as-is (full buyins/seats/etc, whatever shape
   // it already had) rather than touching it, so nothing downstream needs to change.
-  const games = await Promise.all(gameSummaries.map(gs => {
-    const cached = getGame(gs.id);
-    if (cached && cached.updatedAt && gs.updatedAt && cached.updatedAt === gs.updatedAt) return cached;
-    return v2Fetch("GET", `/games/${gs.id}`);
-  }));
+  const isFresh = gs => { const cached = getGame(gs.id); return cached && cached.updatedAt && gs.updatedAt && cached.updatedAt === gs.updatedAt; };
+  const fetched = await fetchGamesFull(gameSummaries.filter(gs => !isFresh(gs)).map(gs => gs.id));
+  const byId = Object.fromEntries(fetched.map(g => [g.id, g]));
+  const games = gameSummaries.map(gs => isFresh(gs) ? getGame(gs.id) : byId[gs.id]).filter(Boolean);
   return { communities, games };
 }
 
@@ -1784,7 +1793,7 @@ let USE_RELATIONAL_API = false;
 // so in production that guard silently protected nothing, and a refresh landing between a
 // v2 write's request and its local state patch could revert it (or diverge two devices)
 // until the next refresh happened to catch up. Counted, not a single flag, since more
-// than one v2Fetch call can genuinely overlap (e.g. initial load's parallel GETs).
+// than one save can genuinely overlap. Reads (GET) aren't counted - see v2Fetch.
 let v2ActionCount = 0;
 let v2ActionInFlight = null;
 let resolveV2Idle = null;
@@ -1830,7 +1839,11 @@ async function v2FetchWithRetry(method, path, body, retries = 2){
   }
 }
 async function v2Fetch(method, path, body){
-  v2ActionBegin();
+  // Only a save counts as "in flight" (doRefreshNow waits for those and drops a GET that
+  // raced one) - counting reads too, like the 4-second join-request poll, made refreshes
+  // wait and get thrown away for nothing.
+  const isWrite = method !== "GET";
+  if (isWrite) v2ActionBegin();
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), V2_FETCH_TIMEOUT_MS);
   try {
@@ -1860,7 +1873,7 @@ async function v2Fetch(method, path, body){
     throw e;
   } finally {
     clearTimeout(timeoutId);
-    v2ActionFinish();
+    if (isWrite) v2ActionFinish();
   }
 }
 
@@ -4072,7 +4085,7 @@ async function checkMyJoinRequest(){
 async function reloadV2Data(){
   state.communities = await v2Fetch("GET", "/communities");
   const summaries = await fetchGameSummaries(state.communities);
-  state.games = await Promise.all(summaries.map(g => v2Fetch("GET", `/games/${g.id}`)));
+  state.games = await fetchGamesFull(summaries.map(g => g.id));
 }
 // Someone at the table: requests waiting on me, one window at a time.
 let pendingJoinRequests = [];
@@ -11687,7 +11700,7 @@ window.addEventListener("popstate", async () => {
       try {
         state.communities = await v2Fetch("GET", "/communities");
         const gameSummaries = await fetchGameSummaries(state.communities);
-        state.games = await Promise.all(gameSummaries.map(g => v2Fetch("GET", `/games/${g.id}`)));
+        state.games = await fetchGamesFull(gameSummaries.map(g => g.id));
         v2Loaded = true;
         // Every buy-in that already existed the moment the app opened counts as "already
         // seen" from the start - an independent backstop alongside hasAppliedFreshStateOnce
