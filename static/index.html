@@ -570,8 +570,12 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .login-invite{font-size:18px;line-height:1.5;text-align:center;margin:0 0 14px;padding:10px 12px;border:1px solid rgba(212,175,55,.45);border-radius:12px;background:rgba(212,175,55,.08);}
 .game-focus-head{justify-content:center;font-size:15px;}
 .game-focus-head .crumb-here{flex-shrink:1;min-width:0;overflow:hidden;text-overflow:ellipsis;}
-.game-menu{display:flex;flex-direction:column;gap:8px;}
-.game-menu .btn{display:flex;align-items:center;justify-content:center;gap:8px;font-size:18px;}
+.menu-overlay{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.25);animation:menuShade .2s ease-out;}
+.menu-drop{position:fixed;width:min(260px,calc(100vw - 24px));background:var(--card);border:1px solid rgba(212,175,55,.6);border-radius:14px;padding:8px;box-shadow:0 12px 30px rgba(0,0,0,.5);transform-origin:top;animation:menuUnroll .28s cubic-bezier(.2,.8,.3,1);}
+@keyframes menuUnroll{from{clip-path:inset(0 0 100% 0 round 14px);transform:translateY(-6px);opacity:.4}to{clip-path:inset(0 0 0 0 round 14px);transform:none;opacity:1}}
+@keyframes menuShade{from{background:rgba(0,0,0,0)}}
+.game-menu{display:flex;flex-direction:column;gap:6px;}
+.game-menu .btn{display:flex;align-items:center;justify-content:flex-start;gap:10px;font-size:17px;padding:10px 12px;}
 .login-alt button{background:none;border:none;padding:0;font:inherit;font-size:14px;color:var(--muted);text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
 .join-wait-dots{display:flex;justify-content:center;gap:8px;margin:4px 0 18px;}
 .join-wait-dots span{width:10px;height:10px;border-radius:50%;background:var(--gold);animation:jwdot 1.2s ease-in-out infinite;}
@@ -8757,6 +8761,11 @@ function renderModal(m){
   // directPay (item 15): closes only by picking a recipient or tapping "הערב נגמר",
   // never by dismissing - someone who left owing money shouldn't be able to just back
   // out of saying who they paid.
+  // The ☰ menu: a dropdown hanging right under its button, unrolling top-down (see
+  // .menu-drop); a tap anywhere outside it closes it.
+  if (m.type === "gameMenu") {
+    return `<div class="menu-overlay" data-menu-outside><div class="menu-drop" style="top:${m.top || 56}px;left:${m.left || 12}px;" onclick="event.stopPropagation()">${body}</div></div>`;
+  }
   const dismissable = m.type !== "loginRequired" && !(m.type === "identityName" && m.forced) && m.type !== "directPay" && m.type !== "entryBuyin" && m.type !== "joinWait" && m.type !== "joinApprove";
   const topAnchored = m.type === "seatChips" || m.type === "loginRequired" || m.type === "newCommunity";
   // The photo-count tab needs real room - a full-width photo plus the per-color table
@@ -9132,7 +9141,12 @@ function attachHandlers(){
     }
     go("home");
   });
-  app.querySelectorAll("[data-game-menu]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type: "gameMenu"}); });
+  app.querySelectorAll("[data-game-menu]").forEach(el => el.onclick = (e) => {
+    e.stopPropagation();
+    const r = el.getBoundingClientRect();
+    openModal({type: "gameMenu", top: Math.round(r.bottom + 4), left: Math.round(r.left)});
+  });
+  app.querySelectorAll("[data-menu-outside]").forEach(el => el.onclick = () => closeModal());
   app.querySelectorAll("[data-game-menu-go]").forEach(el => el.onclick = () => {
     const g = getGame(nav.gameId);
     const to = el.dataset.gameMenuGo;
