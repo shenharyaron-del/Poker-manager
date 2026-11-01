@@ -567,6 +567,10 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .roster-stats-link{display:inline-flex;align-items:center;gap:6px;background:none;border:none;padding:0;font:inherit;color:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:3px;}
 .roster-stats-link svg{width:16px;height:16px;color:var(--gold);flex-shrink:0;}
 .login-alt{text-align:center;margin-top:14px;}
+.login-invite{font-size:18px;line-height:1.5;text-align:center;margin:0 0 14px;padding:10px 12px;border:1px solid rgba(212,175,55,.45);border-radius:12px;background:rgba(212,175,55,.08);}
+.game-focus-head{justify-content:center;font-size:15px;}
+.game-menu{display:flex;flex-direction:column;gap:8px;}
+.game-menu .btn{display:flex;align-items:center;justify-content:center;gap:8px;font-size:18px;}
 .login-alt button{background:none;border:none;padding:0;font:inherit;font-size:14px;color:var(--muted);text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
 .join-wait-dots{display:flex;justify-content:center;gap:8px;margin:4px 0 18px;}
 .join-wait-dots span{width:10px;height:10px;border-radius:50%;background:var(--gold);animation:jwdot 1.2s ease-in-out infinite;}
@@ -1529,6 +1533,18 @@ async function ensureClubGames(cid){
   } catch(e) { /* the screen says so; opening the club again retries */ }
   clubGamesLoading.delete(cid);
   if (appReady && !modal) render();
+}
+// Games left for after the first screen (see init's focus game).
+let backgroundGameIds = [];
+async function loadBackgroundGames(){
+  const ids = backgroundGameIds;
+  backgroundGameIds = [];
+  let games;
+  try { games = await fetchGamesFull(ids); } catch(e) { return; /* the next refresh brings them */ }
+  rememberAnnouncedBuyinsBulk(games.flatMap(g => (g.buyins || []).map(b => b.id)));
+  const have = new Set(state.games.map(g => g.id));
+  state.games = state.games.concat(games.filter(g => !have.has(g.id)));
+  if (!modal) render();
 }
 // A table screen whose game isn't here (yet): still loading its club, or really gone.
 function missingGameHtml(){
@@ -5480,7 +5496,15 @@ function render(){
   // › <this screen>, the first two linking home and to the club. One line: a long club
   // name gives way first ("…", down to nothing), never the current screen's name.
   const crumbGame = nav.screen === "table" && nav.gameId ? getGame(nav.gameId) : null;
-  const screenTag = crumbGame
+  // Playing (seated, not out yet) and not running the table: just the table's name and a
+  // ☰ menu (home, club, profile, stats, design) - nothing on screen that leaves the game
+  // by accident. Admins and the table's creator keep the full header.
+  const myGamePid = crumbGame && myIdentity.myPlayers && myIdentity.myPlayers[crumbGame.communityId];
+  const gameFocus = !!(crumbGame && seated && !resultsScreen && myGamePid && !(myGamePid in (crumbGame.cashouts || {}))
+    && !isTableAdmin(crumbGame, getCommunity(crumbGame.communityId)));
+  const screenTag = gameFocus
+    ? `<div class="screen-tag screen-tag-lg crumbs-row game-focus-head"><span class="crumb-here">${esc(crumbGame.name || crumbGame.date || "")}</span></div>`
+    : crumbGame
     ? `<div class="screen-tag screen-tag-lg crumbs-row"><button type="button" class="crumb-link" data-crumb-home>בית</button><span class="crumb-sep">›</span><button type="button" class="crumb-link crumb-club" data-back-community="${crumbGame.communityId}">${esc((getCommunity(crumbGame.communityId) || {}).name || "")}</button>${crumbsStopAtClub ? "" : `<span class="crumb-sep">›</span><span class="crumb-here">${esc(screenLabel)}</span>`}</div>`
     : nav.screen === "community"
       ? `<div class="screen-tag screen-tag-lg crumbs-row"><button type="button" class="crumb-link" data-crumb-home>בית</button><span class="crumb-sep">›</span><span class="crumb-club">${esc((getCommunity(nav.communityId) || {}).name || "")}</span></div>`
@@ -5489,7 +5513,8 @@ function render(){
   // covered); the header grows a little to make room for it.
   const installChip = installChipHtml();
   document.documentElement.classList.toggle("has-install-chip", !!installChip);
-  html = screenTag.replace(/^<div class="screen-tag"/, installChip ? '<div class="screen-tag with-install"' : '<div class="screen-tag"').replace(/<\/div>$/, themeToggleHtml() + installChip + '</div>') + html;
+  const cornerBtn = gameFocus ? `<button type="button" class="theme-toggle game-menu-btn" data-game-menu>☰ תפריט</button>` : themeToggleHtml();
+  html = screenTag.replace(/^<div class="screen-tag"/, installChip ? '<div class="screen-tag with-install"' : '<div class="screen-tag"').replace(/<\/div>$/, cornerBtn + installChip + '</div>') + html;
   // Away from the table while still seated (not cashed out) at one or more games: a bar at
   // the bottom with a quick way back to each of them. Taps go through [data-open-game],
   // the same handler as the game cards on the club screen.
@@ -7292,7 +7317,14 @@ function renderModal(m){
         ${loginErr("email")}
         <button type="submit" class="btn ${btnClass} btn-block" data-send-login-code>${label}</button>
       </form>`;
+    // Opened from an invite (WhatsApp or the QR - the same link): say where to.
+    const inviteParams = new URLSearchParams(location.search);
+    const invitedGame = inviteParams.get("game") && getGame(inviteParams.get("game"));
+    const invitedClub = getCommunity((invitedGame && invitedGame.communityId) || inviteParams.get("community"));
+    const inviteLine = invitedGame ? `הוזמנת לשולחן <b>${esc(invitedGame.name || invitedGame.date)}</b>${invitedClub ? ` במועדון <b>${esc(invitedClub.name)}</b>` : ""}`
+      : invitedClub ? `הוזמנת למועדון <b>${esc(invitedClub.name)}</b>` : "";
     body = !m.loginStep && m.loginMode !== "email" ? `
+      ${inviteLine ? `<p class="login-invite">${inviteLine}</p>` : ""}
       <form action="#" onsubmit="return false;">
         <label class="login-label" for="name-login-input" style="font-size:18px;">מה השם שלך?</label>
         <div class="name-pair">
@@ -7300,7 +7332,7 @@ function renderModal(m){
           <input type="text" id="name-login-last" value="${esc(splitName(m.signupName)[1])}" maxlength="30" autocomplete="family-name" placeholder="שם משפחה">
         </div>
         ${loginErr("name")}
-        <button type="submit" class="btn btn-primary btn-block" data-name-login style="font-size:19px;">כניסה</button>
+        <button type="submit" class="btn btn-primary btn-block" data-name-login style="font-size:19px;">${invitedGame ? "כניסה לשולחן" : invitedClub ? "כניסה למועדון" : "כניסה"}</button>
       </form>
       <div class="login-alt"><button type="button" data-login-mode="email">כניסה עם אימייל</button></div>
       ${termsLinkHtml("בשימוש באפליקציה אתה מסכים ל")}
@@ -8106,6 +8138,18 @@ function renderModal(m){
   } else if (m.type === "potFix") {
     title = "סידור קופה";
     body = renderPotFix(m.gameId);
+  } else if (m.type === "gameMenu") {
+    const g = getGame(nav.gameId);
+    const club = g && getCommunity(g.communityId);
+    title = "תפריט";
+    body = `
+      <div class="game-menu">
+        <button class="btn btn-ghost btn-block" data-game-menu-go="home">🏠 מסך הבית</button>
+        ${club ? `<button class="btn btn-ghost btn-block" data-game-menu-go="club">♣️ המועדון ${esc(club.name)}</button>` : ""}
+        <button class="btn btn-ghost btn-block" data-game-menu-go="profile">👤 הפרופיל שלי</button>
+        <button class="btn btn-ghost btn-block" data-game-menu-go="stats">${icon('bar')} הביצועים שלי</button>
+        <button class="btn btn-ghost btn-block" data-game-menu-go="theme">🎨 עיצוב</button>
+      </div>`;
   } else if (m.type === "renamePlayer") {
     const c = getCommunity(m.communityId) || {roster: []};
     const p = c.roster.find(r => r.id === m.playerId) || {name: ""};
@@ -9084,6 +9128,16 @@ function attachHandlers(){
       state.games = state.games.filter(g => g.communityId !== c.id);
     }
     go("home");
+  });
+  app.querySelectorAll("[data-game-menu]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type: "gameMenu"}); });
+  app.querySelectorAll("[data-game-menu-go]").forEach(el => el.onclick = () => {
+    const g = getGame(nav.gameId);
+    const to = el.dataset.gameMenuGo;
+    if (to === "home") go("home");
+    else if (to === "club" && g) go("community", {communityId: g.communityId});
+    else if (to === "profile") openModal({type: "identityName", forced: false});
+    else if (to === "stats") openModal({type: "stats", clientId: myIdentity.id});
+    else if (to === "theme") openModal({type: "themePicker"});
   });
   // Super admin: rename a player (closing returns to the list).
   app.querySelectorAll("[data-rename-player]").forEach(el => el.onclick = () => {
@@ -11778,7 +11832,13 @@ window.addEventListener("popstate", async () => {
         const openParams = new URLSearchParams(location.search);
         [openParams.get("community"), SAVED_NAV_AT_LOAD && SAVED_NAV_AT_LOAD.communityId].forEach(cid => { if (cid) lazyLoadedClubIds.add(cid); });
         const gameSummaries = await fetchGameSummaries(state.communities, [openParams.get("game"), SAVED_NAV_AT_LOAD && SAVED_NAV_AT_LOAD.gameId]);
-        state.games = await fetchGamesFull(gameSummaries.map(g => g.id));
+        // Opening a table (an invite, or a refresh on one): that game alone first, so its
+        // screen shows right away - every other game follows in the background once the
+        // app is up (see backgroundGameIds below).
+        const focusId = openParams.get("game") || (SAVED_NAV_AT_LOAD && SAVED_NAV_AT_LOAD.screen === "table" && SAVED_NAV_AT_LOAD.gameId);
+        const focus = focusId && gameSummaries.find(gs => gs.id === focusId);
+        backgroundGameIds = focus ? gameSummaries.filter(gs => gs.id !== focus.id).map(gs => gs.id) : [];
+        state.games = await fetchGamesFull(focus ? [focus.id] : gameSummaries.map(g => g.id));
         v2Loaded = true;
         // Every buy-in that already existed the moment the app opened counts as "already
         // seen" from the start - an independent backstop alongside hasAppliedFreshStateOnce
@@ -11918,6 +11978,7 @@ window.addEventListener("popstate", async () => {
   if (joinWait && myIdentity.name && (!modal || modal.type !== "loginRequired")) modal = {type:"joinWait"};
   appReady = true;
   render();
+  if (backgroundGameIds.length) loadBackgroundGames();
   scheduleAutoRefresh();
   setInterval(joinRequestsTick, 4000);
   joinRequestsTick();
