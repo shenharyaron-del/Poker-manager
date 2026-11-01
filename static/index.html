@@ -1101,7 +1101,11 @@ html.theme-light .extra-seat-plus .esp-amount{color:var(--text);}
 html.theme-light .extra-seat-plus .esp-amount .pos{color:#047857;}
 html.theme-light .extra-seat-plus .esp-amount .neg{color:#b91c1c;}
 html.theme-light .extra-seat-plus .esp-label{color:#5b3708;text-shadow:0 0 3px rgba(255,255,255,.8);}
-.pp-name-box .pp-return-link{font-size:13px;}
+.pp-tile-return{color:var(--gold);font-weight:800;text-decoration:underline;text-underline-offset:2px;cursor:pointer;}
+.pp-tile.can-return small{white-space:nowrap;font-size:.62em;}
+.pp-tile.can-return{opacity:1;padding-left:8px;padding-right:8px;}
+.pp-tile.can-return::after{display:none;}
+html.theme-light .pp-tile-return{color:#9a5f12;}
 .pp-return-link{background:none;border:none;padding:0;font:inherit;font-size:.8em;font-weight:700;color:var(--gold);text-decoration:underline;text-underline-offset:3px;cursor:pointer;white-space:nowrap;}
 .pp-return-side{grid-column:4;display:flex;align-items:center;justify-content:center;}
 .pp-return-side .pp-return-link{font-size:15px;}
@@ -6657,20 +6661,22 @@ function renderPlayerScreen(gameId){
     : othersTonight.length > 8 ? othersTonight[othersTonight.length - 1] : null;
   const playerTile = (id, cls) => {
     const out = id in (g.cashouts||{});
-    return `<button type="button" class="pp-tile${cls || ""}${id===pid?' on':''}${out?' out':''}" data-pp-view="${id}"><bdi>${esc(tableShortName(g, id))}</bdi>${out?'<small>יצא</small>':''}</button>`;
+    // An admin sends a cashed-out player back to the table right from their box up here,
+    // without opening that player's screen.
+    const back = out && isAdminView ? ` · <span class="pp-tile-return" role="button" data-admin-return-to-game="${id}">החזר למשחק</span>` : "";
+    return `<button type="button" class="pp-tile${cls || ""}${id===pid?' on':''}${out?' out':''}${back ? ' can-return' : ''}" data-pp-view="${id}"><bdi>${esc(tableShortName(g, id))}</bdi>${out?`<small>יצא${back}</small>`:''}</button>`;
   };
   // Name line: the viewed player's name in a frame (no dropdown any more - an admin picks
   // whose screen to see from the tiles above it).
   const nameHtml = (() => {
     const nm = p ? p.name : "";
     const len = nm.length + (cashedOut ? 6 : 0);
-    // With the "החזר למשחק" link in the box too, the line has to fit in it.
-    const font = cashedOut && isAdminView && viewingOther ? (nm.length > 8 ? 15 : 17) : len > 24 ? 17 : len > 18 ? 20 : null;
-    // An admin can send a cashed-out player back to the table: a link right after "יצא" in
-    // the name box - or, on the admin's own screen, beside the box on its left.
+    const font = len > 24 ? 17 : len > 18 ? 20 : null;
+    // The admin's own screen, cashed out: "החזר למשחק" beside the name box, on its left
+    // (anyone else is sent back from their box in the tiles above).
     const canReturn = cashedOut && isAdminView;
     const returnLink = `<button type="button" class="pp-return-link" data-admin-return-to-game="${pid}">החזר למשחק</button>`;
-    const box = `<div class="pp-name-box" dir="rtl"${font ? ` style="font-size:${font}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut ? ' · יצא' : ''}${canReturn && viewingOther ? ` · ${returnLink}` : ''}</div>`;
+    const box = `<div class="pp-name-box" dir="rtl"${font ? ` style="font-size:${font}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut ? ' · יצא' : ''}</div>`;
     // Looking at someone else: my own name, as a button beside theirs, takes me back to my
     // own screen.
     const me = myPlayerId && g.players.find(x => x.id === myPlayerId);
@@ -9757,7 +9763,8 @@ function attachHandlers(){
   // Player screen's "החזרה לשולחן" for another player - a confirm step first,
   // since this is the one place an admin can send a DIFFERENT player back into an active
   // table on their behalf, not something to do with a stray tap.
-  app.querySelectorAll("[data-admin-return-to-game]").forEach(el => el.onclick = async () => {
+  app.querySelectorAll("[data-admin-return-to-game]").forEach(el => el.onclick = async (e) => {
+    e.stopPropagation();   // the link sits inside the player's tile - don't open their screen too
     const playerId = el.dataset.adminReturnToGame;
     const g = getGame(nav.gameId);
     const name = (g.players.find(p=>p.id===playerId)||{}).name || "השחקן";
