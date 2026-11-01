@@ -1,4 +1,5 @@
 import base64
+import gzip
 import hashlib
 import json
 import io
@@ -375,6 +376,9 @@ def _get_pool():
     with _db_pool_lock:
         if _db_pool is None:
             connect_kwargs = {"options": f"-c search_path={DB_SCHEMA},public"} if DB_SCHEMA else {}
+            # TCP keepalives, so a connection quietly dropped along the way (an idle
+            # timeout between here and Supabase) is noticed instead of hanging a request.
+            connect_kwargs.update(keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=3)
             pool = psycopg2.pool.ThreadedConnectionPool(_MIN_POOL_CONNS, _MAX_POOL_CONNS, DATABASE_URL, **connect_kwargs)
             conn = pool.getconn()
             try:
@@ -389,13 +393,39 @@ class DbBusyError(Exception):
     pass
 
 
+# When each pooled connection was last handed back - one unused for a while (the server
+# stays up all day; the games are in the evening) may have been closed on Supabase's side,
+# and the first save on it used to fail ("שמירה נכשלה"). Such a connection is checked with
+# a one-line query first and replaced if it's dead.
+_conn_last_used = {}
+_CONN_CHECK_AFTER_IDLE_SECONDS = 60
+
+
+def _healthy_conn(pool):
+    for _ in range(3):
+        conn = pool.getconn()
+        idle = time.time() - _conn_last_used.get(id(conn), 0)
+        if not conn.closed and idle < _CONN_CHECK_AFTER_IDLE_SECONDS:
+            return conn
+        if not conn.closed:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT 1")
+                conn.rollback()
+                return conn
+            except psycopg2.Error:
+                pass
+        pool.putconn(conn, close=True)
+    return pool.getconn()
+
+
 @contextmanager
 def get_db():
     pool = _get_pool()
     if not _pool_slots.acquire(timeout=_POOL_WAIT_SECONDS):
         raise DbBusyError("database connection pool exhausted")
     try:
-        conn = pool.getconn()
+        conn = _healthy_conn(pool)
     except Exception:
         _pool_slots.release()
         raise
@@ -413,8 +443,27 @@ def get_db():
             close_bad = True
         raise
     finally:
+        _conn_last_used[id(conn)] = time.time()
         pool.putconn(conn, close=close_bad)
         _pool_slots.release()
+
+
+@app.after_request
+def _after_api_request(response):
+    # A save went through: tell every open app right away (SSE) instead of leaving the
+    # other phones to notice on their next 6-second poll.
+    if (request.path.startswith("/api/v2/") and request.method in ("POST", "PUT", "PATCH", "DELETE")
+            and 200 <= response.status_code < 300):
+        _broadcast_state_changed()
+    # Compress the bigger JSON answers (clubs, games) - phones on a mobile network.
+    if (response.mimetype == "application/json" and response.status_code == 200 and not response.direct_passthrough
+            and "gzip" in request.headers.get("Accept-Encoding", "") and "Content-Encoding" not in response.headers):
+        data = response.get_data()
+        if len(data) > 1400:
+            response.set_data(gzip.compress(data, 5))
+            response.headers["Content-Encoding"] = "gzip"
+            response.headers["Vary"] = "Accept-Encoding"
+    return response
 
 
 # Every unhandled error comes back as JSON instead of Flask's HTML error page, so the
@@ -529,13 +578,30 @@ def index():
         with open(os.path.join(STATIC_DIR, "index.html"), encoding="utf-8") as f:
             _index_html_cache = f.read()
     base = "https://" + request.host if request.host and not request.host.startswith(("127.", "localhost")) else request.host_url.rstrip("/")
-    html = _index_html_cache.replace(OG_PLACEHOLDER_ORIGIN, base)
-    response = app.response_class(html, mimetype="text/html")
+    # Per host: the page with that host's share-preview URLs, its ETag and a gzipped copy.
+    # The ETag makes a reopen with nothing new a 304 with no body, and gzip cuts the ~800KB
+    # page to ~230KB - before, every open (and every open from WhatsApp's own browser,
+    # which keeps nothing) downloaded the whole page uncompressed.
+    page = _index_pages.get(base)
+    if page is None:
+        html = _index_html_cache.replace(OG_PLACEHOLDER_ORIGIN, base).encode("utf-8")
+        page = _index_pages[base] = (html, hashlib.sha1(html).hexdigest(), gzip.compress(html, 6))
+    html, etag, gz = page
+    if request.if_none_match.contains(etag):
+        response = app.response_class(status=304)
+    elif "gzip" in request.headers.get("Accept-Encoding", ""):
+        response = app.response_class(gz, mimetype="text/html")
+        response.headers["Content-Encoding"] = "gzip"
+    else:
+        response = app.response_class(html, mimetype="text/html")
+    response.set_etag(etag)
+    response.headers["Vary"] = "Accept-Encoding"
     response.headers["Cache-Control"] = "no-cache, must-revalidate"
     return response
 
 
 _index_html_cache = None
+_index_pages = {}
 OG_PLACEHOLDER_ORIGIN = "https://poker-manager-7irt.onrender.com"
 
 
@@ -1082,95 +1148,104 @@ def v2_list_games(community_id):
     return jsonify(games)
 
 
+_GAME_BASE_COLUMNS = (
+    "SELECT id, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at, created_by, created_at "
+    "FROM games"
+)
+
+
+def _ms(ts):
+    return int(ts.timestamp() * 1000) if ts else None
+
+
+def _games_full(cur, base_rows):
+    """Full detail for these games (rows from _GAME_BASE_COLUMNS), each child table read
+    ONCE for all of them (game_id = ANY) - 7 queries whatever the number of games, instead
+    of 7 per game.
+
+    The client skips re-fetching a game whose updatedAt (returned cheaply by the summary
+    list) hasn't moved - that only works because EVERY write that changes what this
+    returns also bumps games.updated_at, even ones (buyins, cashouts, payments, events)
+    that don't otherwise touch the games row at all."""
+    games = {}
+    for gid, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at, created_by, created_at in base_rows:
+        games[gid] = {
+            "id": gid, "communityId": community_id, "name": name,
+            "date": date.isoformat() if date else None,
+            "createdByName": created_by_name, "createdBy": created_by, "closed": closed,
+            "updatedAt": updated_at.isoformat() if updated_at else None,
+            "createdAt": created_at.isoformat() if created_at else None,
+            "seats": seats, "liveChips": live_chips,
+            "players": [], "buyins": [], "cashouts": {},
+            "payboxPayments": [], "playerPayments": [], "events": [],
+        }
+    ids = list(games)
+    if not ids:
+        return []
+    cur.execute("SELECT game_id, player_id, name, gender FROM game_players WHERE game_id = ANY(%s)", (ids,))
+    for gid, pid, pname, gender in cur.fetchall():
+        games[gid]["players"].append({"id": pid, "name": pname, **({"gender": gender} if gender else {})})
+    cur.execute("SELECT game_id, id, player_id, amount, ts, actor_name FROM buyins WHERE game_id = ANY(%s) ORDER BY ts", (ids,))
+    for gid, bid, pid, amount, ts, actor_name in cur.fetchall():
+        games[gid]["buyins"].append({"id": bid, "playerId": pid, "amount": _num(amount), "ts": _ms(ts), "actorName": actor_name})
+    cur.execute("SELECT game_id, player_id, amount, ts, arranged_with FROM cashouts WHERE game_id = ANY(%s)", (ids,))
+    for gid, pid, amount, ts, arranged_with in cur.fetchall():
+        games[gid]["cashouts"][pid] = {"amount": _num(amount), "ts": _ms(ts), "arrangedWith": arranged_with or []}
+    cur.execute("SELECT game_id, id, player_id, amount, ts FROM paybox_payments WHERE game_id = ANY(%s) ORDER BY ts", (ids,))
+    for gid, pay_id, pid, amount, ts in cur.fetchall():
+        games[gid]["payboxPayments"].append({"id": pay_id, "playerId": pid, "amount": _num(amount), "ts": _ms(ts)})
+    cur.execute(
+        "SELECT game_id, id, from_player_id, to_player_id, amount, ts FROM player_payments WHERE game_id = ANY(%s) ORDER BY ts",
+        (ids,),
+    )
+    for gid, pay_id, from_pid, to_pid, amount, ts in cur.fetchall():
+        games[gid]["playerPayments"].append(
+            {"id": pay_id, "fromPlayerId": from_pid, "toPlayerId": to_pid, "amount": _num(amount), "ts": _ms(ts)}
+        )
+    cur.execute(
+        "SELECT game_id, id, ts, type, player_id, actor_name, amount FROM game_events WHERE game_id = ANY(%s) ORDER BY ts",
+        (ids,),
+    )
+    for gid, ev_id, ts, ev_type, pid, actor_name, amount in cur.fetchall():
+        games[gid]["events"].append({
+            "id": ev_id, "ts": _ms(ts), "type": ev_type, "playerId": pid, "actorName": actor_name,
+            "amount": _num(amount) if amount is not None else None,
+        })
+    return list(games.values())
+
+
 @app.route("/api/v2/games/<game_id>", methods=["GET"])
 def v2_get_game(game_id):
     caller = _caller()
-    # 7 separate queries (one per child table) - loadStateV2() client-side calls this for
-    # EVERY game on EVERY refresh tick by default, which doesn't scale (reported live as
-    # general sluggishness + the connection pool contention already found for avatar
-    # uploads). The fix is client-side: skip re-fetching a game whose updatedAt (already
-    # returned cheaply by v2_list_games, no joins) hasn't moved since the last fetch. That
-    # only works if EVERY write below that changes what this endpoint returns also bumps
-    # games.updated_at - each one does, even ones (buyins, cashouts, payments, events)
-    # that don't otherwise touch the games row at all, specifically to uphold that.
     with get_db() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                "SELECT id, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at, created_by, created_at "
-                "FROM games WHERE id = %s",
-                (game_id,),
-            )
+            cur.execute(_GAME_BASE_COLUMNS + " WHERE id = %s", (game_id,))
             row = cur.fetchone()
-            if not row:
+            if not row or not _can_see_community(cur, caller, row[1]):
+                conn.commit()
                 return jsonify({"error": "not found"}), 404
-            gid, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at, created_by, created_at = row
-            if not _can_see_community(cur, caller, community_id):
-                return jsonify({"error": "not found"}), 404
-
-            cur.execute("SELECT player_id, name, gender FROM game_players WHERE game_id = %s", (gid,))
-            players = [{"id": r[0], "name": r[1], **({"gender": r[2]} if r[2] else {})} for r in cur.fetchall()]
-
-            cur.execute("SELECT id, player_id, amount, ts, actor_name FROM buyins WHERE game_id = %s ORDER BY ts", (gid,))
-            buyins = [
-                {"id": r[0], "playerId": r[1], "amount": _num(r[2]), "ts": int(r[3].timestamp() * 1000) if r[3] else None, "actorName": r[4]}
-                for r in cur.fetchall()
-            ]
-
-            cur.execute("SELECT player_id, amount, ts, arranged_with FROM cashouts WHERE game_id = %s", (gid,))
-            cashouts = {}
-            for player_id, amount, ts, arranged_with in cur.fetchall():
-                cashouts[player_id] = {
-                    "amount": _num(amount),
-                    "ts": int(ts.timestamp() * 1000) if ts else None,
-                    "arrangedWith": arranged_with or [],
-                }
-
-            cur.execute(
-                "SELECT id, player_id, amount, ts FROM paybox_payments WHERE game_id = %s ORDER BY ts", (gid,)
-            )
-            paybox_payments = [
-                {"id": r[0], "playerId": r[1], "amount": _num(r[2]), "ts": int(r[3].timestamp() * 1000) if r[3] else None}
-                for r in cur.fetchall()
-            ]
-
-            cur.execute(
-                "SELECT id, from_player_id, to_player_id, amount, ts FROM player_payments "
-                "WHERE game_id = %s ORDER BY ts",
-                (gid,),
-            )
-            player_payments = [
-                {
-                    "id": r[0], "fromPlayerId": r[1], "toPlayerId": r[2], "amount": _num(r[3]),
-                    "ts": int(r[4].timestamp() * 1000) if r[4] else None,
-                }
-                for r in cur.fetchall()
-            ]
-
-            cur.execute(
-                "SELECT id, ts, type, player_id, actor_name, amount FROM game_events "
-                "WHERE game_id = %s ORDER BY ts",
-                (gid,),
-            )
-            events = [
-                {
-                    "id": r[0], "ts": int(r[1].timestamp() * 1000) if r[1] else None, "type": r[2],
-                    "playerId": r[3], "actorName": r[4], "amount": _num(r[5]) if r[5] is not None else None,
-                }
-                for r in cur.fetchall()
-            ]
+            game = _games_full(cur, [row])[0]
         conn.commit()
+    return jsonify(game)
 
-    return jsonify({
-        "id": gid, "communityId": community_id, "name": name,
-        "date": date.isoformat() if date else None,
-        "createdByName": created_by_name, "createdBy": created_by, "closed": closed,
-        "updatedAt": updated_at.isoformat() if updated_at else None,
-        "createdAt": created_at.isoformat() if created_at else None,
-        "seats": seats, "liveChips": live_chips,
-        "players": players, "buyins": buyins, "cashouts": cashouts,
-        "payboxPayments": paybox_payments, "playerPayments": player_payments,
-        "events": events,
-    })
+
+@app.route("/api/v2/games-full", methods=["GET"])
+def v2_get_games_full():
+    # Many games' full detail in one request (?ids=a,b,c; no ids = every game the caller
+    # may see) - the app used to open with one request per game ever played.
+    caller = _caller()
+    ids = [i for i in (request.args.get("ids") or "").split(",") if _valid_id(i)][:500]
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            visible = _visible_community_ids(cur, caller)
+            if ids:
+                cur.execute(_GAME_BASE_COLUMNS + " WHERE id = ANY(%s)", (ids,))
+            else:
+                cur.execute(_GAME_BASE_COLUMNS)
+            rows = [r for r in cur.fetchall() if visible is None or r[1] in visible]
+            games = _games_full(cur, rows)
+        conn.commit()
+    return jsonify(games)
 
 
 @app.route("/api/v2/games/<game_id>/summary", methods=["GET"])
@@ -1705,7 +1780,6 @@ def v2_rename_roster_player(community_id, player_id):
             rows = cur.fetchall()
             _rename_roster_rows(cur, rows, name)
         conn.commit()
-    _broadcast_state_changed()
     return jsonify({"ok": True, "updated": len(rows)})
 
 
@@ -2201,7 +2275,6 @@ def v2_create_join_request(community_id):
                 (rid, community_id, game_id, player_id, caller["client_id"], row[0]),
             )
         conn.commit()
-    _broadcast_state_changed()
     return jsonify({"id": rid, "status": "pending"})
 
 
@@ -2278,7 +2351,6 @@ def v2_decide_join_request(request_id):
                 ("approved" if approve else "rejected", caller.get("name"), request_id),
             )
         conn.commit()
-    _broadcast_state_changed()
     return jsonify({"ok": True})
 
 
