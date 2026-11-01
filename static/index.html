@@ -572,10 +572,19 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 /* ☰ sits on the right (the theme toggle's spot is the left corner) - the menu opens under it. */
 .screen-tag .game-menu-btn{left:auto;right:12px;}
 .game-focus-head .crumb-here{flex-shrink:1;min-width:0;overflow:hidden;text-overflow:ellipsis;}
+.table-swipe-root img{-webkit-user-drag:none;}
+.tab-slide-from-right{animation:tabFromRight .2s ease-out;}
+.tab-slide-from-left{animation:tabFromLeft .2s ease-out;}
+@keyframes tabFromRight{from{transform:translateX(35%);opacity:.3}}
+@keyframes tabFromLeft{from{transform:translateX(-35%);opacity:.3}}
 .menu-overlay{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.25);animation:menuShade .2s ease-out;}
 .menu-drop{position:fixed;width:min(260px,calc(100vw - 24px));background:var(--card);border:1px solid rgba(212,175,55,.6);border-radius:14px;padding:8px;box-shadow:0 12px 30px rgba(0,0,0,.5);transform-origin:top;animation:menuUnroll .28s cubic-bezier(.2,.8,.3,1);}
 @keyframes menuUnroll{from{clip-path:inset(0 0 100% 0 round 14px);transform:translateY(-6px);opacity:.4}to{clip-path:inset(0 0 0 0 round 14px);transform:none;opacity:1}}
 @keyframes menuShade{from{background:rgba(0,0,0,0)}}
+.menu-drop.closing{animation:menuRollUp .2s cubic-bezier(.5,0,.8,.4) forwards;}
+.menu-overlay.closing{animation:menuShadeOut .2s ease-in forwards;}
+@keyframes menuRollUp{from{clip-path:inset(0 0 0 0 round 14px);transform:none;opacity:1}to{clip-path:inset(0 0 100% 0 round 14px);transform:translateY(-6px);opacity:.4}}
+@keyframes menuShadeOut{to{background:rgba(0,0,0,0)}}
 .game-menu{display:flex;flex-direction:column;gap:6px;}
 .game-menu .btn{display:flex;align-items:center;justify-content:flex-start;gap:10px;font-size:17px;padding:10px 12px;}
 .login-alt button{background:none;border:none;padding:0;font:inherit;font-size:14px;color:var(--muted);text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
@@ -1552,6 +1561,64 @@ async function loadBackgroundGames(){
   const have = new Set(state.games.map(g => g.id));
   state.games = state.games.concat(games.filter(g => !have.has(g.id)));
   if (!modal) render();
+}
+// Dragging a finger left/right on a table screen moves to the neighbouring tab (משחק -
+// שולחן - ציר זמן - הזמנה). The page follows the finger; at either end there's nothing
+// further (no wrap-around) - it just springs back. Tabs are laid out right to left, so a
+// drag to the left brings in the tab on the right, and a drag to the right the one on the
+// left. A swipe that starts on a button doesn't also tap it.
+function attachTabSwipe(app){
+  const root = app.querySelector(".table-swipe-root"), page = app.querySelector("[data-tab-swipe]");
+  if (!root || !page) return;
+  const tabs = [...app.querySelectorAll(".game-seg [data-game-tab]")];
+  const cur = tabs.findIndex(t => t.classList.contains("on"));
+  if (cur < 0 || tabs.length < 2) return;
+  let sx = null, sy = 0, active = false, abandoned = false, dx = 0, swiped = 0;
+  const neighbour = d => tabs[cur + (d < 0 ? -1 : 1)];   // d: drag direction (<0 = left)
+  root.addEventListener("pointerdown", e => {
+    if (modal || e.target.closest("[data-seat], input, textarea, select, .ttl-scroll")) return;
+    sx = e.clientX; sy = e.clientY; active = false; abandoned = false; dx = 0;
+  });
+  root.addEventListener("pointermove", e => {
+    if (sx == null || abandoned) return;
+    dx = e.clientX - sx;
+    const dy = e.clientY - sy;
+    if (!active) {
+      if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { abandoned = true; return; }
+      if (Math.abs(dx) > 12) active = true; else return;
+    }
+    if (e.cancelable) e.preventDefault();
+    page.style.transition = "none";
+    page.style.transform = `translateX(${neighbour(dx) ? dx : dx * 0.25}px)`;
+  });
+  const end = () => {
+    if (sx == null) return;
+    sx = null;
+    if (!active) return;
+    swiped = Date.now();
+    const next = Math.abs(dx) > 70 && neighbour(dx);
+    if (!next) {
+      page.style.transition = "transform .2s ease";
+      page.style.transform = "";
+      return;
+    }
+    page.style.transition = "transform .16s ease-in";
+    page.style.transform = `translateX(${dx < 0 ? "-" : ""}100%)`;
+    setTimeout(() => { tabSlideIn = dx < 0 ? "from-right" : "from-left"; swiped = 0; next.click(); }, 150);
+  };
+  root.addEventListener("pointerup", end);
+  root.addEventListener("pointercancel", end);
+  // A picture's own drag (the odds coin, avatars) would cancel the swipe mid-way.
+  root.addEventListener("dragstart", e => e.preventDefault());
+  root.addEventListener("click", e => { if (Date.now() - swiped < 400) { e.stopPropagation(); e.preventDefault(); } }, true);
+}
+// The ☰ menu rolls back up (the opening animation reversed) before whatever comes next.
+function closeMenuThen(next){
+  const drop = document.querySelector(".menu-drop"), shade = document.querySelector(".menu-overlay");
+  if (!drop || drop.classList.contains("closing")) { next(); return; }
+  drop.classList.add("closing");
+  if (shade) shade.classList.add("closing");
+  setTimeout(next, 200);
 }
 // A table screen whose game isn't here (yet): still loading its club, or really gone.
 function missingGameHtml(){
@@ -5414,11 +5481,14 @@ function gameTabsScreen(g, c, seated){
   return `<div class="table-swipe-root">
     <div class="swipe-track-viewport">
       <div class="swipe-track">
-        <div class="swipe-page lux-page${pageCls}">${row}${content}</div>
+        <div class="swipe-page lux-page${pageCls}${tabSlideIn ? " tab-slide-" + tabSlideIn : ""}" data-tab-swipe>${row}${content}</div>
       </div>
     </div>
   </div>`;
 }
+// Set by a finger swipe between the tabs (see attachTabSwipe): the next page slides in from
+// that side, once.
+let tabSlideIn = null;
 // "משחק" before I've sat down: nothing of mine to show yet - point to the seats.
 function renderUnseatedGameTab(g){
   // The 10th seat counts as free here - it's taken from the table tab, like any seat.
@@ -9148,8 +9218,8 @@ function attachHandlers(){
     const r = el.getBoundingClientRect();
     openModal({type: "gameMenu", top: Math.round(r.bottom + 4), right: Math.round(document.documentElement.clientWidth - r.right)});
   });
-  app.querySelectorAll("[data-menu-outside]").forEach(el => el.onclick = () => closeModal());
-  app.querySelectorAll("[data-game-menu-go]").forEach(el => el.onclick = () => {
+  app.querySelectorAll("[data-menu-outside]").forEach(el => el.onclick = () => closeMenuThen(() => closeModal()));
+  app.querySelectorAll("[data-game-menu-go]").forEach(el => el.onclick = () => closeMenuThen(() => {
     const g = getGame(nav.gameId);
     const to = el.dataset.gameMenuGo;
     if (to === "home") go("home");
@@ -9157,7 +9227,7 @@ function attachHandlers(){
     else if (to === "profile") openModal({type: "identityName", forced: false});
     else if (to === "stats") openModal({type: "stats", clientId: myIdentity.id});
     else if (to === "theme") openModal({type: "themePicker"});
-  });
+  }));
   // Super admin: rename a player (closing returns to the list).
   app.querySelectorAll("[data-rename-player]").forEach(el => el.onclick = () => {
     if (!modal || modal.type !== "roster") return;
@@ -9430,6 +9500,8 @@ function attachHandlers(){
   };
   app.querySelectorAll("[data-pp-back-me]").forEach(el => el.onclick = () => { playerViewTarget = null; render(); });
   app.querySelectorAll("[data-table-view]").forEach(el => el.onclick = () => { setTableView(el.dataset.tableView); render(); });
+  tabSlideIn = null;
+  attachTabSwipe(app);
   app.querySelectorAll("[data-game-tab]").forEach(el => el.onclick = () => {
     const t = el.dataset.gameTab;
     if (t === "game") tableSubView = "player";
