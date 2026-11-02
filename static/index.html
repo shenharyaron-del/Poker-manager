@@ -7157,11 +7157,11 @@ function renderTable(gameId){
   const totalChipsAll = seatedIds.reduce((s,pid)=>s+(liveChips[pid]||0),0);
   const diff = totalChipsAll - totalBuyinAll;
   const diffLabel = diff > 0.5 ? "קופה בחוסר" : (diff < -0.5 ? "קופה בעודף" : "קופה מאוזנת");
-  // Middle of the felt: with no chips counted yet only the buy-in total shows (no chips
-  // line, no pot balance). Once some players have left, the chips line is what they
-  // returned - "ז'יטונים של שחקנים שעזבו" - until everyone's out.
+  // Middle of the felt: with no chips counted yet only the buy-in total shows. Once some
+  // players have left (others still play): what they returned, and what's left in the pot.
+  // Everyone out: just the pot's balance (מאוזנת / בעודף / בחוסר).
   const leftChips = seatedIds.filter(pid => pid in g.cashouts).reduce((s, pid) => s + (g.cashouts[pid].amount || 0), 0);
-  const leftChipsLabel = leftChips > 0 && !allCashedOut ? `ז'יטונים של שחקנים שעזבו ₪${Math.round(leftChips)}` : `סה"כ ז'יטונים ₪${totalChipsAll}`;
+  const playersLeftMidNight = leftChips > 0 && !allCashedOut;
   const diffColor = diff > 0.5 ? "#fda4af" : (diff < -0.5 ? "#6ee7b7" : "var(--muted)");
 
   // Once everyone's cashed out, the pot's balanced, and the community settles directly
@@ -7211,8 +7211,10 @@ function renderTable(gameId){
               return `<div class="extra-seat-plus taken${xout ? " out" : ""}" style="left:90%;top:95%;" title="${esc(xp ? xp.name : "")}"><span class="esp-circle">${esc(nameInitials(xp ? xp.name : ""))}</span><span class="esp-label esp-amount">${xline}</span></div>`; })() : ""}
         <div style="position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);text-align:center;z-index:3;">
           <img src="/static/logo-p-crown.png" style="width:37px;height:auto;margin-bottom:8px;pointer-events:none;">
-          <div style="color:var(--muted);font-size:12px;">סה"כ קנייה ₪${totalBuyinAll}</div>
-          ${totalChipsAll > 0 ? `<div style="color:var(--muted);font-size:12px;">${leftChipsLabel}</div>
+          ${allCashedOut ? "" : `<div style="color:var(--muted);font-size:12px;">סה"כ קנייה ₪${totalBuyinAll}</div>`}
+          ${playersLeftMidNight ? `<div style="color:var(--muted);font-size:12px;">ז'יטונים של שחקנים שעזבו ₪${Math.round(leftChips)}</div>
+          <div style="color:var(--text);font-weight:700;font-size:13px;margin-top:4px;">נשארו בקופה ₪${Math.round(totalBuyinAll - leftChips)}</div>`
+          : totalChipsAll > 0 ? `${allCashedOut ? "" : `<div style="color:var(--muted);font-size:12px;">סה"כ ז'יטונים ₪${totalChipsAll}</div>`}
           <div style="color:${diffColor};font-weight:700;font-size:13px;margin-top:4px;">${diffLabel}${Math.abs(diff)>=0.5?` ₪${Math.abs(Math.round(diff))}`:""}</div>` : ""}
           ${!allCashedOut ? `<div class="felt-odds">
             <span data-open-poker-odds class="odds-label" style="color:#C8902F;font-size:16px;text-align:center;line-height:1.3;cursor:pointer;">מחשבון<br>סיכויי פוקר</span>
