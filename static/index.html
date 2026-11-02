@@ -8319,14 +8319,14 @@ function renderModal(m){
       <div class="game-menu">
         <button class="btn btn-ghost btn-block" data-game-menu-go="home">🏠 מסך הבית</button>
         ${club ? `<button class="btn btn-ghost btn-block" data-game-menu-go="club">♣️ המועדון ${esc(club.name)}</button>` : ""}
-        ${canCloseNight ? (g.closed
-          ? `<button class="btn btn-ghost btn-block" data-game-menu-go="reopen">🔓 ביטול סגירת ערב</button>`
-          : `<button class="btn btn-ghost btn-block" data-game-menu-go="close">🔒 סגור משחק</button>`) : ""}
         ${canSetupClub ? `<button class="btn btn-ghost btn-block" data-open-chip-setup="${setupClub.id}">${icon('gear')} פרופיל מועדון</button>` : ""}
         <button class="btn btn-ghost btn-block" data-game-menu-go="profile">👤 הפרופיל שלי</button>
         <button class="btn btn-ghost btn-block" data-game-menu-go="stats">${icon('bar')} הביצועים שלי</button>
         <button class="btn btn-ghost btn-block" data-game-menu-go="theme">🎨 עיצוב</button>
         ${installMode() ? `<button class="btn btn-ghost btn-block" data-install-app>📲 התקנת האפליקציה</button>` : ""}
+        ${canCloseNight ? (g.closed
+          ? `<button class="btn btn-ghost btn-block" data-game-menu-go="reopen">🔓 ביטול סגירת ערב</button>`
+          : `<button class="btn btn-ghost btn-block" data-game-menu-go="close">🔒 סגור משחק</button>`) : ""}
       </div>`;
   } else if (m.type === "renamePlayer") {
     const c = getCommunity(m.communityId) || {roster: []};
