@@ -5654,7 +5654,9 @@ function render(){
   const myPid = g => myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
   const activeGames = nav.screen === "table" ? [] : (state.games || []).filter(g => {
     const pid = myPid(g);
-    return pid && (g.seats || []).includes(pid) && (!(pid in (g.cashouts || {})) || !g.closed);
+    // Still mine while I play, and after I've left as long as the night is still going -
+    // not closed, or closed but someone hasn't left yet (the club screen calls that "פעיל").
+    return pid && (g.seats || []).includes(pid) && (!(pid in (g.cashouts || {})) || !g.closed || gameStatus(g).key === "active");
   });
   // Plus open tables in my clubs that I'm not at yet and that still have a free seat (9
   // max) - a quick way to join one. Only tables opened in the last 24 hours (createdAt;
