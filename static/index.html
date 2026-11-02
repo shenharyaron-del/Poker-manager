@@ -568,6 +568,11 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .roster-stats-link{display:inline-flex;align-items:center;gap:6px;background:none;border:none;padding:0;font:inherit;color:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:3px;}
 .roster-stats-link svg{width:16px;height:16px;color:var(--gold);flex-shrink:0;}
 .login-alt{text-align:center;margin-top:14px;}
+.client-errors .ce-row{padding:8px 2px;border-bottom:1px solid var(--card-b);font-size:15px;}
+.client-errors .ce-head{display:flex;justify-content:space-between;gap:8px;}
+.client-errors .ce-head span{color:var(--muted);font-size:14px;}
+.client-errors .ce-action{color:var(--gold);font-size:13px;text-align:left;margin-top:2px;word-break:break-all;}
+.client-errors .ce-msg{color:var(--muted);font-size:14px;margin-top:2px;word-break:break-word;}
 .login-invite{font-size:18px;line-height:1.5;text-align:center;margin:0 0 14px;padding:10px 12px;border:1px solid rgba(212,175,55,.45);border-radius:12px;background:rgba(212,175,55,.08);}
 .game-focus-head{justify-content:center;font-size:15px;padding-left:100px;padding-right:100px;}
 /* ☰ sits on the right (the theme toggle's spot is the left corner) - the menu opens under it. */
@@ -2011,18 +2016,48 @@ const V2_FETCH_TIMEOUT_MS = 20000;
 async function v2FetchWithRetry(method, path, body, retries = 2){
   for (let attempt = 0; ; attempt++) {
     try {
-      return await v2Fetch(method, path, body);
+      return await v2Fetch(method, path, body, {report: false});
     } catch(e) {
       const status = e && e.status;
       if (method === "DELETE" && attempt > 0 && status === 404) return {ok: true};
       const retryable = !status || status >= 500;
-      if (!retryable || attempt >= retries) throw e;
+      if (!retryable || attempt >= retries) { reportSaveFailure(method, path, e, attempt + 1); throw e; }
       logSync(`retrying ${method} ${path} after: ${e.message}`);
       await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
     }
   }
 }
-async function v2Fetch(method, path, body){
+// A save that failed for good (after any retries) is reported to the server, so the super
+// admin can see what actually goes wrong on players' phones ("שמירות שנכשלו" in the system
+// settings). Queued on the device first - a report made with no connection goes out with
+// the next one that works (see flushErrorReports).
+function reportSaveFailure(method, path, err, attempts){
+  let queue = [];
+  try { queue = JSON.parse(localStorage.getItem("poker-error-reports") || "[]"); } catch(e) {}
+  queue.push({action: `${method} ${path}`, status: (err && err.status) || null,
+    message: `${(err && err.message) || err}${attempts > 1 ? ` (אחרי ${attempts} ניסיונות)` : ""}${navigator.onLine === false ? " · אין חיבור" : ""}`,
+    name: myIdentity.name || null, version: appVersion || null});
+  try { localStorage.setItem("poker-error-reports", JSON.stringify(queue.slice(-20))); } catch(e) {}
+  flushErrorReports();
+}
+let flushingErrorReports = false;
+async function flushErrorReports(){
+  if (flushingErrorReports) return;
+  let queue = [];
+  try { queue = JSON.parse(localStorage.getItem("poker-error-reports") || "[]"); } catch(e) { return; }
+  if (!queue.length) return;
+  flushingErrorReports = true;
+  try {
+    while (queue.length) {
+      const res = await fetch("/api/client-errors", {method: "POST", headers: {"Content-Type": "application/json", "X-Client-Id": getClientId()}, body: JSON.stringify(queue[0])});
+      if (!res.ok) break;
+      queue.shift();
+      try { localStorage.setItem("poker-error-reports", JSON.stringify(queue)); } catch(e) {}
+    }
+  } catch(e) { /* still offline - the next try sends them */ }
+  flushingErrorReports = false;
+}
+async function v2Fetch(method, path, body, opts){
   // Only a save counts as "in flight" (doRefreshNow waits for those and drops a GET that
   // raced one) - counting reads too, like the 4-second join-request poll, made refreshes
   // wait and get thrown away for nothing.
@@ -2053,8 +2088,9 @@ async function v2Fetch(method, path, body){
     }
     return data;
   } catch(e) {
-    if (e.name === "AbortError") throw new Error(`${method} ${path} timed out`);
-    throw e;
+    const err = e.name === "AbortError" ? new Error(`${method} ${path} timed out`) : e;
+    if (isWrite && !(opts && opts.report === false)) reportSaveFailure(method, path, err, 1);
+    throw err;
   } finally {
     clearTimeout(timeoutId);
     if (isWrite) v2ActionFinish();
@@ -2291,7 +2327,7 @@ async function v2CreateGame(id, communityId, name, date, createdByName, creatorP
 // Returns the fresh updatedAt on success, null on a 409 (same shape as v2UpdateCommunity).
 async function v2UpdateGame(gameId, fields){
   const result = await withConflictRetry(
-    () => v2Fetch("PATCH", `/games/${gameId}`, {...fields, updatedAt: getGame(gameId).updatedAt}),
+    () => v2FetchWithRetry("PATCH", `/games/${gameId}`, {...fields, updatedAt: getGame(gameId).updatedAt}),
     () => v2LoadGameFull(gameId)
   );
   if (result.conflict) return null;
@@ -2318,7 +2354,7 @@ async function v2DeleteGame(gameId){
 }
 
 async function v2AddGamePlayer(gameId, id, name){
-  await v2Fetch("POST", `/games/${gameId}/players`, {id, name});
+  await v2FetchWithRetry("POST", `/games/${gameId}/players`, {id, name});
   const g = getGame(gameId);
   if (!g.players.some(p => p.id === id)) g.players.push({id, name});
 }
@@ -2327,8 +2363,14 @@ async function v2AddGamePlayer(gameId, id, name){
 // seat and lets the user pick another - see the section comment on the server side for
 // why this is a single atomic DB check rather than a read-modify-write).
 async function v2ClaimSeat(gameId, seatIndex, playerId, name, gender){
-  const result = await v2Fetch("POST", `/games/${gameId}/seats/${seatIndex}`, {playerId, name, ...(gender ? {gender} : {})});
-  if (result.conflict) return false;
+  let result = await v2FetchWithRetry("POST", `/games/${gameId}/seats/${seatIndex}`, {playerId, name, ...(gender ? {gender} : {})});
+  if (result.conflict) {
+    // A retry after an attempt that did land (a dropped answer) comes back "taken" - by me.
+    // Only a seat someone else holds is a real conflict.
+    const fresh = await v2Fetch("GET", `/games/${gameId}`).catch(() => null);
+    if (!fresh || (fresh.seats || [])[seatIndex] !== playerId) return false;
+    result = {seats: fresh.seats, updatedAt: fresh.updatedAt};
+  }
   const g = getGame(gameId);
   g.seats = result.seats;
   g.updatedAt = result.updatedAt;
@@ -2398,7 +2440,7 @@ async function v2MaybeAutoCloseNight(gameId){
 async function v2ClearSeat(gameId, seatIndex){
   const g = getGame(gameId);
   const playerId = g.seats[seatIndex];
-  const result = await v2Fetch("DELETE", `/games/${gameId}/seats/${seatIndex}`);
+  const result = await v2FetchWithRetry("DELETE", `/games/${gameId}/seats/${seatIndex}`);
   g.seats[seatIndex] = null;
   g.updatedAt = result.updatedAt;
   if (playerId) {
@@ -2418,7 +2460,7 @@ async function v2SwapSeats(gameId, fromIndex, toIndex){
 async function v2RemoveGamePlayer(gameId, playerId){
   const g = getGame(gameId);
   const wasClosed = g.closed;
-  await v2Fetch("DELETE", `/games/${gameId}/players/${playerId}`);
+  await v2FetchWithRetry("DELETE", `/games/${gameId}/players/${playerId}`);
   g.players = g.players.filter(p => p.id !== playerId);
   g.buyins = g.buyins.filter(b => b.playerId !== playerId);
   g.payboxPayments = (g.payboxPayments||[]).filter(pp => pp.playerId !== playerId);
@@ -2468,7 +2510,7 @@ async function v2SetCashout(gameId, playerId, amount, arrangedWith, chips){
 async function v2AddGameEvent(gameId, type, playerId, actorName, amount){
   try {
     const id = uid();
-    await v2Fetch("POST", `/games/${gameId}/events`, {id, type, playerId, actorName, amount});
+    await v2FetchWithRetry("POST", `/games/${gameId}/events`, {id, type, playerId, actorName, amount});
     const g = getGame(gameId);
     if (g) { if (!g.events) g.events = []; g.events.push({id, type, playerId, actorName, amount, ts: Date.now()}); }
   } catch(e) { logSync("game event log failed: " + e); }
@@ -2482,12 +2524,12 @@ function logGameEvent(g, type, playerId, actorName, amount){
 }
 
 async function v2DeleteCashout(gameId, playerId){
-  await v2Fetch("DELETE", `/games/${gameId}/cashouts/${playerId}`);
+  await v2FetchWithRetry("DELETE", `/games/${gameId}/cashouts/${playerId}`);
   delete getGame(gameId).cashouts[playerId];
 }
 
 async function v2UpdateLiveChips(gameId, playerId, chips){
-  await v2Fetch("PATCH", `/games/${gameId}/live-chips`, {playerId, chips});
+  await v2FetchWithRetry("PATCH", `/games/${gameId}/live-chips`, {playerId, chips});
   getGame(gameId).liveChips[playerId] = chips;
 }
 
@@ -2518,7 +2560,7 @@ async function v2DeletePlayerPayment(gameId, paymentId){
 }
 
 async function v2ResetPlayerPayments(gameId, playerId){
-  await v2Fetch("DELETE", `/games/${gameId}/payments/player/${playerId}`);
+  await v2FetchWithRetry("DELETE", `/games/${gameId}/payments/player/${playerId}`);
   const g = getGame(gameId);
   g.payboxPayments = (g.payboxPayments||[]).filter(pp => pp.playerId !== playerId);
   g.playerPayments = (g.playerPayments||[]).filter(pp => pp.fromPlayerId !== playerId && pp.toPlayerId !== playerId);
@@ -4290,7 +4332,7 @@ async function checkJoinRequestsToDecide(){
   if (modal && modal.type === "joinApprove" && !pendingJoinRequests.some(r => r.id === modal.req.id)) { closeModal(); return; }
   if (!modal && pendingJoinRequests.length) openModal({type: "joinApprove", req: pendingJoinRequests[0]});
 }
-function joinRequestsTick(){ checkMyJoinRequest(); checkJoinRequestsToDecide(); }
+function joinRequestsTick(){ checkMyJoinRequest(); checkJoinRequestsToDecide(); flushErrorReports(); }
 // Retry the club / table join after a new name (see the joinWait window).
 async function rejoinAfterNameChange(jw){
   if (jw.gameId && getGame(jw.gameId)) {
@@ -7718,6 +7760,7 @@ function renderModal(m){
       <div class="section-title" style="padding:0;margin:0 0 8px;">שחקנים גלובליים</div>
       <div style="margin-bottom:18px;">
         <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-open-global-players>${icon('users')} רשימת שחקנים</button>
+        <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:8px;" data-open-client-errors>⚠️ שמירות שנכשלו</button>
       </div>
       <div class="section-title" style="padding:0;margin:0 0 8px;">גיבוי ושחזור</div>
       <div style="margin-bottom:8px;">
@@ -7734,6 +7777,19 @@ function renderModal(m){
       <a href="https://console.anthropic.com" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:18px;color:var(--muted);font-size:16px;text-decoration:underline;">console.anthropic.com</a>
       <div style="text-align:center;margin-top:8px;color:var(--muted);font-size:15px;">גרסה: ${esc(appVersion || "לא ידוע")}</div>
     `;
+  } else if (m.type === "clientErrors") {
+    title = "שמירות שנכשלו";
+    const rows = m.rows;
+    const when = ts => { const d = new Date(ts); return `${d.getDate()}/${d.getMonth() + 1} ${fmtTime(ts)}`; };
+    body = rows === undefined ? `<p style="color:var(--muted);text-align:center;">טוען...</p>`
+      : !rows.length ? `<p style="color:var(--muted);text-align:center;">אין שמירות שנכשלו 👍</p>`
+      : `<p style="color:var(--muted);font-size:15px;margin:0 0 10px;">שמירות שנכשלו בטלפונים של השחקנים, אחרי הניסיונות החוזרים - החדשות למעלה.</p>
+        <div class="scroll-list client-errors">${rows.map(r => `
+          <div class="ce-row">
+            <div class="ce-head"><b>${esc(r.name || "לא ידוע")}</b><span>${when(r.ts)}</span></div>
+            <div class="ce-action" dir="ltr">${esc(r.action || "")}${r.status ? ` · ${r.status}` : ""}</div>
+            <div class="ce-msg">${esc(r.message || "")}${r.version ? ` · ${esc(r.version)}` : ""}</div>
+          </div>`).join("")}</div>`;
   } else if (m.type === "adminVerify") {
     title = "אימות לפני הגדרות מערכת";
     body = `
@@ -10521,6 +10577,12 @@ function attachHandlers(){
     // not null/[] - an empty real result must not re-trigger this) - the read-only list
     // renders directly in this screen now (see its own comment on why), not behind a
     // button into a separate one, so there's no dedicated open-handler to fetch from.
+    app.querySelectorAll("[data-open-client-errors]").forEach(el => el.onclick = async () => {
+      openModal({type: "clientErrors", back: modal});
+      let rows = [];
+      try { const res = await fetch("/api/admin/client-errors?clientId=" + encodeURIComponent(getClientId())); rows = res.ok ? await res.json() : []; } catch(e) {}
+      if (modal && modal.type === "clientErrors") updateModal({rows});
+    });
     if (modal.thirdPartyServices === undefined) {
       (async () => {
         try {
