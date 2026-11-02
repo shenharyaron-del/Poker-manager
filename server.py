@@ -2220,7 +2220,10 @@ _JOIN_REQUEST_TTL = "1 day"
 
 
 def _can_decide_joins(cur, caller, community_id):
-    r = _rights(cur, caller, community_id)
+    # As a member of the club - its admins, or anyone sitting at one of its open tables. The
+    # super admin's reach over every club doesn't count here, or they'd be asked about
+    # every club's newcomers.
+    r = _rights(cur, {**caller, "is_super": False}, community_id)
     if r["community_admin"]:
         return True
     if not r["my_players"]:
