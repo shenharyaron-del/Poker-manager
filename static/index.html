@@ -7804,7 +7804,8 @@ function renderModal(m){
     const r = m.result;
     const resultHtml = !r ? "" : r.error ? `<div class="dbm-note dbm-bad">${esc(r.error)}${r.missingTables && r.missingTables.length ? `<br>חסרות טבלאות: <span dir="ltr">${esc(r.missingTables.join(", "))}</span>` : ""}${r.missingColumns && Object.keys(r.missingColumns).length ? `<br>חסרות עמודות: <span dir="ltr">${esc(JSON.stringify(r.missingColumns))}</span>` : ""}</div>`
       : `<div class="dbm-note ${r.ok ? "dbm-good" : "dbm-bad"}">${r.ok ? "ההעתקה הושלמה - כל הכמויות תואמות ✓ אפשר לעבור לשלב 4." : "ההעתקה הסתיימה אבל יש טבלאות שהכמויות בהן שונות - לא להחליף עדיין."}</div>
-        <div class="scroll-list dbm-table"><div class="dbm-row dbm-headrow"><span>טבלה</span><span>נוכחי</span><span>חדש</span></div>${r.tables.map(t => `<div class="dbm-row${t.old === t.new ? "" : " dbm-diff"}"><span dir="ltr">${esc(t.table)}</span><span>${t.old}</span><span>${t.new}${t.old === t.new ? " ✓" : " ✗"}</span></div>`).join("")}</div>`;
+        <div class="scroll-list dbm-table"><div class="dbm-row dbm-headrow"><span>טבלה</span><span>נוכחי</span><span>חדש</span></div>${r.tables.map(t => `<div class="dbm-row${t.old === t.new ? "" : " dbm-diff"}"><span dir="ltr">${esc(t.table)}</span><span>${t.old}</span><span>${t.new}${t.old === t.new ? " ✓" : " ✗"}</span></div>`).join("")}</div>
+        ${(r.skipped || []).length ? `<p class="dbm-note">לא הועתקו (טבלאות שהאפליקציה לא משתמשת בהן - נשארות במסד הנוכחי): ${r.skipped.map(t => `<span dir="ltr">${esc(t.table)}</span> (${t.rows} שורות, <span dir="ltr">${esc(t.size)}</span>)`).join(", ")}</p>` : ""}`;
     body = `${steps}${statusHtml}
       ${st && st.reachable ? `<button class="btn btn-primary btn-block" data-db-copy ${m.copying ? "disabled" : ""} style="margin:10px 0;">${m.copying ? "מעתיק..." : "העתקת נתונים למסד החדש"}</button>` : ""}
       ${resultHtml}`;

@@ -3832,14 +3832,18 @@ def copy_to_new_db():
             _ensure_schema(new)
             with new.cursor() as ncur:
                 new_tables = set(_db_tables(ncur))
-                missing_tables = [t for t in tables if t not in new_tables]
-                missing_cols = {t: [c for c in old_cols[t] if c not in _db_columns(ncur, t)]
-                                for t in tables if t in new_tables}
+                # A table the app's schema doesn't have is one the app never uses (made by
+                # hand in the database at some point) - left out and listed, with its size;
+                # it stays in the current database. A missing COLUMN of one of the app's
+                # tables still stops everything.
+                skipped = [t for t in tables if t not in new_tables]
+                tables = [t for t in tables if t in new_tables]
+                missing_cols = {t: [c for c in old_cols[t] if c not in _db_columns(ncur, t)] for t in tables}
                 missing_cols = {t: cs for t, cs in missing_cols.items() if cs}
-                if missing_tables or missing_cols:
+                if missing_cols:
                     new.rollback()
                     return jsonify({"error": "the new database's structure doesn't match - nothing copied",
-                                    "missingTables": missing_tables, "missingColumns": missing_cols}), 409
+                                    "missingColumns": missing_cols}), 409
                 order = _fk_order(ncur, tables)
                 # Empty everything first (children before parents), then copy parents first.
                 ncur.execute("TRUNCATE " + ", ".join(f'"{t}"' for t in order) + " CASCADE")
@@ -3858,6 +3862,11 @@ def copy_to_new_db():
                             if seq:
                                 ncur.execute(f'SELECT setval(%s, COALESCE((SELECT max("{c}") FROM "{t}"), 0) + 1, false)', (seq,))
                     old_counts = _table_counts(ocur, order)
+                    skipped_info = []
+                    for t in skipped:
+                        ocur.execute(f'SELECT count(*), pg_size_pretty(pg_total_relation_size(\'"{t}"\')) FROM "{t}"')
+                        n, size = ocur.fetchone()
+                        skipped_info.append({"table": t, "rows": n, "size": size})
                 new_counts = _table_counts(ncur, order)
             new.commit()
             old.commit()
@@ -3867,7 +3876,7 @@ def copy_to_new_db():
     finally:
         new.close()
     tables_out = [{"table": t, "old": old_counts[t], "new": new_counts[t]} for t in order]
-    return jsonify({"ok": all(r["old"] == r["new"] for r in tables_out), "tables": tables_out})
+    return jsonify({"ok": all(r["old"] == r["new"] for r in tables_out), "tables": tables_out, "skipped": skipped_info})
 
 
 _CLIENT_ERRORS_KEEP = 500
