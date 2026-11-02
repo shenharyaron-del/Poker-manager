@@ -261,6 +261,20 @@ _INIT_STATEMENTS = (
     "  decided_at TIMESTAMPTZ"
     ")",
     "CREATE INDEX IF NOT EXISTS join_requests_community_idx ON join_requests(community_id)",
+    # Saves that failed on a player's phone (after its retries) - reported by the app so
+    # the super admin can see what actually goes wrong at the table. Kept short: the
+    # oldest rows are trimmed on insert (see report_client_error).
+    "CREATE TABLE IF NOT EXISTS client_errors ("
+    "  id BIGSERIAL PRIMARY KEY,"
+    "  ts TIMESTAMPTZ NOT NULL DEFAULT now(),"
+    "  client_id TEXT,"
+    "  name TEXT,"
+    "  action TEXT,"
+    "  status INTEGER,"
+    "  message TEXT,"
+    "  app_version TEXT,"
+    "  user_agent TEXT"
+    ")",
     "INSERT INTO third_party_services (id, name, url, category, sort_order) "
     "SELECT 'cronjob-keepalive', 'cron-job.org', 'https://console.cron-job.org/jobs', 'Keep-alive', "
     "COALESCE(MAX(sort_order), -1) + 1 FROM third_party_services "
@@ -3708,6 +3722,53 @@ def delete_account():
 
 def _third_party_service_row(row):
     return {"id": row[0], "name": row[1], "url": row[2], "username": row[3], "password": row[4], "category": row[5]}
+
+
+_CLIENT_ERRORS_KEEP = 500
+
+
+@app.route("/api/client-errors", methods=["POST"])
+def report_client_error():
+    # Anyone's app may report its own failed save (no rights needed - it's only a log line).
+    # Everything is cut short so a broken or hostile client can't flood the table.
+    body = request.get_json(silent=True) or {}
+    def short(v, n):
+        return str(v)[:n] if v is not None else None
+    status = body.get("status")
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO client_errors (client_id, name, action, status, message, app_version, user_agent) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s)",
+                (short(request.headers.get("X-Client-Id") or body.get("clientId"), 128), short(body.get("name"), 80),
+                 short(body.get("action"), 200), status if isinstance(status, int) else None,
+                 short(body.get("message"), 300), short(body.get("version"), 20),
+                 short(request.headers.get("User-Agent"), 200)),
+            )
+            cur.execute(
+                "DELETE FROM client_errors WHERE id <= (SELECT max(id) FROM client_errors) - %s",
+                (_CLIENT_ERRORS_KEEP,),
+            )
+        conn.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/client-errors")
+def list_client_errors():
+    ok, err = _require_super_admin(request.args.get("clientId", ""))
+    if not ok:
+        return err
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT ts, name, action, status, message, app_version FROM client_errors ORDER BY id DESC LIMIT 200"
+            )
+            rows = cur.fetchall()
+        conn.commit()
+    return jsonify([
+        {"ts": int(r[0].timestamp() * 1000), "name": r[1], "action": r[2], "status": r[3], "message": r[4], "version": r[5]}
+        for r in rows
+    ])
 
 
 @app.route("/api/admin/third-party-services")
