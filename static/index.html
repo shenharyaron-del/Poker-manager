@@ -717,7 +717,7 @@ input:focus,.select-input:focus{border-color:var(--gold);}
    avatar's own visible edge. */
 .seat-info{display:flex;flex-direction:column;align-items:center;gap:1px;cursor:pointer;background:rgba(8,8,8,.82);border-radius:10px;padding:13px 10px 5px;margin-top:-13px;}
 .seat-name{font-size:11px;font-weight:700;color:var(--text);text-align:center;white-space:nowrap;max-width:78px;overflow:hidden;text-overflow:ellipsis;}
-.buyin-bar{align-self:stretch;height:6px;margin-top:3px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;direction:rtl;}
+.buyin-bar{align-self:stretch;height:6px;margin-top:3px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;direction:ltr;}
 .buyin-bar span{display:block;height:100%;border-radius:3px;}
 .seat-caption{font-size:13px;color:var(--gold);font-weight:700;text-align:center;line-height:1.35;white-space:nowrap;}
 .seat-history-toggle{position:absolute;top:3px;right:5px;background:none;border:none;color:var(--muted);cursor:pointer;padding:2px;display:inline-flex;z-index:2;}
@@ -6232,7 +6232,8 @@ function monthlyReportText(c, ym, st){
 const SEAT_POS = [
   [32,7],[68,7],[86,26],[86,52],[78,76],[38,92],[18,76],[14,52],[14,26],[3,90]
 ];
-// A seat's buy-in bar (under the name and amount): as long as the player's buy-in
+// A seat's buy-in bar (under the name and amount; filling left to right, gone once the
+// player has left): as long as the player's buy-in
 // relative to whoever bought in the most tonight, and coloured by the amount itself in
 // ₪50 steps - green at ₪50 up to red at ₪300 and above - so a colour means the same
 // amount every night.
@@ -7053,8 +7054,9 @@ function renderTable(gameId){
       if (d < best) { best = d; hintSeatIdx = i; }
     });
   }
-  // Each seat's buy-in bar is measured against whoever bought in the most tonight.
-  const maxSeatBuyin = Math.max(0, ...seats.filter(Boolean).map(pid => buyinTotals[pid] || 0));
+  // Each seat's buy-in bar is measured against whoever still at the table bought in the most
+  // (players who left have no bar).
+  const maxSeatBuyin = Math.max(0, ...seats.filter(pid => pid && !(pid in g.cashouts)).map(pid => buyinTotals[pid] || 0));
   const seatsHtml = seats.map((pid, i) => {
     if (i === EXTRA_SEAT) return ""; // the 10th seat isn't on the table (see EXTRA_SEAT)
     const [x,y] = SEAT_POS[visualPos(i)];
@@ -7147,7 +7149,7 @@ function renderTable(gameId){
         ${historyToggleHtml}
         <div class="seat-name">${esc(name)}</div>
         <div class="seat-caption">${caption}</div>
-        ${buyinBarHtml(buyin, maxSeatBuyin)}
+        ${cashedOut ? "" : buyinBarHtml(buyin, maxSeatBuyin)}
         ${historyPopupHtml}
       </div>
     </div>`;
