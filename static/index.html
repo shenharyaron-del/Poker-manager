@@ -6814,8 +6814,6 @@ function renderGameResultsScreen(gameId){
 
   const payboxPayments = g.payboxPayments || [];
   const playerPayments = g.playerPayments || [];
-  const payboxPaymentIdByPlayer = {};
-  payboxPayments.forEach(pp => { payboxPaymentIdByPlayer[pp.playerId] = pp.id; });
 
   const playerRowsHtml = results.map(r => {
     const isMe = r.id === myPlayerId;
@@ -6824,18 +6822,8 @@ function renderGameResultsScreen(gameId){
     // adding the crown's width for the one row that has it - otherwise every other name
     // starts one icon-width further right than the winner's, which read as misaligned.
     const crownHtml = `<span style="width:18px;display:inline-flex;justify-content:center;flex-shrink:0;color:var(--gold);">${isWinner ? icon('crown') : ''}</span>`;
-    const paymentId = payboxPaymentIdByPlayer[r.id];
-    const checked = isGroupPay && !!paymentId;
-    // Checkbox placed AFTER the amount (not before) so it's the flex item flush against
-    // the card's own edge, at the same x on every row - put first, its position would
-    // shift with the amount's own width (digit count), which is exactly what looked
-    // unaligned before.
-    // The amount saved with the tick is always positive (the server rejects anything else -
-    // a loser's negative profit made every loser's tick fail with "שמירה נכשלה"). Nothing
-    // to settle for a player who broke even, so no box for them.
-    const checkboxHtml = isGroupPay && Math.abs(r.profit) >= 0.01
-      ? `<input type="checkbox" data-result-paybox-toggle="${r.id}" data-amount="${Math.abs(r.profit)}" data-payment-id="${paymentId||''}" ${checked?'checked':''} style="width:22px;height:18px;accent-color:var(--gold);flex-shrink:0;">`
-      : "";
+    // A group-pot night (Paybox / Bit) shows no "who paid" ticks - nobody tracks those
+    // payments here; only player-to-player nights do (see "מי מעביר למי" below).
     return `
       <div class="card" data-player-night="${r.id}" data-game-id="${g.id}" style="cursor:pointer;${isMe ? 'border:1.5px solid var(--gold);' : ''}">
         <div class="flex1" style="display:flex;align-items:center;gap:6px;min-width:0;">
@@ -6843,8 +6831,7 @@ function renderGameResultsScreen(gameId){
           <span style="font-weight:700;font-size:24px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.name)}${isMe ? ' <span style="color:var(--muted);font-weight:400;font-size:21px;">(את/ה)</span>' : ''}</span>
         </div>
         <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
-          <span style="font-weight:800;font-size:21px;color:${profitColor(r.profit)};${checked?'text-decoration:line-through;opacity:.5;':''}">₪${Math.abs(r.profit)}</span>
-          ${checkboxHtml}
+          <span style="font-weight:800;font-size:21px;color:${profitColor(r.profit)};">₪${Math.abs(r.profit)}</span>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted);flex-shrink:0;"><path d="M15 18l-6-6 6-6"/></svg>
         </div>
       </div>`;
@@ -9232,25 +9219,9 @@ function attachHandlers(){
     go("table", {gameId, communityId});
     if (USE_RELATIONAL_API) { await ensureGameLoadedForView(gameId); render(); }
   });
-  // Game-results screen "paid" checkboxes - toggling one records/deletes the matching
-  // paybox_payments or player_payments row (see renderGameResultsScreen's own comment for
-  // which one applies to which settlement mode); nothing here recomputes the transfer list
-  // itself, it's purely a mark-as-done layered on top of the fixed amounts already shown.
-  app.querySelectorAll("[data-result-paybox-toggle]").forEach(el => el.onclick = async () => {
-    const gameId = nav.gameId, playerId = el.dataset.resultPayboxToggle, paymentId = el.dataset.paymentId;
-    const amount = parseFloat(el.dataset.amount);
-    el.disabled = true;
-    try {
-      if (paymentId) {
-        if (USE_RELATIONAL_API) await v2DeletePayboxPayment(gameId, paymentId);
-        else await mutateAndSave(() => { const g = getGame(gameId); g.payboxPayments = (g.payboxPayments||[]).filter(pp => pp.id !== paymentId); });
-      } else {
-        if (USE_RELATIONAL_API) await v2AddPayboxPayment(gameId, uid(), playerId, amount);
-        else await mutateAndSave(() => { const g = getGame(gameId); if (!g.payboxPayments) g.payboxPayments = []; g.payboxPayments.push({id:uid(), playerId, amount, ts: Date.now()}); });
-      }
-    } catch(e) { showAlert(saveFailedText(e)); }
-    render();
-  });
+  // Game-results screen "עבר" checkboxes (player-to-player nights only) - toggling one
+  // records/deletes the matching player_payments row; nothing here recomputes the transfer
+  // list itself, it's purely a mark-as-done layered on top of the fixed amounts shown.
   app.querySelectorAll("[data-result-player-payment-toggle]").forEach(el => el.onclick = async () => {
     const gameId = nav.gameId, fromId = el.dataset.from, toId = el.dataset.to, paymentId = el.dataset.paymentId;
     const amount = parseFloat(el.dataset.amount);
