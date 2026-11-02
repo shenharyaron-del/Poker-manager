@@ -568,6 +568,14 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .roster-stats-link{display:inline-flex;align-items:center;gap:6px;background:none;border:none;padding:0;font:inherit;color:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:3px;}
 .roster-stats-link svg{width:16px;height:16px;color:var(--gold);flex-shrink:0;}
 .login-alt{text-align:center;margin-top:14px;}
+.dbm-steps{margin:0 0 12px;padding-inline-start:20px;font-size:15px;line-height:1.6;color:var(--text);}
+.dbm-note{font-size:15px;margin:8px 0;color:var(--muted);}
+.dbm-good{color:#34d399;} .dbm-bad{color:#fda4af;}
+html.theme-light .dbm-good{color:#15803d;} html.theme-light .dbm-bad{color:#b91c1c;}
+.dbm-table{margin-top:6px;}
+.dbm-row{display:grid;grid-template-columns:2fr 1fr 1fr;gap:6px;padding:4px 2px;border-bottom:1px solid var(--card-b);font-size:14px;}
+.dbm-headrow{font-weight:700;color:var(--gold);}
+.dbm-diff{color:#fda4af;}
 .client-errors .ce-row{padding:8px 2px;border-bottom:1px solid var(--card-b);font-size:15px;}
 .client-errors .ce-head{display:flex;justify-content:space-between;gap:8px;}
 .client-errors .ce-head span{color:var(--muted);font-size:14px;}
@@ -7761,6 +7769,7 @@ function renderModal(m){
       <div style="margin-bottom:18px;">
         <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-open-global-players>${icon('users')} רשימת שחקנים</button>
         <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:8px;" data-open-client-errors>⚠️ שמירות שנכשלו</button>
+        <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:8px;" data-open-db-move>🗄️ העברת מסד נתונים</button>
       </div>
       <div class="section-title" style="padding:0;margin:0 0 8px;">גיבוי ושחזור</div>
       <div style="margin-bottom:8px;">
@@ -7777,6 +7786,28 @@ function renderModal(m){
       <a href="https://console.anthropic.com" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:18px;color:var(--muted);font-size:16px;text-decoration:underline;">console.anthropic.com</a>
       <div style="text-align:center;margin-top:8px;color:var(--muted);font-size:15px;">גרסה: ${esc(appVersion || "לא ידוע")}</div>
     `;
+  } else if (m.type === "dbMove") {
+    // One-time copy of everything to a new database (see copy_to_new_db in server.py).
+    title = "העברת מסד נתונים";
+    const st = m.status;
+    const steps = `<ol class="dbm-steps">
+        <li>ב-Supabase: פרויקט חדש באזור Singapore (Free).</li>
+        <li>ב-Render → Environment: משתנה חדש <b dir="ltr">NEW_DATABASE_URL</b> עם כתובת החיבור של הפרויקט החדש (אותו סוג כמו ה-DATABASE_URL הקיים), ושמירה.</li>
+        <li>אחרי ה-deploy: כאן, "העתקת נתונים למסד החדש" - כשאף אחד לא משחק.</li>
+        <li>אם הכול תואם: ב-Render מחליפים את <b dir="ltr">DATABASE_URL</b> לכתובת החדשה ומוחקים את <b dir="ltr">NEW_DATABASE_URL</b>.</li>
+      </ol>`;
+    let statusHtml;
+    if (!st) statusHtml = `<p class="dbm-note">בודק...</p>`;
+    else if (!st.configured) statusHtml = `<p class="dbm-note">עוד לא הוגדר מסד חדש (שלב 2).</p>`;
+    else if (!st.reachable) statusHtml = `<p class="dbm-note dbm-bad">אין חיבור למסד החדש: <span dir="ltr">${esc(st.error || "")}</span></p>`;
+    else statusHtml = `<p class="dbm-note dbm-good">מסד חדש מחובר ✓ <span dir="ltr">(PostgreSQL ${esc(String(st.version || "").split(" ")[0])})</span> · ${Object.values(st.counts || {}).reduce((a, b) => a + b, 0)} שורות בו כרגע</p>`;
+    const r = m.result;
+    const resultHtml = !r ? "" : r.error ? `<div class="dbm-note dbm-bad">${esc(r.error)}${r.missingTables && r.missingTables.length ? `<br>חסרות טבלאות: <span dir="ltr">${esc(r.missingTables.join(", "))}</span>` : ""}${r.missingColumns && Object.keys(r.missingColumns).length ? `<br>חסרות עמודות: <span dir="ltr">${esc(JSON.stringify(r.missingColumns))}</span>` : ""}</div>`
+      : `<div class="dbm-note ${r.ok ? "dbm-good" : "dbm-bad"}">${r.ok ? "ההעתקה הושלמה - כל הכמויות תואמות ✓ אפשר לעבור לשלב 4." : "ההעתקה הסתיימה אבל יש טבלאות שהכמויות בהן שונות - לא להחליף עדיין."}</div>
+        <div class="scroll-list dbm-table"><div class="dbm-row dbm-headrow"><span>טבלה</span><span>נוכחי</span><span>חדש</span></div>${r.tables.map(t => `<div class="dbm-row${t.old === t.new ? "" : " dbm-diff"}"><span dir="ltr">${esc(t.table)}</span><span>${t.old}</span><span>${t.new}${t.old === t.new ? " ✓" : " ✗"}</span></div>`).join("")}</div>`;
+    body = `${steps}${statusHtml}
+      ${st && st.reachable ? `<button class="btn btn-primary btn-block" data-db-copy ${m.copying ? "disabled" : ""} style="margin:10px 0;">${m.copying ? "מעתיק..." : "העתקת נתונים למסד החדש"}</button>` : ""}
+      ${resultHtml}`;
   } else if (m.type === "clientErrors") {
     title = "שמירות שנכשלו";
     const rows = m.rows;
@@ -9386,6 +9417,20 @@ function attachHandlers(){
     else if (to === "theme") openModal({type: "themePicker"});
     else if ((to === "close" || to === "reopen") && g) { closeModal(); setNightClosed(g.id, to === "close"); }
   }));
+  if (modal && modal.type === "dbMove") {
+    const copyBtn = app.querySelector("[data-db-copy]");
+    if (copyBtn) copyBtn.onclick = async () => {
+      const sure = await showConfirm("להעתיק עכשיו את כל הנתונים למסד החדש? כדאי שאף אחד לא ישחק בזמן ההעתקה. המסד הנוכחי לא משתנה.", {okLabel: "העתקה", cancelLabel: "ביטול"});
+      if (!sure) return;
+      updateModal({copying: true, result: null});
+      let result;
+      try {
+        const res = await fetch("/api/admin/copy-to-new-db?clientId=" + encodeURIComponent(getClientId()), {method: "POST"});
+        result = await res.json().catch(() => ({error: "תשובה לא צפויה מהשרת (" + res.status + ")"}));
+      } catch(e) { result = {error: "החיבור לשרת נכשל - נסו שוב."}; }
+      if (modal && modal.type === "dbMove") updateModal({copying: false, result});
+    };
+  }
   // Super admin: rename a player (closing returns to the list).
   app.querySelectorAll("[data-rename-player]").forEach(el => el.onclick = () => {
     if (!modal || modal.type !== "roster") return;
@@ -10577,6 +10622,12 @@ function attachHandlers(){
     // not null/[] - an empty real result must not re-trigger this) - the read-only list
     // renders directly in this screen now (see its own comment on why), not behind a
     // button into a separate one, so there's no dedicated open-handler to fetch from.
+    app.querySelectorAll("[data-open-db-move]").forEach(el => el.onclick = async () => {
+      openModal({type: "dbMove", back: modal});
+      let status = {configured: false};
+      try { const res = await fetch("/api/admin/new-db?clientId=" + encodeURIComponent(getClientId())); if (res.ok) status = await res.json(); } catch(e) {}
+      if (modal && modal.type === "dbMove") updateModal({status});
+    });
     app.querySelectorAll("[data-open-client-errors]").forEach(el => el.onclick = async () => {
       openModal({type: "clientErrors", back: modal});
       let rows = [];

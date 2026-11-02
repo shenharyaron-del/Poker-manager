@@ -3724,6 +3724,152 @@ def _third_party_service_row(row):
     return {"id": row[0], "name": row[1], "url": row[2], "username": row[3], "password": row[4], "category": row[5]}
 
 
+# ---------- One-time move to a new database (e.g. Supabase Tokyo -> Singapore) ----------
+# The super admin sets NEW_DATABASE_URL on Render (the address never passes through chat),
+# then presses "העתקת נתונים למסד החדש": the new database gets this app's schema
+# (schema.sql + _INIT_STATEMENTS), every table is emptied there and copied over from the
+# current one, and both sides' row counts come back for comparison. Nothing changes in the
+# current database. Switching is then just pointing DATABASE_URL at the new one.
+NEW_DATABASE_URL = os.environ.get("NEW_DATABASE_URL")
+
+
+def _new_db_conn():
+    kwargs = {"options": f"-c search_path={DB_SCHEMA},public"} if DB_SCHEMA else {}
+    return psycopg2.connect(NEW_DATABASE_URL, connect_timeout=15, **kwargs)
+
+
+def _db_tables(cur):
+    cur.execute(
+        "SELECT table_name FROM information_schema.tables "
+        "WHERE table_schema = current_schema() AND table_type = 'BASE TABLE' ORDER BY table_name"
+    )
+    return [r[0] for r in cur.fetchall()]
+
+
+def _db_columns(cur, table):
+    cur.execute(
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_schema = current_schema() AND table_name = %s ORDER BY ordinal_position",
+        (table,),
+    )
+    return [r[0] for r in cur.fetchall()]
+
+
+def _fk_order(cur, tables):
+    # Parents before children, so every row's foreign key finds its target.
+    cur.execute(
+        "SELECT tc.table_name, ccu.table_name FROM information_schema.table_constraints tc "
+        "JOIN information_schema.constraint_column_usage ccu ON ccu.constraint_name = tc.constraint_name "
+        "AND ccu.table_schema = tc.table_schema "
+        "WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_schema = current_schema()"
+    )
+    deps = {t: set() for t in tables}
+    for child, parent in cur.fetchall():
+        if child in deps and parent in deps and child != parent:
+            deps[child].add(parent)
+    ordered, done = [], set()
+    while len(ordered) < len(tables):
+        ready = [t for t in tables if t not in done and deps[t] <= done]
+        if not ready:  # a cycle - just take the rest as they come
+            ready = [t for t in tables if t not in done]
+        for t in ready:
+            ordered.append(t)
+            done.add(t)
+    return ordered
+
+
+def _table_counts(cur, tables):
+    out = {}
+    for t in tables:
+        cur.execute(f'SELECT count(*) FROM "{t}"')
+        out[t] = cur.fetchone()[0]
+    return out
+
+
+@app.route("/api/admin/new-db")
+def new_db_status():
+    ok, err = _require_super_admin(request.args.get("clientId", ""))
+    if not ok:
+        return err
+    if not NEW_DATABASE_URL:
+        return jsonify({"configured": False})
+    try:
+        conn = _new_db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SHOW server_version")
+                version = cur.fetchone()[0]
+                tables = _db_tables(cur)
+                counts = _table_counts(cur, tables)
+        finally:
+            conn.close()
+    except psycopg2.Error as e:
+        return jsonify({"configured": True, "reachable": False, "error": str(e).strip()[:300]})
+    return jsonify({"configured": True, "reachable": True, "version": version, "counts": counts})
+
+
+@app.route("/api/admin/copy-to-new-db", methods=["POST"])
+def copy_to_new_db():
+    ok, err = _require_super_admin(request.args.get("clientId", ""))
+    if not ok:
+        return err
+    if not NEW_DATABASE_URL:
+        return jsonify({"error": "NEW_DATABASE_URL is not set on the server"}), 400
+    try:
+        new = _new_db_conn()
+    except psycopg2.Error as e:
+        return jsonify({"error": "can't reach the new database: " + str(e).strip()[:300]}), 502
+    try:
+        with get_db() as old:
+            with old.cursor() as ocur:
+                tables = _db_tables(ocur)
+                old_cols = {t: _db_columns(ocur, t) for t in tables}
+            # The app's schema on the new database (a no-op for what's already there).
+            with new.cursor() as ncur:
+                if "games" not in _db_tables(ncur):
+                    ncur.execute(Path(__file__).with_name("schema.sql").read_text(encoding="utf-8"))
+                    new.commit()
+            _ensure_schema(new)
+            with new.cursor() as ncur:
+                new_tables = set(_db_tables(ncur))
+                missing_tables = [t for t in tables if t not in new_tables]
+                missing_cols = {t: [c for c in old_cols[t] if c not in _db_columns(ncur, t)]
+                                for t in tables if t in new_tables}
+                missing_cols = {t: cs for t, cs in missing_cols.items() if cs}
+                if missing_tables or missing_cols:
+                    new.rollback()
+                    return jsonify({"error": "the new database's structure doesn't match - nothing copied",
+                                    "missingTables": missing_tables, "missingColumns": missing_cols}), 409
+                order = _fk_order(ncur, tables)
+                # Empty everything first (children before parents), then copy parents first.
+                ncur.execute("TRUNCATE " + ", ".join(f'"{t}"' for t in order) + " CASCADE")
+                with old.cursor() as ocur:
+                    for t in order:
+                        cols = ", ".join(f'"{c}"' for c in old_cols[t])
+                        buf = io.StringIO()
+                        ocur.copy_expert(f'COPY (SELECT {cols} FROM "{t}") TO STDOUT', buf)
+                        buf.seek(0)
+                        ncur.copy_expert(f'COPY "{t}" ({cols}) FROM STDIN', buf)
+                    # Serial counters continue after the copied ids.
+                    for t in order:
+                        for c in old_cols[t]:
+                            ncur.execute("SELECT pg_get_serial_sequence(%s, %s)", (t, c))
+                            seq = ncur.fetchone()[0]
+                            if seq:
+                                ncur.execute(f'SELECT setval(%s, COALESCE((SELECT max("{c}") FROM "{t}"), 0) + 1, false)', (seq,))
+                    old_counts = _table_counts(ocur, order)
+                new_counts = _table_counts(ncur, order)
+            new.commit()
+            old.commit()
+    except psycopg2.Error as e:
+        new.rollback()
+        return jsonify({"error": "copy failed - nothing changed in the new database: " + str(e).strip()[:300]}), 500
+    finally:
+        new.close()
+    tables_out = [{"table": t, "old": old_counts[t], "new": new_counts[t]} for t in order]
+    return jsonify({"ok": all(r["old"] == r["new"] for r in tables_out), "tables": tables_out})
+
+
 _CLIENT_ERRORS_KEEP = 500
 
 
