@@ -68,8 +68,9 @@ body{
 .active-games-bar{position:fixed;left:0;right:0;bottom:0;z-index:40;max-width:520px;margin:0 auto;padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));background:radial-gradient(ellipse at 50% 0%,#2f9e63 0%,#17703f 45%,#0b4426 100%);border:2px solid #f5c542;border-bottom:none;border-radius:20px 20px 0 0;display:flex;flex-direction:column;gap:8px;max-height:45vh;overflow-y:auto;animation:agbGlow 2.4s ease-in-out infinite;}
 @keyframes agbGlow{0%,100%{box-shadow:0 -6px 22px rgba(0,0,0,.4),0 0 0 rgba(245,197,66,0);}50%{box-shadow:0 -6px 22px rgba(0,0,0,.4),0 -4px 26px rgba(245,197,66,.65);}}
 .active-games-bar .agb-title{display:flex;align-items:center;justify-content:center;gap:8px;font-size:18px;font-weight:800;color:#fde68a;text-shadow:0 1px 2px rgba(0,0,0,.5);}
-.active-games-bar .agb-live{width:10px;height:10px;border-radius:50%;background:#ef4444;box-shadow:0 0 0 0 rgba(239,68,68,.7);animation:agbLive 1.4s ease-out infinite;flex-shrink:0;}
-@keyframes agbLive{0%{box-shadow:0 0 0 0 rgba(239,68,68,.7);}100%{box-shadow:0 0 0 9px rgba(239,68,68,0);}}
+/* The red "live" dot: two rings spreading out from it, wider and stronger than a faint halo. */
+.active-games-bar .agb-live{width:12px;height:12px;border-radius:50%;background:#ef4444;box-shadow:0 0 0 0 rgba(239,68,68,.9);animation:agbLive 1.2s ease-out infinite;flex-shrink:0;}
+@keyframes agbLive{0%{box-shadow:0 0 0 0 rgba(239,68,68,1),0 0 0 0 rgba(239,68,68,.8);}60%{box-shadow:0 0 0 11px rgba(239,68,68,.45),0 0 0 6px rgba(239,68,68,.6);}100%{box-shadow:0 0 0 18px rgba(239,68,68,0),0 0 0 12px rgba(239,68,68,0);}}
 .active-games-bar .agb-game{background:linear-gradient(180deg,#fde68a,#f5c542 55%,#d4a017)!important;color:#1c1917!important;border:none!important;box-shadow:0 3px 8px rgba(0,0,0,.35);}
 .active-games-bar .agb-game{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:20px;}
 .active-games-bar .agb-label{display:flex;flex-direction:column;align-items:flex-start;min-width:0;line-height:1.2;}
@@ -1150,8 +1151,9 @@ html.theme-light.theme-blue .game-stats-btn{color:#a86a12;border-color:#a86a12;b
 .monthly-preview{margin-top:4px;font-size:17px;padding:10px 12px;border-radius:12px;background:rgba(0,0,0,.2);font-size:15px;line-height:1.6;color:var(--text);white-space:normal;}
 html.theme-light .monthly-preview{background:rgba(0,0,0,.06);}
 .unseated-game p{font-size:19px;margin:0 0 16px;line-height:1.5;}
-.game-seg button.tab-hint{animation:tab-pulse 1.2s ease-in-out infinite;}
-@keyframes tab-pulse{0%,100%{box-shadow:0 0 0 0 rgba(212,175,55,.0);}50%{box-shadow:0 0 0 4px rgba(212,175,55,.55);}}
+/* The tab that wants a tap: a bright gold ring with a glow, pulsing - clearly visible. */
+.game-seg button.tab-hint{animation:tab-pulse 1.1s ease-in-out infinite;}
+@keyframes tab-pulse{0%,100%{box-shadow:0 0 0 1px rgba(245,197,66,.35),0 0 0 rgba(245,197,66,0);}50%{box-shadow:0 0 0 3px rgba(245,197,66,1),0 0 14px 3px rgba(245,197,66,.75);}}
 .invite-tab{padding:4px 20px 20px;overflow-y:auto;touch-action:pan-y;}
 .invite-tab-lead{text-align:center;font-size:19px;margin:6px 0 14px;}
 .invite-tab-or{text-align:center;color:var(--muted);font-size:16px;margin:18px 0 10px;}
