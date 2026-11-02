@@ -1551,11 +1551,17 @@ let lazyClubGames = false;
 const lazyLoadedClubIds = new Set();
 const clubGamesLoading = new Set();
 let allGameSummaries = [];
+// At startup the games load before the logged-in account is applied to this device (its
+// player id and club links) - so the account's own ids and links count here too, or the
+// super admin's own clubs (and their open tables) were left unloaded.
+let startupAccount = null;
 function isMyOwnClub(c){
   if (!c) return false;
   const ids = myIdSet();
+  if (startupAccount && startupAccount.playerId) ids.add(startupAccount.playerId);
+  const links = {...((startupAccount && startupAccount.myPlayers) || {}), ...(myIdentity.myPlayers || {})};
   return (c.createdBy && ids.has(c.createdBy)) || (c.roster || []).some(r => r.clientId && ids.has(r.clientId))
-    || !!(myIdentity.myPlayers && myIdentity.myPlayers[c.id]);
+    || !!links[c.id];
 }
 function clubGamesWanted(cid){
   return !lazyClubGames || lazyLoadedClubIds.has(cid) || isMyOwnClub(getCommunity(cid));
@@ -12029,7 +12035,8 @@ window.addEventListener("popstate", async () => {
         state.communities = await v2Fetch("GET", "/communities");
         // Super admin: only their own clubs' games up front, plus the club of whatever this
         // open is headed to (an invite link, or the page before a refresh).
-        lazyClubGames = !!(sessionResult.status === "fulfilled" && sessionResult.value && sessionResult.value.role === "superAdmin");
+        startupAccount = sessionResult.status === "fulfilled" ? sessionResult.value : null;
+        lazyClubGames = !!(startupAccount && startupAccount.role === "superAdmin");
         const openParams = new URLSearchParams(location.search);
         [openParams.get("community"), SAVED_NAV_AT_LOAD && SAVED_NAV_AT_LOAD.communityId].forEach(cid => { if (cid) lazyLoadedClubIds.add(cid); });
         const gameSummaries = await fetchGameSummaries(state.communities, [openParams.get("game"), SAVED_NAV_AT_LOAD && SAVED_NAV_AT_LOAD.gameId]);
