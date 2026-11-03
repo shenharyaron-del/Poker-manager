@@ -1036,6 +1036,35 @@ html.theme-light.theme-blue .btn-blue{background:#0b2f4a!important;border:1.5px 
 .game-welcome-overlay.no-anim{animation:none;}
 .status-badge{display:inline-block;flex-shrink:0;font-family:'Rubik',sans-serif;font-size:11px;font-weight:700;color:#fff;border-radius:8px;padding:3px 8px;white-space:nowrap;letter-spacing:0;}
 .status-badge.small{font-size:10px;padding:2px 7px;border-radius:7px;vertical-align:middle;}
+/* Player screen: carousel of everyone else at tonight's table, above the name */
+.pp-car{position:relative;margin:0 0 10px;padding:8px 26px 6px;border-radius:18px;border:1px solid rgba(212,175,55,.45);background:linear-gradient(180deg,rgba(0,0,0,.18),rgba(0,0,0,.32));}
+.pp-car:not(.many){padding:8px 6px 6px;}
+.pp-car-track{display:flex;gap:4px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;touch-action:pan-x pan-y;}
+.pp-car:not(.many) .pp-car-track{justify-content:center;}
+.pp-car-track::-webkit-scrollbar{display:none;}
+.pp-ci{flex:0 0 31%;scroll-snap-align:center;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px 7px;border-radius:14px;border:1.5px solid transparent;background:transparent;color:var(--text);font-family:inherit;cursor:pointer;min-width:0;}
+.pp-ci.on{border-color:var(--gold);background:rgba(212,175,55,.14);box-shadow:0 0 12px rgba(212,175,55,.25);}
+.pp-ci-av{width:58px;height:58px;border-radius:50%;background-size:cover;background-position:center;border:2.5px solid #2f9e7a;box-shadow:0 2px 6px rgba(0,0,0,.35);flex-shrink:0;}
+.pp-ci.on .pp-ci-av{border-color:var(--gold);}
+.pp-ci.out .pp-ci-av{filter:grayscale(1);opacity:.55;}
+.pp-ci-name{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:17px;font-weight:800;line-height:1.2;margin-top:2px;}
+.pp-ci.on .pp-ci-name{color:var(--gold);}
+.pp-ci-amt{font-size:16px;font-weight:600;color:var(--muted);}
+.pp-ci-out{font-size:15px;font-weight:600;color:var(--muted);}
+.pp-ci-return{font-size:15px;font-weight:800;color:var(--gold);text-decoration:underline;text-underline-offset:2px;}
+.pp-car-arrow{position:absolute;top:38%;transform:translateY(-50%);width:26px;height:40px;display:flex;align-items:center;justify-content:center;background:none;border:none;padding:0;cursor:pointer;color:#5fd3b0;}
+.pp-car-arrow svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;}
+.pp-car-arrow.prev{right:2px;}
+.pp-car-arrow.next{left:2px;}
+.pp-car-dots{display:flex;justify-content:center;gap:7px;margin-top:6px;}
+.pp-car-dots span{width:8px;height:8px;border-radius:50%;background:rgba(95,211,176,.35);cursor:pointer;transition:background .2s,transform .2s;}
+.pp-car-dots span.on{background:#5fd3b0;transform:scale(1.25);}
+html.theme-light .pp-car{background:rgba(255,255,255,.55);border-color:#c9a45a;}
+html.theme-light .pp-ci.on{background:#fff3cf;}
+html.theme-light .pp-ci.on .pp-ci-name,html.theme-light .pp-ci-return{color:#9a5f12;}
+html.theme-light .pp-car-arrow{color:#0e8a66;}
+html.theme-light .pp-car-dots span{background:rgba(14,138,102,.3);}
+html.theme-light .pp-car-dots span.on{background:#0e8a66;}
 /* Player screen: tiles of everyone at tonight's table above the name (4 per row, max 6) */
 .pp-tiles{display:grid;gap:6px;margin:0 0 10px;}
 .pp-tile{position:relative;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:8px 16px;border-radius:10px;border:1px solid rgba(212,175,55,.45);background:transparent;color:var(--text);font-family:inherit;font-size:inherit;font-weight:700;line-height:1.15;cursor:pointer;overflow:visible;}
@@ -1644,7 +1673,7 @@ function attachTabSwipe(app){
   let sx = null, sy = 0, active = false, abandoned = false, dx = 0, swiped = 0;
   const neighbour = d => tabs[cur + (d < 0 ? -1 : 1)];   // d: drag direction (<0 = left)
   root.addEventListener("pointerdown", e => {
-    if (modal || e.target.closest("[data-seat], input, textarea, select, .ttl-scroll")) return;
+    if (modal || e.target.closest("[data-seat], input, textarea, select, .ttl-scroll, .pp-car-track")) return;
     sx = e.clientX; sy = e.clientY; active = false; abandoned = false; dx = 0;
   });
   root.addEventListener("pointermove", e => {
@@ -3673,13 +3702,13 @@ function tourSteps(base){
       desc: base.admin
         ? [{page: "player", text: 'לוחצים על "הזמן שחקן" ושולחים לחברים את הקישור בוואטסאפ'}, ", או ", {page: "table", text: "הוסיפו שחקן על כיסא פנוי"}, "."]
         : [{page: "player", text: 'לוחצים על "הזמן שחקן" ושולחים לחברים את הקישור בוואטסאפ'}, ". ", {page: "table", text: "גרירה ימינה מראה את מסך השולחן"}, "."]},
-    {view: "player", o: {}, sel: ".pp-tiles", title: "החברים מצטרפים",
+    {view: "player", o: {}, sel: ".pp-car", title: "החברים מצטרפים",
       desc: "כל מי שמתיישב בשולחן מקבל ריבוע משלו כאן למעלה – בזמן אמת, אצל כולם."},
     {view: "player", o: {notStarted: true}, sel: "[data-start-game]", title: "תחילת משחק",
       desc: 'כשמתחילים לשחק, כל אחד מהשולחן יכול ללחוץ על "תחילת משחק". ריביי נפתח רק אחרי זה.'},
     {view: "player", o: {}, sel: ".rb-frame", title: "ריביי – קנייה נוספת",
       desc: `נגמרו הז'יטונים? בוחרים סכום ולוחצים "ריביי". סך הקניות שלכם מתעדכן מיד.`},
-    {view: "player", o: {}, sel: '.pp-tile[data-pp-view="' + TOUR_DANI + '"]', title: "ריביי לחבר",
+    {view: "player", o: {}, sel: '.pp-ci[data-pp-view="' + TOUR_DANI + '"]', title: "ריביי לחבר",
       desc: "דני ביקש שתוסיפו לו ריביי או הודיע על סיום הערב? לוחצים על הריבוע שלו כדי לעבוד עליו."},
     {view: "player", o: {viewOther: true}, sel: ".rb-frame", title: "מסך אדום = שחקן אחר",
       desc: "המסך נצבע באדום כדי שלא תתבלבלו – כל פעולה כאן נרשמת לדני. אחרי הריביי חוזרים למסך שלכם לבד תוך 10 שניות, או מיד בלחיצה על השם שלכם."},
@@ -5703,7 +5732,7 @@ function render(){
   // design) in the corner, instead of "בית › מועדון" breadcrumbs - nothing on screen that
   // leaves the game by accident. The home screen keeps its "עיצוב" button.
   const menuHead = !!crumbGame || nav.screen === "community";
-  const headTitle = crumbGame ? (crumbGame.name || crumbGame.date || "") + (crumbsStopAtClub ? "" : ` · ${screenLabel}`)
+  const headTitle = crumbGame ? (crumbGame.name || ilDate(crumbGame.date)) + (crumbsStopAtClub ? "" : ` · ${screenLabel}`)
     : nav.screen === "community" ? (getCommunity(nav.communityId) || {}).name || "" : "";
   const screenTag = menuHead
     ? `<div class="screen-tag screen-tag-lg crumbs-row game-focus-head"><span class="crumb-here">${esc(headTitle)}</span></div>`
@@ -6776,10 +6805,8 @@ function renderPlayerScreen(gameId){
   // their screen - the one being looked at is highlighted. With 10 at the table, one of
   // them sits in a box right of the name instead (the 10th seat's player, or - when the
   // 10th is me - the last of the other 9), so the tiles stay at 8, two rows, on every phone.
-  const extraSeatId = (g.seats||[])[EXTRA_SEAT];
-  const othersTonight = g.players.filter(pl => pl.id !== myPlayerId && pl.id !== extraSeatId && ((g.seats||[]).includes(pl.id) || pl.id in (g.cashouts||{}))).map(pl => pl.id);
-  const sideId = extraSeatId && extraSeatId !== myPlayerId ? extraSeatId
-    : othersTonight.length > 8 ? othersTonight[othersTonight.length - 1] : null;
+  const othersTonight = g.players.filter(pl => pl.id !== myPlayerId && ((g.seats||[]).includes(pl.id) || pl.id in (g.cashouts||{}))).map(pl => pl.id);
+  const sideId = null;   // everyone is in the carousel now (the 10th seat included)
   const playerTile = (id, cls) => {
     const out = id in (g.cashouts||{});
     // An admin sends a cashed-out player back to the table right from their box up here,
@@ -6810,20 +6837,31 @@ function renderPlayerScreen(gameId){
   // Tiles above the name: everyone who entered tonight, in order, then a "הזמן שחקן" tile
   // in the next free spot (it replaces the header's invite button here).
   // An admin taps a tile to see that player's screen; for everyone else they're a roster.
-  const tilesHtml = (() => {
-    // The way back to my own screen is the ↩ button by the name.
-    const entered = othersTonight.filter(id => id !== sideId);
-    // At most 8 boxes (9 at a table, nobody replaces anyone: 8 others, or 7 + invite),
-    // laid out like the timeline's name chips: never bigger than a third of the row (1-3
-    // boxes sit from the right at that size, "הזמן שחקן" last), 4 in one row, 5-6 in rows
-    // of 3, 7-8 in rows of 4 - the font sized to the box (long names shrink to fit, see
-    // fitNameBoxes).
-    // "הזמן שחקן" moved to the tabs row above (see gameTabsScreen).
-    const out = entered.map(id => playerTile(id)).join("");
-    const n = entered.length;
-    const cols = n === 4 || n > 6 ? 4 : 3;
-    const fs = cols === 3 ? 18 : 16;
-    return `<div class="pp-tiles" style="grid-template-columns:repeat(${cols},1fr);font-size:${fs}px;">${out}</div>`;
+  // A carousel of everyone else tonight (entry order): avatar, name and what they bought
+  // in - or, once they've left, "החזר" (an admin sends them back to the table) / "יצא".
+  // The one being looked at is highlighted. Arrows and dots under it when it doesn't fit.
+  const carouselHtml = (() => {
+    if (!othersTonight.length) return "";
+    const totals = {};
+    (g.buyins || []).forEach(b => { totals[b.playerId] = (totals[b.playerId] || 0) + (b.amount || 0); });
+    const items = othersTonight.map(id => {
+      const out = id in (g.cashouts || {});
+      const rp = c.roster.find(r => r.id === id);
+      const photo = (rp && getPlayerPhoto(rp)) || "/static/logo-watermark.png";
+      const under = !out ? `<span class="pp-ci-amt">₪${Math.round((totals[id] || 0) * 100) / 100}</span>`
+        : isAdminView ? `<span class="pp-ci-return" role="button" data-admin-return-to-game="${id}">↩ החזר</span>`
+        : `<span class="pp-ci-out">יצא</span>`;
+      return `<button type="button" class="pp-ci${id === pid ? " on" : ""}${out ? " out" : ""}" data-pp-view="${id}">
+        <span class="pp-ci-av" style="background-image:url('${photo}')"></span>
+        <bdi class="pp-ci-name">${esc(tableShortName(g, id))}</bdi>${under}</button>`;
+    }).join("");
+    const many = othersTonight.length > 3;
+    return `<div class="pp-car${many ? " many" : ""}" data-pp-car="${g.id}">
+      ${many ? `<button type="button" class="pp-car-arrow prev" data-pp-car-step="1" aria-label="הקודם"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>` : ""}
+      <div class="pp-car-track" data-pp-car-track>${items}</div>
+      ${many ? `<button type="button" class="pp-car-arrow next" data-pp-car-step="-1" aria-label="הבא"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <div class="pp-car-dots">${othersTonight.map((_, i) => `<span data-pp-car-dot="${i}"></span>`).join("")}</div>` : ""}
+    </div>`;
   })();
   // Order (top to bottom): name/total, ריביי buttons, the shared history/feed panel
   // (.player-history-feed, flex:1 - the one section whose size actually adapts, toggled
@@ -6833,7 +6871,7 @@ function renderPlayerScreen(gameId){
   return `
     <div class="player-screen-scroll">
       <div style="text-align:center;padding:6px 0 ${cashedOut?16:4}px;flex-shrink:0;">
-        ${tilesHtml}
+        ${carouselHtml}
         ${nameHtml}
         ${cashedOut ? "" : `<div class="pp-total-wrap"><div class="pp-total" data-player-total>₪${buyinTotal}</div><img class="pp-chips" src="/static/player-chips.webp" alt="" draggable="false"></div>${paymentNotesHtml}`}
         ${(() => {
@@ -7099,7 +7137,7 @@ function renderWatchFeed(gameId){
       <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
       <div class="flex1" style="min-width:0;">
         <h1 class="serif sm" style="color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g.name || c.name)}</h1>
-        <div class="meta" style="color:#6ee7b7;font-size:15px;display:flex;align-items:center;gap:4px;">${icon('cal')}${esc(g.date)}</div>
+        <div class="meta" style="color:#6ee7b7;font-size:15px;display:flex;align-items:center;gap:4px;">${icon('cal')}${esc(ilDate(g.date))}</div>
       </div>
     </div>
     ${watchStripHtml(g)}
@@ -7329,8 +7367,54 @@ function renderTable(gameId){
 // Which view is open is remembered per device.
 // A name too long for its box steps its font down (to 11px) before it ever gets "…" -
 // the timeline's name chips, the player screen's player boxes and the chips-left label.
+// The player screen's carousel (see carouselHtml): keeps the player it was showing in the
+// middle across re-renders (a refresh tick redraws the screen), and the first time
+// centers the one being looked at; arrows move one player, dots follow and jump.
+const ppCarCenter = {};   // gameId -> player id in the middle
+const ppCarOn = {};       // gameId -> the player being looked at, last time
+function setupPlayerCarousel(){
+  const car = document.querySelector("[data-pp-car]");
+  if (!car) return;
+  const gid = car.dataset.ppCar;
+  const track = car.querySelector("[data-pp-car-track]");
+  const items = [...track.querySelectorAll(".pp-ci")];
+  const dots = [...car.querySelectorAll("[data-pp-car-dot]")];
+  const centerOf = el => { const r = el.getBoundingClientRect(); return r.left + r.width / 2; };
+  const trackMid = () => centerOf(track);
+  const middleIndex = () => {
+    let best = 0, bestD = Infinity;
+    items.forEach((el, i) => { const d = Math.abs(centerOf(el) - trackMid()); if (d < bestD) { bestD = d; best = i; } });
+    return best;
+  };
+  const bring = (el, smooth) => {
+    const delta = centerOf(el) - trackMid();
+    if (smooth) track.scrollBy({left: delta, behavior: "smooth"}); else track.scrollLeft += delta;
+  };
+  const markDots = () => {
+    const i = middleIndex();
+    dots.forEach((d, k) => d.classList.toggle("on", k === i));
+    if (items[i]) ppCarCenter[gid] = items[i].dataset.ppView;
+  };
+  if (car.classList.contains("many")) {
+    // A newly picked player comes to the middle; otherwise it stays where it was.
+    const on = items.find(el => el.classList.contains("on"));
+    const onId = on ? on.dataset.ppView : null;
+    const keep = (onId && onId !== ppCarOn[gid] && on) || items.find(el => el.dataset.ppView === ppCarCenter[gid]) || on;
+    ppCarOn[gid] = onId;
+    if (keep) bring(keep, false);
+  }
+  markDots();
+  let t = null;
+  track.onscroll = () => { clearTimeout(t); t = setTimeout(markDots, 60); };
+  car.querySelectorAll("[data-pp-car-step]").forEach(btn => btn.onclick = (e) => {
+    e.stopPropagation();
+    const i = Math.max(0, Math.min(items.length - 1, middleIndex() + Number(btn.dataset.ppCarStep) * -1));
+    bring(items[i], true);
+  });
+  dots.forEach(d => d.onclick = () => { const el = items[Number(d.dataset.ppCarDot)]; if (el) bring(el, true); });
+}
 function fitNameBoxes(){
-  document.querySelectorAll(".ttl-chip, .pp-tile bdi, .pp-tile-invite span, .lv-amount-label, .fit-line").forEach(el => {
+  document.querySelectorAll(".ttl-chip, .pp-tile bdi, .pp-ci-name, .pp-tile-invite span, .lv-amount-label, .fit-line").forEach(el => {
     let fs = parseFloat(getComputedStyle(el).fontSize);
     while (el.scrollWidth > el.clientWidth + 1 && fs > 11) { fs -= 1; el.style.fontSize = fs + "px"; }
   });
@@ -9756,6 +9840,7 @@ function attachHandlers(){
     render();
   });
   fitNameBoxes();
+  setupPlayerCarousel();
   app.querySelectorAll("[data-pp-view]").forEach(el => el.onclick = () => {
     const g = getGame(nav.gameId);
     const mine = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
