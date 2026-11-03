@@ -123,6 +123,11 @@ h1.sm{font-size:20px;}
 .new-game-card .ngc-art{flex-shrink:0;width:76px;height:auto;-webkit-user-drag:none;}
 .new-game-card .ngc-title{font-size:21px;font-weight:800;color:#fff;line-height:1.2;}
 .new-game-card .ngc-sub{font-size:15px;color:rgba(255,255,255,.88);margin-top:3px;}
+/* Light themes: a pale mint card with dark green text, still set apart from the cream nights */
+html.theme-light .card.new-game-card{background:linear-gradient(135deg,#e6f7ee,#c9ecd8);border:2px solid #10b981;box-shadow:0 4px 12px rgba(16,185,129,.18);}
+html.theme-light .new-game-card .ngc-title{color:#065f46;}
+html.theme-light .new-game-card .ngc-sub{color:#047857;}
+html.theme-light.theme-blue .card.new-game-card{background:linear-gradient(135deg,#eafaf3,#cdeedd);border-color:#0e9f6e;}
 .club-games-scroll{overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
 .open-badge{font-size:11px;font-weight:700;color:var(--gold-text);background:var(--gold);border-radius:8px;padding:3px 8px;}
 .poker-loading-spin{display:inline-flex;animation:pokerChipSpin .8s linear infinite;}
