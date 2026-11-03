@@ -3984,7 +3984,15 @@ async function performBuyin(gameId, playerId, amount, opts){
   pendingBuyinRequest = {gameId, id, playerId, cancelled: false};
   showPendingBuyinBanner(`נרשמה בקשה ל${verb} ₪${amount} ל-${playerName}...`);
   render();
-  if (fromEl) { const totalEl = document.querySelector("[data-player-total]"); if (totalEl) flyAmountBadge(fromEl, totalEl, amount); }
+  if (fromEl) {
+    // For someone else (acting on their behalf): to their card in the carousel - their
+    // amount there - rather than the big total under my own name.
+    const g0 = getGame(gameId);
+    const mine = g0 && myIdentity.myPlayers && myIdentity.myPlayers[g0.communityId];
+    const card = playerId !== mine && document.querySelector(`.pp-ci[data-pp-view="${playerId}"]`);
+    const totalEl = card ? (card.querySelector(".pp-ci-amt") || card) : document.querySelector("[data-player-total]");
+    if (totalEl) flyAmountBadge(fromEl, totalEl, amount);
+  }
 
   let ok = false;
   const sentActorName = actorName === playerName ? undefined : actorName;
