@@ -1062,6 +1062,8 @@ fieldset.pp-car{min-width:0;margin-inline:0;}
 .pp-car.has-legend{padding-top:4px;}
 .pp-car-legend{padding:0 8px;margin:0;margin-inline-start:12px;margin-inline-end:auto;font-size:14px;font-weight:700;color:var(--gold);}
 html.theme-light .pp-car-legend{color:#9a5f12;}
+html.theme-light .pp-ci-amt,html.theme-light .pp-ci-out{color:#1f4f66;}
+html.theme-light.theme-sand .pp-ci-amt,html.theme-light.theme-sand .pp-ci-out{color:#6b4a2a;}
 .pp-car-track{display:flex;gap:2px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;touch-action:pan-x pan-y;}
 .pp-car:not(.many) .pp-car-track{justify-content:center;}
 .pp-car-track::-webkit-scrollbar{display:none;}
@@ -6744,6 +6746,8 @@ function renderPlayerScreen(gameId){
   const buyinPending = !!(pendingBuyinRequest && pendingBuyinRequest.gameId === g.id && !pendingBuyinRequest.cancelled);
   const amounts = getBuyinAmounts(c);
   const pickKey = g.id + ":" + pid;
+  // Acting for someone else: whose rebuy it is, right on the button.
+  const forName = viewingOther && p ? ` ל-<bdi>${esc(tableShortName(g, pid))}</bdi>` : "";
   const picked = rebuyPick[pickKey] !== undefined ? rebuyPick[pickKey] : amounts[0];
   // No rebuys before "תחילת משחק" - only the entry amount counts until the game starts.
   const rebuyLocked = buyinPending || notStarted;
@@ -6755,9 +6759,9 @@ function renderPlayerScreen(gameId){
     ${picked === 'other' ? `
     <div style="display:flex;gap:8px;margin-top:12px;">
       <input type="number" inputmode="decimal" id="rb-other-amount" placeholder="סכום ₪" ${rebuyLocked?'disabled':''} style="flex:1;padding:12px 8px;font-size:18px;text-align:center;border-radius:12px;border:1px solid var(--gold);background:var(--input);color:var(--text);">
-      <button class="rb-confirm" style="flex:1.4;margin-top:0;" data-rb-confirm ${rebuyLocked?'disabled':''}>ריביי</button>
+      <button class="rb-confirm" style="flex:1.4;margin-top:0;" data-rb-confirm ${rebuyLocked?'disabled':''}>ריביי${forName}</button>
     </div>` : `
-    <button class="rb-confirm" data-rb-confirm ${rebuyLocked?'disabled':''}>ריביי ₪${picked}</button>`}
+    <button class="rb-confirm" data-rb-confirm ${rebuyLocked?'disabled':''}>ריביי ₪${picked}${forName}</button>`}
     ${(() => {
       // Undo right after a rebuy (a double tap, the wrong player): for 30 seconds after the
       // latest rebuy, one tap opens its delete confirmation - same as picking it from
@@ -7425,8 +7429,7 @@ function playersCarouselHtml(key, g, c, ids, {onId = null, meId = null, attr, un
 // The player screen's carousel (see carouselHtml): keeps the player it was showing in the
 // middle across re-renders (a refresh tick redraws the screen), and the first time
 // centers the one being looked at; arrows move one player, dots follow and jump.
-const ppCarCenter = {};   // gameId -> player id in the middle
-const ppCarOn = {};       // gameId -> the player being looked at, last time
+const ppCarScroll = {};   // carousel key -> its scroll position
 function setupPlayerCarousel(){
   document.querySelectorAll("[data-pp-car]").forEach(setupOneCarousel);
 }
@@ -7461,16 +7464,13 @@ function setupOneCarousel(car){
   const markDots = () => {
     const i = middleIndex();
     dots.forEach((d, k) => d.classList.toggle("on", k === i));
-    if (items[i]) ppCarCenter[gid] = items[i].dataset.ppView;
+    ppCarScroll[gid] = track.scrollLeft;
   };
   if (car.classList.contains("many")) {
-    // A newly picked player comes to the middle; otherwise it stays where it was.
-    const on = items.find(el => el.classList.contains("on"));
-    const onId = on ? on.dataset.ppView : null;
-    const first = items.find(el => el.dataset.ppView === ppCarCenter[gid]);
-    if (first) bring(first, false);
-    if (on && onId !== ppCarOn[gid] && !shown(on)) bring(on, false);
-    ppCarOn[gid] = onId;
+    // Stays exactly where it was across re-renders (picking a player included - nothing
+    // jumps); only the very first time, the player being looked at is brought into view.
+    if (ppCarScroll[gid] != null) track.scrollLeft = ppCarScroll[gid];
+    else { const on = items.find(el => el.classList.contains("on")); if (on && !shown(on)) bring(on, false); }
   }
   markDots();
   let t = null;
