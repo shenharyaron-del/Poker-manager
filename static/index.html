@@ -1183,6 +1183,9 @@ html.theme-light .pp-tile-return{color:#9a5f12;}
 .pp-tile.on .pp-tile-return,html.theme-light .pp-tile.on .pp-tile-return{color:#7c2d12;}
 .pp-return-link{background:none;border:none;padding:0;font:inherit;font-size:.8em;font-weight:700;color:var(--gold);text-decoration:underline;text-underline-offset:3px;cursor:pointer;white-space:nowrap;}
 .pp-return-side{grid-column:4;display:flex;align-items:center;justify-content:center;}
+.pp-name-box:has(.pp-self-return){flex-wrap:wrap;gap:2px 10px;}
+.pp-self-return{background:none;border:none;padding:0;font:inherit;font-size:17px;font-weight:800;color:var(--gold);text-decoration:underline;text-underline-offset:3px;cursor:pointer;white-space:nowrap;margin-inline-start:4px;}
+html.theme-light .pp-self-return{color:#9a5f12;}
 .pp-return-side .pp-return-link{font-size:15px;}
 .pp-back-me{grid-column:4;min-width:0;min-height:44px;padding:6px 6px;border-radius:12px;border:2px solid #93c5fd;background:#1d4ed8;color:#fff;font-family:inherit;font-size:16px;font-weight:800;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.35);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 /* Name field + a small ז / נ (male / female) pick on the same row. */
@@ -6853,11 +6856,14 @@ function renderPlayerScreen(gameId){
     const nm = p ? p.name : "";
     const len = nm.length + (cashedOut ? 6 : 0);
     const font = len > 24 ? 17 : len > 18 ? 20 : null;
-    // The admin's own screen, cashed out: "החזר למשחק" beside the name box, on its left
-    // (anyone else is sent back from their box in the tiles above).
-    const canReturn = cashedOut && isAdminView;
-    const returnLink = `<button type="button" class="pp-return-link" data-admin-return-to-game="${pid}">החזר למשחק</button>`;
-    const box = `<div class="pp-name-box" dir="rtl"${font ? ` style="font-size:${font}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut ? ' · יצא' : ''}</div>`;
+    // My own screen, once I've left: "↩ חזור למשחק" right where "יצא" was - the player may
+    // come back themself (the server allows a player their own cashout), unless the admin
+    // closed the night, which only they reopen.
+    const selfReturn = cashedOut && !viewingOther && (isAdminView || !g.closed);
+    const outPart = !cashedOut ? "" : selfReturn
+      ? `<button type="button" class="pp-self-return" data-self-return="${pid}">↩ חזור למשחק</button>`
+      : ' · יצא';
+    const box = `<div class="pp-name-box" dir="rtl"${font ? ` style="font-size:${font}px;"` : ''}><bdi>${esc(nm)}</bdi>${outPart}</div>`;
     // Looking at someone else: my own name, as a button beside theirs, takes me back to my
     // own screen.
     const me = myPlayerId && g.players.find(x => x.id === myPlayerId);
@@ -6865,7 +6871,7 @@ function renderPlayerScreen(gameId){
     // name button (when looking at someone else) sits in the 4th.
     // The box right of the name (see sideId).
     const extraBox = sideId ? playerTile(sideId, " pp-extra") : "";
-    return `<div class="pp-name-row">${extraBox}${box}${viewingOther && me ? `<button type="button" class="pp-back-me" data-pp-back-me title="חזרה למסך שלי"><bdi>${esc(tableShortName(g, me.id))}</bdi></button>` : ""}${canReturn && !viewingOther ? `<div class="pp-return-side">${returnLink}</div>` : ""}</div>`;
+    return `<div class="pp-name-row">${extraBox}${box}${viewingOther && me ? `<button type="button" class="pp-back-me" data-pp-back-me title="חזרה למסך שלי"><bdi>${esc(tableShortName(g, me.id))}</bdi></button>` : ""}</div>`;
   })();
   // Tiles above the name: everyone who entered tonight, in order, then a "הזמן שחקן" tile
   // in the next free spot (it replaces the header's invite button here).
@@ -10055,6 +10061,11 @@ function attachHandlers(){
     closeModal();
   };
   app.querySelectorAll("[data-return-to-game]").forEach(el => el.onclick = () => performReturnToGame(el, el.dataset.returnToGame));
+  // My own "↩ חזור למשחק" (see nameHtml): asks first - coming back drops the count I entered.
+  app.querySelectorAll("[data-self-return]").forEach(el => el.onclick = async () => {
+    if (!(await showConfirm("לחזור למשחק? הספירה שהזנת תבוטל.", {okLabel: "חזרה למשחק", cancelLabel: "ביטול"}))) return;
+    await performReturnToGame(el, el.dataset.selfReturn);
+  });
   // Player screen's "החזרה לשולחן" for another player - a confirm step first,
   // since this is the one place an admin can send a DIFFERENT player back into an active
   // table on their behalf, not something to do with a stray tap.
