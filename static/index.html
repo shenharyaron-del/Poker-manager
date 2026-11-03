@@ -1219,7 +1219,17 @@ html.theme-light .felt-odds .odds-label{color:#5b3708!important;text-shadow:0 0 
 .tv-seg button{background:transparent;border:none;color:var(--text);font-family:inherit;font-size:17px;padding:7px 14px;cursor:pointer;}
 .tv-seg button.on{background:var(--gold);color:var(--gold-text);font-weight:700;}
 /* Timeline name chips: at most two rows (see renderTableTimeline). */
-.ttl-chips{display:grid;gap:6px;margin:8px 0 4px;}
+.ttl-chips{margin:8px 0 4px;}
+.ttl-chips .pp-car{margin:0;}
+.pp-car.names-only .pp-ci{padding-bottom:6px;}
+.pp-ci.me .pp-ci-name{color:#5fd3b0;}
+/* Timeline: the picked player in blue, like their lit-up times in the list */
+.ttl-chips .pp-ci.on{border-color:#3b82f6;background:rgba(59,130,246,.16);box-shadow:0 0 12px rgba(59,130,246,.3);}
+.ttl-chips .pp-ci.on .pp-ci-av{border-color:#3b82f6;}
+.ttl-chips .pp-ci.on .pp-ci-name{color:#60a5fa;}
+html.theme-light .ttl-chips .pp-ci.on{background:#dbeafe;}
+html.theme-light .ttl-chips .pp-ci.on .pp-ci-name{color:#1d4ed8;}
+html.theme-light .pp-ci.me .pp-ci-name{color:#0e8a66;}
 .ttl-chip{font-family:inherit;font-size:inherit;padding:8px 6px;text-align:center;border-radius:999px;border:1px solid var(--card-b);background:transparent;color:var(--muted);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .ttl-chip.me{border-color:var(--gold);color:var(--gold);font-weight:700;}
 .ttl-chip.sel{border-color:#3b82f6;color:#3b82f6;font-weight:700;}
@@ -6841,27 +6851,14 @@ function renderPlayerScreen(gameId){
   // in - or, once they've left, "החזר" (an admin sends them back to the table) / "יצא".
   // The one being looked at is highlighted. Arrows and dots under it when it doesn't fit.
   const carouselHtml = (() => {
-    if (!othersTonight.length) return "";
     const totals = {};
     (g.buyins || []).forEach(b => { totals[b.playerId] = (totals[b.playerId] || 0) + (b.amount || 0); });
-    const items = othersTonight.map(id => {
-      const out = id in (g.cashouts || {});
-      const rp = c.roster.find(r => r.id === id);
-      const photo = (rp && getPlayerPhoto(rp)) || "/static/logo-watermark.png";
-      const under = !out ? `<span class="pp-ci-amt">₪${Math.round((totals[id] || 0) * 100) / 100}</span>`
+    return playersCarouselHtml("player:" + g.id, g, c, othersTonight, {
+      onId: pid, attr: "data-pp-view",
+      under: id => !(id in (g.cashouts || {})) ? `<span class="pp-ci-amt">₪${Math.round((totals[id] || 0) * 100) / 100}</span>`
         : isAdminView ? `<span class="pp-ci-return" role="button" data-admin-return-to-game="${id}">↩ החזר</span>`
-        : `<span class="pp-ci-out">יצא</span>`;
-      return `<button type="button" class="pp-ci${id === pid ? " on" : ""}${out ? " out" : ""}" data-pp-view="${id}">
-        <span class="pp-ci-av" style="background-image:url('${photo}')"></span>
-        <bdi class="pp-ci-name">${esc(tableShortName(g, id))}</bdi>${under}</button>`;
-    }).join("");
-    const many = othersTonight.length > 4;   // trimmed in setupPlayerCarousel to what fits
-    return `<div class="pp-car${many ? " many" : ""}" data-pp-car="${g.id}">
-      ${many ? `<button type="button" class="pp-car-arrow prev" data-pp-car-step="1" aria-label="הקודם"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>` : ""}
-      <div class="pp-car-track" data-pp-car-track>${items}</div>
-      ${many ? `<button type="button" class="pp-car-arrow next" data-pp-car-step="-1" aria-label="הבא"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
-      <div class="pp-car-dots"></div>` : ""}
-    </div>`;
+        : `<span class="pp-ci-out">יצא</span>`,
+    });
   })();
   // Order (top to bottom): name/total, ריביי buttons, the shared history/feed panel
   // (.player-history-feed, flex:1 - the one section whose size actually adapts, toggled
@@ -7367,14 +7364,36 @@ function renderTable(gameId){
 // Which view is open is remembered per device.
 // A name too long for its box steps its font down (to 11px) before it ever gets "…" -
 // the timeline's name chips, the player screen's player boxes and the chips-left label.
+// A carousel of players - avatar, name and (under) an optional line - shared by the player
+// screen (with what each bought in / "החזר") and the timeline (names only). key: what its
+// scroll position is remembered by; attr: the attribute a tap on a player is handled by.
+function playersCarouselHtml(key, g, c, ids, {onId = null, meId = null, attr, under = null}){
+  if (!ids.length) return "";
+  const items = ids.map(id => {
+    const out = id in (g.cashouts || {});
+    const rp = c.roster.find(r => r.id === id);
+    const photo = (rp && getPlayerPhoto(rp)) || "/static/logo-watermark.png";
+    return `<button type="button" class="pp-ci${id === onId ? " on" : ""}${id === meId ? " me" : ""}${out ? " out" : ""}" ${attr}="${id}">
+      <span class="pp-ci-av" style="background-image:url('${photo}')"></span>
+      <bdi class="pp-ci-name">${esc(tableShortName(g, id))}</bdi>${under ? under(id) : ""}</button>`;
+  }).join("");
+  const many = ids.length > 4;   // trimmed in setupPlayerCarousel to what fits
+  return `<div class="pp-car${many ? " many" : ""}${under ? "" : " names-only"}" data-pp-car="${key}">
+    ${many ? `<button type="button" class="pp-car-arrow prev" data-pp-car-step="1" aria-label="הקודם"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>` : ""}
+    <div class="pp-car-track" data-pp-car-track>${items}</div>
+    ${many ? `<button type="button" class="pp-car-arrow next" data-pp-car-step="-1" aria-label="הבא"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <div class="pp-car-dots"></div>` : ""}
+  </div>`;
+}
 // The player screen's carousel (see carouselHtml): keeps the player it was showing in the
 // middle across re-renders (a refresh tick redraws the screen), and the first time
 // centers the one being looked at; arrows move one player, dots follow and jump.
 const ppCarCenter = {};   // gameId -> player id in the middle
 const ppCarOn = {};       // gameId -> the player being looked at, last time
 function setupPlayerCarousel(){
-  const car = document.querySelector("[data-pp-car]");
-  if (!car) return;
+  document.querySelectorAll("[data-pp-car]").forEach(setupOneCarousel);
+}
+function setupOneCarousel(car){
   const gid = car.dataset.ppCar;
   const track = car.querySelector("[data-pp-car-track]");
   const items = [...track.querySelectorAll(".pp-ci")];
@@ -7472,8 +7491,7 @@ function renderTableTimeline(g, c, myPlayerId){
   const order = [];
   buyins.forEach(b => { if (!order.includes(b.playerId)) order.push(b.playerId); });
   const sel = timelineHighlight[g.id];
-  const chips = order.map(pid => `<button type="button" class="ttl-chip${pid === myPlayerId ? ' me' : ''}${pid === sel && pid !== myPlayerId ? ' sel' : ''}" data-timeline-pick="${pid}"><bdi>${esc(name(pid))}</bdi></button>`).join("");
-  const chipCols = order.length <= 4 ? Math.max(order.length, 3) : Math.ceil(order.length / 2);
+  const chips = playersCarouselHtml("ttl:" + g.id, g, c, order, {onId: sel, meId: myPlayerId, attr: "data-timeline-pick"});
 
   // Activity list, from 0:00 down. A cancelled buy-in is simply gone from g.buyins, and
   // its cancellation event is skipped - neither shows. The pot fix shows as one line
@@ -7518,7 +7536,7 @@ function renderTableTimeline(g, c, myPlayerId){
     : `<div class="ttl-row${r.start ? ' ttl-start' : ''}"><span class="ttl-time${sel && r.pid === sel ? ' hl' : ''}">${fmtElapsed((r.ts || t0) - t0)}</span><span class="ttl-text">${r.text}</span></div>`).join("");
   return `
     <div class="px5 ttl-wrap">
-      <div class="ttl-chips" style="grid-template-columns:repeat(${chipCols},1fr);font-size:${chipCols >= 5 ? 15 : chipCols === 4 ? 16 : 18}px;">${chips}</div>
+      <div class="ttl-chips">${chips}</div>
       <fieldset class="leave-frame stats-frame ttl-list-frame"><legend>מה קרה בערב</legend>
         <div class="ttl-list" data-ttl-list="${g.id}">${list}</div>
       </fieldset>
