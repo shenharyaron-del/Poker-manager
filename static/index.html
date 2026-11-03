@@ -133,6 +133,7 @@ html.theme-light .card.new-game-card{background:linear-gradient(135deg,#e6f7ee,#
 html.theme-light .new-game-card .ngc-title{color:#065f46;}
 html.theme-light .new-game-card .ngc-sub{color:#047857;}
 html.theme-light.theme-blue .card.new-game-card{background:linear-gradient(135deg,#eafaf3,#cdeedd);border-color:#0e9f6e;}
+body.page-bg-lifted .swipe-page.lux-page{background:transparent!important;}
 .club-games-scroll{overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
 .open-badge{font-size:11px;font-weight:700;color:var(--gold-text);background:var(--gold);border-radius:8px;padding:3px 8px;}
 .poker-loading-spin{display:inline-flex;animation:pokerChipSpin .8s linear infinite;}
@@ -5882,6 +5883,7 @@ function render(){
   app.innerHTML = html;
   attachHandlers();
   if (nav.screen === "community") fitClubGamesScroll();
+  liftGamePageBackground();
   // Runs whenever .poker-table-wrap exists at all now, not just when it's the visible
   // face - with both panes always mounted while seated, the circles view's own DOM (and
   // its sizing) exists even while the player screen is the one on screen.
@@ -6331,6 +6333,24 @@ function renderCommunity(communityId){
       ${myIdentity.myPlayers && myIdentity.myPlayers[c.id] && !isClubCreator(c) ? `<div class="terms-link" style="margin:14px 0 10px;"><button type="button" data-leave-club="${c.id}">יציאה מהמועדון</button></div>` : ""}
     </div>
   `;
+}
+// Game screens: the page's background (each theme's felt, the red "acting for someone
+// else" one...) is moved onto the whole screen, so the header above the tabs - the title,
+// ☰ and the משחק/שולחן/... row - sits on the very same background as the page under it,
+// instead of the plain screen colour. Read from the page's own CSS, so every theme and
+// state keeps its look without repeating it here.
+function liftGamePageBackground(){
+  const body = document.body;
+  const page = nav.screen === "table" && document.querySelector(".swipe-page.lux-page");
+  body.classList.remove("page-bg-lifted");
+  if (!page) { body.style.removeProperty("background"); return; }
+  const cs = getComputedStyle(page);
+  body.style.background = "none";
+  body.style.backgroundColor = cs.backgroundColor;
+  body.style.backgroundImage = cs.backgroundImage;
+  body.style.backgroundSize = cs.backgroundSize;
+  body.style.backgroundRepeat = cs.backgroundRepeat;
+  body.classList.add("page-bg-lifted");
 }
 // "2026-11-03" -> "03-11-2026" (anything else as it is).
 function ilDate(d){
