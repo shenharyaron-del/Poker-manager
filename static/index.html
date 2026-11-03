@@ -6918,8 +6918,11 @@ function renderPlayerScreen(gameId){
   // Admin, looking at someone: the per-player actions the old admin page had.
   // A cashed-out player is sent back to the table from a link by their name (see nameHtml),
   // not a separate button.
+  // "נכנס בטעות? הסר מהשולחן" - only while it can still be a mistaken sit-down: the entry
+  // buy-in alone. Once they've rebought it's a real player (a cancelled rebuy is gone from
+  // the buy-ins, so the link comes back).
   const adminPlayerActions = (isAdminView && pid) ? (cashedOut ? ""
-    : ((viewingOther && !armed) ? `<div class="terms-link" style="margin:10px 0 4px;flex-shrink:0;font-size:16px;color:var(--text);opacity:.85;"><bdi>${esc(p ? tableShortName(g, pid) : "השחקן")}</bdi> ${playerIsFemale(g, c, pid) ? "נכנסה" : "נכנס"} בטעות? <button type="button" data-admin-remove-seat="${pid}">הסר מהשולחן</button></div>` : "")) : "";
+    : ((viewingOther && !armed && myBuyins.length <= 1) ? `<div class="terms-link" style="margin:10px 0 4px;flex-shrink:0;font-size:16px;color:var(--text);opacity:.85;"><bdi>${esc(p ? tableShortName(g, pid) : "השחקן")}</bdi> ${playerIsFemale(g, c, pid) ? "נכנסה" : "נכנס"} בטעות? <button type="button" data-admin-remove-seat="${pid}">הסר מהשולחן</button></div>` : "")) : "";
   // Everyone but me who entered tonight (tonight's entry order), each a tile that opens
   // their screen - the one being looked at is highlighted. With 10 at the table, one of
   // them sits in a box right of the name instead (the 10th seat's player, or - when the
