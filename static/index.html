@@ -120,7 +120,7 @@ h1.sm{font-size:20px;}
 .card-open{border-color:var(--gold);background:rgba(251,191,36,.08);}
 /* Club screen: "צור שולחן חדש" - green felt, set apart from the nights below it */
 .card.new-game-card{background:linear-gradient(135deg,#059669,#065f46);border:1px solid #047857;box-shadow:0 4px 14px rgba(5,150,105,.3);padding:12px 16px;margin-bottom:6px;}
-.new-game-card .ngc-art{flex-shrink:0;}
+.new-game-card .ngc-art{flex-shrink:0;width:76px;height:auto;-webkit-user-drag:none;}
 .new-game-card .ngc-title{font-size:21px;font-weight:800;color:#fff;line-height:1.2;}
 .new-game-card .ngc-sub{font-size:15px;color:rgba(255,255,255,.88);margin-top:3px;}
 .club-games-scroll{overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
@@ -6234,16 +6234,8 @@ function ilDate(d){
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d || "");
   return m ? `${m[3]}-${m[2]}-${m[1]}` : (d || "");
 }
-// A poker table with a "+" badge - the club screen's "צור שולחן חדש" card.
-const NEW_TABLE_ART = `<svg class="ngc-art" viewBox="0 0 56 52" width="56" height="52" aria-hidden="true">
-  <ellipse cx="25" cy="30" rx="22" ry="14.5" fill="#6b3f1a"/>
-  <ellipse cx="25" cy="30" rx="18" ry="11" fill="#10b981" stroke="#a7f3d0" stroke-width="1.2"/>
-  <circle cx="17" cy="30" r="3.2" fill="#fbbf24" stroke="#fff" stroke-width="1.2"/>
-  <circle cx="25.5" cy="33" r="3.2" fill="#ef4444" stroke="#fff" stroke-width="1.2"/>
-  <circle cx="33" cy="28" r="3.2" fill="#3b82f6" stroke="#fff" stroke-width="1.2"/>
-  <circle cx="44" cy="12" r="10.5" fill="#fbbf24" stroke="#064e3b" stroke-width="2"/>
-  <path d="M44 6.5v11M38.5 12h11" stroke="#064e3b" stroke-width="2.8" stroke-linecap="round"/>
-</svg>`;
+// A poker table with a "+" gem - the club screen's "צור שולחן חדש" card.
+const NEW_TABLE_ART = `<img class="ngc-art" src="/static/new-table.png" width="76" height="53" alt="" draggable="false">`;
 // The nights list scrolls on its own below the "ערבי משחק" title when it doesn't fit, so
 // the players button, "צור שולחן חדש" and the title stay put. Its scroll position
 // survives re-renders (a refresh tick redraws the screen).
