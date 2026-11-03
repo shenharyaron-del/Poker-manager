@@ -1245,6 +1245,14 @@ function uid(){ return Math.random().toString(36).slice(2,10); }
 
 // A stable per-browser id so the server knows which "personal identity" bucket belongs
 // to this device. Not a login - just lets each browser keep its own typed-in name.
+// The server never sends anyone's device id (it's what signs every request - see
+// server.py's _pub): people show up in createdBy / a player's clientId / the account's
+// playerId by a public stand-in instead. This device's own stand-in, as the server last
+// told it - so "is this me" works even before the first identity load answers.
+function rememberPublicClientId(id){ try { localStorage.setItem("poker-public-client-id", id); } catch(e) {} }
+function myPublicId(){
+  try { return localStorage.getItem("poker-public-client-id") || getClientId(); } catch(e) { return getClientId(); }
+}
 function getClientId(){
   let id = localStorage.getItem("poker-tracker-client-id");
   if (!id) {
@@ -1898,7 +1906,7 @@ async function saveState(baseHash){
       if (baseHash) params.push("baseHash=" + encodeURIComponent(baseHash));
       const res = await fetch("/api/state" + (params.length ? "?" + params.join("&") : ""), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Client-Id": getClientId() },
         body: JSON.stringify(state)
       });
       logSync("save: POST done");
@@ -2786,7 +2794,9 @@ async function loadIdentity(){
         // A genuinely empty response (no record for this device at all) is authoritative
         // too, same as a real one - only a non-ok status or a thrown error below is
         // ambiguous enough to be worth retrying instead of trusting right away.
-        return data || { id: getClientId(), name: null };
+        if (data && data.publicClientId) rememberPublicClientId(data.publicClientId);
+        if (data) delete data.publicClientId;
+        return data || { id: myPublicId(), name: null };
       }
     } catch(e) { /* network error - fall through to retry below */ }
     if (attempt >= RETRY_DELAYS_MS.length) break;
@@ -2796,7 +2806,7 @@ async function loadIdentity(){
   // fallback here (whether from an exhausted retry loop or genuinely no record yet) used to
   // silently split one real person into two: it got linked into rosters/globalPlayers
   // under a throwaway id, so the same phone showed up twice under the same typed-in name.
-  return { id: getClientId(), name: null };
+  return { id: myPublicId(), name: null };
 }
 async function loadVersion(){
   try {
@@ -2874,7 +2884,7 @@ async function checkLoginSession(){
         if (data.loggedIn && data.restoredClientId && data.restoredClientId !== getClientId()) {
           // The browser lost localStorage but still had the server's device cookie - put
           // this device's real id back and reload once, so identity/state load under it.
-          try { localStorage.setItem("poker-tracker-client-id", data.restoredClientId); } catch(e) {}
+          try { localStorage.setItem("poker-tracker-client-id", data.restoredClientId); localStorage.removeItem("poker-public-client-id"); } catch(e) {}
           if (!sessionStorage.getItem("poker-restored-device")) {
             sessionStorage.setItem("poker-restored-device", "1");
             location.reload();
@@ -3147,7 +3157,7 @@ async function doRegisterPasskey(btn){
 }
 
 let state = defaultState();
-let myIdentity = { id: getClientId(), name: null };
+let myIdentity = { id: myPublicId(), name: null };
 let appVersion = null; // filled in by init() from /api/version
 // Global admin toggles (see adminSettings) - safe defaults (full verification, no
 // bypass) if the fetch itself ever fails, never the other way around.
@@ -3305,7 +3315,7 @@ function getBuyinAmounts(c){
 // A name is just a label anyone can type into their profile, so rights (club/table admin,
 // Setup, delete) and "which roster player is me" go by ids. The ids that are me: the
 // account's player id and this device's own id.
-function myIdSet(){ return new Set([myIdentity.id, getClientId()].filter(Boolean)); }
+function myIdSet(){ return new Set([myIdentity.id, getClientId(), myPublicId()].filter(Boolean)); }
 // A creator id (club's createdBy / table's createdBy) is me - directly, or through my own
 // linked roster row in that club (its clientId is the id I had when I joined/created it).
 function isMeById(createdBy, communityId){
@@ -12076,7 +12086,7 @@ window.addEventListener("popstate", async () => {
     // A failed initial load must never be treated as "no data yet" - only fall back to
     // defaultState() here (the one legitimate use of it), never after a save is possible.
     state = stateResult.status === "fulfilled" ? stateResult.value : defaultState();
-    myIdentity = identityResult.status === "fulfilled" ? identityResult.value : { id: getClientId(), name: null };
+    myIdentity = identityResult.status === "fulfilled" ? identityResult.value : { id: myPublicId(), name: null };
     const versionInfo = versionResult.status === "fulfilled" ? versionResult.value : null;
     appVersion = versionInfo ? versionInfo.version : null;
     // Server-controlled, per-deployment (see RELATIONAL_API_DEFAULT in server.py) - a

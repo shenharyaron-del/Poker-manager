@@ -1,6 +1,7 @@
 import base64
 import gzip
 import hashlib
+import hmac
 import json
 import io
 import os
@@ -672,9 +673,69 @@ def _public_state(data, state_hash):
     parsed = _json_or_empty(data)
     parsed["communities"] = []
     parsed["games"] = []
+    parsed["globalPlayers"] = _public_global_players(parsed.get("globalPlayers"))
     stripped = json.dumps(parsed)
     _stripped_state_cache = (state_hash, stripped)
     return stripped
+
+
+def _public_global_players(players):
+    # Keyed by person id - served keyed by its public stand-in (see _pub). Entries saved
+    # before that are keyed by the real id; one saved since (already public) wins.
+    if not isinstance(players, dict):
+        return {}
+    out = {}
+    for key, value in players.items():
+        if isinstance(key, str) and not key.startswith(_PUB_PREFIX):
+            out[_pub(key)] = value
+    for key, value in players.items():
+        if isinstance(key, str) and key.startswith(_PUB_PREFIX):
+            out[key] = value
+    return out
+
+
+def _merge_legacy_save(posted):
+    """In relational mode the blob only still holds per-person extras (globalPlayers:
+    photo, phone, seat position) and the super admin's avatar library. A save may change a
+    person's entry only when it's the caller's own, or the caller is a super admin or an
+    admin of a club that person plays in; the rest only a super admin. Everything else is
+    kept as stored - clubs and games live in their own tables."""
+    caller = _caller()
+    current_data, _ = _get_cached_state()
+    current = _json_or_empty(current_data)
+    players = _public_global_players(current.get("globalPlayers"))
+    posted_players = posted.get("globalPlayers") if isinstance(posted.get("globalPlayers"), dict) else {}
+    changed = {_pub(k): v for k, v in posted_players.items()
+               if isinstance(k, str) and players.get(_pub(k)) != v}
+    if changed and not caller["is_super"]:
+        allowed = {_pub(i) for i in caller["ids"]}
+        others = [k for k in changed if k not in allowed]
+        if others:
+            # Whose (real id) each other key is, and in which clubs - a club admin may set
+            # the photo/phone of that club's players.
+            with get_db() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT DISTINCT client_id, community_id FROM roster_players WHERE client_id IS NOT NULL")
+                    clubs_of = {}
+                    for client_id, community_id in cur.fetchall():
+                        clubs_of.setdefault(_pub(client_id), set()).add(community_id)
+                    admin_of = {}
+                    for key in others:
+                        for community_id in clubs_of.get(key, ()):
+                            if community_id not in admin_of:
+                                admin_of[community_id] = _rights(cur, caller, community_id)["community_admin"]
+                            if admin_of[community_id]:
+                                allowed.add(key)
+                                break
+                conn.commit()
+        changed = {k: v for k, v in changed.items() if k in allowed}
+    players.update(changed)
+    current["globalPlayers"] = players
+    if caller["is_super"]:
+        for key, value in posted.items():
+            if key not in ("communities", "games", "globalPlayers"):
+                current[key] = value
+    return json.dumps(current)
 
 
 @app.route("/api/state", methods=["GET"])
@@ -717,6 +778,8 @@ def save_state():
     if not isinstance(parsed, dict):
         return jsonify({"error": "state must be a JSON object"}), 400
     with _state_write_lock:
+        if RELATIONAL_API_DEFAULT:
+            data = _merge_legacy_save(parsed)
         return _save_state_locked(data)
 
 
@@ -811,7 +874,7 @@ def _row_to_community(row):
      settlement_default, updated_at, last_participants, buyin_amounts, active_bit_link_id,
      created_at) = row
     return {
-        "id": cid, "name": name, "createdBy": created_by, "createdByName": created_by_name,
+        "id": cid, "name": name, "createdBy": _pub(created_by), "createdByName": created_by_name,
         "chipRatio": _num(chip_ratio), "activePayboxLinkId": active_paybox_link_id,
         "activeBitLinkId": active_bit_link_id,
         "settlementDefault": settlement_default,
@@ -846,8 +909,53 @@ _caller_cache_lock = threading.Lock()
 _CALLER_CACHE_SECONDS = 10
 
 
+# ---------- Public ids ----------
+# A device's id (X-Client-Id) is its credential: whoever sends it acts as that device. A
+# person's id - a club's/table's createdBy, a club player's clientId, an account's playerId -
+# is very often that same string (the id of the device they first used), so sending those
+# to other people handed out working credentials. Everything the server sends now carries
+# a stand-in instead: an HMAC of the id, the same for the same id everywhere (so the
+# client's "is this me / the same person" comparisons work unchanged), and impossible to
+# turn back into the id. Short ids (a club player's own row id, 8 characters) are already
+# public - seats and buy-ins name them - and pass through as they are; device ids are
+# 24-36 characters. What a client sends back is translated to the real id when it is one
+# of the caller's own (see _own_id); a stand-in for anyone else's id is never stored.
+_PUB_PREFIX = "u~"
+_PUB_KEY = hashlib.sha256(
+    ("public-ids:" + (os.environ.get("PUBLIC_ID_SECRET") or DATABASE_URL)).encode("utf-8")
+).digest()
+
+
+def _pub(value):
+    if not isinstance(value, str) or len(value) < 20 or value.startswith(_PUB_PREFIX):
+        return value
+    return _PUB_PREFIX + hmac.new(_PUB_KEY, value.encode("utf-8"), hashlib.sha256).hexdigest()[:24]
+
+
+def _own_id(caller, value):
+    """The real id behind `value` when it is one of the caller's own ids (as is, or its
+    public stand-in), else None."""
+    if not isinstance(value, str) or not value:
+        return None
+    for own in caller["ids"]:
+        if value == own or value == _pub(own):
+            return own
+    return None
+
+
+def _caller_for(client_id):
+    """The identity of the device `client_id` (the auth endpoints take it in the body)."""
+    client_id = (client_id or "").strip()[:128]
+    if client_id.startswith(_PUB_PREFIX):
+        client_id = ""
+    return {**_load_caller_identity(client_id), "invite_game": "", "invite_community": ""}
+
+
 def _caller():
     client_id = request.headers.get("X-Client-Id", "").strip()[:128]
+    if client_id.startswith(_PUB_PREFIX):
+        # A stand-in is never a device's id - don't let one pose as a person's.
+        client_id = ""
     invite = {
         "invite_game": request.headers.get("X-Invite-Game", "").strip()[:64],
         "invite_community": request.headers.get("X-Invite-Community", "").strip()[:64],
@@ -875,6 +983,7 @@ def _forget_caller(client_id):
 
 def _load_caller_identity(client_id):
     ids, roster_ids, is_super = set(), set(), False
+    device_ids = [client_id] if client_id else []
     if client_id:
         ids.add(client_id)
         with get_db() as conn:
@@ -883,6 +992,10 @@ def _load_caller_identity(client_id):
                 row = cur.fetchone()
                 account = {}
                 if row:
+                    # Every device of this account - a join approved on one of them is
+                    # the account's (see _rights).
+                    cur.execute("SELECT client_id FROM trusted_devices WHERE email = %s", (row[0],))
+                    device_ids = list({client_id, *(r[0] for r in cur.fetchall())})
                     cur.execute("SELECT data FROM accounts WHERE email = %s", (row[0],))
                     arow = cur.fetchone()
                     account = _json_or_empty(arow[0]) if arow else {}
@@ -904,7 +1017,7 @@ def _load_caller_identity(client_id):
                 roster_ids.update(v for v in my_players.values() if isinstance(v, str))
     name = (account.get("name") if client_id else None) or (identity.get("name") if client_id else None)
     return {"client_id": client_id, "ids": list(ids), "roster_ids": list(roster_ids), "is_super": is_super,
-            "name": name if isinstance(name, str) else None}
+            "name": name if isinstance(name, str) else None, "device_ids": device_ids}
 
 
 def _visible_community_ids(cur, caller):
@@ -940,15 +1053,41 @@ def _can_see_community(cur, caller, community_id):
 # "my own player"), checked here too - hiding a button stops nobody who sends the request
 # directly. Identity is by id only (see _load_caller_identity), never by display name -
 # except a table from before games.created_by existed, whose creator is only known by name.
+# (see _rights) - the club players (alias r) that are the caller's: linked to one of their
+# ids, or approved for one of their account's devices (_APPROVED_SQL), or - in myPlayers -
+# nobody else's yet (unlinked, or linked only to its own id: a pre-registered player).
+_APPROVED_SQL = (
+    "EXISTS (SELECT 1 FROM join_requests j JOIN roster_players a "
+    "  ON a.id = j.player_id AND a.community_id = j.community_id "
+    "  WHERE j.status = 'approved' AND j.client_id = ANY(%s) "
+    "  AND ((a.id = r.id AND a.community_id = r.community_id) OR a.client_id = r.client_id))"
+)
+_MY_ROWS_SQL = (
+    "(r.client_id = ANY(%s) OR (r.id = ANY(%s) AND ("
+    "  r.client_id IS NULL OR r.client_id = r.id OR " + _APPROVED_SQL + ")))"
+)
+
+
+def _my_rows_params(caller):
+    return (caller["ids"], caller["roster_ids"], caller.get("device_ids") or [])
+
+
 def _rights(cur, caller, community_id, game_id=None):
     r = {"member": False, "community_admin": False, "table_admin": False, "my_players": set()}
     if not community_id:
         return r
     r["member"] = _can_see_community(cur, caller, community_id)
+    # A club player is the caller's when it's linked to one of their ids, or when their
+    # device/account has it in myPlayers AND may have it: nobody else's yet (unlinked, or
+    # linked only to its own id - a pre-registered player), or approved for one of this
+    # account's devices by a join request (that player, or the same person's player in
+    # another club). myPlayers is written by the device itself, so it alone proves nothing.
+    # Admin rights come only from a player that's really the caller's (linked, or approved) -
+    # an unlinked player anyone may take as theirs carries no club-admin flag with it.
     cur.execute(
-        "SELECT id, client_id, is_admin FROM roster_players WHERE community_id = %s "
-        "AND (client_id = ANY(%s) OR id = ANY(%s))",
-        (community_id, caller["ids"], caller["roster_ids"]),
+        "SELECT r.id, r.client_id, r.is_admin AND (r.client_id = ANY(%s) OR " + _APPROVED_SQL + ") "
+        "FROM roster_players r WHERE r.community_id = %s AND " + _MY_ROWS_SQL,
+        (caller["ids"], caller.get("device_ids") or [], community_id, *_my_rows_params(caller)),
     )
     rows = cur.fetchall()
     r["my_players"] = {row[0] for row in rows}
@@ -1114,7 +1253,7 @@ def v2_list_communities():
                 for community_id, pid, pname, client_id, is_admin, gender in cur.fetchall():
                     entry = {"id": pid, "name": pname, "gender": gender or "male"}
                     if client_id:
-                        entry["clientId"] = client_id
+                        entry["clientId"] = _pub(client_id)
                     if is_admin:
                         entry["isAdmin"] = True
                     by_id[community_id]["roster"].append(entry)
@@ -1186,7 +1325,7 @@ def _games_full(cur, base_rows):
         games[gid] = {
             "id": gid, "communityId": community_id, "name": name,
             "date": date.isoformat() if date else None,
-            "createdByName": created_by_name, "createdBy": created_by, "closed": closed,
+            "createdByName": created_by_name, "createdBy": _pub(created_by), "closed": closed,
             "updatedAt": updated_at.isoformat() if updated_at else None,
             "createdAt": created_at.isoformat() if created_at else None,
             "seats": seats, "liveChips": live_chips,
@@ -1329,7 +1468,7 @@ def v2_get_game_summary(game_id):
     return jsonify({
         "id": gid, "communityId": community_id, "name": name,
         "date": date.isoformat() if date else None,
-        "createdByName": created_by_name, "createdBy": created_by, "closed": closed,
+        "createdByName": created_by_name, "createdBy": _pub(created_by), "closed": closed,
         "updatedAt": updated_at.isoformat() if updated_at else None,
         "createdAt": created_at.isoformat() if created_at else None,
         "players": players, "buyinTotals": buyin_totals, "cashouts": cashouts,
@@ -1450,6 +1589,10 @@ def v2_create_community():
         return jsonify({"error": "id and name required"}), 400
     created_by, created_by_name = body.get("createdBy"), body.get("createdByName")
     creator_player_id, creator_player_name = body.get("creatorPlayerId"), body.get("creatorPlayerName")
+    # The creator is the caller - one of their own ids, else this device's id.
+    created_by = _own_id(_caller(), created_by) or request.headers.get("X-Client-Id", "").strip()[:128] or None
+    if created_by and created_by.startswith(_PUB_PREFIX):
+        created_by = None
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -1488,6 +1631,9 @@ def v2_update_community(community_id):
         if not _caller().get("is_super"):
             return jsonify({"error": "only a super admin can change the club's creator"}), 403
         if not isinstance(body["createdBy"], str) or not body["createdBy"].strip() or len(body["createdBy"]) > 128:
+            return jsonify({"error": "invalid createdBy"}), 400
+        body["createdBy"] = _own_id(_caller(), body["createdBy"].strip()) or body["createdBy"]
+        if body["createdBy"].startswith(_PUB_PREFIX):
             return jsonify({"error": "invalid createdBy"}), 400
     if "buyinAmounts" in body and body["buyinAmounts"] is not None:
         amounts = body["buyinAmounts"]
@@ -1668,6 +1814,13 @@ def v2_update_roster_player(community_id, player_id):
     # same "single row, single field" shape, just a different field. Accepts either or
     # both fields present; the client always sends exactly one of them per call today.
     body = request.get_json(silent=True) or {}
+    if "clientId" in body:
+        # The client sends its own id as it knows it (the public stand-in) - store the real
+        # one. Only one's own id, or the row's own id (a pre-registered player), may be set.
+        new = body["clientId"]
+        body["clientId"] = _own_id(_caller(), new) or (new if new == player_id else None)
+        if not body["clientId"]:
+            return _forbidden()
     denied = _roster_patch_denied(community_id, player_id, body)
     if denied:
         return denied
@@ -1729,7 +1882,7 @@ def v2_rename_player_everywhere(client_id):
     # Cross-community by design - a logged-in player's roster entries in every community
     # they've joined share one clientId and should all show the same name.
     # Only for one of the caller's own ids - this renames them in every club.
-    if client_id not in _caller()["ids"]:
+    if not _own_id(_caller(), client_id):
         return _forbidden()
     body = request.get_json(silent=True) or {}
     name = (body.get("name") or "").strip()
@@ -1742,8 +1895,8 @@ def v2_rename_player_everywhere(client_id):
             # their device was approved as (identity myPlayers) - not only rows linked to
             # this exact id.
             cur.execute(
-                "SELECT id, community_id, name FROM roster_players WHERE client_id = ANY(%s) OR id = ANY(%s)",
-                (caller["ids"], caller["roster_ids"]),
+                "SELECT r.id, r.community_id, r.name FROM roster_players r WHERE " + _MY_ROWS_SQL,
+                _my_rows_params(caller),
             )
             mine = cur.fetchall()
             _rename_roster_rows(cur, mine, name)
@@ -1805,7 +1958,8 @@ def v2_set_gender_everywhere(client_id):
     # gender doesn't vary by which community's roster row you're looking at. Used only to
     # pick the right verb gender in the table activity feed.
     # Only for one of the caller's own ids - this renames them in every club.
-    if client_id not in _caller()["ids"]:
+    client_id = _own_id(_caller(), client_id)
+    if not client_id:
         return _forbidden()
     body = request.get_json(silent=True) or {}
     gender = "female" if body.get("gender") == "female" else "male"
@@ -2021,7 +2175,7 @@ def _row_to_game_summary(row):
         "date": row[3].isoformat() if row[3] else None,
         "createdByName": row[4], "closed": row[5],
         "updatedAt": row[6].isoformat() if row[6] else None,
-        "createdBy": row[7] if len(row) > 7 else None,
+        "createdBy": _pub(row[7]) if len(row) > 7 else None,
         "createdAt": row[8].isoformat() if len(row) > 8 and row[8] else None,
     }
 
@@ -2039,9 +2193,7 @@ def v2_create_game():
         return denied
     # Only an id this caller actually is (see _caller) - else this device's own id.
     caller = _caller()
-    created_by = body.get("createdBy")
-    if created_by not in caller["ids"]:
-        created_by = request.headers.get("X-Client-Id", "").strip()[:128] or None
+    created_by = _own_id(caller, body.get("createdBy")) or caller["client_id"] or None
     with get_db() as conn:
         with conn.cursor() as cur:
             seats = [None] * 9
@@ -2784,16 +2936,25 @@ def get_identity():
             cur.execute("SELECT data FROM identities WHERE client_id = %s", (client_id,))
             row = cur.fetchone()
         conn.commit()
-    if row:
-        return row[0], 200, {"Content-Type": "application/json"}
-    return jsonify(None)
+    # Ids in their public form (see _pub) - the form the device sees itself in everywhere
+    # else (createdBy, a player's clientId). publicClientId: this device's own id's.
+    data = _json_or_empty(row[0]) if row else {"name": None}
+    data["id"] = _pub(data.get("id") or client_id)
+    data["publicClientId"] = _pub(client_id)
+    return jsonify(data)
 
 
 @app.route("/api/identity", methods=["POST"])
 def save_identity():
-    client_id = request.args.get("clientId", "")
-    data = request.get_data(as_text=True)
-    json.loads(data)
+    client_id = request.args.get("clientId", "").strip()[:128]
+    if not client_id or client_id.startswith(_PUB_PREFIX):
+        return jsonify({"error": "clientId required"}), 400
+    parsed = _json_or_empty(request.get_data(as_text=True))
+    # Its id is stored as the real one, and only an id this device already is (its own,
+    # its account's, the one it had) - never someone else's (see _load_caller_identity).
+    parsed.pop("publicClientId", None)
+    parsed["id"] = _own_id(_caller_for(client_id), parsed.get("id")) or client_id
+    data = json.dumps(parsed)
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -2917,6 +3078,17 @@ def _default_account(email):
         "myPlayers": {},
         "playerId": None,
     }
+
+
+def _local_id(body):
+    """The id this device knew itself by before logging in (body localId) - only when it is
+    really one of the device's own (body clientId), never someone else's to take over."""
+    return _own_id(_caller_for(str(body.get("clientId", ""))), str(body.get("localId", "")).strip())
+
+
+def _account_out(account):
+    # The account as sent to its own devices - playerId as its public stand-in (see _pub).
+    return {**account, "playerId": _pub(account.get("playerId"))}
 
 
 def _claim_player_id(account, local_id):
@@ -3053,6 +3225,17 @@ def pre_register_account():
     player_id = str(body.get("playerId", "")).strip()
     if not EMAIL_RE.match(email) or not name or not player_id:
         return jsonify({"error": "email, name and playerId required"}), 400
+    # Only for a club player nobody has yet (unlinked, or linked just to its own id), by
+    # someone who plays in that club - not a way to tie a stranger's email to any player.
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT community_id, client_id FROM roster_players WHERE id = %s", (player_id,))
+            rows = cur.fetchall()
+        conn.commit()
+    if not rows or any(c and c != player_id for _, c in rows):
+        return _forbidden()
+    if any(_guard(community_id=community_id) for community_id, _ in rows):
+        return _forbidden()
     if _get_account(email) is not None:
         return jsonify({"error": "already registered"}), 409
     account = _default_account(email)
@@ -3084,7 +3267,7 @@ def verify_login_code():
     email = str(body.get("email", "")).strip().lower()
     code = str(body.get("code", "")).strip()
     client_id = str(body.get("clientId", "")).strip()
-    local_id = str(body.get("localId", "")).strip()
+    local_id = _local_id(body)
     # Only meaningful once the code itself has been verified below - a device choice
     # made at the email step is just intent until then, never acted on early.
     replace_existing = bool(body.get("replace"))
@@ -3114,7 +3297,7 @@ def verify_login_code():
     _claim_player_id(account, local_id)
     _save_account(email, account)
     _forget_caller(client_id)
-    return _with_device_cookie(jsonify({"email": email, **account, **_passkey_fields(email)}), client_id)
+    return _with_device_cookie(jsonify({"email": email, **_account_out(account), **_passkey_fields(email)}), client_id)
 
 
 @app.route("/api/auth/quick-login", methods=["POST"])
@@ -3129,7 +3312,7 @@ def quick_login():
     body = request.get_json(silent=True) or {}
     email = str(body.get("email", "")).strip().lower()
     client_id = str(body.get("clientId", "")).strip()
-    local_id = str(body.get("localId", "")).strip()
+    local_id = _local_id(body)
     replace_existing = bool(body.get("replace"))
     if not EMAIL_RE.match(email) or not client_id:
         return jsonify({"error": "invalid email/clientId"}), 400
@@ -3154,7 +3337,7 @@ def quick_login():
     _claim_player_id(account, local_id)
     _save_account(email, account)
     _forget_caller(client_id)
-    return _with_device_cookie(jsonify({"email": email, **account, **_passkey_fields(email)}), client_id)
+    return _with_device_cookie(jsonify({"email": email, **_account_out(account), **_passkey_fields(email)}), client_id)
 
 
 @app.route("/api/auth/settings")
@@ -3247,7 +3430,7 @@ def auth_session():
     if not email:
         return jsonify({"loggedIn": False})
     account = _get_account(email) or _default_account(email)
-    body = {"loggedIn": True, "email": email, **account, **_passkey_fields(email)}
+    body = {"loggedIn": True, "email": email, **_account_out(account), **_passkey_fields(email)}
     if restored_client_id:
         body["restoredClientId"] = restored_client_id
     # Refreshes the cookie for devices that logged in before it existed.
@@ -3406,7 +3589,7 @@ def passkey_login_verify():
         return _passkey_unavailable()
     body = request.get_json(silent=True) or {}
     client_id = str(body.get("clientId", "")).strip()
-    local_id = str(body.get("localId", "")).strip()
+    local_id = _local_id(body)
     credential = body.get("credential") or {}
     if not client_id or not isinstance(credential, dict):
         return jsonify({"error": "missing clientId/credential"}), 400
@@ -3449,7 +3632,7 @@ def passkey_login_verify():
     _claim_player_id(account, local_id)
     _save_account(email, account)
     _forget_caller(client_id)
-    return _with_device_cookie(jsonify({"email": email, **account, **_passkey_fields(email)}), client_id)
+    return _with_device_cookie(jsonify({"email": email, **_account_out(account), **_passkey_fields(email)}), client_id)
 
 
 # ---------- Passkey-only accounts (phase 2) ----------
@@ -3493,7 +3676,7 @@ def passkey_signup_verify():
         return _passkey_unavailable()
     body = request.get_json(silent=True) or {}
     client_id = str(body.get("clientId", "")).strip()
-    local_id = str(body.get("localId", "")).strip()
+    local_id = _local_id(body)
     if not client_id:
         return jsonify({"error": "missing clientId"}), 400
     challenge, key = _take_challenge(body.get("challengeId"))
@@ -3527,7 +3710,7 @@ def passkey_signup_verify():
     _claim_player_id(account, local_id)
     _save_account(key, account)
     _forget_caller(client_id)
-    return _with_device_cookie(jsonify({"email": key, **account, **_passkey_fields(key)}), client_id)
+    return _with_device_cookie(jsonify({"email": key, **_account_out(account), **_passkey_fields(key)}), client_id)
 
 
 def _email_taken(email):
@@ -3602,7 +3785,7 @@ def _rekey_account(key, email, client_id):
         account["role"] = "superAdmin"
         _save_account(email, account)
     _forget_caller(client_id)
-    return jsonify({"email": email, **account, **_passkey_fields(email)})
+    return jsonify({"email": email, **_account_out(account), **_passkey_fields(email)})
 
 
 @app.route("/api/auth/claim-player-id", methods=["POST"])
@@ -3614,11 +3797,11 @@ def claim_player_id():
     email = _trusted_email(str(body.get("clientId", "")).strip())
     if not email:
         return jsonify({"error": "not logged in"}), 401
-    local_id = str(body.get("localId", "")).strip()
+    local_id = _local_id(body)
     account = _get_account(email) or _default_account(email)
     _claim_player_id(account, local_id)
     _save_account(email, account)
-    return jsonify({"playerId": account.get("playerId")})
+    return jsonify({"playerId": _pub(account.get("playerId"))})
 
 
 @app.route("/api/auth/account", methods=["POST"])
@@ -3642,7 +3825,7 @@ def update_account():
     if updates.get("seenGameTour") is True:
         account["seenGameTour"] = True
     _save_account(email, account)
-    return jsonify({"email": email, **account})
+    return jsonify({"email": email, **_account_out(account)})
 
 
 @app.route("/api/auth/set-seen-tour", methods=["POST"])
@@ -3699,7 +3882,7 @@ def list_accounts():
             cur.execute("SELECT email, data FROM accounts ORDER BY email")
             rows = cur.fetchall()
         conn.commit()
-    return jsonify([{"email": r[0], **json.loads(r[1])} for r in rows])
+    return jsonify([{"email": r[0], **_account_out(json.loads(r[1]))} for r in rows])
 
 
 @app.route("/api/auth/delete-account", methods=["POST"])
