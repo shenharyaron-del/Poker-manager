@@ -6997,7 +6997,16 @@ function renderPlayerScreen(gameId){
       <div style="text-align:center;padding:6px 0 ${cashedOut?16:4}px;flex-shrink:0;">
         ${carouselHtml}
         ${nameHtml}
-        ${cashedOut ? "" : `<div class="pp-total-wrap"><div class="pp-total" data-player-total>₪${buyinTotal}</div><img class="pp-chips" src="/static/player-chips.webp" alt="" draggable="false"></div>${paymentNotesHtml}`}
+        ${(() => {
+          // The big total under my name is always mine - acting for someone else doesn't
+          // change it (their amount is on their card in the carousel above).
+          if (viewingOther) {
+            if (!myPlayerId || myPlayerId in (g.cashouts || {})) return "";
+            const mine = (g.buyins || []).filter(b => b.playerId === myPlayerId).reduce((s2, b) => s2 + b.amount, 0);
+            return `<div class="pp-total-wrap"><div class="pp-total" data-player-total>₪${mine}</div><img class="pp-chips" src="/static/player-chips.webp" alt="" draggable="false"></div>`;
+          }
+          return cashedOut ? "" : `<div class="pp-total-wrap"><div class="pp-total" data-player-total>₪${buyinTotal}</div><img class="pp-chips" src="/static/player-chips.webp" alt="" draggable="false"></div>${paymentNotesHtml}`;
+        })()}
         ${(() => {
           // Direct-settlement arrangement(s) involving this player (either side - see
           // getArrangementNotes).
