@@ -120,6 +120,11 @@ h1.sm{font-size:20px;}
 .card-open{border-color:var(--gold);background:rgba(251,191,36,.08);}
 /* Club screen: "צור שולחן חדש" - green felt, set apart from the nights below it */
 .card.new-game-card{background:linear-gradient(135deg,#059669,#065f46);border:1px solid #047857;box-shadow:0 4px 14px rgba(5,150,105,.3);padding:12px 16px;margin-bottom:6px;}
+/* Dark theme: near-black with a glowing gold rim and gold title - set apart from the green
+   screen and the green nights around it */
+html:not(.theme-light) .card.new-game-card{background:linear-gradient(180deg,#0f3b2c,#082419);border:2px solid #f2c14e;box-shadow:0 0 0 1px rgba(242,193,78,.25),0 0 18px rgba(242,193,78,.45);}
+html:not(.theme-light) .new-game-card .ngc-title{color:#f2c14e;}
+html:not(.theme-light) .new-game-card .ngc-sub{color:#f5f5f4;}
 .new-game-card .ngc-art{flex-shrink:0;width:76px;height:auto;-webkit-user-drag:none;}
 .new-game-card .ngc-title{font-size:21px;font-weight:800;color:#fff;line-height:1.2;}
 .new-game-card .ngc-sub{font-size:15px;color:rgba(255,255,255,.88);margin-top:3px;}
