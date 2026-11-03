@@ -2710,9 +2710,20 @@ def v2_delete_buyin(game_id, buyin_id):
     # delete-then-re-add on the client side.
     with get_db() as conn:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM buyins WHERE id = %s AND game_id = %s", (buyin_id, game_id))
-            deleted = cur.rowcount
+            cur.execute("DELETE FROM buyins WHERE id = %s AND game_id = %s RETURNING player_id, amount, ts",
+                        (buyin_id, game_id))
+            gone = cur.fetchone()
+            deleted = 1 if gone else 0
             if deleted:
+                # The deleted buy-in itself, at its own time - so the timeline can still show
+                # a cancelled rebuy where it happened (struck through), next to the
+                # "buyin_deleted" line the client logs for a real cancellation. Shown only
+                # when such a cancellation follows it (a delete-and-re-add correction has none).
+                cur.execute(
+                    "INSERT INTO game_events (id, game_id, ts, type, player_id, actor_name, amount) "
+                    "VALUES (%s,%s,COALESCE(%s, now()),'buyin_was',%s,NULL,%s)",
+                    (secrets.token_hex(8), game_id, gone[2], gone[0], gone[1]),
+                )
                 cur.execute("UPDATE games SET updated_at = now() WHERE id = %s", (game_id,))
         conn.commit()
     if not deleted:

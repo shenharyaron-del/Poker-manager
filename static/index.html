@@ -1259,6 +1259,7 @@ html.theme-light .felt-odds .odds-label{color:#5b3708!important;text-shadow:0 0 
 /* Timeline name chips: at most two rows (see renderTableTimeline). */
 .ttl-chips{margin:8px 0 4px;}
 .ttl-chips .pp-car{margin:0;}
+.ttl-cancelled{opacity:.6;text-decoration-thickness:2px;}
 .pp-car.names-only .pp-ci{padding-bottom:6px;}
 .pp-ci.me .pp-ci-name{color:#5fd3b0;}
 /* Timeline: the picked player in blue, like their lit-up times in the list */
@@ -6549,7 +6550,10 @@ function buildTableFeed(g, c){
   Object.keys(g.cashouts||{}).forEach(playerId => {
     feedEvents.push({ts: g.cashouts[playerId].ts, kind:"cashout", playerId, amount: g.cashouts[playerId].amount});
   });
-  (g.events||[]).forEach(ev => feedEvents.push({ts: ev.ts, kind: ev.type, playerId: ev.playerId, amount: ev.amount, actorName: ev.actorName}));
+  // "cashed_out" / "buyin_was" are the timeline's record of every exit and of a cancelled
+  // buy-in - this feed has its own (the cashout rows, the buy-in log), so they'd double up.
+  (g.events||[]).filter(ev => ev.type !== "cashed_out" && ev.type !== "buyin_was")
+    .forEach(ev => feedEvents.push({ts: ev.ts, kind: ev.type, playerId: ev.playerId, amount: ev.amount, actorName: ev.actorName}));
   // Direct player-to-player transfers recorded at cash-out (see the directPay window).
   (g.playerPayments||[]).forEach(pp => feedEvents.push({ts: pp.ts, kind: "player_payment", payment: pp}));
   feedEvents.sort((a,b) => (a.ts||0)-(b.ts||0));
@@ -7614,8 +7618,8 @@ function renderTableTimeline(g, c, myPlayerId){
   const sel = timelineHighlight[g.id];
   const chips = playersCarouselHtml("ttl:" + g.id, g, c, order, {onId: sel, meId: myPlayerId, attr: "data-timeline-pick"});
 
-  // Activity list, from 0:00 down. A cancelled buy-in is simply gone from g.buyins, and
-  // its cancellation event is skipped - neither shows. The pot fix shows as one line
+  // Activity list, from 0:00 down. A cancelled rebuy shows struck through at its own time,
+  // plus a line for the cancellation (see below). The pot fix shows as one line
   // (its own buy-ins, by the same person within a minute of it, are folded into it).
   const potFixes = events.filter(e => e.type === "pot_fixed");
   const isPotFixBuyin = b => potFixes.some(e => b.actorName && b.actorName === e.actorName && Math.abs((b.ts || 0) - (e.ts || 0)) < 60000);
@@ -7652,11 +7656,25 @@ function renderTableTimeline(g, c, myPlayerId){
   events.forEach(e => {
     if (e.type === "returned_to_table") rows.push({ts: e.ts, pid: e.playerId, text: `<b>${esc(name(e.playerId))}</b> ${fem(e.playerId) ? "חזרה" : "חזר"} לשולחן${by(e.playerId, e.actorName)}`});
     else if (e.type === "seat_removed") rows.push({ts: e.ts, pid: e.playerId, text: `<b>${esc(name(e.playerId))}</b> ${fem(e.playerId) ? "הוצאה" : "הוצא"} מהשולחן${by(e.playerId, e.actorName)}`});
+    else if (e.type === "buyin_deleted") rows.push({ts: e.ts, pid: e.playerId, text: `<b>${esc(name(e.playerId))}</b> ${fem(e.playerId) ? "ביטלה" : "ביטל"} ריביי ₪${e.amount}${by(e.playerId, e.actorName)}`});
     else if (e.type === "pot_fixed") rows.push({ts: e.ts, text: `סידור קופה${e.actorName ? ` <span class="ttl-by">ע"י ${esc(e.actorName)}</span>` : ""}`});
     else if (e.type === "night_closed") rows.push({ts: e.ts, night: true, text: `הערב נסגר${e.actorName ? ` <span class="ttl-by">ע"י ${esc(e.actorName)}</span>` : ""}`});
     else if (e.type === "night_declared_over") rows.push({ts: e.ts, night: true, text: `הוכרז על סיום הערב${e.actorName ? ` <span class="ttl-by">ע"י ${esc(e.actorName)}</span>` : ""}`});
     else if (e.type === "game_started") rows.push({ts: t0, start: true, night: true, text: `<b>תחילת משחק</b> ${fmtTime(t0)}${e.actorName ? ` <span class="ttl-by">ע"י ${esc(e.actorName)}</span>` : ""}`});
     else if (e.type === "night_reopened") rows.push({ts: e.ts, night: true, text: `הערב נפתח מחדש${e.actorName ? ` <span class="ttl-by">ע"י ${esc(e.actorName)}</span>` : ""}`});
+  });
+  // A cancelled rebuy, where it happened, struck through: the deleted buy-in ("buyin_was",
+  // kept by the server) that a "buyin_deleted" for the same player and amount follows.
+  // A delete with no cancellation after it (a correction) isn't shown.
+  const usedWas = new Set();
+  events.filter(e => e.type === "buyin_deleted").forEach(del => {
+    const was = events.filter(w => w.type === "buyin_was" && !usedWas.has(w.id) && w.playerId === del.playerId
+      && Number(w.amount) === Number(del.amount) && (w.ts || 0) <= (del.ts || 0) + 1000)
+      .sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
+    if (!was) return;
+    usedWas.add(was.id);
+    rows.push({ts: was.ts, pid: was.playerId, pre: !!startEv && (was.ts || 0) < t0,
+      text: `<s class="ttl-cancelled"><b>${esc(name(was.playerId))}</b> ריביי ₪${was.amount}</s> <span class="ttl-by">(בוטל)</span>`});
   });
   // Pre-start entries first (in the order they sat down), then the start line, then the rest.
   const rank = r => r.pre ? 0 : r.start ? 1 : 2;
