@@ -1197,6 +1197,24 @@ html.theme-light .pp-tile-return{color:#9a5f12;}
 .pp-return-link{background:none;border:none;padding:0;font:inherit;font-size:.8em;font-weight:700;color:var(--gold);text-decoration:underline;text-underline-offset:3px;cursor:pointer;white-space:nowrap;}
 .pp-return-side{grid-column:4;display:flex;align-items:center;justify-content:center;}
 .pp-name-box:has(.pp-self-return){flex-wrap:wrap;gap:2px 10px;}
+/* The name + total frame (player screen) - same raised gold rim as the other frames */
+.pp-me-card{display:flex;flex-direction:column;align-items:center;gap:0;margin:0 auto 18px;padding:8px 30px 6px;width:fit-content;min-width:52%;max-width:100%;box-sizing:border-box;border:1.5px solid rgba(242,193,78,.8);border-radius:14px;background:transparent;font-family:inherit;color:var(--text);box-shadow:inset 0 -3px 8px rgba(0,0,0,.22),0 4px 10px rgba(0,0,0,.35);}
+button.pp-me-card{cursor:pointer;}
+html.theme-light .pp-me-card{border-color:rgba(168,106,18,.75);box-shadow:inset 0 -3px 8px rgba(0,0,0,.08),0 4px 10px rgba(20,48,61,.22);}
+html.theme-light.theme-blue .pp-me-card{border-color:rgba(255,230,160,.95);}
+html.theme-light.theme-sand .pp-me-card{border-color:rgba(110,65,25,.65);}
+.pp-me-card .pp-me-name{font-size:21px;font-weight:800;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.player-page .pp-me-card .pp-total{font-size:52px;line-height:1.05;margin:0;}
+.pp-me-card .pp-self-return{margin:4px 0 2px;}
+/* Game screen spacing - room between the sections now that there's less on it */
+.player-screen-scroll .pp-car{margin-bottom:18px;}
+.player-screen-scroll .rb-frame{margin-bottom:22px;padding-top:6px;}
+.rb-frame > legend{font-size:13px;letter-spacing:.03em;}
+.rb-frame .rb-chips{margin:6px 0 4px;}
+.rb-frame .rb-undo-last{margin-top:12px;}
+.rb-frame .rb-cancel{background:none;border:none;box-shadow:none;padding:0;margin-top:12px;text-align:center;}
+.rb-frame .rb-cancel-chev{display:none;}
+.rb-frame .rb-cancel-head{background:none;border:none;box-shadow:none;width:auto;margin:0 auto;padding:2px 6px;font-size:15px;color:var(--muted);text-decoration:underline;text-underline-offset:3px;display:inline-flex;align-items:center;gap:4px;}
 .pp-self-return{background:none;border:none;padding:0;font:inherit;font-size:17px;font-weight:800;color:var(--gold);text-decoration:underline;text-underline-offset:3px;cursor:pointer;white-space:nowrap;margin-inline-start:4px;}
 html.theme-light .pp-self-return{color:#9a5f12;}
 .pp-return-side .pp-return-link{font-size:15px;}
@@ -6865,14 +6883,13 @@ function renderPlayerScreen(gameId){
     <div style="display:flex;gap:8px;margin-top:12px;">
       <input type="number" inputmode="decimal" id="rb-other-amount" placeholder="סכום ₪" ${rebuyLocked?'disabled':''} style="flex:1;padding:12px 8px;font-size:18px;text-align:center;border-radius:12px;border:1px solid var(--gold);background:var(--input);color:var(--text);">
       <button class="rb-confirm fit-line" style="flex:1.4;margin-top:0;white-space:nowrap;overflow:hidden;" data-rb-confirm ${rebuyLocked?'disabled':''}>בצע ריביי${forName}</button>
-    </div>` : `
-    <button class="rb-confirm fit-line" style="white-space:nowrap;overflow:hidden;" data-rb-confirm ${rebuyLocked?'disabled':''}>בצע ₪${picked} ריביי${forName}</button>`}
+    </div>` : ""}
     ${(() => {
-      // Undo right after a rebuy (a double tap, the wrong player): for 30 seconds after the
-      // latest rebuy, one tap opens its delete confirmation - same as picking it from
-      // "ביטול ריביי" below. A timer re-renders once the 30 seconds are up to hide it.
+      // One cancel line: right after a rebuy (a double tap, the wrong player), for 10 seconds,
+      // "בטל ריביי ₪X אחרון" - one tap opens its delete confirmation. Then it turns into the
+      // "ביטול ריביי" link below, which lists every rebuy. A timer re-renders at the switch.
       const last = myBuyins.length > 1 ? myBuyins[myBuyins.length - 1] : null;
-      const left = last && last.ts ? 30000 - (Date.now() - last.ts) : 0;
+      const left = last && last.ts ? 10000 - (Date.now() - last.ts) : 0;
       if (left <= 0) return "";
       clearTimeout(undoRebuyTimer);
       undoRebuyTimer = setTimeout(() => { if (nav.screen === "table") render(); }, left + 50);
@@ -6883,6 +6900,8 @@ function renderPlayerScreen(gameId){
       // existing delete-buy-in confirmation.
       const rebuys = myBuyins.slice(1).reverse();
       if (!rebuys.length) return "";
+      const lastB = rebuys[0];
+      if (lastB && lastB.ts && Date.now() - lastB.ts < 10000) return "";   // the "בטל אחרון" line shows instead
       const open = !!rebuyCancelOpen[pickKey];
       return `
       <div class="rb-cancel">
@@ -6989,11 +7008,15 @@ function renderPlayerScreen(gameId){
     const extraBox = sideId ? playerTile(sideId, " pp-extra") : "";
     // Acting for someone else: my own box stays as it is (tap it to go back to my screen) -
     // who I'm acting for shows in the carousel, the red page and the ריביי button.
+    // One frame: the name, and under it the total (always mine - acting for someone else
+    // doesn't change it; their amount is on their card in the carousel). Tapping it while
+    // acting for someone else goes back to my own screen.
+    const mineOut = !myPlayerId || myPlayerId in (g.cashouts || {});
+    const myTotal = (g.buyins || []).filter(b => b.playerId === myPlayerId).reduce((s2, b) => s2 + b.amount, 0);
     if (viewingOther && me) {
-      const myBox = `<button type="button" class="pp-name-box pp-name-me" dir="rtl" data-pp-back-me title="חזרה למסך שלי"><bdi>${esc(me.name)}</bdi></button>`;
-      return `<div class="pp-name-row">${extraBox}${myBox}</div>`;
+      return `<button type="button" class="pp-me-card" dir="rtl" data-pp-back-me title="חזרה למסך שלי"><span class="pp-me-name"><bdi>${esc(me.name)}</bdi></span>${mineOut ? "" : `<span class="pp-total" data-player-total>₪${myTotal}</span>`}</button>`;
     }
-    return `<div class="pp-name-row">${extraBox}${box}</div>`;
+    return `<div class="pp-me-card" dir="rtl"><span class="pp-me-name"${font ? ` style="font-size:${Math.min(font, 20)}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut && !selfReturn ? ' · יצא' : ''}</span>${cashedOut ? (selfReturn ? `<button type="button" class="pp-self-return" data-self-return="${pid}">↩ חזור למשחק</button>` : "") : `<span class="pp-total" data-player-total>₪${buyinTotal}</span>`}</div>`;
   })();
   // Tiles above the name: everyone who entered tonight, in order, then a "הזמן שחקן" tile
   // in the next free spot (it replaces the header's invite button here).
@@ -7023,16 +7046,7 @@ function renderPlayerScreen(gameId){
       <div style="text-align:center;padding:6px 0 ${cashedOut?16:4}px;flex-shrink:0;">
         ${carouselHtml}
         ${nameHtml}
-        ${(() => {
-          // The big total under my name is always mine - acting for someone else doesn't
-          // change it (their amount is on their card in the carousel above).
-          if (viewingOther) {
-            if (!myPlayerId || myPlayerId in (g.cashouts || {})) return "";
-            const mine = (g.buyins || []).filter(b => b.playerId === myPlayerId).reduce((s2, b) => s2 + b.amount, 0);
-            return `<div class="pp-total-wrap"><div class="pp-total" data-player-total>₪${mine}</div><img class="pp-chips" src="/static/player-chips.webp" alt="" draggable="false"></div>`;
-          }
-          return cashedOut ? "" : `<div class="pp-total-wrap"><div class="pp-total" data-player-total>₪${buyinTotal}</div><img class="pp-chips" src="/static/player-chips.webp" alt="" draggable="false"></div>${paymentNotesHtml}`;
-        })()}
+        ${viewingOther || cashedOut ? "" : paymentNotesHtml}
         ${(() => {
           // Direct-settlement arrangement(s) involving this player (either side - see
           // getArrangementNotes).
@@ -7042,7 +7056,7 @@ function renderPlayerScreen(gameId){
         })()}
         ${cashedOutInfoHtml}
       </div>
-      ${(cashedOut || armed) ? "" : `<fieldset class="leave-frame rb-frame" style="margin-bottom:14px;">${rebuyHtml}</fieldset>`}
+      ${(cashedOut || armed) ? "" : `<fieldset class="leave-frame rb-frame"><legend>${viewingOther && p ? `הקישו על סכום כדי לבצע ריביי ${/^[\u0590-\u05FF]/.test(tableShortName(g, pid)) ? "ל" : "ל-"}${esc(tableShortName(g, pid))}` : "הקישו על סכום כדי לבצע ריביי"}</legend>${rebuyHtml}</fieldset>`}
       ${(cashedOut || (notStarted && !armed)) ? "" : `<fieldset class="leave-frame lv-frame${armed?' lv-frame-top':''}">${leaveHtml}</fieldset>`}
       ${(notStarted && !cashedOut) ? `<button type="button" class="btn btn-primary btn-block gs-start" data-start-game="${g.id}">${icon('check')} תחילת משחק</button>` : ""}
       ${adminPlayerActions}
@@ -9981,8 +9995,9 @@ function attachHandlers(){
   // ריביי") since every amount here is a real button that applies itself immediately.
   // Routed through performBuyin (pending banner/cancel, disables every rebuy button until
   // it settles, cross-device confirm card) instead of saving directly.
-  const doPlayerBuyin = async (amt, fromEl, targetPid) => {
+  const doPlayerBuyin = async (amt, fromEl, targetPid, opts = {}) => {
     if (!amt || amt <= 0 || pendingBuyinRequest) return;
+    let asked = false;
     const gameId = nav.gameId;
     const g = getGame(gameId);
     // targetPid: an admin buying in for the player picked in the name dropdown.
@@ -9997,6 +10012,7 @@ function attachHandlers(){
       const entry = myBuyins.slice().sort((a, b) => (a.ts || 0) - (b.ts || 0))[0];
       const total = Math.round((entry.amount + amt) * 100) / 100;
       const whose = pid === mineId ? "שלך" : `של ${(g.players.find(pl => pl.id === pid) || {}).name || "השחקן"}`;
+      asked = true;
       const raise = await showConfirm(`המשחק עוד לא התחיל. להגדיל את הקנייה הראשונית ${whose} מ-₪${entry.amount} ל-₪${total}?`, {okLabel: `כן, ל-₪${total}`, cancelLabel: `לא, ריביי ₪${amt}`, outside: null});
       if (raise === null) return;
       if (raise) {
@@ -10020,9 +10036,17 @@ function attachHandlers(){
         const ago = ts => { const m = Math.floor((now - ts) / 60000); return m < 1 ? "פחות מדקה" : m === 1 ? "דקה" : `${m} דקות`; };
         const whose = pid === mineId ? "שלך" : `של ${(g.players.find(pl => pl.id === pid) || {}).name || "השחקן"}`;
         const startLine = recentStart ? `המשחק התחיל לפני ${ago(startEv.ts)}. ` : "";
+        asked = true;
         const ok = await showConfirm(`${startLine}הקנייה האחרונה ${whose} הייתה לפני ${ago(lastTs)} (${fmtTime(lastTs)}). האם אתה בטוח שאתה רוצה להוסיף ריביי של ₪${amt}?`, {okLabel: "כן, הוסף ריביי", cancelLabel: "ביטול"});
         if (!ok) return;
       }
+    }
+    // A tap on an amount chip (no separate "בצע" button any more): one plain question,
+    // unless one of the questions above was already asked.
+    if (opts.ask && !asked) {
+      const nm = tableShortName(g, pid);
+      const to = /^[\u0590-\u05FF]/.test(nm) ? "ל" + nm : "ל-" + nm;
+      if (!(await showConfirm(`לבצע ₪${amt} ריביי ${to}?`, {okLabel: "כן, בצע ריביי", cancelLabel: "ביטול"}))) return;
     }
     playerScreenCustomOpen = false;
     await performBuyin(gameId, pid, amt, {fromEl});
@@ -10089,8 +10113,12 @@ function attachHandlers(){
   });
   app.querySelectorAll("[data-rb-pick]").forEach(el => el.onclick = () => {
     const v = el.dataset.rbPick;
-    rebuyPick[nav.gameId + ":" + viewedPid()] = v === "other" ? "other" : parseFloat(v);
+    const pid = viewedPid();
+    rebuyPick[nav.gameId + ":" + pid] = v === "other" ? "other" : parseFloat(v);
+    if (v === "other") { render(); return; }
     render();
+    const chip = document.querySelector(`[data-rb-pick="${v}"]`) || el;
+    doPlayerBuyin(parseFloat(v), chip, pid, {ask: true});
   });
   app.querySelectorAll("[data-rb-confirm]").forEach(el => el.onclick = () => {
     const pid = viewedPid();
