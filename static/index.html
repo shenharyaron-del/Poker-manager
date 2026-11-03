@@ -1037,25 +1037,25 @@ html.theme-light.theme-blue .btn-blue{background:#0b2f4a!important;border:1.5px 
 .status-badge{display:inline-block;flex-shrink:0;font-family:'Rubik',sans-serif;font-size:11px;font-weight:700;color:#fff;border-radius:8px;padding:3px 8px;white-space:nowrap;letter-spacing:0;}
 .status-badge.small{font-size:10px;padding:2px 7px;border-radius:7px;vertical-align:middle;}
 /* Player screen: carousel of everyone else at tonight's table, above the name */
-.pp-car{position:relative;margin:0 0 10px;padding:8px 26px 6px;border-radius:18px;border:1px solid rgba(212,175,55,.45);background:linear-gradient(180deg,rgba(0,0,0,.18),rgba(0,0,0,.32));}
+.pp-car{position:relative;margin:0 0 10px;padding:8px 20px 6px;border-radius:18px;border:1px solid rgba(212,175,55,.45);background:linear-gradient(180deg,rgba(0,0,0,.18),rgba(0,0,0,.32));}
 .pp-car:not(.many){padding:8px 6px 6px;}
 .pp-car-track{display:flex;gap:2px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;touch-action:pan-x pan-y;}
 .pp-car:not(.many) .pp-car-track{justify-content:center;}
 .pp-car-track::-webkit-scrollbar{display:none;}
-.pp-ci{flex:0 0 24%;scroll-snap-align:start;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px 7px;border-radius:14px;border:1.5px solid transparent;background:transparent;color:var(--text);font-family:inherit;cursor:pointer;min-width:0;}
+.pp-ci{flex:0 0 calc((100% - (var(--pp-per,4) - 1) * 2px) / var(--pp-per,4));scroll-snap-align:start;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px 7px;border-radius:14px;border:1.5px solid transparent;background:transparent;color:var(--text);font-family:inherit;cursor:pointer;min-width:0;}
 .pp-ci.on{border-color:var(--gold);background:rgba(212,175,55,.14);box-shadow:0 0 12px rgba(212,175,55,.25);}
-.pp-ci-av{width:50px;height:50px;border-radius:50%;background-size:cover;background-position:center;border:2.5px solid #2f9e7a;box-shadow:0 2px 6px rgba(0,0,0,.35);flex-shrink:0;}
+.pp-ci-av{width:46px;height:46px;border-radius:50%;background-size:cover;background-position:center;border:2.5px solid #2f9e7a;box-shadow:0 2px 6px rgba(0,0,0,.35);flex-shrink:0;}
 .pp-ci.on .pp-ci-av{border-color:var(--gold);}
 .pp-ci.out .pp-ci-av{filter:grayscale(1);opacity:.55;}
-.pp-ci-name{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:16px;font-weight:800;line-height:1.2;margin-top:2px;}
+.pp-ci-name{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px;font-weight:800;line-height:1.2;margin-top:2px;}
 .pp-ci.on .pp-ci-name{color:var(--gold);}
-.pp-ci-amt{font-size:15px;font-weight:600;color:var(--muted);}
-.pp-ci-out{font-size:15px;font-weight:600;color:var(--muted);}
-.pp-ci-return{font-size:14px;font-weight:800;color:var(--gold);text-decoration:underline;text-underline-offset:2px;}
-.pp-car-arrow{position:absolute;top:38%;transform:translateY(-50%);width:26px;height:40px;display:flex;align-items:center;justify-content:center;background:none;border:none;padding:0;cursor:pointer;color:#5fd3b0;}
+.pp-ci-amt{font-size:14px;font-weight:600;color:var(--muted);}
+.pp-ci-out{font-size:14px;font-weight:600;color:var(--muted);}
+.pp-ci-return{font-size:13px;font-weight:800;color:var(--gold);text-decoration:underline;text-underline-offset:2px;}
+.pp-car-arrow{position:absolute;top:38%;transform:translateY(-50%);width:20px;height:40px;display:flex;align-items:center;justify-content:center;background:none;border:none;padding:0;cursor:pointer;color:#5fd3b0;}
 .pp-car-arrow svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;}
-.pp-car-arrow.prev{right:2px;}
-.pp-car-arrow.next{left:2px;}
+.pp-car-arrow.prev{right:0;}
+.pp-car-arrow.next{left:0;}
 .pp-car-dots{display:flex;justify-content:center;gap:7px;margin-top:6px;}
 .pp-car-dots span{width:8px;height:8px;border-radius:50%;background:rgba(95,211,176,.35);cursor:pointer;transition:background .2s,transform .2s;}
 .pp-car-dots span.on{background:#5fd3b0;transform:scale(1.25);}
@@ -6855,12 +6855,12 @@ function renderPlayerScreen(gameId){
         <span class="pp-ci-av" style="background-image:url('${photo}')"></span>
         <bdi class="pp-ci-name">${esc(tableShortName(g, id))}</bdi>${under}</button>`;
     }).join("");
-    const many = othersTonight.length > 4;
+    const many = othersTonight.length > 4;   // trimmed in setupPlayerCarousel to what fits
     return `<div class="pp-car${many ? " many" : ""}" data-pp-car="${g.id}">
       ${many ? `<button type="button" class="pp-car-arrow prev" data-pp-car-step="1" aria-label="הקודם"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>` : ""}
       <div class="pp-car-track" data-pp-car-track>${items}</div>
       ${many ? `<button type="button" class="pp-car-arrow next" data-pp-car-step="-1" aria-label="הבא"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
-      <div class="pp-car-dots">${othersTonight.slice(3).map((_, i) => `<span data-pp-car-dot="${i}"></span>`).join("")}</div>` : ""}
+      <div class="pp-car-dots"></div>` : ""}
     </div>`;
   })();
   // Order (top to bottom): name/total, ריביי buttons, the shared history/feed panel
@@ -7378,6 +7378,15 @@ function setupPlayerCarousel(){
   const gid = car.dataset.ppCar;
   const track = car.querySelector("[data-pp-car-track]");
   const items = [...track.querySelectorAll(".pp-ci")];
+  // As many to a row as fit (a card at least ~58px wide), never fewer than 4; when all of
+  // them fit, no arrows or dots. One dot per scroll position.
+  const per = Math.max(4, Math.floor((track.clientWidth + 2) / 60));
+  car.style.setProperty("--pp-per", per);
+  const fits = items.length <= per;
+  car.classList.toggle("many", !fits);
+  car.querySelectorAll(".pp-car-arrow, .pp-car-dots").forEach(el => { el.style.display = fits ? "none" : ""; });
+  const dotsBox = car.querySelector(".pp-car-dots");
+  if (dotsBox) dotsBox.innerHTML = fits ? "" : items.slice(per - 1).map((_, i) => `<span data-pp-car-dot="${i}"></span>`).join("");
   const dots = [...car.querySelectorAll("[data-pp-car-dot]")];
   // Four to a row, lined up from the start (the right edge, RTL): "the first one shown" is
   // what the dots mark and what's kept across re-renders.
@@ -7412,7 +7421,7 @@ function setupPlayerCarousel(){
   track.onscroll = () => { clearTimeout(t); t = setTimeout(markDots, 60); };
   car.querySelectorAll("[data-pp-car-step]").forEach(btn => btn.onclick = (e) => {
     e.stopPropagation();
-    const i = Math.max(0, Math.min(items.length - 4, middleIndex() + Number(btn.dataset.ppCarStep) * -1));
+    const i = Math.max(0, Math.min(items.length - per, middleIndex() + Number(btn.dataset.ppCarStep) * -1));
     bring(items[i], true);
   });
   dots.forEach(d => d.onclick = () => { const el = items[Number(d.dataset.ppCarDot)]; if (el) bring(el, true); });
