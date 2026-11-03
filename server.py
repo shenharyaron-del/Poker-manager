@@ -850,16 +850,9 @@ def events():
     )
 
 
-# ---------- Phase 2 of the relational-DB migration: new read-only endpoints ----------
-# Query the tables from schema.sql (see migrate_to_relational.py and
-# .claude/plans/virtual-cuddling-wreath.md). Nothing in the app calls these yet - they sit
-# dormant alongside the existing /api/state blob until a later phase wires index.html to
-# them. Kept under /api/v2/ so the eventual cutover is just switching which prefix the
-# client calls, with the old endpoints untouched until then.
-#
-# The real `public` schema doesn't have these tables yet (that only happens at the final
-# production migration, Phase 7) - these routes will 500 until then, which is fine since
-# nothing reachable from the UI calls them.
+# ---------- /api/v2: clubs and games in their own tables (schema.sql) ----------
+# What the app reads and writes. The legacy /api/state blob above only still carries the
+# per-person extras and the avatar library (see _merge_legacy_save).
 
 
 def _num(x):
@@ -4104,8 +4097,48 @@ if __name__ == "__main__":
     # the app after a cold start - directly observed as a minute-plus "loading" screen
     # while testing the staging environment. This moves that cost to server startup,
     # where nobody's watching it happen.
-    _get_pool()
-    # threaded=True is required now - an SSE connection (/api/events) stays open
-    # indefinitely, and the default single-threaded dev server would block every
-    # other request behind it for as long as any one tab stays connected.
-    app.run(host="0.0.0.0", port=port, debug=os.environ.get("DEBUG") == "1", threaded=True)
+    # Production runs under gunicorn - a real server, not Flask's development one (which
+    # warns not to be used this way) - started from here so Render's start command
+    # ("python server.py") stays the same. One process on purpose: the SSE subscribers
+    # (_broadcast_state_changed), the caller/state caches and the DB pool all live in this
+    # process's memory, and a second one would neither hear the other's saves nor fit the
+    # free plan's 512MB as comfortably. Many threads instead, since every open phone
+    # holds one for its /api/events stream. gunicorn doesn't run on Windows (local
+    # development there) - it falls back to Flask's own server, as does DEBUG=1.
+    use_gunicorn = os.environ.get("DEBUG") != "1"
+    if use_gunicorn:
+        try:
+            from gunicorn.app.base import BaseApplication
+        except Exception:  # not installed, or Windows (no fcntl)
+            use_gunicorn = False
+    if use_gunicorn:
+        class _Server(BaseApplication):
+            def load_config(self):
+                for key, value in {
+                    "bind": f"0.0.0.0:{port}",
+                    "workers": 1,
+                    "worker_class": "gthread",
+                    "threads": 64,
+                    # The worker's own heartbeat, not a per-request limit - SSE streams
+                    # stay open far longer than this, which gthread allows.
+                    "timeout": 120,
+                    "graceful_timeout": 10,
+                    "keepalive": 5,
+                    "accesslog": "-",
+                    # The pool is opened in the worker, not here before the fork - a
+                    # connection inherited across a fork is shared by two processes, and a
+                    # restarted worker would inherit the previous one's mid-use sockets.
+                    "post_worker_init": lambda worker: _get_pool(),
+                }.items():
+                    self.cfg.set(key, value)
+
+            def load(self):
+                return app
+
+        _Server().run()
+    else:
+        _get_pool()
+        # threaded=True is required - an SSE connection (/api/events) stays open
+        # indefinitely, and a single-threaded server would block every other request
+        # behind it for as long as any one tab stays connected.
+        app.run(host="0.0.0.0", port=port, debug=os.environ.get("DEBUG") == "1", threaded=True)
