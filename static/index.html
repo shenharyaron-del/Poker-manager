@@ -1039,19 +1039,19 @@ html.theme-light.theme-blue .btn-blue{background:#0b2f4a!important;border:1.5px 
 /* Player screen: carousel of everyone else at tonight's table, above the name */
 .pp-car{position:relative;margin:0 0 10px;padding:8px 26px 6px;border-radius:18px;border:1px solid rgba(212,175,55,.45);background:linear-gradient(180deg,rgba(0,0,0,.18),rgba(0,0,0,.32));}
 .pp-car:not(.many){padding:8px 6px 6px;}
-.pp-car-track{display:flex;gap:4px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;touch-action:pan-x pan-y;}
+.pp-car-track{display:flex;gap:2px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;touch-action:pan-x pan-y;}
 .pp-car:not(.many) .pp-car-track{justify-content:center;}
 .pp-car-track::-webkit-scrollbar{display:none;}
-.pp-ci{flex:0 0 31%;scroll-snap-align:center;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px 7px;border-radius:14px;border:1.5px solid transparent;background:transparent;color:var(--text);font-family:inherit;cursor:pointer;min-width:0;}
+.pp-ci{flex:0 0 24%;scroll-snap-align:start;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px 7px;border-radius:14px;border:1.5px solid transparent;background:transparent;color:var(--text);font-family:inherit;cursor:pointer;min-width:0;}
 .pp-ci.on{border-color:var(--gold);background:rgba(212,175,55,.14);box-shadow:0 0 12px rgba(212,175,55,.25);}
-.pp-ci-av{width:58px;height:58px;border-radius:50%;background-size:cover;background-position:center;border:2.5px solid #2f9e7a;box-shadow:0 2px 6px rgba(0,0,0,.35);flex-shrink:0;}
+.pp-ci-av{width:50px;height:50px;border-radius:50%;background-size:cover;background-position:center;border:2.5px solid #2f9e7a;box-shadow:0 2px 6px rgba(0,0,0,.35);flex-shrink:0;}
 .pp-ci.on .pp-ci-av{border-color:var(--gold);}
 .pp-ci.out .pp-ci-av{filter:grayscale(1);opacity:.55;}
-.pp-ci-name{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:17px;font-weight:800;line-height:1.2;margin-top:2px;}
+.pp-ci-name{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:16px;font-weight:800;line-height:1.2;margin-top:2px;}
 .pp-ci.on .pp-ci-name{color:var(--gold);}
-.pp-ci-amt{font-size:16px;font-weight:600;color:var(--muted);}
+.pp-ci-amt{font-size:15px;font-weight:600;color:var(--muted);}
 .pp-ci-out{font-size:15px;font-weight:600;color:var(--muted);}
-.pp-ci-return{font-size:15px;font-weight:800;color:var(--gold);text-decoration:underline;text-underline-offset:2px;}
+.pp-ci-return{font-size:14px;font-weight:800;color:var(--gold);text-decoration:underline;text-underline-offset:2px;}
 .pp-car-arrow{position:absolute;top:38%;transform:translateY(-50%);width:26px;height:40px;display:flex;align-items:center;justify-content:center;background:none;border:none;padding:0;cursor:pointer;color:#5fd3b0;}
 .pp-car-arrow svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;}
 .pp-car-arrow.prev{right:2px;}
@@ -6855,12 +6855,12 @@ function renderPlayerScreen(gameId){
         <span class="pp-ci-av" style="background-image:url('${photo}')"></span>
         <bdi class="pp-ci-name">${esc(tableShortName(g, id))}</bdi>${under}</button>`;
     }).join("");
-    const many = othersTonight.length > 3;
+    const many = othersTonight.length > 4;
     return `<div class="pp-car${many ? " many" : ""}" data-pp-car="${g.id}">
       ${many ? `<button type="button" class="pp-car-arrow prev" data-pp-car-step="1" aria-label="הקודם"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>` : ""}
       <div class="pp-car-track" data-pp-car-track>${items}</div>
       ${many ? `<button type="button" class="pp-car-arrow next" data-pp-car-step="-1" aria-label="הבא"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
-      <div class="pp-car-dots">${othersTonight.map((_, i) => `<span data-pp-car-dot="${i}"></span>`).join("")}</div>` : ""}
+      <div class="pp-car-dots">${othersTonight.slice(3).map((_, i) => `<span data-pp-car-dot="${i}"></span>`).join("")}</div>` : ""}
     </div>`;
   })();
   // Order (top to bottom): name/total, ריביי buttons, the shared history/feed panel
@@ -7379,17 +7379,20 @@ function setupPlayerCarousel(){
   const track = car.querySelector("[data-pp-car-track]");
   const items = [...track.querySelectorAll(".pp-ci")];
   const dots = [...car.querySelectorAll("[data-pp-car-dot]")];
-  const centerOf = el => { const r = el.getBoundingClientRect(); return r.left + r.width / 2; };
-  const trackMid = () => centerOf(track);
+  // Four to a row, lined up from the start (the right edge, RTL): "the first one shown" is
+  // what the dots mark and what's kept across re-renders.
+  const startEdge = el => el.getBoundingClientRect().right;
   const middleIndex = () => {
     let best = 0, bestD = Infinity;
-    items.forEach((el, i) => { const d = Math.abs(centerOf(el) - trackMid()); if (d < bestD) { bestD = d; best = i; } });
+    items.forEach((el, i) => { const d = Math.abs(startEdge(el) - startEdge(track)); if (d < bestD) { bestD = d; best = i; } });
     return best;
   };
   const bring = (el, smooth) => {
-    const delta = centerOf(el) - trackMid();
+    const delta = startEdge(el) - startEdge(track);
     if (smooth) track.scrollBy({left: delta, behavior: "smooth"}); else track.scrollLeft += delta;
   };
+  // A picked player who isn't fully shown comes in at the start; one already shown stays put.
+  const shown = el => { const r = el.getBoundingClientRect(), t = track.getBoundingClientRect(); return r.left >= t.left - 2 && r.right <= t.right + 2; };
   const markDots = () => {
     const i = middleIndex();
     dots.forEach((d, k) => d.classList.toggle("on", k === i));
@@ -7399,16 +7402,17 @@ function setupPlayerCarousel(){
     // A newly picked player comes to the middle; otherwise it stays where it was.
     const on = items.find(el => el.classList.contains("on"));
     const onId = on ? on.dataset.ppView : null;
-    const keep = (onId && onId !== ppCarOn[gid] && on) || items.find(el => el.dataset.ppView === ppCarCenter[gid]) || on;
+    const first = items.find(el => el.dataset.ppView === ppCarCenter[gid]);
+    if (first) bring(first, false);
+    if (on && onId !== ppCarOn[gid] && !shown(on)) bring(on, false);
     ppCarOn[gid] = onId;
-    if (keep) bring(keep, false);
   }
   markDots();
   let t = null;
   track.onscroll = () => { clearTimeout(t); t = setTimeout(markDots, 60); };
   car.querySelectorAll("[data-pp-car-step]").forEach(btn => btn.onclick = (e) => {
     e.stopPropagation();
-    const i = Math.max(0, Math.min(items.length - 1, middleIndex() + Number(btn.dataset.ppCarStep) * -1));
+    const i = Math.max(0, Math.min(items.length - 4, middleIndex() + Number(btn.dataset.ppCarStep) * -1));
     bring(items[i], true);
   });
   dots.forEach(d => d.onclick = () => { const el = items[Number(d.dataset.ppCarDot)]; if (el) bring(el, true); });
