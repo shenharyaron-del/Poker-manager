@@ -2534,7 +2534,28 @@ async function v2SeatPlayerIfRoom(gameId, playerId, name){
 // g.closed and rides along inside whatever mutateAndSave save is already in flight; here
 // there's no ambient save to ride along with, so this makes its own follow-up PATCH only
 // when the check actually flips something.
-async function v2MaybeAutoCloseNight(gameId){
+// Closing the night when the last player leaves runs in the background: the exit itself is
+// already saved, and waiting here for a full re-load of the game plus the close (two more
+// round trips to the server, more with a retry) kept the last player's "אישור" spinning
+// noticeably longer than anyone else's. Callers still `await` it - it returns at once.
+const autoCloseRunning = new Set();
+function v2MaybeAutoCloseNight(gameId){
+  // Nothing to close while someone at the table (as this phone sees it) is still playing -
+  // no request at all. (Another phone's last exit is then the one that closes it.)
+  const local = getGame(gameId);
+  if (local) {
+    const seatedNow = (local.seats || []).filter(Boolean);
+    if (seatedNow.length < 2 || !seatedNow.every(pid => pid in (local.cashouts || {})) || local.closed) return Promise.resolve();
+  }
+  if (autoCloseRunning.has(gameId)) return Promise.resolve();
+  autoCloseRunning.add(gameId);
+  v2AutoCloseNightNow(gameId)
+    .then(() => { if (nav.screen === "table" && nav.gameId === gameId) render(); })
+    .catch(e => console.warn("auto-close failed", e))
+    .finally(() => autoCloseRunning.delete(gameId));
+  return Promise.resolve();
+}
+async function v2AutoCloseNightNow(gameId){
   // Re-fetches fresh rather than trusting the local g.updatedAt: v2ClaimSeat/v2ClearSeat/
   // v2SwapSeats all bump games.updated_at server-side but don't return the new value to
   // sync locally, so the local copy of that field can be stale here - confirmed by
