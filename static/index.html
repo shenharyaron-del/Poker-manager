@@ -6919,7 +6919,7 @@ function renderPlayerScreen(gameId){
   // A cashed-out player is sent back to the table from a link by their name (see nameHtml),
   // not a separate button.
   const adminPlayerActions = (isAdminView && pid) ? (cashedOut ? ""
-    : ((viewingOther && !armed) ? `<button class="btn btn-ghost btn-block" style="margin-top:4px;font-size:17px;" data-admin-remove-seat="${pid}">הסרת ${esc(p ? p.name : "השחקן")} מהשולחן</button>` : "")) : "";
+    : ((viewingOther && !armed) ? `<div class="terms-link" style="margin:10px 0 4px;flex-shrink:0;font-size:16px;color:var(--text);opacity:.85;"><button type="button" data-admin-remove-seat="${pid}">הסרת ${esc(p ? p.name : "השחקן")} מהשולחן</button></div>` : "")) : "";
   // Everyone but me who entered tonight (tonight's entry order), each a tile that opens
   // their screen - the one being looked at is highlighted. With 10 at the table, one of
   // them sits in a box right of the name instead (the 10th seat's player, or - when the
