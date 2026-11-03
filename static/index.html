@@ -7639,19 +7639,34 @@ function renderTableTimeline(g, c, myPlayerId){
   // Every exit: the "cashed_out" events (one per time someone left - a return deletes the
   // cashout row, not the event), then a current cashout with no event for it (nights saved
   // before exits were kept as events). Profit = cashed out minus bought in up to then.
-  const exitRow = (pid, amount, ts) => {
+  // "· העביר לירון": who a player settles with directly (the "למי מעבירים" window, kept on
+  // their current cashout) - shown on that exit, and the line also belongs to the people
+  // they settle with (it shows in their filtered timeline too).
+  const toName = id => { const n = tableShortName(g, id); return (/^[\u0590-\u05FF]/.test(n) ? "ל" : "ל-") + `<bdi>${esc(n)}</bdi>`; };
+  const fromName = id => { const n = tableShortName(g, id); return (/^[\u0590-\u05FF]/.test(n) ? "מ" : "מ-") + `<bdi>${esc(n)}</bdi>`; };
+  const exitRow = (pid, amount, ts, arranged) => {
     const bought = buyins.filter(b => b.playerId === pid && (!ts || (b.ts || 0) <= ts)).reduce((s2, b) => s2 + b.amount, 0);
     const profit = (amount || 0) - bought;
     const res = Math.abs(profit) < 0.5 ? "מאוזן" : profit > 0 ? `+₪${Math.round(profit)}` : `-₪${Math.abs(Math.round(profit))}`;
     const dur = entryTs[pid] && ts ? ` אחרי ${fmtElapsed(ts - entryTs[pid])}` : "";
-    rows.push({ts, pid, text: `<b>${esc(name(pid))}</b> ${fem(pid) ? "יצאה" : "יצא"} עם ₪${amount} <span class="${profit >= 0 ? 'stats-win' : 'stats-loss'}">(<bdi dir="ltr">${res}</bdi>)</span>${dur}`});
+    const with_ = (arranged || []).filter(id => g.players.some(x => x.id === id));
+    const settle = !with_.length || Math.abs(profit) < 0.5 ? ""
+      : profit < 0 ? ` · ${fem(pid) ? "העבירה" : "העביר"} ${with_.map(toName).join(" ו")}`
+      : ` · ${fem(pid) ? "קיבלה" : "קיבל"} ${with_.map(fromName).join(" ו")}`;
+    rows.push({ts, pid, also: with_, text: `<b>${esc(name(pid))}</b> ${fem(pid) ? "יצאה" : "יצא"} עם ₪${amount} <span class="${profit >= 0 ? 'stats-win' : 'stats-loss'}">(<bdi dir="ltr">${res}</bdi>)</span>${dur}${settle}`});
   };
-  events.filter(e => e.type === "cashed_out").forEach(e => exitRow(e.playerId, e.amount, e.ts));
+  // The arrangement belongs to the current cashout - so to the latest exit of a player who's out.
+  const outEvents = events.filter(e => e.type === "cashed_out");
+  outEvents.forEach(e => {
+    const latest = !outEvents.some(o => o.playerId === e.playerId && (o.ts || 0) > (e.ts || 0));
+    const co = cashouts[e.playerId];
+    exitRow(e.playerId, e.amount, e.ts, latest && co ? co.arrangedWith : null);
+  });
   Object.keys(cashouts).forEach(pid => {
     const co = cashouts[pid];
     const lastReturn = Math.max(0, ...events.filter(e => e.type === "returned_to_table" && e.playerId === pid).map(e => e.ts || 0));
     const logged = events.some(e => e.type === "cashed_out" && e.playerId === pid && (e.ts || 0) >= lastReturn);
-    if (!logged) exitRow(pid, co.amount, co.ts);
+    if (!logged) exitRow(pid, co.amount, co.ts, co.arrangedWith);
   });
   events.forEach(e => {
     if (e.type === "returned_to_table") rows.push({ts: e.ts, pid: e.playerId, text: `<b>${esc(name(e.playerId))}</b> ${fem(e.playerId) ? "חזרה" : "חזר"} לשולחן${by(e.playerId, e.actorName)}`});
@@ -7680,11 +7695,12 @@ function renderTableTimeline(g, c, myPlayerId){
   const rank = r => r.pre ? 0 : r.start ? 1 : 2;
   rows.sort((a, b) => rank(a) - rank(b) || (a.ts || 0) - (b.ts || 0));
   // A player picked above: only their own lines, plus the night's start and end.
-  const shown = sel ? rows.filter(r => r.pid === sel || r.night) : rows;
+  const mine = r => r.pid === sel || (r.also || []).includes(sel);
+  const shown = sel ? rows.filter(r => mine(r) || r.night) : rows;
   // A pre-start row has no time - its text starts where the start line's 0:00 does.
   const list = shown.map(r => r.pre
-    ? `<div class="ttl-row ttl-pre${sel && r.pid === sel ? ' hl' : ''}"><span class="ttl-text">${r.text}</span></div>`
-    : `<div class="ttl-row${r.start ? ' ttl-start' : ''}"><span class="ttl-time${sel && r.pid === sel ? ' hl' : ''}">${fmtElapsed((r.ts || t0) - t0)}</span><span class="ttl-text">${r.text}</span></div>`).join("");
+    ? `<div class="ttl-row ttl-pre${sel && mine(r) ? ' hl' : ''}"><span class="ttl-text">${r.text}</span></div>`
+    : `<div class="ttl-row${r.start ? ' ttl-start' : ''}"><span class="ttl-time${sel && mine(r) ? ' hl' : ''}">${fmtElapsed((r.ts || t0) - t0)}</span><span class="ttl-text">${r.text}</span></div>`).join("");
   return `
     <div class="px5 ttl-wrap">
       <div class="ttl-chips">${chips}</div>
