@@ -7,7 +7,7 @@
 <link rel="icon" type="image/png" href="/static/logo.png">
 <link rel="apple-touch-icon" href="/static/icon-192.png">
 <link rel="manifest" href="/static/manifest.json">
-<meta name="theme-color" content="#022c22">
+<meta name="theme-color" content="#3d8a6c">
 <!-- Tells in-app browsers (WhatsApp's on Android in dark mode) that this page handles its
      own light and dark colors - otherwise they "auto-darken" it, and the sand / blue
      themes came out very dark when opened from an invite link. -->
@@ -4899,6 +4899,7 @@ function currentTheme(){
   const cl = document.documentElement.classList;
   return cl.contains("theme-blue") ? "blue" : cl.contains("theme-sand") ? "sand" : "dark";
 }
+const THEME_BAR_COLORS = {dark: "#3d8a6c", blue: "#4d89a8", sand: "#dfcaa9"};
 function setTheme(key, noRender){
   const cl = document.documentElement.classList;
   cl.remove("theme-light", "theme-blue", "theme-sand");
@@ -4908,7 +4909,7 @@ function setTheme(key, noRender){
   // when applying the account's own saved value.
   if (!setTheme.fromAccount && myIdentity && myIdentity.email) updateAccount({theme: key});
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.content = key === "blue" ? "#4d89a8" : key === "sand" ? "#dfcaa9" : "#022c22";
+  if (meta) meta.content = THEME_BAR_COLORS[key] || THEME_BAR_COLORS.dark;
   if (!noRender) render();
 }
 function themeToggleHtml(){
@@ -6343,8 +6344,22 @@ function liftGamePageBackground(){
   const body = document.body;
   const page = nav.screen === "table" && document.querySelector(".swipe-page.lux-page");
   body.classList.remove("page-bg-lifted");
-  if (!page) { body.style.removeProperty("background"); return; }
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (!page) {
+    body.style.removeProperty("background");
+    document.documentElement.style.removeProperty("background-color");
+    if (meta) meta.content = THEME_BAR_COLORS[currentTheme()];
+    return;
+  }
   const cs = getComputedStyle(page);
+  // The phone's status bar / the strip above the page (notch area) - the page's top colour:
+  // the first colour of its base gradient (the last layer).
+  const lastGrad = cs.backgroundImage.slice(cs.backgroundImage.lastIndexOf("linear-gradient("));
+  const top = (lastGrad.match(/rgba?\([^)]*\)/) || [])[0];
+  if (top) {
+    document.documentElement.style.backgroundColor = top;
+    if (meta) meta.content = top;
+  }
   body.style.background = "none";
   body.style.backgroundColor = cs.backgroundColor;
   body.style.backgroundImage = cs.backgroundImage;
