@@ -1194,8 +1194,6 @@ html.theme-light .pp-tile-return{color:#9a5f12;}
 html.theme-light .pp-self-return{color:#9a5f12;}
 .pp-return-side .pp-return-link{font-size:15px;}
 .pp-name-me{font-family:inherit;cursor:pointer;}
-.pp-acting-as{display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:default;line-height:1.1;}
-.pp-acting-as small{font-size:12px;font-weight:700;opacity:.85;}
 .pp-back-me{grid-column:4;min-width:0;min-height:44px;padding:6px 6px;border-radius:12px;border:2px solid #93c5fd;background:#1d4ed8;color:#fff;font-family:inherit;font-size:16px;font-weight:800;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.35);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 /* Name field + a small ז / נ (male / female) pick on the same row. */
 .gender-name-row{display:flex;align-items:stretch;gap:6px;}
@@ -6882,12 +6880,11 @@ function renderPlayerScreen(gameId){
     // name button (when looking at someone else) sits in the 4th.
     // The box right of the name (see sideId).
     const extraBox = sideId ? playerTile(sideId, " pp-extra") : "";
-    // Acting for someone else: my own box stays where it is (tap it to go back to my
-    // screen), and the player I'm acting for shows in the blue box beside it.
+    // Acting for someone else: my own box stays as it is (tap it to go back to my screen) -
+    // who I'm acting for shows in the carousel, the red page and the ריביי button.
     if (viewingOther && me) {
       const myBox = `<button type="button" class="pp-name-box pp-name-me" dir="rtl" data-pp-back-me title="חזרה למסך שלי"><bdi>${esc(me.name)}</bdi></button>`;
-      const actingBox = `<div class="pp-back-me pp-acting-as" title="פועל בשם ${esc(nm)}"><bdi>${esc(tableShortName(g, pid))}</bdi>${cashedOut ? '<small>יצא</small>' : ''}</div>`;
-      return `<div class="pp-name-row">${extraBox}${myBox}${actingBox}</div>`;
+      return `<div class="pp-name-row">${extraBox}${myBox}</div>`;
     }
     return `<div class="pp-name-row">${extraBox}${box}</div>`;
   })();
