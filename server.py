@@ -824,6 +824,15 @@ def _save_state_locked(data):
     return jsonify({"ok": True, "hash": new_hash})
 
 
+# Each open stream holds one of the server's threads (see __main__). A phone that went to
+# the background, or reopened the app, can leave its old stream open on our side for a long
+# time - Render's proxy keeps the connection to us alive - and enough of those once took
+# every thread, so the server stopped answering anything ("טוען נתונים משותפים" forever).
+# So a stream ends by itself after _SSE_MAX_SECONDS; the browser's EventSource reconnects
+# on its own (after "retry" ms), and the periodic refresh covers that short gap.
+_SSE_MAX_SECONDS = 50
+
+
 @app.route("/api/events")
 def events():
     def stream():
@@ -831,10 +840,14 @@ def events():
         with _subscribers_lock:
             _subscribers.append(q)
         try:
-            yield ": connected\n\n"
+            yield "retry: 2000\n: connected\n\n"
+            deadline = time.time() + _SSE_MAX_SECONDS
             while True:
+                left = deadline - time.time()
+                if left <= 0:
+                    return
                 try:
-                    msg = q.get(timeout=25)
+                    msg = q.get(timeout=min(15, left))
                     yield f"data: {msg}\n\n"
                 except queue.Empty:
                     yield ": keep-alive\n\n"  # keeps the connection from idling out
@@ -4118,7 +4131,7 @@ if __name__ == "__main__":
                     "bind": f"0.0.0.0:{port}",
                     "workers": 1,
                     "worker_class": "gthread",
-                    "threads": 64,
+                    "threads": int(os.environ.get("WEB_THREADS", "200")),
                     # The worker's own heartbeat, not a per-request limit - SSE streams
                     # stay open far longer than this, which gthread allows.
                     "timeout": 120,
