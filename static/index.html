@@ -7658,9 +7658,14 @@ function renderTableTimeline(g, c, myPlayerId){
     const profit = (amount || 0) - bought;
     const res = Math.abs(profit) < 0.5 ? "מאוזן" : profit > 0 ? `+₪${Math.round(profit)}` : `-₪${Math.abs(Math.round(profit))}`;
     const dur = entryTs[pid] && ts ? ` אחרי ${fmtElapsed(ts - entryTs[pid])}` : "";
-    const with_ = (arranged || []).filter(id => g.players.some(x => x.id === id));
-    const settle = !with_.length || Math.abs(profit) < 0.5 ? ""
-      : profit < 0 ? ` · ${fem(pid) ? "העבירה" : "העביר"} ${with_.map(toName).join(" ו")}`
+    // Who they paid: the transfers recorded in "למי מעבירים" (player payments from them,
+    // made after this exit and before they came back), else an arrangement on the cashout.
+    const nextReturn = Math.min(Infinity, ...events.filter(e => e.type === "returned_to_table" && e.playerId === pid && (e.ts || 0) > (ts || 0)).map(e => e.ts || 0));
+    const paidTo = [...new Set((g.playerPayments || []).filter(pp => pp.fromPlayerId === pid
+      && (!ts || !pp.ts || (pp.ts >= ts - 5000 && pp.ts < nextReturn))).map(pp => pp.toPlayerId))];
+    const with_ = (paidTo.length ? paidTo : (arranged || [])).filter(id => g.players.some(x => x.id === id));
+    const settle = !with_.length ? ""
+      : paidTo.length || profit < 0 ? ` · ${fem(pid) ? "העבירה" : "העביר"} ${with_.map(toName).join(" ו")}`
       : ` · ${fem(pid) ? "קיבלה" : "קיבל"} ${with_.map(fromName).join(" ו")}`;
     rows.push({ts, pid, also: with_, text: `<b>${esc(name(pid))}</b> ${fem(pid) ? "יצאה" : "יצא"} עם ₪${amount} <span class="${profit >= 0 ? 'stats-win' : 'stats-loss'}">(<bdi dir="ltr">${res}</bdi>)</span>${dur}${settle}`});
   };
