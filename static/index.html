@@ -7643,16 +7643,18 @@ function renderTableTimeline(g, c, myPlayerId){
     if (e.type === "returned_to_table") rows.push({ts: e.ts, pid: e.playerId, text: `<b>${esc(name(e.playerId))}</b> ${fem(e.playerId) ? "חזרה" : "חזר"} לשולחן${by(e.playerId, e.actorName)}`});
     else if (e.type === "seat_removed") rows.push({ts: e.ts, pid: e.playerId, text: `<b>${esc(name(e.playerId))}</b> ${fem(e.playerId) ? "הוצאה" : "הוצא"} מהשולחן${by(e.playerId, e.actorName)}`});
     else if (e.type === "pot_fixed") rows.push({ts: e.ts, text: `סידור קופה${e.actorName ? ` <span class="ttl-by">ע"י ${esc(e.actorName)}</span>` : ""}`});
-    else if (e.type === "night_closed") rows.push({ts: e.ts, text: `הערב נסגר${e.actorName ? ` <span class="ttl-by">ע"י ${esc(e.actorName)}</span>` : ""}`});
-    else if (e.type === "night_declared_over") rows.push({ts: e.ts, text: `הוכרז על סיום הערב${e.actorName ? ` <span class="ttl-by">ע"י ${esc(e.actorName)}</span>` : ""}`});
-    else if (e.type === "game_started") rows.push({ts: t0, start: true, text: `<b>תחילת משחק</b> ${fmtTime(t0)}${e.actorName ? ` <span class="ttl-by">ע"י ${esc(e.actorName)}</span>` : ""}`});
-    else if (e.type === "night_reopened") rows.push({ts: e.ts, text: `הערב נפתח מחדש${e.actorName ? ` <span class="ttl-by">ע"י ${esc(e.actorName)}</span>` : ""}`});
+    else if (e.type === "night_closed") rows.push({ts: e.ts, night: true, text: `הערב נסגר${e.actorName ? ` <span class="ttl-by">ע"י ${esc(e.actorName)}</span>` : ""}`});
+    else if (e.type === "night_declared_over") rows.push({ts: e.ts, night: true, text: `הוכרז על סיום הערב${e.actorName ? ` <span class="ttl-by">ע"י ${esc(e.actorName)}</span>` : ""}`});
+    else if (e.type === "game_started") rows.push({ts: t0, start: true, night: true, text: `<b>תחילת משחק</b> ${fmtTime(t0)}${e.actorName ? ` <span class="ttl-by">ע"י ${esc(e.actorName)}</span>` : ""}`});
+    else if (e.type === "night_reopened") rows.push({ts: e.ts, night: true, text: `הערב נפתח מחדש${e.actorName ? ` <span class="ttl-by">ע"י ${esc(e.actorName)}</span>` : ""}`});
   });
   // Pre-start entries first (in the order they sat down), then the start line, then the rest.
   const rank = r => r.pre ? 0 : r.start ? 1 : 2;
   rows.sort((a, b) => rank(a) - rank(b) || (a.ts || 0) - (b.ts || 0));
+  // A player picked above: only their own lines, plus the night's start and end.
+  const shown = sel ? rows.filter(r => r.pid === sel || r.night) : rows;
   // A pre-start row has no time - its text starts where the start line's 0:00 does.
-  const list = rows.map(r => r.pre
+  const list = shown.map(r => r.pre
     ? `<div class="ttl-row ttl-pre${sel && r.pid === sel ? ' hl' : ''}"><span class="ttl-text">${r.text}</span></div>`
     : `<div class="ttl-row${r.start ? ' ttl-start' : ''}"><span class="ttl-time${sel && r.pid === sel ? ' hl' : ''}">${fmtElapsed((r.ts || t0) - t0)}</span><span class="ttl-text">${r.text}</span></div>`).join("");
   return `
