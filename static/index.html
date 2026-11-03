@@ -2120,6 +2120,7 @@ function v2ActionFinish(){
 // refresh right along with it, not just this one call. AbortController turns that into an
 // ordinary failure after a bounded wait instead.
 const V2_FETCH_TIMEOUT_MS = 20000;
+const V2_WRITE_TIMEOUT_MS = 7000;
 // Safe automatic retries for writes that are idempotent on the server (a client-generated
 // id with ON CONFLICT DO NOTHING, or a PUT/DELETE of a fixed target). A timeout or dropped
 // connection doesn't tell us whether the first attempt landed - retrying with the SAME id
@@ -2178,7 +2179,11 @@ async function v2Fetch(method, path, body, opts){
   const isWrite = method !== "GET";
   if (isWrite) v2ActionBegin();
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), V2_FETCH_TIMEOUT_MS);
+  // A save gives up and retries sooner than a read: saves are small and quick on the server,
+  // so one with no answer after a few seconds has lost its response on the way back (seen
+  // on a real night: the cashout saved at once, the phone heard nothing and sat 20s before
+  // retrying). Retrying is safe - every save carries its own id / is an upsert.
+  const timeoutId = setTimeout(() => controller.abort(), isWrite ? V2_WRITE_TIMEOUT_MS : V2_FETCH_TIMEOUT_MS);
   try {
     // Who's asking (see _caller in server.py): the server only returns communities this
     // device's person belongs to, plus the one an invite link in the URL points at.
