@@ -7632,12 +7632,22 @@ function renderTableTimeline(g, c, myPlayerId){
       ? `<b>${esc(name(b.playerId))}</b> ${fem(b.playerId) ? "נכנסה" : "נכנס"} עם ₪${b.amount}${by(b.playerId, b.actorName)}`
       : `<b>${esc(name(b.playerId))}</b> ריביי ₪${b.amount}${by(b.playerId, b.actorName)}`});
   });
+  // Every exit: the "cashed_out" events (one per time someone left - a return deletes the
+  // cashout row, not the event), then a current cashout with no event for it (nights saved
+  // before exits were kept as events). Profit = cashed out minus bought in up to then.
+  const exitRow = (pid, amount, ts) => {
+    const bought = buyins.filter(b => b.playerId === pid && (!ts || (b.ts || 0) <= ts)).reduce((s2, b) => s2 + b.amount, 0);
+    const profit = (amount || 0) - bought;
+    const res = Math.abs(profit) < 0.5 ? "מאוזן" : profit > 0 ? `+₪${Math.round(profit)}` : `-₪${Math.abs(Math.round(profit))}`;
+    const dur = entryTs[pid] && ts ? ` אחרי ${fmtElapsed(ts - entryTs[pid])}` : "";
+    rows.push({ts, pid, text: `<b>${esc(name(pid))}</b> ${fem(pid) ? "יצאה" : "יצא"} עם ₪${amount} <span class="${profit >= 0 ? 'stats-win' : 'stats-loss'}">(<bdi dir="ltr">${res}</bdi>)</span>${dur}`});
+  };
+  events.filter(e => e.type === "cashed_out").forEach(e => exitRow(e.playerId, e.amount, e.ts));
   Object.keys(cashouts).forEach(pid => {
     const co = cashouts[pid];
-    const profit = (co.amount || 0) - (totals[pid] || 0);
-    const res = Math.abs(profit) < 0.5 ? "מאוזן" : profit > 0 ? `+₪${Math.round(profit)}` : `-₪${Math.abs(Math.round(profit))}`;
-    const dur = entryTs[pid] && co.ts ? ` אחרי ${fmtElapsed(co.ts - entryTs[pid])}` : "";
-    rows.push({ts: co.ts, pid, text: `<b>${esc(name(pid))}</b> ${fem(pid) ? "יצאה" : "יצא"} עם ₪${co.amount} <span class="${profit >= 0 ? 'stats-win' : 'stats-loss'}">(<bdi dir="ltr">${res}</bdi>)</span>${dur}`});
+    const lastReturn = Math.max(0, ...events.filter(e => e.type === "returned_to_table" && e.playerId === pid).map(e => e.ts || 0));
+    const logged = events.some(e => e.type === "cashed_out" && e.playerId === pid && (e.ts || 0) >= lastReturn);
+    if (!logged) exitRow(pid, co.amount, co.ts);
   });
   events.forEach(e => {
     if (e.type === "returned_to_table") rows.push({ts: e.ts, pid: e.playerId, text: `<b>${esc(name(e.playerId))}</b> ${fem(e.playerId) ? "חזרה" : "חזר"} לשולחן${by(e.playerId, e.actorName)}`});

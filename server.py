@@ -2752,9 +2752,26 @@ def v2_set_cashout(game_id, player_id):
                 "INSERT INTO cashouts (game_id, player_id, amount, ts, arranged_with) "
                 "VALUES (%s,%s,%s,now(),%s) "
                 "ON CONFLICT (game_id, player_id) DO UPDATE SET amount = EXCLUDED.amount, "
-                "arranged_with = EXCLUDED.arranged_with",
+                "arranged_with = EXCLUDED.arranged_with RETURNING (xmax = 0)",
                 (game_id, player_id, amount, Json(arranged_with or [])),
             )
+            fresh = cur.fetchone()[0]
+            # Every time someone leaves is kept as an event too: the cashout row itself is
+            # deleted when they come back to the table, so without this the timeline lost
+            # each earlier exit ("חזר לשולחן" again and again with no "יצא" before it). An
+            # edit of the amount updates the latest exit's amount instead of adding one.
+            if fresh:
+                cur.execute(
+                    "INSERT INTO game_events (id, game_id, type, player_id, actor_name, amount) "
+                    "VALUES (%s,%s,'cashed_out',%s,%s,%s)",
+                    (secrets.token_hex(8), game_id, player_id, _caller().get("name"), amount),
+                )
+            else:
+                cur.execute(
+                    "UPDATE game_events SET amount = %s WHERE id = (SELECT id FROM game_events "
+                    "WHERE game_id = %s AND player_id = %s AND type = 'cashed_out' ORDER BY ts DESC LIMIT 1)",
+                    (amount, game_id, player_id),
+                )
             if chips is not None:
                 cur.execute(
                     "UPDATE games SET live_chips = live_chips || %s::jsonb, updated_at = now() WHERE id = %s",
