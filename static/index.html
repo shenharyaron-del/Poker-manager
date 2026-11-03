@@ -950,6 +950,10 @@ html.theme-light.theme-blue .rb-chip{background-image:url(/static/rebuy-chip-blu
 .rb-chip.on,html.theme-light .rb-chip.on{transform:none;}
 .rb-chip{transition:transform .15s ease;}
 .rb-chip.pressing{animation:rbPress .32s ease-out;}
+/* No square flash on tap (the phone's own tap highlight / focus ring) - the press animation
+   is the feedback. Same for the carousel cards. */
+.rb-chip,.pp-ci,.pp-car-arrow,.pp-me-card{-webkit-tap-highlight-color:transparent;}
+.rb-chip:focus,.pp-ci:focus,.pp-car-arrow:focus,.pp-me-card:focus{outline:none;}
 @keyframes rbPress{
   0%{transform:scale(1);}
   35%{transform:scale(.86) translateY(3px);box-shadow:0 0 0 0 rgba(255,210,90,.9),0 2px 4px rgba(0,0,0,.5);}
