@@ -324,6 +324,13 @@ body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;disp
 .lv-confirm{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:12px;padding:13px 10px;border-radius:14px;font-family:inherit;font-size:23px;font-weight:800;color:#2a1d05;cursor:pointer;
   background:linear-gradient(180deg,#fde68a 0%,#f2c14e 45%,#c8922a 100%);border:1px solid rgba(0,0,0,.25);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 5px 12px rgba(0,0,0,.45);}
 .lv-photo:disabled,.lv-confirm:disabled{cursor:not-allowed;}
+.lv-row{display:flex;gap:10px;align-items:flex-end;}
+.lv-confirm.lv-confirm-side{width:auto;flex:0 0 auto;margin-top:0;padding:12px 14px;font-size:20px;white-space:nowrap;}
+.lv-confirm-side svg{width:20px;height:20px;}
+/* Counting by photo: a quiet text link, not another big button */
+.lv-photo-link{display:flex;align-items:center;justify-content:center;gap:6px;margin:12px auto 0;padding:4px 8px;background:none;border:none;font-family:inherit;font-size:15px;color:var(--muted);text-decoration:underline;text-underline-offset:3px;cursor:pointer;opacity:.85;}
+.lv-photo-link svg{width:16px;height:16px;flex-shrink:0;}
+.lv-photo-link:disabled{opacity:.4;cursor:not-allowed;}
 .pp-name-select{font-family:inherit;font-size:24px;font-weight:700;color:var(--text);background:transparent;border:1px solid rgba(212,175,55,.45);border-radius:12px;padding:4px 34px 4px 34px;max-width:90%;text-align:center;text-align-last:center;cursor:pointer;
   -webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23e9c46a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-position:12px 50%;background-size:12px 8px;background-repeat:no-repeat;}
 .pp-name-select option{color:#111;}
@@ -1142,6 +1149,8 @@ html.theme-light.theme-blue .setup-frame,html.theme-light.theme-blue .stats-fram
 html.theme-light .rb-confirm{background:linear-gradient(180deg,#3654c4,#1c2c78);color:#fde68a;}
 html.theme-light.theme-blue .rb-confirm{background:linear-gradient(180deg,#ffe58a,#f5b82e 45%,#c4831a);color:#2a1d05;border-color:#fff3c4;box-shadow:0 0 0 1px rgba(255,243,196,.6),0 6px 16px rgba(10,30,50,.45);}
 html.theme-light.theme-sand .rb-confirm{background:linear-gradient(180deg,#bf8a45,#8f5d24);color:#fffaf0;border-color:#7a4a17;box-shadow:0 6px 16px rgba(90,55,20,.4);}
+/* ריביי: the same yellow as the system's other action buttons (אישור ספירה etc.), every theme */
+.rb-confirm,html.theme-light .rb-confirm,html.theme-light.theme-blue .rb-confirm,html.theme-light.theme-sand .rb-confirm{background:linear-gradient(180deg,#fde68a 0%,#f2c14e 45%,#c8922a 100%);color:#2a1d05;border:1px solid rgba(0,0,0,.25);text-shadow:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 5px 12px rgba(0,0,0,.4);}
 .pp-name-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;align-items:stretch;}
 .pp-name-row .pp-name-box{grid-column:2 / span 2;min-width:0;max-width:none;width:100%;padding:6px 8px;display:flex;align-items:center;justify-content:center;}
 .pp-name-row .pp-name-box bdi{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -6773,8 +6782,9 @@ function renderPlayerScreen(gameId){
       <span class="lv-line"></span>
     </label>
     <div class="lv-body${armed?'':' off'}">
-      <div style="display:flex;gap:10px;align-items:flex-end;">
-        <button class="lv-photo" data-leave-photo ${armed?'':'disabled'}><span><b>ספירה</b><small>באמצעות צילום</small></span>${icon('camera')}</button>
+      <!-- The amount first (right), "אישור ספירה" beside it; counting by photo under them,
+           kept low-key - typing the amount is the usual way. -->
+      <div class="lv-row">
         <div style="flex:1;min-width:0;">
           <div class="lv-amount-label" style="color:var(--muted);font-size:16px;margin-bottom:4px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">סכום הז'יטונים שנשארו</div>
           <div style="position:relative;">
@@ -6782,6 +6792,7 @@ function renderPlayerScreen(gameId){
             <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--gold);font-size:20px;">₪</span>
           </div>
         </div>
+        <button class="lv-confirm lv-confirm-side" data-leave-confirm ${armed?'':'disabled'}>${icon('out')}<span>אישור ספירה</span></button>
       </div>
       ${(() => {
         // Chips → ₪ converter when the group's ratio isn't an easy one (e.g. 1 ₪ = 4 chips:
@@ -6797,7 +6808,7 @@ function renderPlayerScreen(gameId){
         </div>
         <div style="color:var(--muted);font-size:15px;margin-top:4px;">היחס במועדון: ₪1 = ${ratio} ז'יטונים</div>`;
       })()}
-      <button class="lv-confirm" data-leave-confirm ${armed?'':'disabled'}>${icon('out')}<span>אישור ספירה</span></button>
+      <button class="lv-photo-link" data-leave-photo ${armed?'':'disabled'}>${icon('camera')}<span>צילום / ספירת ז'יטונים לפי סוג</span></button>
       ${(() => {
         // The pot as it stands - what was bought in, what's already been taken out by players
         // who left, and what should still be on the table. Updates as others leave.
