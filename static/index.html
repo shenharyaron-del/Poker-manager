@@ -946,20 +946,20 @@ html.theme-light.theme-blue .rb-chip{background-image:url(/static/rebuy-chip-blu
 .rb-chip.on,html.theme-light .rb-chip.on,html.theme-light.theme-sand .rb-chip.on,html.theme-light.theme-blue .rb-chip.on{border:none;background:url(/static/rebuy-chip-green.webp) center/100% 100% no-repeat;color:#fff6d6;transform:translateY(-5px) scale(1.08);box-shadow:0 0 22px 5px rgba(255,200,80,.85),0 12px 16px rgba(0,0,0,.4);}
 /* A tap buys in now (no picking first), so every chip is the same size - 10% bigger than
    before - and a tap plays a press: down, a gold flash, back up. */
-.rb-chip,html.theme-light .rb-chip{width:79px;height:79px;font-size:20px;transform:none;}
+.rb-chip,html.theme-light .rb-chip{width:75px;height:75px;font-size:19px;transform:none;flex-shrink:1;min-width:0;}
 .rb-chip.on,html.theme-light .rb-chip.on{transform:none;}
 .rb-chip{transition:transform .15s ease;}
-.rb-chip.pressing{animation:rbPress .32s ease-out;}
+.rb-chip.pressing{animation:rbPress .45s cubic-bezier(.3,.7,.4,1);z-index:2;}
 /* No square flash on tap (the phone's own tap highlight / focus ring) - the press animation
    is the feedback. Same for the carousel cards. */
 .rb-chip,.pp-ci,.pp-car-arrow,.pp-me-card{-webkit-tap-highlight-color:transparent;}
 .rb-chip{-webkit-touch-callout:none;user-select:none;-webkit-user-select:none;touch-action:manipulation;}
 .rb-chip:focus,.pp-ci:focus,.pp-car-arrow:focus,.pp-me-card:focus{outline:none;}
 @keyframes rbPress{
-  0%{transform:scale(1);}
-  35%{transform:scale(.86) translateY(3px);box-shadow:0 0 0 0 rgba(255,210,90,.9),0 2px 4px rgba(0,0,0,.5);}
-  70%{transform:scale(1.06);box-shadow:0 0 0 12px rgba(255,210,90,0),0 6px 12px rgba(0,0,0,.45);}
-  100%{transform:scale(1);}
+  0%{transform:scale(1);filter:brightness(1);}
+  25%{transform:scale(.74) translateY(5px);filter:brightness(1.35);box-shadow:0 0 0 0 rgba(255,215,90,1),0 0 18px 6px rgba(255,215,90,.8),0 1px 2px rgba(0,0,0,.6);}
+  60%{transform:scale(1.14);filter:brightness(1.15);box-shadow:0 0 0 18px rgba(255,215,90,0),0 0 26px 10px rgba(255,215,90,.35),0 8px 14px rgba(0,0,0,.45);}
+  100%{transform:scale(1);filter:brightness(1);}
 }
 html.theme-light.theme-sand .rb-chip.on{background-image:url(/static/rebuy-chip-brown.webp);}
 html.theme-light.theme-blue .rb-chip.on{background-image:url(/static/rebuy-chip-blue.webp);}
@@ -1217,13 +1217,13 @@ button.pp-me-card{cursor:pointer;}
 html.theme-light .pp-me-card{border-color:rgba(168,106,18,.75);box-shadow:inset 0 -3px 8px rgba(0,0,0,.08),0 4px 10px rgba(20,48,61,.22);}
 html.theme-light.theme-blue .pp-me-card{border-color:rgba(255,230,160,.95);}
 html.theme-light.theme-sand .pp-me-card{border-color:rgba(110,65,25,.65);}
-.pp-me-card .pp-me-name{font-size:21px;font-weight:800;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.player-page .pp-me-card .pp-total{font-size:52px;line-height:1.05;margin:0;}
+.pp-me-card .pp-me-name{font-size:24px;font-weight:800;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.player-page .pp-me-card .pp-total{font-size:42px;line-height:1.05;margin:0;}
 .pp-me-card .pp-self-return{margin:4px 0 2px;}
 /* Game screen spacing - room between the sections now that there's less on it */
 .player-screen-scroll .pp-car{margin-bottom:18px;}
 .player-screen-scroll .rb-frame{margin-bottom:22px;padding-top:6px;}
-.rb-frame > legend{font-size:13px;letter-spacing:.03em;}
+.rb-frame > legend{letter-spacing:.03em;}
 .rb-frame .rb-chips{margin:6px 0 4px;}
 .rb-frame .rb-undo-last{margin-top:12px;}
 .rb-frame .rb-cancel{background:none;border:none;box-shadow:none;padding:0;margin-top:12px;text-align:center;}
@@ -1371,7 +1371,17 @@ html.theme-light.theme-sand :is(.leave-frame,.pp-car,.pp-name-box){border-color:
 /* The player's name box gets the same rim, with the name a touch bolder */
 .pp-name-box{font-weight:800;}
 /* The carousel's title like every other frame's */
-.pp-car-legend{font-size:13px;letter-spacing:.03em;}
+/* Frame titles 4px bigger, and in every theme (acting for someone else included) the title
+   and its frame are the very same colour. */
+.leave-frame legend,.pp-car-legend{font-size:15px;letter-spacing:.03em;}
+.leave-frame legend,.pp-car-legend,html.theme-light .pp-car-legend{color:var(--frame-c);}
+:is(.leave-frame,.pp-car,.pp-me-card){border-color:var(--frame-c)!important;}
+:root{--frame-c:#e9b949;}
+html.theme-light{--frame-c:#a86a12;}
+html.theme-light.theme-blue{--frame-c:#ffe39a;}
+html.theme-light.theme-sand{--frame-c:#7a4a1a;}
+.lux-page.pp-other{--frame-c:#f2c14e;}
+html.theme-light .lux-page.pp-other{--frame-c:#8a3a12;}
 </style>
 </head>
 <body>
@@ -5047,8 +5057,8 @@ function showConfirm(message, opts){
     el.innerHTML = `<div class="custom-confirm-box">
       <div>${esc(String(message))}</div>
       <div class="custom-confirm-actions">
-        <button class="btn btn-ghost btn-block" data-confirm-cancel>${esc(o.cancelLabel)}</button>
         <button class="btn btn-primary btn-block" data-confirm-ok>${esc(o.okLabel)}</button>
+        <button class="btn btn-ghost btn-block" data-confirm-cancel>${esc(o.cancelLabel)}</button>
       </div>
     </div>`;
     document.body.appendChild(el);
@@ -6894,7 +6904,7 @@ function renderPlayerScreen(gameId){
       <button class="rb-chip${picked==='other'?' on':''}" data-rb-pick="other" ${rebuyLocked?'disabled':''}><span>אחר</span></button>
     </div>
     ${picked === 'other' ? `
-    <div style="display:flex;gap:8px;margin-top:12px;">
+    <div class="rb-other-row" style="display:flex;gap:8px;margin-top:12px;">
       <input type="number" inputmode="decimal" id="rb-other-amount" placeholder="סכום ₪" ${rebuyLocked?'disabled':''} style="flex:1;padding:12px 8px;font-size:18px;text-align:center;border-radius:12px;border:1px solid var(--gold);background:var(--input);color:var(--text);">
       <button class="rb-confirm fit-line" style="flex:1.4;margin-top:0;white-space:nowrap;overflow:hidden;" data-rb-confirm ${rebuyLocked?'disabled':''}>בצע ריביי${forName}</button>
     </div>` : ""}
@@ -7030,7 +7040,7 @@ function renderPlayerScreen(gameId){
     if (viewingOther && me) {
       return `<button type="button" class="pp-me-card" dir="rtl" data-pp-back-me title="חזרה למסך שלי"><span class="pp-me-name"><bdi>${esc(me.name)}</bdi></span>${mineOut ? "" : `<span class="pp-total" data-player-total>₪${myTotal}</span>`}</button>`;
     }
-    return `<div class="pp-me-card" dir="rtl"><span class="pp-me-name"${font ? ` style="font-size:${Math.min(font, 20)}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut && !selfReturn ? ' · יצא' : ''}</span>${cashedOut ? (selfReturn ? `<button type="button" class="pp-self-return" data-self-return="${pid}">↩ חזור למשחק</button>` : "") : `<span class="pp-total" data-player-total>₪${buyinTotal}</span>`}</div>`;
+    return `<div class="pp-me-card" dir="rtl"><span class="pp-me-name"${font ? ` style="font-size:${Math.min(font + 3, 23)}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut && !selfReturn ? ' · יצא' : ''}</span>${cashedOut ? (selfReturn ? `<button type="button" class="pp-self-return" data-self-return="${pid}">↩ חזור למשחק</button>` : "") : `<span class="pp-total" data-player-total>₪${buyinTotal}</span>`}</div>`;
   })();
   // Tiles above the name: everyone who entered tonight, in order, then a "הזמן שחקן" tile
   // in the next free spot (it replaces the header's invite button here).
@@ -10150,13 +10160,18 @@ function attachHandlers(){
     const v = el.dataset.rbPick;
     const pid = viewedPid();
     rebuyPick[nav.gameId + ":" + pid] = v === "other" ? "other" : parseFloat(v);
+    // Leaving "אחר" for an amount: its typing field goes at once.
+    if (v !== "other") {
+      document.querySelectorAll(".rb-other-row").forEach(r => r.remove());
+      document.querySelectorAll('[data-rb-pick="other"].on').forEach(c => c.classList.remove("on"));
+    }
     // The press plays first (render would replace the button mid-animation).
     el.classList.remove("pressing"); void el.offsetWidth; el.classList.add("pressing");
     setTimeout(() => {
       if (v === "other") { render(); return; }
       const chip = document.querySelector(`[data-rb-pick="${v}"]`) || el;
       doPlayerBuyin(parseFloat(v), chip, pid, {ask: true});
-    }, 300);
+    }, 420);
   });
   app.querySelectorAll("[data-rb-confirm]").forEach(el => el.onclick = () => {
     const pid = viewedPid();
