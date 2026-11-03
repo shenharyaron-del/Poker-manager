@@ -944,9 +944,18 @@ html.theme-light.theme-sand .rb-chip{background-image:url(/static/rebuy-chip-bro
 html.theme-light.theme-blue .rb-chip{background-image:url(/static/rebuy-chip-blue.webp);}
 .rb-chip::before{display:none;}
 .rb-chip.on,html.theme-light .rb-chip.on,html.theme-light.theme-sand .rb-chip.on,html.theme-light.theme-blue .rb-chip.on{border:none;background:url(/static/rebuy-chip-green.webp) center/100% 100% no-repeat;color:#fff6d6;transform:translateY(-5px) scale(1.08);box-shadow:0 0 22px 5px rgba(255,200,80,.85),0 12px 16px rgba(0,0,0,.4);}
-/* The amounts not picked: ~19% smaller, so the picked one stands out */
-.rb-chip:not(.on){transform:scale(.8075);}
+/* A tap buys in now (no picking first), so every chip is the same size - 10% bigger than
+   before - and a tap plays a press: down, a gold flash, back up. */
+.rb-chip,html.theme-light .rb-chip{width:79px;height:79px;font-size:20px;transform:none;}
+.rb-chip.on,html.theme-light .rb-chip.on{transform:none;}
 .rb-chip{transition:transform .15s ease;}
+.rb-chip.pressing{animation:rbPress .32s ease-out;}
+@keyframes rbPress{
+  0%{transform:scale(1);}
+  35%{transform:scale(.86) translateY(3px);box-shadow:0 0 0 0 rgba(255,210,90,.9),0 2px 4px rgba(0,0,0,.5);}
+  70%{transform:scale(1.06);box-shadow:0 0 0 12px rgba(255,210,90,0),0 6px 12px rgba(0,0,0,.45);}
+  100%{transform:scale(1);}
+}
 html.theme-light.theme-sand .rb-chip.on{background-image:url(/static/rebuy-chip-brown.webp);}
 html.theme-light.theme-blue .rb-chip.on{background-image:url(/static/rebuy-chip-blue.webp);}
 .rb-chip:active:not(:disabled){translate:0 3px;}
@@ -6876,7 +6885,7 @@ function renderPlayerScreen(gameId){
   const rebuyLocked = buyinPending || notStarted;
   const rebuyHtml = `
     <div class="rb-chips">
-      ${amounts.map(v => `<button class="rb-chip${picked===v?' on':''}" data-rb-pick="${v}" ${rebuyLocked?'disabled':''}><span>₪${v}</span></button>`).join("")}
+      ${amounts.map(v => `<button class="rb-chip" data-rb-pick="${v}" ${rebuyLocked?'disabled':''}><span>₪${v}</span></button>`).join("")}
       <button class="rb-chip${picked==='other'?' on':''}" data-rb-pick="other" ${rebuyLocked?'disabled':''}><span>אחר</span></button>
     </div>
     ${picked === 'other' ? `
@@ -10115,10 +10124,13 @@ function attachHandlers(){
     const v = el.dataset.rbPick;
     const pid = viewedPid();
     rebuyPick[nav.gameId + ":" + pid] = v === "other" ? "other" : parseFloat(v);
-    if (v === "other") { render(); return; }
-    render();
-    const chip = document.querySelector(`[data-rb-pick="${v}"]`) || el;
-    doPlayerBuyin(parseFloat(v), chip, pid, {ask: true});
+    // The press plays first (render would replace the button mid-animation).
+    el.classList.remove("pressing"); void el.offsetWidth; el.classList.add("pressing");
+    setTimeout(() => {
+      if (v === "other") { render(); return; }
+      const chip = document.querySelector(`[data-rb-pick="${v}"]`) || el;
+      doPlayerBuyin(parseFloat(v), chip, pid, {ask: true});
+    }, 300);
   });
   app.querySelectorAll("[data-rb-confirm]").forEach(el => el.onclick = () => {
     const pid = viewedPid();
