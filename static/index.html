@@ -1058,6 +1058,10 @@ html.theme-light.theme-blue .btn-blue{background:#0b2f4a!important;border:1.5px 
 /* Player screen: carousel of everyone else at tonight's table, above the name */
 .pp-car{position:relative;margin:0 0 10px;padding:8px 20px 6px;border-radius:18px;border:1px solid rgba(212,175,55,.45);background:linear-gradient(180deg,rgba(0,0,0,.18),rgba(0,0,0,.32));}
 .pp-car:not(.many){padding:8px 6px 6px;}
+fieldset.pp-car{min-width:0;margin-inline:0;}
+.pp-car.has-legend{padding-top:4px;}
+.pp-car-legend{padding:0 8px;margin:0 auto;font-size:14px;font-weight:700;color:var(--gold);}
+html.theme-light .pp-car-legend{color:#9a5f12;}
 .pp-car-track{display:flex;gap:2px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;touch-action:pan-x pan-y;}
 .pp-car:not(.many) .pp-car-track{justify-content:center;}
 .pp-car-track::-webkit-scrollbar{display:none;}
@@ -6884,6 +6888,8 @@ function renderPlayerScreen(gameId){
     (g.buyins || []).forEach(b => { totals[b.playerId] = (totals[b.playerId] || 0) + (b.amount || 0); });
     return playersCarouselHtml("player:" + g.id, g, c, othersTonight, {
       onId: pid, attr: "data-pp-view",
+      // Only the table's admins act for someone else - for them the frame says so.
+      legend: isAdminView ? "בחר שחקן כדי לפעול בשמו" : "",
       under: id => !(id in (g.cashouts || {})) ? `<span class="pp-ci-amt">₪${Math.round((totals[id] || 0) * 100) / 100}</span>`
         : isAdminView ? `<span class="pp-ci-return" role="button" data-admin-return-to-game="${id}">↩ החזר</span>`
         : `<span class="pp-ci-out">יצא</span>`,
@@ -7396,7 +7402,7 @@ function renderTable(gameId){
 // A carousel of players - avatar, name and (under) an optional line - shared by the player
 // screen (with what each bought in / "החזר") and the timeline (names only). key: what its
 // scroll position is remembered by; attr: the attribute a tap on a player is handled by.
-function playersCarouselHtml(key, g, c, ids, {onId = null, meId = null, attr, under = null}){
+function playersCarouselHtml(key, g, c, ids, {onId = null, meId = null, attr, under = null, legend = ""}){
   if (!ids.length) return "";
   const items = ids.map(id => {
     const out = id in (g.cashouts || {});
@@ -7407,12 +7413,14 @@ function playersCarouselHtml(key, g, c, ids, {onId = null, meId = null, attr, un
       <bdi class="pp-ci-name">${esc(tableShortName(g, id))}</bdi>${under ? under(id) : ""}</button>`;
   }).join("");
   const many = ids.length > 4;   // trimmed in setupPlayerCarousel to what fits
-  return `<div class="pp-car${many ? " many" : ""}${under ? "" : " names-only"}" data-pp-car="${key}">
+  // A fieldset, so a legend (when there is one) sits on the frame itself.
+  return `<fieldset class="pp-car${many ? " many" : ""}${under ? "" : " names-only"}${legend ? " has-legend" : ""}" data-pp-car="${key}">
+    ${legend ? `<legend class="pp-car-legend">${esc(legend)}</legend>` : ""}
     ${many ? `<button type="button" class="pp-car-arrow prev" data-pp-car-step="1" aria-label="הקודם"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>` : ""}
     <div class="pp-car-track" data-pp-car-track>${items}</div>
     ${many ? `<button type="button" class="pp-car-arrow next" data-pp-car-step="-1" aria-label="הבא"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
     <div class="pp-car-dots"></div>` : ""}
-  </div>`;
+  </fieldset>`;
 }
 // The player screen's carousel (see carouselHtml): keeps the player it was showing in the
 // middle across re-renders (a refresh tick redraws the screen), and the first time
