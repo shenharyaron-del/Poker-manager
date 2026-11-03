@@ -1322,14 +1322,16 @@ html.has-install-chip [data-share-app]{top:calc(84px + env(safe-area-inset-top,0
    בערב...): one look everywhere - a stronger gold rim, and raised: a light top edge, a soft
    inner shade at the bottom and a drop shadow, in every theme. No fill, so a title sitting
    on the frame stays on one background. */
-:is(.leave-frame,.pp-car){border:1.5px solid rgba(242,193,78,.8);border-radius:14px;
+:is(.leave-frame,.pp-car,.pp-name-box){border:1.5px solid rgba(242,193,78,.8);border-radius:14px;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -3px 8px rgba(0,0,0,.22),0 4px 10px rgba(0,0,0,.35);}
-html.theme-light :is(.leave-frame,.pp-car){border-color:rgba(168,106,18,.75);
+html.theme-light :is(.leave-frame,.pp-car,.pp-name-box){border-color:rgba(168,106,18,.75);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.7),inset 0 -3px 8px rgba(0,0,0,.08),0 4px 10px rgba(20,48,61,.22);}
-html.theme-light.theme-blue :is(.leave-frame,.pp-car){border-color:rgba(255,230,160,.95);
+html.theme-light.theme-blue :is(.leave-frame,.pp-car,.pp-name-box){border-color:rgba(255,230,160,.95);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.55),inset 0 -3px 8px rgba(10,40,60,.12),0 4px 10px rgba(10,30,50,.3);}
-html.theme-light.theme-sand :is(.leave-frame,.pp-car){border-color:rgba(110,65,25,.65);
+html.theme-light.theme-sand :is(.leave-frame,.pp-car,.pp-name-box){border-color:rgba(110,65,25,.65);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.7),inset 0 -3px 8px rgba(70,40,10,.08),0 4px 10px rgba(90,55,20,.22);}
+/* The player's name box gets the same rim, with the name a touch bolder */
+.pp-name-box{font-weight:800;}
 /* The carousel's title like every other frame's */
 .pp-car-legend{font-size:13px;letter-spacing:.03em;}
 </style>
