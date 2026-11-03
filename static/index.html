@@ -118,6 +118,12 @@ h1.sm{font-size:20px;}
 .sub{color:var(--muted);font-size:13px;margin-top:6px;}
 .card{background:var(--card);border:1px solid var(--card-b);border-radius:16px;padding:16px;margin-bottom:10px;display:flex;align-items:center;gap:12px;cursor:pointer;}
 .card-open{border-color:var(--gold);background:rgba(251,191,36,.08);}
+/* Club screen: "צור שולחן חדש" - green felt, set apart from the nights below it */
+.card.new-game-card{background:linear-gradient(135deg,#059669,#065f46);border:1px solid #047857;box-shadow:0 4px 14px rgba(5,150,105,.3);padding:12px 16px;margin-bottom:6px;}
+.new-game-card .ngc-art{flex-shrink:0;}
+.new-game-card .ngc-title{font-size:21px;font-weight:800;color:#fff;line-height:1.2;}
+.new-game-card .ngc-sub{font-size:15px;color:rgba(255,255,255,.88);margin-top:3px;}
+.club-games-scroll{overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
 .open-badge{font-size:11px;font-weight:700;color:var(--gold-text);background:var(--gold);border-radius:8px;padding:3px 8px;}
 .poker-loading-spin{display:inline-flex;animation:pokerChipSpin .8s linear infinite;}
 @keyframes pokerChipSpin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
@@ -945,9 +951,9 @@ html.theme-light.theme-sand .odds-label{color:#6b4a1f!important;}
 /* "קבוצה חדשה" / "ערב משחק חדש" dashed cards - light like the other cards on the light themes */
 /* Light themes: the "new" cards get a pale gold tint and a thicker dashed gold rim, so they
    read as an "add" slot rather than one more existing club / night. */
-html.theme-light .card[data-new-community],html.theme-light .card[data-new-game]{background:linear-gradient(135deg,#fff4cf,#fde9a8)!important;border:2px dashed #c08a1e!important;}
-html.theme-light.theme-sand .card[data-new-community],html.theme-light.theme-sand .card[data-new-game]{background:linear-gradient(135deg,#f9e7bd,#f1d595)!important;border-color:#9a5f12!important;}
-html.theme-light.theme-blue .card[data-new-community],html.theme-light.theme-blue .card[data-new-game]{--muted:#3b6b80;--gold:#a86a12;}
+html.theme-light .card[data-new-community]{background:linear-gradient(135deg,#fff4cf,#fde9a8)!important;border:2px dashed #c08a1e!important;}
+html.theme-light.theme-sand .card[data-new-community]{background:linear-gradient(135deg,#f9e7bd,#f1d595)!important;border-color:#9a5f12!important;}
+html.theme-light.theme-blue .card[data-new-community]{--muted:#3b6b80;--gold:#a86a12;}
 /* Club card swipe (home screen): the card slides left over the Setup / delete buttons. */
 .club-swipe{position:relative;margin-bottom:10px;border-radius:16px;overflow:hidden;}
 .club-swipe .club-front{position:relative;z-index:1;margin-bottom:0;transition:transform .22s ease;touch-action:pan-y;will-change:transform;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;}
@@ -5620,7 +5626,7 @@ function renderInviteTab(g, c){
   const seatsLeft = seatsLeftCount(g);
   return `
     <div class="invite-tab">
-      <p class="invite-tab-lead">הזמנת שחקנים ל<b>${esc(g.name || g.date)}</b> · ${seatsLeft === 1 ? "נשאר מקום אחד" : `נשארו ${seatsLeft} מקומות`}</p>
+      <p class="invite-tab-lead">הזמנת שחקנים ל<b>${esc(g.name || ilDate(g.date))}</b> · ${seatsLeft === 1 ? "נשאר מקום אחד" : `נשארו ${seatsLeft} מקומות`}</p>
       <button class="btn btn-block" data-invite-whatsapp-tab="${g.id}" style="background:#25D366;color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;gap:8px;">${icon('share')} שליחה בוואטסאפ</button>
       <div class="invite-tab-or">או סריקת QR מהטלפון שלהם</div>
       <div class="invite-tab-qr"><img src="/api/qr?text=${encodeURIComponent(url)}" alt="QR"></div>
@@ -5746,7 +5752,7 @@ function render(){
         const iLeft = mine && myPid(g) in (g.cashouts || {});
         const statusText = iLeft ? "יצאת · המשחק עדיין פעיל"
           : mine ? (myIdentity.gender === "female" ? "את יושבת כאן" : "אתה יושב כאן") : gameStatus(g).label;
-        return `<button type="button" class="btn btn-primary btn-block agb-game" data-open-game="${g.id}"><span class="agb-label"><span class="agb-name">${esc(g.name || g.date || "")}</span><span class="agb-club">${esc(cname)} · ${seatedText} · ${statusText}</span></span>${icon('chev')}</button>`;
+        return `<button type="button" class="btn btn-primary btn-block agb-game" data-open-game="${g.id}"><span class="agb-label"><span class="agb-name">${esc(g.name || ilDate(g.date))}</span><span class="agb-club">${esc(cname)} · ${seatedText} · ${statusText}</span></span>${icon('chev')}</button>`;
       }).join("")}
     </div>`;
   }
@@ -5772,6 +5778,7 @@ function render(){
   const prevFeedScrollTop = (() => { const el = app.querySelector("[data-player-feed]"); return el ? el.scrollTop : null; })();
   app.innerHTML = html;
   attachHandlers();
+  if (nav.screen === "community") fitClubGamesScroll();
   // Runs whenever .poker-table-wrap exists at all now, not just when it's the visible
   // face - with both panes always mounted while seated, the circles view's own DOM (and
   // its sizing) exists even while the player screen is the one on screen.
@@ -6153,7 +6160,7 @@ async function inviteToGame(gameId){
   // Straight to this table, with the club's code riding along so someone new joins the
   // club first (see the invite handling at startup), then sits down here.
   const url = gameInviteUrl(g, c);
-  const text = `הצטרפו אליי למשחק פוקר ב${c.name} - ${g.name || g.date}`;
+  const text = `הצטרפו אליי למשחק פוקר ב${c.name} - ${g.name || ilDate(g.date)}`;
   if (navigator.share) {
     try { await navigator.share({title: "הזמנה למשחק פוקר", text, url}); } catch(err) { /* user cancelled the share sheet */ }
   } else if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -6169,16 +6176,18 @@ function renderCommunity(communityId){
   if (!c) return `<div class="empty">מועדון לא נמצא</div>`;
   const games = gamesForCommunity(communityId);
   const noPlayersYet = c.roster.length === 0;
+  // The one action on this screen - its own colour (green felt) and picture, set apart
+  // from the list of nights below it.
   const newGameCard = `
-    <div class="card" data-new-game style="border-style:dashed;border-color:var(--gold);background:rgba(251,191,36,.06);${noPlayersYet ? 'opacity:.5;cursor:not-allowed;' : ''}">
+    <div class="card new-game-card" data-new-game ${noPlayersYet ? 'style="opacity:.5;cursor:not-allowed;"' : ''}>
+      ${NEW_TABLE_ART}
       <div class="flex1">
-        <div class="name serif">צור שולחן חדש</div>
-        <div class="meta">${icon('plus')} ${noPlayersYet ? "הוסיפו שחקנים תחילה" : "הקישו כדי לפתוח שולחן חדש"}</div>
+        <div class="ngc-title">צור שולחן חדש</div>
+        <div class="ngc-sub">${noPlayersYet ? "הוסיפו שחקנים תחילה" : "הקישו כדי לפתוח שולחן חדש"}</div>
       </div>
-      <div class="chev">${icon('chev')}</div>
     </div>`;
   let gameHintShown = false;
-  const gamesHtml = newGameCard + games.map(g => {
+  const gamesHtml = games.map(g => {
     const seatedCount = (g.seats||[]).filter(Boolean).length;
     const waitingForPlayers = !g.closed && seatedCount < 2;
     const gameAlert = closedGameAlert(g, c);
@@ -6190,7 +6199,7 @@ function renderCommunity(communityId){
     const canDelete = isSuperAdmin() || isTableAdmin(g, c);
     const front = `
     <div class="card club-front ${g.closed?"":"card-open"}" data-open-game="${g.id}">
-      <div class="row flex1"><span style="color:#6ee7b7">${icon('cal')}</span><div class="flex1"><div class="name serif">${esc(g.name || g.date)}</div>${g.name ? `<div style="font-size:15px;color:var(--muted);margin-top:2px;">${esc(g.date)}</div>` : ""}${gameAlert ? `<div class="game-alert-line">${gameAlert.text}</div>` : ""}</div>${gameStatusBadge(g)}</div>
+      <div class="row flex1"><div class="flex1"><div class="name serif">${esc(g.name || ilDate(g.date))}</div>${g.name ? `<div style="font-size:15px;color:var(--muted);margin-top:2px;">${esc(ilDate(g.date))}</div>` : ""}${gameAlert ? `<div class="game-alert-line">${gameAlert.text}</div>` : ""}</div>${gameStatusBadge(g)}</div>
       <div class="chev">${icon('chev')}</div>
     </div>`;
     if (!canInvite && !canDelete) return front.replace('class="card club-front ', 'class="card ');
@@ -6212,12 +6221,48 @@ function renderCommunity(communityId){
       <button class="btn btn-ghost btn-sm" data-show-roster style="display:flex;align-items:center;gap:6px;flex-shrink:0;">${icon('users')} שחקנים (${c.roster.length})</button>
       <div style="color:var(--muted);font-size:14px;line-height:1.4;">דרך כפתור "שחקנים"<br>ניתן למנות אדמינים</div>
     </div>
-    <div class="px5" style="margin:0 0 14px;"><button class="btn btn-ghost btn-block monthly-report-btn" data-monthly-report="${c.id}">🏆 דוח מנצחים</button></div>
-    <div class="section-title" style="font-size:14px;">ערבי משחק</div>
-    <div class="px5" style="margin-bottom:20px;">${gamesHtml}</div>
-    ${myIdentity.myPlayers && myIdentity.myPlayers[c.id] && !isClubCreator(c) ? `<div class="terms-link" style="margin-bottom:24px;"><button type="button" data-leave-club="${c.id}">יציאה מהמועדון</button></div>` : ""}
+    <div class="px5">${newGameCard}</div>
+    <div class="section-title" style="font-size:14px;margin-top:6px;">ערבי משחק</div>
+    <div class="px5 club-games-scroll" data-club-games-scroll="${c.id}">
+      ${gamesHtml}
+      ${myIdentity.myPlayers && myIdentity.myPlayers[c.id] && !isClubCreator(c) ? `<div class="terms-link" style="margin:14px 0 10px;"><button type="button" data-leave-club="${c.id}">יציאה מהמועדון</button></div>` : ""}
+    </div>
   `;
 }
+// "2026-11-03" -> "03-11-2026" (anything else as it is).
+function ilDate(d){
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d || "");
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : (d || "");
+}
+// A poker table with a "+" badge - the club screen's "צור שולחן חדש" card.
+const NEW_TABLE_ART = `<svg class="ngc-art" viewBox="0 0 56 52" width="56" height="52" aria-hidden="true">
+  <ellipse cx="25" cy="30" rx="22" ry="14.5" fill="#6b3f1a"/>
+  <ellipse cx="25" cy="30" rx="18" ry="11" fill="#10b981" stroke="#a7f3d0" stroke-width="1.2"/>
+  <circle cx="17" cy="30" r="3.2" fill="#fbbf24" stroke="#fff" stroke-width="1.2"/>
+  <circle cx="25.5" cy="33" r="3.2" fill="#ef4444" stroke="#fff" stroke-width="1.2"/>
+  <circle cx="33" cy="28" r="3.2" fill="#3b82f6" stroke="#fff" stroke-width="1.2"/>
+  <circle cx="44" cy="12" r="10.5" fill="#fbbf24" stroke="#064e3b" stroke-width="2"/>
+  <path d="M44 6.5v11M38.5 12h11" stroke="#064e3b" stroke-width="2.8" stroke-linecap="round"/>
+</svg>`;
+// The nights list scrolls on its own below the "ערבי משחק" title when it doesn't fit, so
+// the players button, "צור שולחן חדש" and the title stay put. Its scroll position
+// survives re-renders (a refresh tick redraws the screen).
+const clubGamesScroll = {};
+function fitClubGamesScroll(){
+  const el = document.querySelector("[data-club-games-scroll]");
+  if (!el) return;
+  const cid = el.dataset.clubGamesScroll;
+  el.style.maxHeight = "";
+  const bottomBar = [...document.querySelectorAll(".active-games-bar")].find(b => getComputedStyle(b).position === "fixed");
+  const reserve = bottomBar ? bottomBar.getBoundingClientRect().height : 0;
+  const avail = Math.floor(window.innerHeight - el.getBoundingClientRect().top - reserve - 8);
+  if (el.scrollHeight > avail && avail > 160) {
+    el.style.maxHeight = avail + "px";
+    if (clubGamesScroll[cid]) el.scrollTop = clubGamesScroll[cid];
+  }
+  el.onscroll = () => { clubGamesScroll[cid] = el.scrollTop; };
+}
+window.addEventListener("resize", () => { if (nav.screen === "community") fitClubGamesScroll(); });
 
 // ---------- Winners report (club screen) ----------
 // Each player's total profit over one month's game nights in this club - or every night
@@ -7528,7 +7573,7 @@ function renderModal(m){
     const inviteParams = new URLSearchParams(location.search);
     const invitedGame = inviteParams.get("game") && getGame(inviteParams.get("game"));
     const invitedClub = getCommunity((invitedGame && invitedGame.communityId) || inviteParams.get("community"));
-    const inviteLine = invitedGame ? `הוזמנת לשולחן <b>${esc(invitedGame.name || invitedGame.date)}</b>${invitedClub ? ` במועדון <b>${esc(invitedClub.name)}</b>` : ""}`
+    const inviteLine = invitedGame ? `הוזמנת לשולחן <b>${esc(invitedGame.name || ilDate(invitedGame.date))}</b>${invitedClub ? ` במועדון <b>${esc(invitedClub.name)}</b>` : ""}`
       : invitedClub ? `הוזמנת למועדון <b>${esc(invitedClub.name)}</b>` : "";
     body = !m.loginStep && m.loginMode !== "email" ? `
       ${inviteLine ? `<p class="login-invite">${inviteLine}</p>` : ""}
@@ -8334,7 +8379,7 @@ function renderModal(m){
     ].filter(Boolean);
     title = "מחיקת ערב משחק";
     body = `
-      <p style="font-size:18px;margin:0 0 12px;">למחוק לגמרי את הערב <b>${esc(g.name || g.date)}</b>${g.name ? ` (${esc(g.date)})` : ""}?</p>
+      <p style="font-size:18px;margin:0 0 12px;">למחוק לגמרי את הערב <b>${esc(g.name || ilDate(g.date))}</b>${g.name ? ` (${esc(ilDate(g.date))})` : ""}?</p>
       ${warnings.length ? `<div class="delete-club-warn">${warnings.map(w => `<div>${w}</div>`).join("")}</div>` : ""}
       <p style="color:#fda4af;font-size:17px;font-weight:700;margin:12px 0 0;">הפעולה בלתי הפיכה.</p>
       <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:12px;" data-confirm-delete-game>${warnings.length ? "מחק את הערב וכל מה שבו" : "מחק ערב"}</button>
@@ -8350,7 +8395,7 @@ function renderModal(m){
     `;
   } else if (m.type === "watchOrJoin") {
     const g = getGame(m.gameId);
-    title = esc(g ? (g.name || g.date) : "משחק");
+    title = esc(g ? (g.name || ilDate(g.date)) : "משחק");
     body = `
       <p style="margin-top:0;line-height:1.6;">את/ה לא יושב/ת בשולחן הזה. איך להיכנס?</p>
       <button class="btn btn-primary btn-block" style="margin-bottom:10px;" data-watch-or-join="join">הצטרפות לשולחן</button>
@@ -8397,6 +8442,7 @@ function renderModal(m){
         <button class="btn btn-ghost btn-block" data-game-menu-go="home">🏠 מסך הבית</button>
         ${club ? `<button class="btn btn-ghost btn-block" data-game-menu-go="club">♣️ המועדון ${esc(club.name)}</button>` : ""}
         ${canSetupClub ? `<button class="btn btn-ghost btn-block" data-open-chip-setup="${setupClub.id}">${icon('gear')} פרופיל מועדון</button>` : ""}
+        ${setupClub ? `<button class="btn btn-ghost btn-block" data-game-menu-go="report">🏆 דוח מנצחים</button>` : ""}
         <button class="btn btn-ghost btn-block" data-game-menu-go="profile">👤 הפרופיל שלי</button>
         <button class="btn btn-ghost btn-block" data-game-menu-go="stats">${icon('bar')} הביצועים שלי</button>
         <button class="btn btn-ghost btn-block" data-game-menu-go="theme">🎨 עיצוב</button>
@@ -8953,12 +8999,12 @@ function renderModal(m){
       // WhatsApp invite sends).
       const url = gameInviteUrl(g, c);
       body = `
-        <p style="text-align:center;font-size:18px;margin:0 0 12px;">צלמו את הקוד עם מצלמת הטלפון כדי להצטרף ל<b>${esc(g.name || g.date)}</b></p>
+        <p style="text-align:center;font-size:18px;margin:0 0 12px;">צלמו את הקוד עם מצלמת הטלפון כדי להצטרף ל<b>${esc(g.name || ilDate(g.date))}</b></p>
         <div style="background:#fff;border-radius:16px;padding:12px;margin:0 auto;max-width:300px;"><img src="/api/qr?text=${encodeURIComponent(url)}" alt="QR" style="display:block;width:100%;height:auto;"></div>
         <p style="text-align:center;color:var(--muted);font-size:15px;margin:12px 0 0;">${esc(c.name)}</p>`;
     } else {
       body = `
-        <p style="text-align:center;font-size:18px;margin:0 0 14px;">איך להזמין ל<b>${esc(g.name || g.date)}</b>?</p>
+        <p style="text-align:center;font-size:18px;margin:0 0 14px;">איך להזמין ל<b>${esc(g.name || ilDate(g.date))}</b>?</p>
         <button class="btn btn-block" data-invite-whatsapp style="background:#25D366;color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:10px;">${icon('share')} שליחה בוואטסאפ</button>
         <button class="btn btn-primary btn-block" data-invite-qr style="font-size:20px;">הצגת QR לסריקה</button>`;
     }
@@ -9394,6 +9440,10 @@ function attachHandlers(){
     else if (to === "profile") openModal({type: "identityName", forced: false});
     else if (to === "stats") openModal({type: "stats", clientId: myIdentity.id});
     else if (to === "theme") openModal({type: "themePicker"});
+    else if (to === "report") {
+      const cid = g ? g.communityId : (nav.screen === "community" && nav.communityId);
+      if (cid) openModal({type: "monthlyReport", communityId: cid});
+    }
     else if ((to === "close" || to === "reopen") && g) { closeModal(); setNightClosed(g.id, to === "close"); }
   }));
   // Super admin: rename a player (closing returns to the list).
