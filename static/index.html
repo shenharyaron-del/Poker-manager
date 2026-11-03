@@ -953,6 +953,7 @@ html.theme-light.theme-blue .rb-chip{background-image:url(/static/rebuy-chip-blu
 /* No square flash on tap (the phone's own tap highlight / focus ring) - the press animation
    is the feedback. Same for the carousel cards. */
 .rb-chip,.pp-ci,.pp-car-arrow,.pp-me-card{-webkit-tap-highlight-color:transparent;}
+.rb-chip{-webkit-touch-callout:none;user-select:none;-webkit-user-select:none;touch-action:manipulation;}
 .rb-chip:focus,.pp-ci:focus,.pp-car-arrow:focus,.pp-me-card:focus{outline:none;}
 @keyframes rbPress{
   0%{transform:scale(1);}
@@ -10124,7 +10125,28 @@ function attachHandlers(){
     playerViewTarget = (id === mine || id === playerViewTarget) ? null : id;
     render();
   });
+  // A press that's held a moment before letting go counts too: phones drop the click after
+  // a long press (it becomes a "long press" instead), so the chip listens for the finger
+  // lifting itself - a lift on the chip without dragging is a tap, however long it was held.
+  app.querySelectorAll("[data-rb-pick]").forEach(el => {
+    let start = null;
+    el.addEventListener("contextmenu", e => e.preventDefault());
+    el.addEventListener("pointerdown", e => { start = {x: e.clientX, y: e.clientY, t: Date.now()}; });
+    el.addEventListener("pointercancel", () => { start = null; });
+    el.addEventListener("pointerup", e => {
+      if (!start) return;
+      const moved = Math.hypot(e.clientX - start.x, e.clientY - start.y) > 12;
+      const held = Date.now() - start.t;
+      start = null;
+      // A quick tap is left to the normal click below; only a held press is handled here.
+      if (moved || held < 400 || el.disabled) return;
+      el.dataset.heldTap = "1";
+      el.onclick();
+    });
+  });
   app.querySelectorAll("[data-rb-pick]").forEach(el => el.onclick = () => {
+    if (el.dataset.heldTap === "2") { el.dataset.heldTap = ""; return; }   // the click a held press may still fire
+    if (el.dataset.heldTap === "1") el.dataset.heldTap = "2";
     const v = el.dataset.rbPick;
     const pid = viewedPid();
     rebuyPick[nav.gameId + ":" + pid] = v === "other" ? "other" : parseFloat(v);
