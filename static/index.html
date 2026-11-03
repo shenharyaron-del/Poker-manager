@@ -244,7 +244,10 @@ body.table-screen .poker-table-inner.crop-from-top{bottom:16px;top:auto;}
    except the activity feed keeps its natural size (flex-shrink:0, set per-element below),
    and the feed alone (flex:1) absorbs whatever room is left, shrinking or growing so the
    leave button after it always stays on screen instead of getting pushed off. */
-body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;padding:0 20px 20px;}
+body.table-screen .player-screen-scroll{flex:1;min-height:0;overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;display:flex;flex-direction:column;padding:0 20px 20px;}
+/* Its sections keep their size - when they don't all fit, the screen scrolls instead of
+   squeezing them (the history/feed panel keeps a usable height). */
+body.table-screen .player-screen-scroll > *{flex-shrink:0;}
 /* Shared by the player screen's history and table-activity sections - a genuinely FIXED
    size (height, not max-height - stays put whether there's 1 message or 30) by default,
    so both read as their own defined panel instead of open-ended lists pushing the page
@@ -5881,7 +5884,13 @@ function render(){
   // to the top - reported live as "now it jumps to the top every few seconds instead".
   const prevHistoryScrollTop = (() => { const el = app.querySelector("[data-player-history]"); return el ? el.scrollTop : null; })();
   const prevFeedScrollTop = (() => { const el = app.querySelector("[data-player-feed]"); return el ? el.scrollTop : null; })();
+  // The game screen scrolls when it doesn't fit (a short phone) - keep its place across a
+  // re-render (refresh ticks redraw the screen), for the same player only.
+  const gameScrollEl = app.querySelector(".player-screen-scroll");
+  const gameScrollKey = nav.gameId + ":" + (playerViewTarget || "me");
+  const gameScrollTop = gameScrollEl && gameScrollEl.dataset.key === gameScrollKey ? gameScrollEl.scrollTop : 0;
   app.innerHTML = html;
+  { const el = app.querySelector(".player-screen-scroll"); if (el) { el.dataset.key = gameScrollKey; if (gameScrollTop) el.scrollTop = gameScrollTop; } }
   attachHandlers();
   if (nav.screen === "community") fitClubGamesScroll();
   liftGamePageBackground();
