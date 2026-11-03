@@ -832,8 +832,8 @@ html.theme-light .lux-page{
 html.theme-light.theme-blue .lux-page.pp-other,html.theme-light.theme-sand .lux-page.pp-other{
   background:
     radial-gradient(120% 55% at 50% 0%,rgba(255,255,255,.3),transparent 70%),
-    radial-gradient(150% 110% at 50% 45%,transparent 55%,rgba(90,20,20,.3) 100%),
-    linear-gradient(#e2a0a0,#d48585 60%,#c46c6c);
+    radial-gradient(150% 110% at 50% 45%,transparent 60%,rgba(60,20,80,.18) 100%),
+    linear-gradient(#e2d3ea,#d6c1e2 60%,#c8acd8);
 }
 /* Table photo with the area outside the wood rail cut out (transparent), so no photo
    background shows around the rail - no border-radius clip needed. Sand gets the same
@@ -1381,7 +1381,11 @@ html.theme-light{--frame-c:#a86a12;}
 html.theme-light.theme-blue{--frame-c:#ffe39a;}
 html.theme-light.theme-sand{--frame-c:#7a4a1a;}
 .lux-page.pp-other{--frame-c:#f2c14e;}
-html.theme-light .lux-page.pp-other{--frame-c:#8a3a12;}
+html.theme-light .lux-page.pp-other{--frame-c:#5b2a7a;}
+/* Blue theme on the lavender page: its light-gold total and pale texts would wash out -
+   the darker gold of the other light theme, and dark text. */
+html.theme-light.theme-blue .lux-page.pp-other .pp-total{background:linear-gradient(180deg,#c9861c 0%,#a86a12 50%,#7a4a08 100%);-webkit-background-clip:text;background-clip:text;}
+html.theme-light.theme-blue .lux-page.pp-other .lv-arm,html.theme-light.theme-blue .lux-page.pp-other .terms-link{color:#2a1838!important;}
 </style>
 </head>
 <body>
