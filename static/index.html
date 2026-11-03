@@ -419,7 +419,7 @@ html:not(.theme-light) body{background:url("data:image/svg+xml,%3Csvg xmlns='htt
   background:linear-gradient(180deg,#fff3c4 0%,#fcd34d 35%,#d99a1e 62%,#fbbf24 80%,#fde68a 100%);
   -webkit-background-clip:text;background-clip:text;color:transparent;
   filter:drop-shadow(0 2px 0 rgba(90,50,0,.55)) drop-shadow(0 0 14px rgba(251,191,36,.45));}
-.player-page .pp-chips{position:relative;z-index:0;display:block;height:52px;width:auto;margin-top:-14px;filter:drop-shadow(0 8px 10px rgba(0,0,0,.55));pointer-events:none;user-select:none;-webkit-user-drag:none;}
+.player-page .pp-chips{position:relative;z-index:0;display:block;height:64px;width:auto;margin-top:-14px;filter:drop-shadow(0 8px 10px rgba(0,0,0,.55));pointer-events:none;user-select:none;-webkit-user-drag:none;}
 .player-page .buyin-frame{background:linear-gradient(180deg,rgba(0,0,0,.38),rgba(0,0,0,.22));border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:10px;
   box-shadow:inset 0 2px 8px rgba(0,0,0,.6),0 1px 0 rgba(255,255,255,.06);}
 .player-page .buyin-frame .chip-btn{border-radius:12px;border:1px solid rgba(110,231,183,.22);color:#f5f5f4;font-weight:600;
@@ -545,7 +545,7 @@ html:not(.theme-light) body{background:url("data:image/svg+xml,%3Csvg xmlns='htt
    room the big total + chip art take up. */
 @media (max-height:720px){
   .player-page .pp-total{font-size:42px;}
-  .player-page .pp-chips{height:35px;margin-top:-10px;}
+  .player-page .pp-chips{height:44px;margin-top:-10px;}
 }
 .section-title{color:var(--gold);font-size:15px;font-weight:700;letter-spacing:.05em;margin:0 0 8px;padding:0 20px;}
 .field{display:block;margin-bottom:14px;}
@@ -6943,7 +6943,7 @@ function renderPlayerScreen(gameId){
       <div style="text-align:center;padding:6px 0 ${cashedOut?16:4}px;flex-shrink:0;">
         ${carouselHtml}
         ${nameHtml}
-        ${cashedOut ? "" : `<div class="pp-total-wrap"><div class="pp-total" data-player-total>₪${buyinTotal}</div><img class="pp-chips" src="/static/player-chips.webp" alt="" draggable="false"></div>${paymentNotesHtml}`}
+        ${cashedOut ? "" : `<div class="pp-total-wrap"><div class="pp-total" data-player-total>₪${buyinTotal}</div><img class="pp-chips" src="/static/pile${chipPileStage(myBuyins.length)}.webp" alt="" draggable="false"></div>${paymentNotesHtml}`}
         ${(() => {
           // Direct-settlement arrangement(s) involving this player (either side - see
           // getArrangementNotes).
@@ -6969,6 +6969,10 @@ function renderPlayerScreen(gameId){
 // A player's name in the player screen's tiles: just the first name, unless someone else
 // at this table (seated or already left tonight) has the same first name - then the full
 // name, so the two can be told apart.
+// The chip pile beside a player's buy-in grows with their buy-ins: 1, 2, 3-4, 5 and more.
+function chipPileStage(n){ return n <= 1 ? 1 : n === 2 ? 2 : n <= 4 ? 3 : 4; }
+// Loaded up front, so the next size shows at once on a buy-in instead of popping in.
+[1, 2, 3, 4].forEach(i => { const im = new Image(); im.src = `/static/pile${i}.webp`; });
 function tableShortName(g, id){
   const full = ((g.players.find(x => x.id === id) || {}).name || "").trim();
   const first = full.split(/\s+/)[0] || full;
