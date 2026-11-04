@@ -7225,7 +7225,7 @@ function renderPlayerScreen(gameId){
         })()}
         ${cashedOutInfoHtml}
       </div>
-      ${(cashedOut || armed) ? "" : `<fieldset class="leave-frame rb-frame"><legend>${viewingOther && p ? `הקישו על סכום כדי לבצע ריביי ${/^[\u0590-\u05FF]/.test(tableShortName(g, pid)) ? "ל" : "ל-"}${esc(tableShortName(g, pid))}` : "הקישו על סכום כדי לבצע ריביי"}</legend>${rebuyHtml}</fieldset>`}
+      ${(cashedOut || armed) ? "" : `<fieldset class="leave-frame rb-frame"><legend>ריביי${forName}</legend>${rebuyHtml}</fieldset>`}
       ${(cashedOut || (notStarted && !armed)) ? "" : `<fieldset class="leave-frame lv-frame${armed?' lv-frame-top':''}">${leaveHtml}</fieldset>`}
       ${(notStarted && !cashedOut) ? `<button type="button" class="btn btn-primary btn-block gs-start" data-start-game="${g.id}">${icon('check')} תחילת משחק</button>` : ""}
       ${adminPlayerActions}
