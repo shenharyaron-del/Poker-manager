@@ -5965,10 +5965,11 @@ function render(){
   // design) in the corner, instead of "בית › מועדון" breadcrumbs - nothing on screen that
   // leaves the game by accident. The home screen keeps its "עיצוב" button.
   const menuHead = !!crumbGame || nav.screen === "community";
-  const headTitle = crumbGame ? (crumbGame.name || ilDate(crumbGame.date)) + (crumbsStopAtClub ? "" : ` · ${screenLabel}`)
-    : nav.screen === "community" ? (getCommunity(nav.communityId) || {}).name || "" : "";
+  // A table's title says it's a table: "שולחן: <its name or date>".
+  const headTitleHtml = crumbGame ? `שולחן: <bdi>${esc(crumbGame.name || ilDate(crumbGame.date))}</bdi>` + (crumbsStopAtClub ? "" : ` · ${esc(screenLabel)}`)
+    : nav.screen === "community" ? esc((getCommunity(nav.communityId) || {}).name || "") : "";
   const screenTag = menuHead
-    ? `<div class="screen-tag screen-tag-lg crumbs-row game-focus-head"><span class="crumb-here">${esc(headTitle)}</span></div>`
+    ? `<div class="screen-tag screen-tag-lg crumbs-row game-focus-head"><span class="crumb-here">${headTitleHtml}</span></div>`
     : `<div class="screen-tag${nav.screen === "home" ? " screen-tag-lg" : ""}">${esc(screenLabel)}</div>`;
   // "התקן אפליקציה" sits under the עיצוב button (not beside the screen name, which it
   // covered); the header grows a little to make room for it.
@@ -7810,6 +7811,14 @@ function fitNameBoxes(){
   document.querySelectorAll(".ttl-chip, .pp-tile bdi, .pp-ci-name, .pp-tile-invite span, .lv-amount-label, .fit-line").forEach(el => {
     let fs = parseFloat(getComputedStyle(el).fontSize);
     while (el.scrollWidth > el.clientWidth + 1 && fs > 11) { fs -= 1; el.style.fontSize = fs + "px"; }
+  });
+  // The table's title ("שולחן: ..."): measured to the fraction of a pixel - whole pixels
+  // let a sliver through and the end showed "…".
+  document.querySelectorAll(".game-focus-head .crumb-here").forEach(el => {
+    const range = document.createRange(); range.selectNodeContents(el);
+    const over = () => range.getBoundingClientRect().width > el.getBoundingClientRect().width + 0.01;
+    let fs = parseFloat(getComputedStyle(el).fontSize);
+    while (over() && fs > 11) { fs -= 0.5; el.style.fontSize = fs + "px"; }
   });
   // Lines of one paragraph (.fit-same) end up the same size - the smallest one's.
   document.querySelectorAll(".fit-same").forEach(par => {
