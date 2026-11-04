@@ -758,6 +758,31 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .seat-caption{font-size:13px;color:var(--gold);font-weight:700;text-align:center;line-height:1.35;white-space:nowrap;}
 .seat-history-toggle{position:absolute;top:3px;right:5px;background:none;border:none;color:var(--muted);cursor:pointer;padding:2px;display:inline-flex;z-index:2;}
 .seat-history-toggle svg{transition:transform .15s ease;}
+/* Table seats as cards: a square photo on the left; name, buy-in and the buy-in bar on the
+   right - in each theme's colours. (Empty seats stay the dashed "+" circles.) */
+.seat-wrap.seat-card{width:140px;flex-direction:row;direction:ltr;align-items:center;gap:6px;padding:5px 6px 14px 5px;border-radius:12px;box-sizing:border-box;
+  background:linear-gradient(180deg,#1f6b4f,#134a37);border:1.5px solid #e9b949;box-shadow:0 4px 10px rgba(0,0,0,.4);}
+.seat-card .seat-circle.filled{width:38px;height:38px;flex-shrink:0;border-radius:5px;border:none;box-shadow:0 1px 3px rgba(0,0,0,.35);font-size:12px;}
+.seat-card .seat-circle.filled.cashed-out{border:none;}
+.seat-card .seat-circle svg{width:20px;height:20px;}
+.seat-card .seat-info,html.theme-light .seat-card .seat-info,html.theme-light.theme-blue .seat-card .seat-info,html.theme-light.theme-sand .seat-card .seat-info{
+  position:static!important;flex:1;min-width:0;direction:rtl;align-items:flex-start;gap:0;margin:0;padding:0 12px 0 0;background:none;border:none;box-shadow:none;border-radius:0;--text:#fdf6e3;--gold:#f2c14e;--muted:#d9c9a6;}
+.seat-card .seat-name{max-width:100%;font-size:12.5px;font-weight:800;text-align:right;line-height:1.2;}
+.seat-card .seat-caption{font-size:12.5px;text-align:right;line-height:1.25;max-width:100%;overflow:hidden;}
+.seat-card .seat-co-profit{font-size:14px!important;}
+.seat-card .buyin-bar{position:absolute;left:6px;right:6px;bottom:4px;margin:0;height:6px;background:rgba(0,0,0,.3);}
+.seat-card .seat-history-toggle{top:3px;right:3px;}
+.seat-card.seat-card-me{box-shadow:0 0 0 2px #22d3ee,0 4px 10px rgba(0,0,0,.4);}
+.seat-card.seat-card-out{opacity:.7;}
+html.theme-light.theme-sand .seat-wrap.seat-card{background:linear-gradient(180deg,#fffaf2,#f1e3c6);border-color:#9a6a2a;box-shadow:0 4px 10px rgba(90,55,20,.3);}
+html.theme-light.theme-sand .seat-card .seat-info{--text:#3a2614;--gold:#8a5a12;--muted:#7a5a3a;}
+html.theme-light.theme-sand .seat-card .buyin-bar{background:rgba(90,55,20,.15);}
+html.theme-light.theme-blue .seat-wrap.seat-card{background:linear-gradient(180deg,#f4f9fb,#d9eaf2);border-color:#3f7d9c;box-shadow:0 4px 10px rgba(10,30,50,.3);}
+html.theme-light.theme-blue .seat-card .seat-info{--text:#0e2633;--gold:#a86a12;--muted:#3b6b80;}
+html.theme-light.theme-blue .seat-card .buyin-bar{background:rgba(14,38,51,.12);}
+html.theme-light .seat-wrap.seat-card.seat-card-me,html.theme-light.theme-sand .seat-wrap.seat-card.seat-card-me,html.theme-light.theme-blue .seat-wrap.seat-card.seat-card-me{box-shadow:0 0 0 2px #22a8c9,0 4px 10px rgba(0,0,0,.25);}
+html.theme-light .seat-card .seat-co-profit.pos{color:#15803d!important;}
+html.theme-light .seat-card .seat-co-profit.neg{color:#b91c1c!important;}
 .seat-history-toggle.open svg{transform:rotate(180deg);}
 /* White, continuing straight down from the dark nameplate above it (see infoRadius/radius
    in renderTable, which square off the touching edges of both pieces so they read as one
@@ -6021,6 +6046,7 @@ function render(){
   { const el = app.querySelector(".player-screen-scroll"); if (el) { el.dataset.key = gameScrollKey; if (gameScrollTop) el.scrollTop = gameScrollTop; } }
   attachHandlers();
   if (nav.screen === "community") fitClubGamesScroll();
+  if (nav.screen === "table") keepSeatCardsInside();
   liftGamePageBackground();
   // Runs whenever .poker-table-wrap exists at all now, not just when it's the visible
   // face - with both panes always mounted while seated, the circles view's own DOM (and
@@ -6505,6 +6531,19 @@ function liftGamePageBackground(){
   body.classList.add("page-bg-lifted");
   // Acting for someone else: the header above (title, ☰, tabs) takes the page's colours too.
   body.classList.toggle("on-behalf", page.classList.contains("pp-other"));
+}
+// The seat cards are wider than the old circles: one at the table's edge would run off the
+// screen, so its centre is nudged in until the whole card fits (6px margin).
+function keepSeatCardsInside(){
+  const W = document.documentElement.clientWidth;
+  document.querySelectorAll(".seat-wrap.seat-card").forEach(w => {
+    const parent = w.offsetParent; if (!parent) return;
+    const pr = parent.getBoundingClientRect(), r = w.getBoundingClientRect();
+    if (!pr.width || !r.width) return;
+    const cx = r.left + r.width / 2;
+    const nx = Math.min(W - 6 - r.width / 2, Math.max(6 + r.width / 2, cx));
+    if (Math.abs(nx - cx) > 0.5) w.style.left = ((nx - pr.left) / pr.width * 100) + "%";
+  });
 }
 // "2026-11-03" -> "03-11-2026" (anything else as it is).
 function ilDate(d){
@@ -7531,7 +7570,7 @@ function renderTable(gameId){
     // only raising the whole open seat's wrap actually lifts its popup above every other
     // seat, regardless of table order.
     const wrapZ = openHistorySeatPlayerId === pid ? 'z-index:70;' : '';
-    return `<div class="seat-wrap" style="left:${x}%;top:${y}%;${wrapZ}" data-seat="${i}">
+    return `<div class="seat-wrap seat-card${pid === myPlayerId ? ' seat-card-me' : ''}${cashedOut ? ' seat-card-out' : ''}" style="left:${x}%;top:${y}%;${wrapZ}" data-seat="${i}">
       <div class="seat-circle filled ${cashedOut?'cashed-out':''}${ringClass}"${circleStyle}>${circleInner}</div>
       <div class="seat-info" data-seat-info style="position:relative;${infoRadius}">
         ${historyToggleHtml}
