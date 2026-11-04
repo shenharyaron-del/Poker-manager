@@ -7036,7 +7036,8 @@ function renderPlayerScreen(gameId){
   // ריביי לירון" (a Hebrew name takes the ל directly, any other "ל-Amir").
   const rbName = p ? tableShortName(g, pid) : "";
   const forName = rbName ? ` ${/^[\u0590-\u05FF]/.test(rbName) ? "ל" : "ל-"}<bdi>${esc(rbName)}</bdi>` : "";
-  // ...and in small under each chip's amount ("₪50" over "לירון").
+  // ...and in small under each amount chip ("₪50" over "לירון") - not on "אחר", which
+  // only opens the field (its "בצע ריביי לירון" button says it).
   // A name too long for the chip loses its "ל" and then shrinks (see fitNameBoxes).
   const chipFor = forName ? `<small class="rb-for" data-name="${esc(rbName)}">${forName.trim()}</small>` : "";
   const picked = rebuyPick[pickKey] !== undefined ? rebuyPick[pickKey] : amounts[0];
@@ -7045,7 +7046,7 @@ function renderPlayerScreen(gameId){
   const rebuyHtml = `
     <div class="rb-chips">
       ${amounts.map(v => `<button class="rb-chip" data-rb-pick="${v}" ${rebuyLocked?'disabled':''}><span>₪${v}${chipFor}</span></button>`).join("")}
-      <button class="rb-chip${picked==='other'?' on':''}" data-rb-pick="other" ${rebuyLocked?'disabled':''}><span>אחר${chipFor}</span></button>
+      <button class="rb-chip${picked==='other'?' on':''}" data-rb-pick="other" ${rebuyLocked?'disabled':''}><span>אחר</span></button>
     </div>
     ${picked === 'other' ? `
     <div class="rb-other-row" style="display:flex;gap:8px;margin-top:12px;">
