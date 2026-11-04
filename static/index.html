@@ -1095,7 +1095,9 @@ html.theme-light.theme-sand .pp-ci-amt,html.theme-light.theme-sand .pp-ci-out{co
 /* The player picked in the carousel, 17% bigger - scaled in place, so the avatar keeps its
    centre and the name/amount their line with everyone else's. */
 .pp-ci.on{overflow:visible;}
-.pp-ci.on .pp-ci-av,.pp-ci.on .pp-ci-name,.pp-ci.on .pp-ci-amt,.pp-ci.on .pp-ci-out,.pp-ci.on .pp-ci-return{transform:scale(1.17);}
+.pp-ci.on .pp-ci-name,.pp-ci.on .pp-ci-amt,.pp-ci.on .pp-ci-out,.pp-ci.on .pp-ci-return{transform:scale(1.17);}
+/* ...and its avatar 15% more on top of that */
+.pp-ci.on .pp-ci-av{transform:scale(1.3455);}
 .pp-ci.out .pp-ci-av{filter:grayscale(1);opacity:.55;}
 .pp-ci-name{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px;font-weight:800;line-height:1.2;margin-top:2px;}
 .pp-ci.on .pp-ci-name{color:var(--gold);}
