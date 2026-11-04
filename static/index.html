@@ -1323,7 +1323,9 @@ html.theme-light .monthly-preview{background:rgba(0,0,0,.06);}
 .pick-seat-hint{text-align:center;color:var(--gold);font-weight:700;font-size:18px;margin:0 16px 6px;animation:alone-arrow 1.1s ease-in-out infinite;}
 /* The odds calculator, exactly as it looked above the table - only its place changed:
    on the felt, under the totals. */
-.felt-odds{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:18px;}
+/* Its own spot on the felt, in the gap under the middle row of seats (the logo and
+   totals sit higher up, at 33%). */
+.felt-odds{display:flex;align-items:center;justify-content:center;gap:8px;position:absolute;left:50%;top:60%;transform:translate(-50%,-50%);z-index:3;white-space:nowrap;}
 /* The label on the felt: light gold with a dark outline on the dark/green felts, deep
    brown with a light glow on the light (blue/sand) felts - readable on each. */
 .felt-odds .odds-label{color:#f3d27a!important;font-weight:700;text-shadow:0 1px 2px rgba(0,0,0,.85),0 0 6px rgba(0,0,0,.5);}
@@ -7530,7 +7532,7 @@ function renderTable(gameId){
       // else gets a plain circle (no +) that's still a valid drop target for repositioning
       // an already-seated player via drag, just not tappable to add someone new.
       const hintHere = i === hintSeatIdx;
-      // The top-left seat sits right under "מחשבון סיכויי פוקר" - there the hint's text goes
+      // The top-left seat sits right under "מחשבון סיכויי יד" - there the hint's text goes
       // beside the hand (on its left) instead of above it, clear of that label.
       const hintCls = hintHere ? (visualPos(i) === 0 ? ' seat-hint seat-hint-side' : ' seat-hint') : '';
       return `<div class="seat-wrap${hintCls}" style="left:${x}%;top:${y}%;" data-seat="${i}"><div class="seat-circle vacant">${(admin || canTakeSeatHere(g))?'+':''}</div></div>`;
@@ -7679,20 +7681,20 @@ function renderTable(gameId){
               const xline = !xout ? `קנייה ₪${xbuy}`
                 : `<span class="${xprofit > 0 ? "pos" : xprofit < 0 ? "neg" : ""}">${xprofit > 0 ? "+" : ""}₪${xprofit}</span>`; // same as the seats' caption
               return `<div class="extra-seat-plus taken${xout ? " out" : ""}" style="left:90%;top:95%;" title="${esc(xp ? xp.name : "")}"><span class="esp-circle">${esc(nameInitials(xp ? xp.name : ""))}</span><span class="esp-label esp-amount">${xline}</span></div>`; })() : ""}
-        <div style="position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);text-align:center;z-index:3;">
+        <div style="position:absolute;left:50%;top:33%;transform:translate(-50%,-50%);text-align:center;z-index:3;">
           <img src="/static/logo-p-crown.png" style="width:37px;height:auto;margin-bottom:8px;pointer-events:none;">
           ${allCashedOut ? "" : `<div style="color:var(--muted);font-size:12px;">סה"כ קנייה ₪${totalBuyinAll}</div>`}
           ${playersLeftMidNight ? `<div style="color:var(--muted);font-size:12px;">ז'יטונים של שחקנים שעזבו ₪${Math.round(leftChips)}</div>
           <div style="color:var(--text);font-weight:700;font-size:13px;margin-top:4px;">נשארו בקופה ₪${Math.round(totalBuyinAll - leftChips)}</div>`
           : totalChipsAll > 0 ? `${allCashedOut ? "" : `<div style="color:var(--muted);font-size:12px;">סה"כ ז'יטונים ₪${totalChipsAll}</div>`}
           <div style="color:${diffColor};font-weight:700;font-size:13px;margin-top:4px;">${diffLabel}${Math.abs(diff)>=0.5?` ₪${Math.abs(Math.round(diff))}`:""}</div>` : ""}
-          ${!allCashedOut ? `<div class="felt-odds">
-            <span data-open-poker-odds class="odds-label" style="color:#C8902F;font-size:16px;text-align:center;line-height:1.3;cursor:pointer;">מחשבון<br>סיכויי פוקר</span>
+        </div>
+        ${!allCashedOut ? `<div class="felt-odds">
+            <span data-open-poker-odds class="odds-label" style="color:#C8902F;font-size:16px;text-align:center;line-height:1.3;cursor:pointer;">מחשבון<br>סיכויי יד</span>
             <button class="icon-btn" data-open-poker-odds title="מה הסיכויים שלי" style="flex-shrink:0;width:48px;height:auto;background:none;border:none;padding:0;display:inline-flex;align-items:center;justify-content:center;">
               <img src="/static/odds-coin.png" style="width:48px;height:auto;display:block;">
             </button>
           </div>` : ""}
-        </div>
       </div>
     </div>`}
   `;
