@@ -7184,13 +7184,13 @@ function renderPlayerScreen(gameId){
   // Tiles above the name: everyone who entered tonight, in order, then a "הזמן שחקן" tile
   // in the next free spot (it replaces the header's invite button here).
   // An admin taps a tile to see that player's screen; for everyone else they're a roster.
-  // A carousel of everyone else tonight (entry order): avatar, name and what they bought
+  // A carousel of everyone else tonight (in table order - see tableSeatOrder): avatar, name and what they bought
   // in - or, once they've left, "החזר" (an admin sends them back to the table) / "יצא".
   // The one being looked at is highlighted. Arrows and dots under it when it doesn't fit.
   const carouselHtml = (() => {
     const totals = {};
     (g.buyins || []).forEach(b => { totals[b.playerId] = (totals[b.playerId] || 0) + (b.amount || 0); });
-    return playersCarouselHtml("player:" + g.id, g, c, othersTonight, {
+    return playersCarouselHtml("player:" + g.id, g, c, tableSeatOrder(g, othersTonight, myPlayerId), {
       onId: pid, attr: "data-pp-view",
       // Only the table's admins act for someone else - for them the frame says so.
       legend: isAdminView ? "בחר שחקן כדי לפעול בשמו" : "",
@@ -7710,6 +7710,23 @@ function renderTable(gameId){
 // A carousel of players - avatar, name and (under) an optional line - shared by the player
 // screen (with what each bought in / "החזר") and the timeline (names only). key: what its
 // scroll position is remembered by; attr: the attribute a tap on a player is handled by.
+// Players in the order they sit around the table, as the table screen shows it: first the
+// one on the left of the player in the middle (me - or, when I'm not seated, whoever sits
+// in my slot), then the one on their left, and so on around, the 10th seat (in the corner
+// beside the middle), the middle player last; then anyone no longer seated (in the order
+// given).
+function tableSeatOrder(g, ids, myPlayerId){
+  const seats = g.seats || [];
+  const mine = myPlayerId ? seats.indexOf(myPlayerId) : -1;
+  const ref = (mine >= 0 && mine < 9) ? mine : getMySeatPosition();
+  const key = id => {
+    const i = seats.indexOf(id);
+    if (i < 0) return 10;
+    if (i === 9) return 7.5;   // the 10th seat's corner: after the last one round, before the middle
+    return ((i - ref + 8) % 9 + 9) % 9;
+  };
+  return ids.map((id, n) => ({id, n, k: key(id)})).sort((a, b) => a.k - b.k || a.n - b.n).map(x => x.id);
+}
 function playersCarouselHtml(key, g, c, ids, {onId = null, meId = null, attr, under = null, legend = ""}){
   if (!ids.length) return "";
   const items = ids.map(id => {
@@ -7830,12 +7847,12 @@ function renderTableTimeline(g, c, myPlayerId){
   const fem = id => playerIsFemale(g, c, id);
   const cashouts = g.cashouts || {};
   const events = g.events || [];
-  // Name chips over the list, in tonight's entry order - tapping one lights up that
+  // Name chips over the list, in table order (see tableSeatOrder) - tapping one lights up that
   // player's times in the list. Never more than two rows.
   const order = [];
   buyins.forEach(b => { if (!order.includes(b.playerId)) order.push(b.playerId); });
   const sel = timelineHighlight[g.id];
-  const chips = playersCarouselHtml("ttl:" + g.id, g, c, order, {onId: sel, meId: myPlayerId, attr: "data-timeline-pick"});
+  const chips = playersCarouselHtml("ttl:" + g.id, g, c, tableSeatOrder(g, order, myPlayerId), {onId: sel, meId: myPlayerId, attr: "data-timeline-pick"});
 
   // Activity list, from 0:00 down. A cancelled rebuy shows struck through at its own time,
   // plus a line for the cancellation (see below). The pot fix shows as one line
