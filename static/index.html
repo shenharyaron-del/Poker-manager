@@ -762,17 +762,18 @@ input:focus,.select-input:focus{border-color:var(--gold);}
    right - in each theme's colours. (Empty seats stay the dashed "+" circles.) */
 .seat-wrap.seat-card{width:min(122px,30vw);flex-direction:row;direction:ltr;align-items:center;gap:5px;padding:4px 5px 12px 4px;border-radius:12px;box-sizing:border-box;
   background:linear-gradient(180deg,#1f6b4f,#134a37);border:1.5px solid #e9b949;box-shadow:0 4px 10px rgba(0,0,0,.4);}
-.seat-card .seat-circle.filled{width:32px;height:32px;flex-shrink:0;border-radius:5px;border:none;box-shadow:0 1px 3px rgba(0,0,0,.35);font-size:12px;}
+.seat-card .seat-circle.filled{width:min(32px,8vw);height:min(32px,8vw);flex-shrink:0;border-radius:5px;border:none;box-shadow:0 1px 3px rgba(0,0,0,.35);font-size:12px;}
 .seat-card .seat-circle.filled.cashed-out{border:none;}
 .seat-card .seat-circle svg{width:20px;height:20px;}
 .seat-card .seat-info,html.theme-light .seat-card .seat-info,html.theme-light.theme-blue .seat-card .seat-info,html.theme-light.theme-sand .seat-card .seat-info{
   position:static!important;flex:1;min-width:0;direction:rtl;align-items:flex-start;gap:0;margin:0;padding:0 12px 0 0;background:none;border:none;box-shadow:none;border-radius:0;--text:#fdf6e3;--gold:#f2c14e;--muted:#d9c9a6;}
-.seat-card .seat-name{max-width:100%;font-size:11.5px;font-weight:800;text-align:right;line-height:1.2;}
-.seat-card .seat-caption{font-size:11.5px;text-align:right;line-height:1.25;max-width:100%;overflow:hidden;}
+.seat-card .seat-name{max-width:100%;font-size:clamp(10px,2.9vw,11.5px);font-weight:800;text-align:right;line-height:1.2;}
+.seat-card .seat-caption{font-size:clamp(10px,2.9vw,11.5px);text-align:right;line-height:1.25;max-width:100%;}
 .seat-card .seat-co-profit{font-size:14px!important;}
 .seat-card .buyin-bar{position:absolute;left:5px;right:5px;bottom:4px;margin:0;height:5px;background:rgba(0,0,0,.3);}
 .seat-card .seat-history-toggle{top:1px;right:1px;}
-.seat-card .seat-info{padding-right:11px!important;}
+.seat-card .seat-info{padding-right:0!important;}
+.seat-card .seat-name{padding-right:11px;box-sizing:border-box;}
 .seat-card.seat-card-me{box-shadow:0 0 0 2px #22d3ee,0 4px 10px rgba(0,0,0,.4);}
 .seat-card.seat-card-out{opacity:.7;}
 html.theme-light.theme-sand .seat-wrap.seat-card{background:linear-gradient(180deg,#fffaf2,#f1e3c6);border-color:#9a6a2a;box-shadow:0 4px 10px rgba(90,55,20,.3);}
@@ -6047,7 +6048,6 @@ function render(){
   { const el = app.querySelector(".player-screen-scroll"); if (el) { el.dataset.key = gameScrollKey; if (gameScrollTop) el.scrollTop = gameScrollTop; } }
   attachHandlers();
   if (nav.screen === "community") fitClubGamesScroll();
-  if (nav.screen === "table") keepSeatCardsInside();
   liftGamePageBackground();
   // Runs whenever .poker-table-wrap exists at all now, not just when it's the visible
   // face - with both panes always mounted while seated, the circles view's own DOM (and
@@ -6129,6 +6129,8 @@ function layoutTableSize(){
   inner.style.left = "50%";
   inner.style.right = "auto";
   inner.style.transform = "translateX(-50%)";
+  // the seat cards are placed against the table's final size (see keepSeatCardsInside)
+  keepSeatCardsInside();
 }
 window.addEventListener("resize", () => requestAnimationFrame(layoutTableSize));
 
@@ -6542,8 +6544,10 @@ function keepSeatCardsInside(){
   if (!cards.length) return;
   const parent = cards[0].offsetParent; if (!parent) return;
   const pr = parent.getBoundingClientRect(); if (!pr.width) return;
+  // from each seat's own position every time (this runs again on resize)
+  cards.forEach(w => { if (w.dataset.x) w.style.left = w.dataset.x + "%"; });
   const items = cards.map(w => {
-    const r = w.getBoundingClientRect(), seatX = parseFloat(w.style.left);
+    const seatX = parseFloat(w.dataset.x || w.style.left), r = w.getBoundingClientRect();
     let cx = r.left + r.width / 2;
     if (seatX <= 20) cx = M + r.width / 2;                 // left column -> the left edge
     else if (seatX >= 80) cx = W - M - r.width / 2;        // right column -> the right edge
@@ -7591,7 +7595,7 @@ function renderTable(gameId){
     // only raising the whole open seat's wrap actually lifts its popup above every other
     // seat, regardless of table order.
     const wrapZ = openHistorySeatPlayerId === pid ? 'z-index:70;' : '';
-    return `<div class="seat-wrap seat-card${pid === myPlayerId ? ' seat-card-me' : ''}${cashedOut ? ' seat-card-out' : ''}" style="left:${x}%;top:${y}%;${wrapZ}" data-seat="${i}">
+    return `<div class="seat-wrap seat-card${pid === myPlayerId ? ' seat-card-me' : ''}${cashedOut ? ' seat-card-out' : ''}" style="left:${x}%;top:${y}%;${wrapZ}" data-seat="${i}" data-x="${x}">
       <div class="seat-circle filled ${cashedOut?'cashed-out':''}${ringClass}"${circleStyle}>${circleInner}</div>
       <div class="seat-info" data-seat-info style="position:relative;${infoRadius}">
         ${historyToggleHtml}
