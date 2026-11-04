@@ -7551,7 +7551,11 @@ function renderTable(gameId){
     }
     // No avatar photo - show the P logo rather than name initials, same fallback already
     // used for the home-screen avatar and the identityName preview.
-    const circleStyle = cashedOut ? "" : ` style="background-image:url('${photo || '/static/logo-watermark.png'}');background-size:cover;background-position:center;"`;
+    // No photo: the round logo on a square of its own navy (a gradient like its rim, light
+    // top-left to dark bottom-right) - the seat card's picture is square.
+    const circleStyle = cashedOut ? "" : photo
+      ? ` style="background-image:url('${photo}');background-size:cover;background-position:center;"`
+      : ` style="background:url('/static/logo-watermark.png') center/112% no-repeat,linear-gradient(135deg,#46566f,#14213a);"`;
     const doorIconBig = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>';
     const circleInner = cashedOut ? doorIconBig : "";
     // The ring stays the fixed cashed-out gray for a player who's already left - only an
