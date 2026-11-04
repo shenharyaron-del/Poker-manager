@@ -10636,7 +10636,9 @@ function attachHandlers(){
   app.querySelectorAll("[data-open-bit-generic]").forEach(el => el.onclick = () => { window.location.href = "bit://"; });
 
   app.querySelectorAll("[data-seat]").forEach(el => {
-    const dragHandle = el.querySelector(".seat-circle") || el;
+    // A seat card drags from anywhere on it (its picture, name, amount, bar); an old-style
+    // seat from its circle.
+    const dragHandle = el.classList.contains("seat-card") ? el : (el.querySelector(".seat-circle") || el);
     // Once everyone's cashed out and settlement arrows are showing, dragging seats around
     // is meaningless (the night's over) - skip the drag machinery entirely and let a tap
     // toggle which player's transfers the arrows are filtered to instead (restored from
@@ -10680,6 +10682,8 @@ function attachHandlers(){
       const seats = g.seats || new Array(9).fill(null);
       const idx = parseInt(el.dataset.seat);
       if (!seats[idx]) return; // only occupied seats can be dragged
+      // the buy-in history arrow and its popup stay taps
+      if (e.target.closest("[data-toggle-seat-history], [data-seat-history-popup], button")) return;
       drag = { fromIdx: idx, startX: e.clientX, startY: e.clientY, moved: false };
       // The periodic/SSE refresh (doRefreshNow) replaces the whole DOM via render() every
       // few seconds regardless of what the user is mid-doing - landing during an active
