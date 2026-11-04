@@ -1098,6 +1098,13 @@ html.theme-light.theme-sand .pp-ci-amt,html.theme-light.theme-sand .pp-ci-out{co
 .pp-ci.on .pp-ci-name,.pp-ci.on .pp-ci-amt,.pp-ci.on .pp-ci-out,.pp-ci.on .pp-ci-return{transform:scale(1.17);}
 /* ...and its avatar 15% more on top of that */
 .pp-ci.on .pp-ci-av{transform:scale(1.3455);}
+/* The picked card's frame reaches a little further up and out (6px up, 4px each side,
+   bottom where it was); everything in the row sits a bit lower so that taller frame clears
+   the frame title above it, and the picked name a bit lower still, clear of the bigger
+   avatar. */
+.pp-car-track{padding:8px 4px 0;margin:0 -4px;}
+.pp-ci.on{padding-top:12px;margin-top:-6px;align-self:flex-start;margin-inline:-4px;padding-inline:6px;flex-basis:calc((100% - (var(--pp-per,4) - 1) * 2px) / var(--pp-per,4) + 8px);position:relative;z-index:1;}
+.pp-ci.on .pp-ci-name{margin-top:7px;}
 .pp-ci.out .pp-ci-av{filter:grayscale(1);opacity:.55;}
 .pp-ci-name{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px;font-weight:800;line-height:1.2;margin-top:2px;}
 .pp-ci.on .pp-ci-name{color:var(--gold);}
