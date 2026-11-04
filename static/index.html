@@ -976,6 +976,9 @@ html.theme-light.theme-blue .rb-chip{background-image:url(/static/rebuy-chip-blu
 .rb-chip,html.theme-light .rb-chip{width:75px;height:75px;font-size:19px;transform:none;flex-shrink:1;min-width:0;}
 .rb-chip.on,html.theme-light .rb-chip.on{transform:none;}
 .rb-chip{transition:transform .15s ease;}
+/* whose rebuy it is, small under the amount */
+.rb-chip>span{display:flex;flex-direction:column;align-items:center;line-height:1.05;max-width:100%;}
+.rb-chip .rb-for{display:block;direction:rtl;unicode-bidi:isolate;max-width:46px;margin-top:1px;font-size:10.5px;font-weight:800;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.92;}
 .rb-chip.pressing{animation:rbPress .45s cubic-bezier(.3,.7,.4,1);z-index:2;}
 /* No square flash on tap (the phone's own tap highlight / focus ring) - the press animation
    is the feedback. Same for the carousel cards. */
@@ -7033,13 +7036,16 @@ function renderPlayerScreen(gameId){
   // ריביי לירון" (a Hebrew name takes the ל directly, any other "ל-Amir").
   const rbName = p ? tableShortName(g, pid) : "";
   const forName = rbName ? ` ${/^[\u0590-\u05FF]/.test(rbName) ? "ל" : "ל-"}<bdi>${esc(rbName)}</bdi>` : "";
+  // ...and in small under each chip's amount ("₪50" over "לירון").
+  // A name too long for the chip loses its "ל" and then shrinks (see fitNameBoxes).
+  const chipFor = forName ? `<small class="rb-for" data-name="${esc(rbName)}">${forName.trim()}</small>` : "";
   const picked = rebuyPick[pickKey] !== undefined ? rebuyPick[pickKey] : amounts[0];
   // No rebuys before "תחילת משחק" - only the entry amount counts until the game starts.
   const rebuyLocked = buyinPending || notStarted;
   const rebuyHtml = `
     <div class="rb-chips">
-      ${amounts.map(v => `<button class="rb-chip" data-rb-pick="${v}" ${rebuyLocked?'disabled':''}><span>₪${v}</span></button>`).join("")}
-      <button class="rb-chip${picked==='other'?' on':''}" data-rb-pick="other" ${rebuyLocked?'disabled':''}><span>אחר</span></button>
+      ${amounts.map(v => `<button class="rb-chip" data-rb-pick="${v}" ${rebuyLocked?'disabled':''}><span>₪${v}${chipFor}</span></button>`).join("")}
+      <button class="rb-chip${picked==='other'?' on':''}" data-rb-pick="other" ${rebuyLocked?'disabled':''}><span>אחר${chipFor}</span></button>
     </div>
     ${picked === 'other' ? `
     <div class="rb-other-row" style="display:flex;gap:8px;margin-top:12px;">
@@ -7781,11 +7787,21 @@ function setupOneCarousel(car){
   });
   dots.forEach(d => d.onclick = () => { const el = items[Number(d.dataset.ppCarDot)]; if (el) bring(el, true); });
 }
+// A font that arrives late (the Hebrew glyphs load on first use) widens text that already
+// fitted - fit again then.
+if (document.fonts) document.fonts.addEventListener("loadingdone", () => fitNameBoxes());
 function fitNameBoxes(){
   document.querySelectorAll(".ttl-chip, .pp-tile bdi, .pp-ci-name, .pp-tile-invite span, .lv-amount-label, .fit-line").forEach(el => {
     let fs = parseFloat(getComputedStyle(el).fontSize);
     while (el.scrollWidth > el.clientWidth + 1 && fs > 11) { fs -= 1; el.style.fontSize = fs + "px"; }
   });
+  // The rebuy chips' "לירון": too long -> just the name, then smaller (down to 8px).
+  // All the chips alike: if one doesn't fit, none gets the "ל", and all take the smallest size.
+  const rbFor = [...document.querySelectorAll(".rb-for")];
+  const over = el => el.scrollWidth > el.clientWidth;
+  if (rbFor.some(over)) rbFor.forEach(el => { if (el.dataset.name) el.textContent = el.dataset.name; });
+  let rbFs = rbFor.length ? parseFloat(getComputedStyle(rbFor[0]).fontSize) : 0;
+  while (rbFs > 8 && rbFor.some(over)) { rbFs -= 0.5; rbFor.forEach(el => { el.style.fontSize = rbFs + "px"; }); }
   // Lines of one paragraph (.fit-same) end up the same size - the smallest one's.
   document.querySelectorAll(".fit-same").forEach(par => {
     const lines = [...par.querySelectorAll(".fit-line")];
