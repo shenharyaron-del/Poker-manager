@@ -754,7 +754,9 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .seat-info{display:flex;flex-direction:column;align-items:center;gap:1px;cursor:pointer;background:rgba(8,8,8,.82);border-radius:10px;padding:13px 10px 5px;margin-top:-13px;}
 .seat-name{font-size:11px;font-weight:700;color:var(--text);text-align:center;white-space:nowrap;max-width:78px;overflow:hidden;text-overflow:ellipsis;}
 .buyin-bar{align-self:stretch;height:6px;margin-top:3px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;direction:ltr;}
-.buyin-bar span{display:block;height:100%;border-radius:3px;}
+.buyin-bar span{display:block;height:100%;border-radius:3px;background:#d8cdb8;}
+html.theme-light.theme-sand .buyin-bar span{background:#9a7b55;}
+html.theme-light.theme-blue .buyin-bar span{background:#6f8f9f;}
 .seat-caption{font-size:13px;color:var(--gold);font-weight:700;text-align:center;line-height:1.35;white-space:nowrap;}
 .seat-history-toggle{position:absolute;top:3px;right:5px;background:none;border:none;color:var(--muted);cursor:pointer;padding:2px;display:inline-flex;z-index:2;}
 .seat-history-toggle svg{transition:transform .15s ease;}
@@ -976,9 +978,6 @@ html.theme-light.theme-blue .rb-chip{background-image:url(/static/rebuy-chip-blu
 .rb-chip,html.theme-light .rb-chip{width:75px;height:75px;font-size:19px;transform:none;flex-shrink:1;min-width:0;}
 .rb-chip.on,html.theme-light .rb-chip.on{transform:none;}
 .rb-chip{transition:transform .15s ease;}
-/* whose rebuy it is, small under the amount */
-.rb-chip>span{display:flex;flex-direction:column;align-items:center;line-height:1.05;max-width:100%;}
-.rb-chip .rb-for{display:block;direction:rtl;unicode-bidi:isolate;max-width:46px;margin-top:1px;font-size:10.5px;font-weight:800;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.92;}
 .rb-chip.pressing{animation:rbPress .45s cubic-bezier(.3,.7,.4,1);z-index:2;}
 /* No square flash on tap (the phone's own tap highlight / focus ring) - the press animation
    is the feedback. Same for the carousel cards. */
@@ -6691,15 +6690,12 @@ const SEAT_POS = [
 ];
 // A seat's buy-in bar (under the name and amount; filling left to right, gone once the
 // player has left): as long as the player's buy-in
-// relative to whoever bought in the most tonight, and coloured by the amount itself in
-// ₪50 steps - green at ₪50 up to red at ₪300 and above - so a colour means the same
-// amount every night.
-const BUYIN_BAR_COLORS = ["#34d399", "#a3e635", "#fdba74", "#f97316", "#f87171", "#dc2626"];
+// relative to whoever bought in the most tonight. One neutral colour for everyone (per
+// theme, see the CSS) - only the length tells.
 function buyinBarHtml(amount, max){
   if (!(amount > 0) || !(max > 0)) return "";
-  const color = BUYIN_BAR_COLORS[Math.min(5, Math.max(0, Math.round(amount / 50) - 1))];
   const pct = Math.max(6, Math.round(amount / max * 100));
-  return `<div class="buyin-bar"><span style="width:${pct}%;background:${color};box-shadow:0 0 5px ${color}99;"></span></div>`;
+  return `<div class="buyin-bar"><span style="width:${pct}%;"></span></div>`;
 }
 // The table screen's default face for a seated player: their own name/total up top, their
 // buy-in history, a one-tap buy-in row, a leave-the-table shortcut, and a WhatsApp-style
@@ -7036,16 +7032,12 @@ function renderPlayerScreen(gameId){
   // ריביי לירון" (a Hebrew name takes the ל directly, any other "ל-Amir").
   const rbName = p ? tableShortName(g, pid) : "";
   const forName = rbName ? ` ${/^[\u0590-\u05FF]/.test(rbName) ? "ל" : "ל-"}<bdi>${esc(rbName)}</bdi>` : "";
-  // ...and in small under each amount chip ("₪50" over "לירון") - not on "אחר", which
-  // only opens the field (its "בצע ריביי לירון" button says it).
-  // A name too long for the chip loses its "ל" and then shrinks (see fitNameBoxes).
-  const chipFor = forName ? `<small class="rb-for" data-name="${esc(rbName)}">${forName.trim()}</small>` : "";
   const picked = rebuyPick[pickKey] !== undefined ? rebuyPick[pickKey] : amounts[0];
   // No rebuys before "תחילת משחק" - only the entry amount counts until the game starts.
   const rebuyLocked = buyinPending || notStarted;
   const rebuyHtml = `
     <div class="rb-chips">
-      ${amounts.map(v => `<button class="rb-chip" data-rb-pick="${v}" ${rebuyLocked?'disabled':''}><span>₪${v}${chipFor}</span></button>`).join("")}
+      ${amounts.map(v => `<button class="rb-chip" data-rb-pick="${v}" ${rebuyLocked?'disabled':''}><span>₪${v}</span></button>`).join("")}
       <button class="rb-chip${picked==='other'?' on':''}" data-rb-pick="other" ${rebuyLocked?'disabled':''}><span>אחר</span></button>
     </div>
     ${picked === 'other' ? `
@@ -7796,13 +7788,6 @@ function fitNameBoxes(){
     let fs = parseFloat(getComputedStyle(el).fontSize);
     while (el.scrollWidth > el.clientWidth + 1 && fs > 11) { fs -= 1; el.style.fontSize = fs + "px"; }
   });
-  // The rebuy chips' "לירון": too long -> just the name, then smaller (down to 8px).
-  // All the chips alike: if one doesn't fit, none gets the "ל", and all take the smallest size.
-  const rbFor = [...document.querySelectorAll(".rb-for")];
-  const over = el => el.scrollWidth > el.clientWidth;
-  if (rbFor.some(over)) rbFor.forEach(el => { if (el.dataset.name) el.textContent = el.dataset.name; });
-  let rbFs = rbFor.length ? parseFloat(getComputedStyle(rbFor[0]).fontSize) : 0;
-  while (rbFs > 8 && rbFor.some(over)) { rbFs -= 0.5; rbFor.forEach(el => { el.style.fontSize = rbFs + "px"; }); }
   // Lines of one paragraph (.fit-same) end up the same size - the smallest one's.
   document.querySelectorAll(".fit-same").forEach(par => {
     const lines = [...par.querySelectorAll(".fit-line")];
