@@ -6539,16 +6539,29 @@ function liftGamePageBackground(){
 // screen's edges (clear of the felt's middle - totals, the odds calculator), every card stays
 // fully on screen, and cards that would overlap are pushed apart.
 function keepSeatCardsInside(){
-  const W = document.documentElement.clientWidth, M = 6;
+  const M = 6;
   const cards = [...document.querySelectorAll(".seat-wrap.seat-card")];
   if (!cards.length) return;
   const parent = cards[0].offsetParent; if (!parent) return;
-  const pr = parent.getBoundingClientRect(); if (!pr.width) return;
+  // Everything is measured against the tab page itself, not the screen: arriving by a
+  // swipe the page is still sliding in (and a phone may have the document shifted
+  // sideways for a moment), which moves every rect - but the page moves with them.
+  const page = parent.closest(".swipe-page") || document.documentElement;
+  const W = page.clientWidth;
+  if (page.className.includes("tab-slide-") && !page._seatRelayout) {
+    page._seatRelayout = true;   // and lay out once more after it lands
+    const again = () => { page.classList.remove("tab-slide-from-right", "tab-slide-from-left"); requestAnimationFrame(keepSeatCardsInside); };
+    page.addEventListener("animationend", again, {once: true});
+    setTimeout(again, 320);
+  }
+  const base = page === document.documentElement ? 0 : page.getBoundingClientRect().left + page.clientLeft;
+  const pr0 = parent.getBoundingClientRect(); if (!pr0.width || !W) return;
+  const pr = {left: pr0.left - base, width: pr0.width};
   // from each seat's own position every time (this runs again on resize)
   cards.forEach(w => { if (w.dataset.x) w.style.left = w.dataset.x + "%"; });
   const items = cards.map(w => {
     const seatX = parseFloat(w.dataset.x || w.style.left), r = w.getBoundingClientRect();
-    let cx = r.left + r.width / 2;
+    let cx = r.left - base + r.width / 2;
     if (seatX <= 20) cx = M + r.width / 2;                 // left column -> the left edge
     else if (seatX >= 80) cx = W - M - r.width / 2;        // right column -> the right edge
     return {w, cx, top: r.top, bottom: r.bottom, width: r.width};
