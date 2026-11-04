@@ -1407,6 +1407,22 @@ html:not(.theme-light) .lux-page.pp-other .pp-car-arrow{color:#0e8a66;}
 html:not(.theme-light) .lux-page.pp-other .pp-car-dots span{background:rgba(14,138,102,.3);}
 html:not(.theme-light) .lux-page.pp-other .pp-car-dots span.on{background:#0e8a66;}
 html:not(.theme-light) .lux-page.pp-other .night-closed-toggle{color:#3a1616;background:rgba(255,255,255,.55);}
+/* Dark theme, acting for someone else: the end-of-night box on the blush page - a light
+   amount field and pot panel instead of the dark green ones. */
+html:not(.theme-light) .lux-page.pp-other{--input:#fff8f6;}
+html:not(.theme-light) .lux-page.pp-other #lv-amount,html:not(.theme-light) .lux-page.pp-other .lv-calc input{background:#fff8f6;color:#3a1616;border-color:#9b2c2c;}
+html:not(.theme-light) .lux-page.pp-other #lv-amount::placeholder{color:#b9a0a0;}
+html:not(.theme-light) .lux-page.pp-other #lv-amount + span{color:#9b2c2c!important;}
+html:not(.theme-light) .lux-page.pp-other .lv-pot{background:rgba(255,255,255,.55);border-color:rgba(155,44,44,.45);}
+html:not(.theme-light) .lux-page.pp-other .lv-pot b{color:#9b2c2c;}
+.lux-page.pp-other :is(.lv-pot,.lv-pot-sub,.lv-amount-label,.lv-photo-link,.lv-calc){color:#5a2a2a!important;}
+html:not(.theme-light) .lux-page.pp-other .lv-arm input{accent-color:#9b2c2c;}
+/* ...and the header above it */
+html:not(.theme-light) body.on-behalf .screen-tag,html:not(.theme-light) body.on-behalf .screen-tag .crumb-here{color:#5a2a2a;opacity:1;}
+html:not(.theme-light) body.on-behalf .game-menu-btn{background:rgba(255,255,255,.6);color:#9b2c2c;border-color:#9b2c2c;}
+html:not(.theme-light) body.on-behalf .game-seg{background:rgba(155,44,44,.14);}
+html:not(.theme-light) body.on-behalf .game-seg button:not(.on){color:#5a2a2a;}
+html:not(.theme-light) body.on-behalf .game-stats-btn{background:rgba(255,255,255,.6);color:#9b2c2c;border-color:#9b2c2c;}
 /* Blue theme on the blush page: its light-gold total and pale texts would wash out -
    the darker gold of the other light theme, and dark text. */
 html.theme-light.theme-blue .lux-page.pp-other .pp-total{background:linear-gradient(180deg,#c9861c 0%,#a86a12 50%,#7a4a08 100%);-webkit-background-clip:text;background-clip:text;}
@@ -6450,7 +6466,7 @@ function renderCommunity(communityId){
 function liftGamePageBackground(){
   const body = document.body;
   const page = nav.screen === "table" && document.querySelector(".swipe-page.lux-page");
-  body.classList.remove("page-bg-lifted");
+  body.classList.remove("page-bg-lifted", "on-behalf");
   const meta = document.querySelector('meta[name="theme-color"]');
   if (!page) {
     body.style.removeProperty("background");
@@ -6473,6 +6489,8 @@ function liftGamePageBackground(){
   body.style.backgroundSize = cs.backgroundSize;
   body.style.backgroundRepeat = cs.backgroundRepeat;
   body.classList.add("page-bg-lifted");
+  // Acting for someone else: the header above (title, ☰, tabs) takes the page's colours too.
+  body.classList.toggle("on-behalf", page.classList.contains("pp-other"));
 }
 // "2026-11-03" -> "03-11-2026" (anything else as it is).
 function ilDate(d){
