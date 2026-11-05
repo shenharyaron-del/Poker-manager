@@ -10692,6 +10692,8 @@ function attachHandlers(){
       const seats = g.seats || new Array(9).fill(null);
       const idx = parseInt(el.dataset.seat);
       if (!seats[idx]) return; // only occupied seats can be dragged
+      // only the table admin moves players (the server checks it too)
+      if (!isTableAdmin(g, getCommunity(g.communityId))) return;
       // the buy-in history arrow and its popup stay taps
       if (e.target.closest("[data-toggle-seat-history], [data-seat-history-popup], button")) return;
       drag = { fromIdx: idx, startX: e.clientX, startY: e.clientY, moved: false };
