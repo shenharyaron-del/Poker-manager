@@ -151,6 +151,10 @@ _INIT_STATEMENTS = (
     # NULL (unknown) instead of all looking freshly opened; new tables get now().
     "ALTER TABLE games ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ",
     "ALTER TABLE games ALTER COLUMN created_at SET DEFAULT now()",
+    # Tonight's treasurer (גזבר הערב) - a player id, NULL = no treasurer. While set, only
+    # that player handles the money: rebuys and their cancellation for everyone; a player
+    # still ends their own night (see _money_denied).
+    "ALTER TABLE games ADD COLUMN IF NOT EXISTS treasurer_id TEXT",
     # A one-off guest's gender (ז / נ in the add-player window) - guests have no roster
     # row to hold it, so it lives on their row for that one game. NULL = not given.
     "ALTER TABLE game_players ADD COLUMN IF NOT EXISTS gender TEXT",
@@ -1152,6 +1156,45 @@ def _guard(community_id=None, game_id=None, need="member", players=None):
     return _forbidden()
 
 
+def _game_treasurer(game_id):
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT treasurer_id FROM games WHERE id = %s", (game_id,))
+            row = cur.fetchone()
+        conn.commit()
+    return row[0] if row else None
+
+
+def _money_denied(game_id, self_players=None, entry_for=None):
+    """None when the caller may touch this night's money, else a 403 response.
+
+    No treasurer tonight: None (the endpoint's own _guard decides, as before). With a
+    treasurer, only that player (or the super admin) - except: a player ending their own
+    night (self_players: the cash-out's player is the caller's), and a player's very first
+    buy-in, their entry, which comes with sitting down (entry_for: by that player, or a
+    table admin seating them)."""
+    caller = _caller()
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT community_id, treasurer_id FROM games WHERE id = %s", (game_id,))
+            row = cur.fetchone()
+            if not row or not row[1]:
+                conn.commit()
+                return None
+            community_id, treasurer = row
+            r = _rights(cur, caller, community_id, game_id)
+            entry_ok = False
+            if entry_for and (entry_for in r["my_players"] or r["table_admin"]):
+                cur.execute("SELECT 1 FROM buyins WHERE game_id = %s AND player_id = %s LIMIT 1", (game_id, entry_for))
+                entry_ok = cur.fetchone() is None
+        conn.commit()
+    if caller["is_super"] or treasurer in r["my_players"] or entry_ok:
+        return None
+    if self_players and all(pid in r["my_players"] for pid in self_players):
+        return None
+    return _forbidden()
+
+
 def _roster_patch_denied(community_id, player_id, body):
     # isAdmin: a community admin's toggle. clientId (linking a row to a person): a
     # community admin; or the caller linking a row to themself, when that row isn't
@@ -1308,8 +1351,8 @@ def v2_list_games(community_id):
 
 
 _GAME_BASE_COLUMNS = (
-    "SELECT id, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at, created_by, created_at "
-    "FROM games"
+    "SELECT id, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at, created_by, created_at, "
+    "treasurer_id FROM games"
 )
 
 
@@ -1327,11 +1370,12 @@ def _games_full(cur, base_rows):
     returns also bumps games.updated_at, even ones (buyins, cashouts, payments, events)
     that don't otherwise touch the games row at all."""
     games = {}
-    for gid, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at, created_by, created_at in base_rows:
+    for gid, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at, created_by, created_at, treasurer_id in base_rows:
         games[gid] = {
             "id": gid, "communityId": community_id, "name": name,
             "date": date.isoformat() if date else None,
             "createdByName": created_by_name, "createdBy": _pub(created_by), "closed": closed,
+            "treasurerId": treasurer_id,
             "updatedAt": updated_at.isoformat() if updated_at else None,
             "createdAt": created_at.isoformat() if created_at else None,
             "seats": seats, "liveChips": live_chips,
@@ -2531,6 +2575,50 @@ def v2_decide_join_request(request_id):
     return jsonify({"ok": True})
 
 
+@app.route("/api/v2/games/<game_id>/treasurer", methods=["PUT"])
+def v2_set_treasurer(game_id):
+    """Tonight's treasurer. {"playerId": id} - a seated player takes it for themself, while
+    there's none; {"playerId": null} - back to no treasurer, by the treasurer or a table
+    admin."""
+    denied = _guard(game_id=game_id)
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    player_id = body.get("playerId")
+    if player_id is not None and not _valid_id(player_id):
+        return jsonify({"error": "playerId must be an id or null"}), 400
+    caller = _caller()
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT community_id, treasurer_id, seats FROM games WHERE id = %s", (game_id,))
+            row = cur.fetchone()
+            if not row:
+                conn.commit()
+                return jsonify({"error": "game not found"}), 404
+            community_id, current, seats = row
+            r = _rights(cur, caller, community_id, game_id)
+            if player_id is None:
+                if current and not (current in r["my_players"] or r["table_admin"] or caller["is_super"]):
+                    conn.commit()
+                    return _forbidden()
+                cur.execute("UPDATE games SET treasurer_id = NULL, updated_at = now() WHERE id = %s", (game_id,))
+            else:
+                if player_id not in r["my_players"] or player_id not in (seats or []):
+                    conn.commit()
+                    return _forbidden()
+                # Only while nobody has it - two players tapping at once: the first wins.
+                cur.execute(
+                    "UPDATE games SET treasurer_id = %s, updated_at = now() WHERE id = %s "
+                    "AND (treasurer_id IS NULL OR treasurer_id = %s)",
+                    (player_id, game_id, player_id),
+                )
+                if cur.rowcount == 0:
+                    conn.commit()
+                    return jsonify({"error": "there is already a treasurer"}), 409
+        conn.commit()
+    return jsonify({"ok": True, "treasurerId": player_id})
+
+
 @app.route("/api/v2/games/<game_id>/seats/swap", methods=["PUT"])
 def v2_swap_seats(game_id):
     # Moving players around the table is the table admin's (its creator, or a club admin) -
@@ -2607,6 +2695,9 @@ def v2_add_buyin(game_id):
         return denied
     body = request.get_json(silent=True) or {}
     buyin_id, player_id, amount = body.get("id"), body.get("playerId"), body.get("amount")
+    denied = _money_denied(game_id, entry_for=player_id if _valid_id(player_id) else None)
+    if denied:
+        return denied
     actor_name = body.get("actorName")
     if not _valid_id(buyin_id) or not _valid_id(player_id) or amount is None:
         return jsonify({"error": "id, playerId and amount required"}), 400
@@ -2641,7 +2732,7 @@ def v2_add_buyin(game_id):
 
 @app.route("/api/v2/games/<game_id>/buyins/bulk", methods=["POST"])
 def v2_add_buyins_bulk(game_id):
-    denied = _guard(game_id=game_id)
+    denied = _guard(game_id=game_id) or _money_denied(game_id)
     if denied:
         return denied
     body = request.get_json(silent=True) or {}
@@ -2677,7 +2768,7 @@ def v2_add_buyins_bulk(game_id):
 
 @app.route("/api/v2/games/<game_id>/buyins/<buyin_id>", methods=["PATCH"])
 def v2_update_buyin_amount(game_id, buyin_id):
-    denied = _guard(game_id=game_id)
+    denied = _guard(game_id=game_id) or _money_denied(game_id)
     if denied:
         return denied
     # A "rebuy" before the game has started is folded into the player's entry instead
@@ -2704,7 +2795,7 @@ def v2_update_buyin_amount(game_id, buyin_id):
 
 @app.route("/api/v2/games/<game_id>/buyins/<buyin_id>", methods=["DELETE"])
 def v2_delete_buyin(game_id, buyin_id):
-    denied = _guard(game_id=game_id)
+    denied = _guard(game_id=game_id) or _money_denied(game_id)
     if denied:
         return denied
     # The only single-buy-in mutation the client has is delete - there's no edit-in-place
@@ -2735,7 +2826,7 @@ def v2_delete_buyin(game_id, buyin_id):
 
 @app.route("/api/v2/games/<game_id>/cashouts/<player_id>", methods=["PUT"])
 def v2_set_cashout(game_id, player_id):
-    denied = _guard(game_id=game_id)
+    denied = _guard(game_id=game_id) or _money_denied(game_id, self_players=[player_id])
     if denied:
         return denied
     # Upsert - covers both a fresh cash-out (quickEnd/leave) and the edit-pencil on an
@@ -2798,7 +2889,12 @@ def v2_set_cashout(game_id, player_id):
 
 @app.route("/api/v2/games/<game_id>/cashouts/<player_id>", methods=["DELETE"])
 def v2_delete_cashout(game_id, player_id):
-    denied = _guard(game_id=game_id, need="table_admin", players=[player_id])
+    # Back to the table: a table admin or the player themself - with a treasurer tonight,
+    # the treasurer or the player themself.
+    if _game_treasurer(game_id):
+        denied = _guard(game_id=game_id) or _money_denied(game_id, self_players=[player_id])
+    else:
+        denied = _guard(game_id=game_id, need="table_admin", players=[player_id])
     if denied:
         return denied
     with get_db() as conn:
