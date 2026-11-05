@@ -2657,7 +2657,10 @@ def v2_swap_seats(game_id):
 
 @app.route("/api/v2/games/<game_id>/players/<player_id>", methods=["DELETE"])
 def v2_remove_game_player(game_id, player_id):
+    # A table admin, the player themself - or tonight's treasurer ("נכנס בטעות? הסר מהשולחן").
     denied = _guard(game_id=game_id, need="table_admin", players=[player_id])
+    if denied and _game_treasurer(game_id) and _money_denied(game_id) is None:
+        denied = None
     if denied:
         return denied
     # Full purge - the removeFromGame flow: drops game_players, buy-ins, paybox payments,

@@ -1276,9 +1276,9 @@ html.theme-light.theme-sand .pp-me-card{border-color:rgba(110,65,25,.65);}
 .pp-me-row.has-tr .pp-me-card{max-width:calc(100% - 172px);min-width:0;}
 .pp-tr{position:absolute;right:0;top:calc(50% - 9px);transform:translateY(-50%);width:80px;display:flex;flex-direction:column;align-items:center;gap:4px;
   background:none;border:none;padding:0;font-family:inherit;font-size:13px;font-weight:700;line-height:1.15;color:var(--text);text-align:center;cursor:pointer;-webkit-tap-highlight-color:transparent;}
-.pp-tr-box{width:22px;height:22px;border-radius:6px;border:2px solid var(--frame-c,var(--gold));box-sizing:border-box;display:flex;align-items:center;justify-content:center;}
-.pp-tr.on .pp-tr-box{background:var(--frame-c,var(--gold));}
-.pp-tr.on .pp-tr-box::after{content:"";width:6px;height:11px;border:solid var(--bg2,#0b2a1f);border-width:0 2.5px 2.5px 0;transform:translateY(-1px) rotate(45deg);}
+/* the same box as "סיימתי את הערב" (.lv-arm input) */
+.pp-tr input{width:24px;height:24px;margin:0;accent-color:var(--gold);pointer-events:none;flex-shrink:0;}
+.lux-page.pp-other .pp-tr input{accent-color:#9a5f12;}
 .pp-tr.info{cursor:default;gap:1px;font-weight:600;}
 .pp-tr.info b{font-size:15px;font-weight:800;color:var(--gold);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 html.theme-light .pp-tr.info b{color:#9a5f12;}
@@ -1300,6 +1300,8 @@ html.theme-light .tr-note b{color:#9a5f12;}
 .rb-frame .rb-cancel-head{background:none;border:none;box-shadow:none;width:auto;margin:0 auto;padding:2px 6px;font-size:15px;color:var(--muted);text-decoration:underline;text-underline-offset:3px;display:inline-flex;align-items:center;gap:4px;}
 .pp-self-return{background:none;border:none;padding:0;font:inherit;font-size:17px;font-weight:800;color:var(--gold);text-decoration:underline;text-underline-offset:3px;cursor:pointer;white-space:nowrap;margin-inline-start:4px;}
 html.theme-light .pp-self-return{color:#9a5f12;}
+/* blue: the brown fades into the blue page - the theme's dark navy, like the names */
+html.theme-light.theme-blue .lux-page:not(.pp-other) :is(.pp-ci-return,.pp-self-return){color:#0e2633;}
 .pp-return-side .pp-return-link{font-size:15px;}
 .pp-name-me{font-family:inherit;cursor:pointer;}
 .pp-back-me{grid-column:4;min-width:0;min-height:44px;padding:6px 6px;border-radius:12px;border:2px solid #93c5fd;background:#1d4ed8;color:#fff;font-family:inherit;font-size:16px;font-weight:800;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.35);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -3716,9 +3718,9 @@ function iAmTreasurer(g){
 // May I make or cancel a rebuy (for anyone) tonight?
 function canHandleMoney(g){ return !gameTreasurer(g) || iAmTreasurer(g) || isSuperAdmin(); }
 // May I open another player's screen (act on their behalf)? With a treasurer tonight only
-// they do - for anyone else there's nothing there to do (no rebuys, and only my own night
-// to end), so the players carousel is just a list.
-function canActForOthers(g){ return !gameTreasurer(g) || iAmTreasurer(g) || isSuperAdmin(); }
+// they do - and a table admin, for "הסר מהשולחן" (their money is the treasurer's); for
+// anyone else there's nothing there to do, so the players carousel is just a list.
+function canActForOthers(g){ return !gameTreasurer(g) || iAmTreasurer(g) || isTableAdmin(g, getCommunity(g.communityId)) || isSuperAdmin(); }
 // May I end player pid's night (or bring them back)?
 function canEndNightFor(g, pid){
   return canHandleMoney(g) || pid === (myIdentity.myPlayers && myIdentity.myPlayers[g.communityId]);
@@ -7201,7 +7203,7 @@ function renderPlayerScreen(gameId){
   // "נכנס בטעות? הסר מהשולחן" - only while it can still be a mistaken sit-down: the entry
   // buy-in alone. Once they've rebought it's a real player (a cancelled rebuy is gone from
   // the buy-ins, so the link comes back).
-  const adminPlayerActions = (isAdminView && pid) ? (cashedOut ? ""
+  const adminPlayerActions = ((isAdminView || iAmTreasurer(g)) && pid) ? (cashedOut ? ""
     : ((viewingOther && !armed && myBuyins.length <= 1) ? `<div class="terms-link" style="margin:10px 0 4px;flex-shrink:0;font-size:16px;color:var(--text);opacity:.85;"><bdi>${esc(p ? tableShortName(g, pid) : "השחקן")}</bdi> ${playerIsFemale(g, c, pid) ? "נכנסה" : "נכנס"} בטעות? <button type="button" data-admin-remove-seat="${pid}">הסר מהשולחן</button></div>` : "")) : "";
   // Everyone but me who entered tonight (tonight's entry order), each a tile that opens
   // their screen - the one being looked at is highlighted. With 10 at the table, one of
@@ -7283,8 +7285,8 @@ function renderPlayerScreen(gameId){
           const tr = gameTreasurer(g);
           const mineSeated = myPlayerId && (g.seats || []).includes(myPlayerId) && !(myPlayerId in (g.cashouts || {}));
           let trHtml = "";
-          if (!tr && mineSeated) trHtml = `<button type="button" class="pp-tr" data-treasurer-take><span class="pp-tr-box"></span><span>אני גזבר הערב</span></button>`;
-          else if (tr && tr === myPlayerId) trHtml = `<button type="button" class="pp-tr on" data-treasurer-clear><span class="pp-tr-box"></span><span>אני גזבר הערב</span></button>`;
+          if (!tr && mineSeated) trHtml = `<div class="pp-tr" role="button" data-treasurer-take><input type="checkbox" tabindex="-1" onclick="return false;"><span>אני גזבר הערב</span></div>`;
+          else if (tr && tr === myPlayerId) trHtml = `<div class="pp-tr on" role="button" data-treasurer-clear><input type="checkbox" checked tabindex="-1" onclick="return false;"><span>אני גזבר הערב</span></div>`;
           else if (tr) trHtml = `<div class="pp-tr info"><b><bdi>${esc(tableShortName(g, tr))}</bdi></b><span>${playerIsFemale(g, c, tr) ? "גזברית" : "גזבר"} הערב</span>${isAdminView ? `<button type="button" class="pp-tr-clear" data-treasurer-clear>ללא גזבר</button>` : ""}</div>`;
           return `<div class="pp-me-row${trHtml ? " has-tr" : ""}">${trHtml}${nameHtml}</div>`;
         })()}
@@ -10341,7 +10343,7 @@ function attachHandlers(){
   app.querySelectorAll("[data-treasurer-take]").forEach(el => el.onclick = async () => {
     const g = getGame(nav.gameId); if (!g) return;
     const mine = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
-    if (!(await showConfirm("להיות גזבר הערב? רק אתה תבצע ריביי וביטול ריביי לכל השחקנים. כל שחקן עדיין יסיים את הערב בעצמו."))) return;
+    if (!(await showConfirm("להיות גזבר הערב? רק אתה תבצע ריביי וביטול ריביי לכל השחקנים. כל שחקן יוכל לסיים את הערב בעצמו, או שהגזבר יסיים עבורו."))) return;
     el.disabled = true;
     try { await v2SetTreasurer(g.id, mine); }
     catch(e) {
