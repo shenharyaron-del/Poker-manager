@@ -1283,6 +1283,8 @@ html.theme-light.theme-sand .pp-me-card{border-color:rgba(110,65,25,.65);}
 .pp-tr.info b{font-size:15px;font-weight:800;color:var(--gold);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 html.theme-light .pp-tr.info b{color:#9a5f12;}
 .pp-tr-clear{margin-top:3px;background:none;border:none;padding:0;font:inherit;font-size:12px;color:var(--muted);text-decoration:underline;cursor:pointer;}
+.game-status-col{display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0;}
+.game-treasurer{font-size:13px;color:var(--muted);white-space:nowrap;}
 .tr-note{margin:4px 0 14px;padding:12px;border:1.5px dashed var(--frame-c,var(--gold));border-radius:14px;text-align:center;font-size:17px;color:var(--text);flex-shrink:0;}
 .tr-note b{color:var(--gold);}
 html.theme-light .tr-note b{color:#9a5f12;}
@@ -6456,6 +6458,14 @@ function gameStatus(g){
   if (Math.abs(chipsTotal - buyinTotal) > 5) return {key: "unbalanced", label: "קופה לא מאוזנת"};
   return {key: "done", label: "הסתיים"};
 }
+// The night's treasurer's first name, if it had one - from the full game when it's here,
+// else from the games list's summary (treasurerName).
+function treasurerFirstName(g){
+  const full = (g.players && g.players.length)
+    ? ((g.players.find(p => p.id === gameTreasurer(g)) || {}).name || "")
+    : (g.treasurerName || "");
+  return full.trim().split(/\s+/)[0] || "";
+}
 function gameStatusBadge(g, small){
   const st = gameStatus(g);
   return `<span class="status-badge${small ? ' small' : ''}" style="background:${GAME_STATUS_COLORS[st.key]};">${st.label}</span>`;
@@ -6528,7 +6538,7 @@ function renderCommunity(communityId){
     const canDelete = isSuperAdmin() || isTableAdmin(g, c);
     const front = `
     <div class="card club-front ${g.closed?"":"card-open"}" data-open-game="${g.id}">
-      <div class="row flex1"><div class="flex1"><div class="name serif">${esc(g.name || ilDate(g.date))}</div>${g.name ? `<div style="font-size:15px;color:var(--muted);margin-top:2px;">${esc(ilDate(g.date))}</div>` : ""}${gameAlert ? `<div class="game-alert-line">${gameAlert.text}</div>` : ""}</div>${gameStatusBadge(g)}</div>
+      <div class="row flex1"><div class="flex1"><div class="name serif">${esc(g.name || ilDate(g.date))}</div>${g.name ? `<div style="font-size:15px;color:var(--muted);margin-top:2px;">${esc(ilDate(g.date))}</div>` : ""}${gameAlert ? `<div class="game-alert-line">${gameAlert.text}</div>` : ""}</div><div class="game-status-col">${gameStatusBadge(g)}${treasurerFirstName(g) ? `<div class="game-treasurer">גזבר: <bdi>${esc(treasurerFirstName(g))}</bdi></div>` : ""}</div></div>
       <div class="chev">${icon('chev')}</div>
     </div>`;
     if (!canInvite && !canDelete) return front.replace('class="card club-front ', 'class="card ');

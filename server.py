@@ -1321,8 +1321,8 @@ def v2_list_all_game_summaries():
         with conn.cursor() as cur:
             visible = _visible_community_ids(cur, caller)
             cur.execute(
-                "SELECT id, community_id, name, date, created_by_name, closed, updated_at, created_by, created_at "
-                "FROM games ORDER BY date DESC"
+                "SELECT id, community_id, name, date, created_by_name, closed, updated_at, created_by, created_at, "
+                + _TREASURER_NAME_SQL + " FROM games ORDER BY date DESC"
             )
             games = [_row_to_game_summary(r) for r in cur.fetchall()]
             if visible is not None:
@@ -1341,8 +1341,8 @@ def v2_list_games(community_id):
             if not _can_see_community(cur, caller, community_id):
                 return jsonify({"error": "not found"}), 404
             cur.execute(
-                "SELECT id, community_id, name, date, created_by_name, closed, updated_at, created_by, created_at "
-                "FROM games WHERE community_id = %s ORDER BY date DESC",
+                "SELECT id, community_id, name, date, created_by_name, closed, updated_at, created_by, created_at, "
+                + _TREASURER_NAME_SQL + " FROM games WHERE community_id = %s ORDER BY date DESC",
                 (community_id,),
             )
             games = [_row_to_game_summary(r) for r in cur.fetchall()]
@@ -2219,8 +2219,15 @@ def v2_delete_bit_link(community_id, link_id):
 # retry loop at all.
 
 
+# The night's treasurer's name, for the games list (summaries carry no players).
+_TREASURER_NAME_SQL = (
+    "(SELECT gp.name FROM game_players gp WHERE gp.game_id = games.id AND gp.player_id = games.treasurer_id)"
+)
+
+
 def _row_to_game_summary(row):
     return {
+        "treasurerName": row[9] if len(row) > 9 else None,
         "id": row[0], "communityId": row[1], "name": row[2],
         "date": row[3].isoformat() if row[3] else None,
         "createdByName": row[4], "closed": row[5],
