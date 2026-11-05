@@ -7299,7 +7299,7 @@ function renderPlayerScreen(gameId){
           if (g.closed) return "";
           const tr = gameTreasurer(g);
           const mineSeated = myPlayerId && (g.seats || []).includes(myPlayerId) && !(myPlayerId in (g.cashouts || {}));
-          if (!tr && mineSeated) return `<div class="tr-strip has-hint"><div class="tr-pick" role="button" data-treasurer-take><input type="checkbox" tabindex="-1" onclick="return false;"><span>אני גזבר הערב</span></div><div class="tr-hint">כדי למנוע טעויות, מומלץ לבחור גזבר שיחלק את הז'יטונים וירשום את הריביי.</div></div>`;
+          if (!tr && mineSeated) return `<div class="tr-strip has-hint"><div class="tr-pick" role="button" data-treasurer-take><input type="checkbox" tabindex="-1" onclick="return false;"><span>אני גזבר הערב</span></div><div class="tr-hint">כדי למנוע טעויות, מומלץ לבחור גזבר שיהיה אחראי על חלוקת הז'יטונים ורישום הריביי.</div></div>`;
           if (tr && tr === myPlayerId) return `<div class="tr-strip"><div class="tr-pick" role="button" data-treasurer-clear><input type="checkbox" checked tabindex="-1" onclick="return false;"><span>אני גזבר הערב</span></div></div>`;
           if (tr) return `<div class="tr-strip info">${TREASURER_ICON}<span>${playerIsFemale(g, c, tr) ? "גזברית" : "גזבר"} הערב: <b><bdi>${esc(tableShortName(g, tr))}</bdi></b></span>${isAdminView ? `<button type="button" class="tr-clear" data-treasurer-clear>הסר מגזברות</button>` : ""}</div>`;
           return "";
