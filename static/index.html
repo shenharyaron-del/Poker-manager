@@ -831,6 +831,7 @@ html.theme-light .stats-net .pot-label{color:inherit;opacity:.8;}
 .bar-fill{width:100%;max-width:24px;border-radius:4px 4px 0 0;}
 .bar-fill.loss{background:var(--rose-b);}
 .bar-fill.win{background:#22a55a;}
+.bar-fill.even{background:#9ca3af;}
 .bar-label{font-size:7px;color:var(--text);margin-top:4px;text-align:center;white-space:nowrap;}
 .txn-row{display:flex;align-items:center;gap:8px;background:var(--input);border:1px solid var(--card-b);border-radius:12px;padding:12px 14px;margin-bottom:8px;}
 .txn-amt{font-weight:700;color:var(--gold);}
@@ -1179,17 +1180,12 @@ html.theme-light .player-history-feed-body.mode-feed,html.theme-light .player-hi
 html.theme-light .chat-frame[data-player-history],html.theme-light .chat-frame[data-player-feed]{background-image:linear-gradient(rgba(255,255,255,.78),rgba(255,255,255,.78)),url('/static/chat-bg.png');border-color:var(--card-b);box-shadow:inset 0 0 12px rgba(0,0,0,.06);}
 html.theme-light .chat-bubble{background:rgba(255,255,255,.95);border:1px solid var(--card-b);color:var(--text);--muted:#5b6b73;}
 html.theme-light.theme-blue .chat-bubble{--text:#0e2633;color:#0e2633;}
-.tl-ctrl{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px;}
-.tl-seg{display:flex;border:1px solid var(--card-b);border-radius:10px;overflow:hidden;}
-.tl-seg button{background:transparent;border:none;color:var(--text);font:inherit;font-size:16px;padding:5px 10px;cursor:pointer;}
-.tl-seg button.on{background:var(--gold);color:#111;font-weight:700;}
-.tl-skip{display:flex;align-items:center;gap:6px;font-size:16px;color:var(--text);cursor:pointer;}
 .tl-scroll{overflow-x:auto;direction:ltr;background:var(--input);border:1px solid var(--card-b);border-radius:12px;padding:6px 4px 2px;}
 .tl-scroll svg{display:block;}
 .tl-ax{fill:var(--muted);font-size:9px;font-family:inherit;}
 .tl-zero{stroke:var(--muted);stroke-width:1;opacity:.6;}
 .tl-grid{stroke:var(--card-b);stroke-width:1;}
-.tl-win{fill:#22a55a;} .tl-loss{fill:var(--rose-b);}
+.tl-win{fill:#22a55a;} .tl-loss{fill:var(--rose-b);} .tl-even{fill:#9ca3af;}
 .tl-line{fill:none;stroke:var(--gold);stroke-width:2;stroke-linejoin:round;stroke-linecap:round;}
 .tl-miss{stroke:var(--muted);stroke-width:1;stroke-dasharray:2 2;opacity:.5;}
 .passkey-offer{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--input);border:1px solid var(--gold);border-radius:14px;padding:10px 12px;margin-bottom:12px;}
@@ -5320,13 +5316,17 @@ function getAvatarGroups(){
 // myIdentity by applyAccountToIdentity - never the old per-device globalPlayers.role.
 function isSuperAdmin(){ return myIdentity.role === "superAdmin"; }
 
+// A night within ₪3 either way counts as even - not a win, not a loss (the histogram's
+// grey middle bar, and the stats' win/loss counts).
+const EVEN_RANGE = 3;
 const PROFIT_BUCKETS = [
   {min:-Infinity, max:-200, label:"-200",     loss:true},
   {min:-200,      max:-150, label:"-200/-150", loss:true},
   {min:-150,      max:-100, label:"-150/-100", loss:true},
   {min:-100,      max:-50,  label:"-100/-50",  loss:true},
-  {min:-50,       max:0,    label:"-50/0",     loss:true},
-  {min:0,         max:50,   label:"0-50",    loss:false},
+  {min:-50,       max:-EVEN_RANGE, label:"-50/0", loss:true},
+  {min:-EVEN_RANGE, max:EVEN_RANGE, label:"0", even:true},
+  {min:EVEN_RANGE, max:50,   label:"0-50",    loss:false},
   {min:50,        max:100,  label:"50-100",  loss:false},
   {min:100,       max:150,  label:"100-150", loss:false},
   {min:150,       max:200,  label:"150-200", loss:false},
@@ -5334,8 +5334,9 @@ const PROFIT_BUCKETS = [
 ];
 function computeProfitBuckets(profits){
   return PROFIT_BUCKETS.map(b => ({
-    label: b.label, loss: b.loss,
-    count: profits.filter(p => p > b.min && p <= b.max).length
+    label: b.label, loss: b.loss, even: b.even,
+    // a night within the even range goes only to the middle bar
+    count: profits.filter(p => b.even ? Math.abs(p) <= EVEN_RANGE : Math.abs(p) > EVEN_RANGE && p > b.min && p <= b.max).length
   }));
 }
 
@@ -5344,7 +5345,7 @@ function renderBarChart(buckets){
   const bars = buckets.map(b => `
     <div class="bar-col">
       <div class="bar-count">${b.count || ""}</div>
-      <div class="bar-fill ${b.loss?'loss':'win'}" style="height:${b.count ? Math.max(6, Math.round(b.count/max*100)) : 2}px"></div>
+      <div class="bar-fill ${b.even?'even':b.loss?'loss':'win'}" style="height:${b.count ? Math.max(6, Math.round(b.count/max*100)) : 2}px"></div>
       <div class="bar-label">${b.label}</div>
     </div>`).join("");
   return `<fieldset class="leave-frame stats-frame"><legend>התפלגות רווח/הפסד לפי ערב</legend><div class="stats-frame-note">הפסדים מימין, רווחים משמאל</div><div class="bar-chart">${bars}</div></fieldset>`;
@@ -5384,7 +5385,7 @@ function renderProfitTimeline(series, type, skip){
   }
   pts.forEach((x, i) => {
     if (x.profit == null) return;
-    const cls = x.profit < 0 ? "tl-loss" : "tl-win";
+    const cls = Math.abs(x.profit) <= EVEN_RANGE ? "tl-even" : x.profit < 0 ? "tl-loss" : "tl-win";
     if (type === "bar") {
       const y0 = Y(0), y1 = Y(x.profit), bw = step * 0.6;
       g += `<rect class="${cls}" x="${X(i) - bw / 2}" y="${Math.min(y0, y1)}" width="${bw}" height="${Math.max(2, Math.abs(y1 - y0))}" rx="2">${tip(x)}</rect>`;
@@ -5394,8 +5395,6 @@ function renderProfitTimeline(series, type, skip){
   });
   return `<div class="tl-scroll"><svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${g}</svg></div>`;
 }
-function tlPref(key, fallback){ try { const v = localStorage.getItem("poker-tl-" + key); return v == null ? fallback : v; } catch(e) { return fallback; } }
-function setTlPref(key, v){ try { localStorage.setItem("poker-tl-" + key, v); } catch(e) {} }
 
 // A club player's result over every night they ended in this club - including nights
 // they played as a one-off guest under the same name (a guest gets a new id at every
@@ -8826,8 +8825,8 @@ function renderModal(m){
         });
       });
       const net = profits.reduce((s,p)=>s+p,0);
-      const wins = profits.filter(p=>p>0);
-      const losses = profits.filter(p=>p<0);
+      const wins = profits.filter(p=>p>EVEN_RANGE);
+      const losses = profits.filter(p=>p<-EVEN_RANGE);
       const avgWin = wins.length ? wins.reduce((s,p)=>s+p,0)/wins.length : null;
       const avgLoss = losses.length ? losses.reduce((s,p)=>s+p,0)/losses.length : null;
       const avgOverall = profits.length ? net/profits.length : null;
@@ -8851,8 +8850,6 @@ function renderModal(m){
           if (place > 0 && place <= Math.ceil(ranked.length / 2)) rankHtml = `<div class="roster-row"><span>${viewingOtherStats ? "המקום במועדון" : "המקום שלי במועדון"}</span><span style="font-weight:700;white-space:nowrap;">${place===1?'🏆 ':''}${place} מתוך ${ranked.length}</span></div>`;
         }
       }
-      const tlType = ["bar","dot","line"].includes(tlPref("type","line")) ? tlPref("type","line") : "line";
-      const tlSkip = tlPref("skip","0") === "1";
       if (profits.length === 0) {
         body = selectorHtml + `<div class="empty" style="padding:20px 0;">עדיין לא סיים אף ערב משחק.</div>`;
       } else {
@@ -8860,23 +8857,19 @@ function renderModal(m){
           <div class="stats-net ${net>=0?'pos':'neg'}"><div class="pot-label">מאזן כולל</div><div class="val">${net>=0?"+":""}₪${Math.round(net)}</div></div>
           <div class="stats-grid" style="margin-bottom:10px;">
             <div class="box"><div class="l">ערבים ${selected==='all'?'בכל המועדונים':'במועדון'}</div><div class="v">${totalCommunityGames}</div></div>
-            <div class="box"><div class="l">סה"כ ערבים שהשתתף בהם</div><div class="v">${profits.length}</div></div>
-            <div class="box"><div class="l">ממוצע נצחונות <span class="stats-n">(${wins.length} משחקים)</span></div><div class="v stats-win">${avgWin!=null?`+₪${Math.round(avgWin)}`:"—"}</div></div>
-            <div class="box"><div class="l">ממוצע הפסדים <span class="stats-n">(${losses.length} משחקים)</span></div><div class="v stats-loss">${avgLoss!=null?`₪${Math.round(avgLoss)}`:"—"}</div></div>
+            <div class="box"><div class="l">סה"כ ערבים שהשתתף</div><div class="v">${profits.length}</div></div>
+            <div class="box"><div class="l">ממוצע נצחונות <span class="stats-n">(${wins.length})</span></div><div class="v stats-win">${avgWin!=null?`+₪${Math.round(avgWin)}`:"—"}</div></div>
+            <div class="box"><div class="l">ממוצע הפסדים <span class="stats-n">(${losses.length})</span></div><div class="v stats-loss">${avgLoss!=null?`₪${Math.round(avgLoss)}`:"—"}</div></div>
             <div class="box"><div class="l">אחוז נצחונות</div><div class="v stats-win">${pct(wins.length)}%</div></div>
             <div class="box"><div class="l">אחוז הפסדים</div><div class="v stats-loss">${pct(losses.length)}%</div></div>
           </div>
           ${rankHtml}
           <div class="roster-row"><span>ממוצע כללי למשחק</span><span style="font-weight:700;">${avgOverall>=0?"+":""}₪${Math.round(avgOverall)}</span></div>
-          ${best?`<div class="roster-row"><span style="color:#059669;font-size:16px;">הערב הכי טוב (${esc(best.date)}${selected==='all'?` · ${esc(best.communityName)}`:''})</span><span class="stats-win" style="font-weight:700;">+₪${Math.round(best.profit)}</span></div>`:""}
-          ${worst?`<div class="roster-row"><span style="color:#059669;font-size:16px;">הערב הכי גרוע (${esc(worst.date)}${selected==='all'?` · ${esc(worst.communityName)}`:''})</span><span class="stats-loss" style="font-weight:700;">₪${Math.round(worst.profit)}</span></div>`:""}
+          ${best?`<div class="roster-row"><span style="color:#059669;font-size:16px;">הערב הכי טוב</span><span class="stats-win" style="font-weight:700;">+₪${Math.round(best.profit)}</span></div>`:""}
+          ${worst?`<div class="roster-row"><span style="color:#059669;font-size:16px;">הערב הכי גרוע</span><span class="stats-loss" style="font-weight:700;">₪${Math.round(worst.profit)}</span></div>`:""}
           ${renderBarChart(computeProfitBuckets(profits))}
           <fieldset class="leave-frame stats-frame"><legend>רווח/הפסד לפי תאריך</legend>
-          <div class="tl-ctrl">
-            <div class="tl-seg">${[["bar","עמודות"],["dot","נקודות"],["line","קו"]].map(([k,l]) => `<button class="${tlType===k?'on':''}" data-tl-type="${k}">${l}</button>`).join("")}</div>
-            <label class="tl-skip"><input type="checkbox" data-tl-skip ${tlSkip?'checked':''}> התעלם מערבים שלא השתתפתי</label>
-          </div>
-          ${renderProfitTimeline(timeline.sort((a,b)=> a.date < b.date ? -1 : a.date > b.date ? 1 : 0), tlType, tlSkip)}
+          ${renderProfitTimeline(timeline.sort((a,b)=> a.date < b.date ? -1 : a.date > b.date ? 1 : 0), "bar", false)}
           </fieldset>
         `;
       }
@@ -11181,8 +11174,6 @@ function attachHandlers(){
     app.querySelectorAll("[data-stats-select-community]").forEach(el => el.onclick = () => {
       updateModal({selectedCommunityId: el.dataset.statsSelectCommunity});
     });
-    app.querySelectorAll("[data-tl-type]").forEach(el => el.onclick = () => { setTlPref("type", el.dataset.tlType); updateModal({}); });
-    app.querySelectorAll("[data-tl-skip]").forEach(el => el.onchange = () => { setTlPref("skip", el.checked ? "1" : "0"); updateModal({}); });
     // Newest nights first in view - a long history scrolls back to the left.
     app.querySelectorAll(".tl-scroll").forEach(el => { el.scrollLeft = el.scrollWidth; });
   }
