@@ -864,6 +864,9 @@ html.theme-light.theme-blue .lux-page.pp-other,html.theme-light.theme-sand .lux-
     radial-gradient(120% 55% at 50% 0%,rgba(255,255,255,.3),transparent 70%),
     radial-gradient(150% 110% at 50% 45%,transparent 60%,rgba(90,20,20,.16) 100%),
     linear-gradient(#f3d2cf,#ecbfbb 60%,#e3aaa5);
+  /* the blue theme's secondary text is near-white (for its blue page) - on the blush it
+     would vanish; the same muted brown-red as the dark theme's blush page instead */
+  --muted:#6e3a3a;--muted2:#6e3a3a;
 }
 /* Table photo with the area outside the wood rail cut out (transparent), so no photo
    background shows around the rail - no border-radius clip needed. Sand gets the same
@@ -903,6 +906,11 @@ html.theme-light.theme-sand [style*="color:#6ee7b7"]{color:#6b4a1f!important;}
 /* A player's profit stays green in the light themes too (the rule above recolours every
    mint text): dark green on the page, bright green inside the table's dark seat boxes. */
 html.theme-light .profit-win,html.theme-light.theme-sand .profit-win{color:#15803d!important;}
+/* Acting for someone else (the blush page, every theme): the light green / pink of the
+   dark felt fade into it - deep green and red instead. */
+.lux-page.pp-other .profit-win,.lux-page.pp-other [style*="color:#6ee7b7"]{color:#15803d!important;}
+.lux-page.pp-other .profit-loss,.lux-page.pp-other [style*="color:#fda4af"]{color:#b91c1c!important;}
+.lux-page.pp-other .pay-in-pill{color:#15803d!important;border-color:rgba(21,128,61,.5)!important;background:rgba(21,128,61,.1)!important;}
 html.theme-light .seat-co-profit.pos,html.theme-light.theme-sand .seat-co-profit.pos{color:#4ade80!important;}
 html.theme-light [style*="color:#fda4af"]{color:#be123c!important;}
 html.theme-light [style*="color:#f5f5f4"]{color:var(--text)!important;}
@@ -6924,7 +6932,7 @@ function renderPlayerScreen(gameId){
   const myPaymentsOut = (g.playerPayments||[]).filter(pp => pp.fromPlayerId === pid);
   const paymentNotesHtml = (myPaymentsIn.length || myPaymentsOut.length) ? `
     <div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:8px;">
-      ${myPaymentsIn.map(pp => `<div style="background:rgba(110,231,183,.12);border:1px solid rgba(110,231,183,.45);color:#6ee7b7;border-radius:999px;padding:5px 14px;font-size:14px;font-weight:700;">${playerNameOf(pp.fromPlayerId)} ${isFemale(pp.fromPlayerId)?'העבירה':'העביר'} לך ₪${pp.amount}</div>`).join("")}
+      ${myPaymentsIn.map(pp => `<div class="pay-in-pill" style="background:rgba(110,231,183,.12);border:1px solid rgba(110,231,183,.45);color:#6ee7b7;border-radius:999px;padding:5px 14px;font-size:14px;font-weight:700;">${playerNameOf(pp.fromPlayerId)} ${isFemale(pp.fromPlayerId)?'העבירה':'העביר'} לך ₪${pp.amount}</div>`).join("")}
       ${myPaymentsOut.map(pp => `<div style="background:rgba(233,196,106,.1);border:1px solid rgba(233,196,106,.45);color:var(--gold);border-radius:999px;padding:5px 14px;font-size:14px;font-weight:700;">✓ העברת ₪${pp.amount} ל${playerNameOf(pp.toPlayerId)}</div>`).join("")}
     </div>` : "";
   let cashedOutInfoHtml = "";
@@ -6936,7 +6944,7 @@ function renderPlayerScreen(gameId){
     // one number that freed-up space exists to foreground.
     const profitLine = profitForInfo >= 0
       ? `<div class="profit-win" style="font-weight:800;font-size:34px;color:#6ee7b7;margin-top:6px;">רווח ${profitForInfo} שח</div>`
-      : `<div style="font-weight:800;font-size:34px;color:#fda4af;margin-top:6px;">הפסד ${Math.abs(profitForInfo)} שח</div>`;
+      : `<div class="profit-loss" style="font-weight:800;font-size:34px;color:#fda4af;margin-top:6px;">הפסד ${Math.abs(profitForInfo)} שח</div>`;
     const breakdownHtml = `
       <div style="font-size:14px;color:var(--muted);line-height:1.6;margin-top:6px;">
         <div>קניה: ${Math.round(buyinTotal)} שח</div>
