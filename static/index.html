@@ -817,9 +817,8 @@ html.theme-light .seat-card .seat-co-profit.neg{color:#b91c1c!important;}
 html.theme-light .stats-net.pos{background:#dcf2e3;color:#14532d;border:1px solid #9fd6b1;}
 html.theme-light .stats-net.neg{background:#f8dede;color:#7f1d1d;border:1px solid #e3a5a5;}
 html.theme-light .stats-win{color:#15803d;} html.theme-light .stats-loss{color:#be123c;}
-/* Blue: green and red both sink into the blue page - the timeline's profit / loss sits on a
-   small light pill there. */
-html.theme-light.theme-blue .ttl-row :is(.stats-win,.stats-loss){background:rgba(255,255,255,.82);border-radius:6px;padding:0 5px;font-weight:700;}
+/* Blue: the light themes' green sinks into the blue page - a deeper green in the timeline. */
+html.theme-light.theme-blue .ttl-row .stats-win{color:#04471f;font-weight:700;}
 html.theme-light .stats-grid .box .l{color:var(--muted);}
 html.theme-light .stats-net .pot-label{color:inherit;opacity:.8;}
 .stats-net .val{font-size:24px;font-weight:700;}
@@ -5206,7 +5205,7 @@ function showConfirm(message, opts){
     const el = document.createElement("div");
     el.className = "custom-confirm";
     el.innerHTML = `<div class="custom-confirm-box">
-      <div>${esc(String(message))}</div>
+      <div style="white-space:pre-line;">${esc(String(message))}</div>
       <div class="custom-confirm-actions">
         <button class="btn btn-primary btn-block" data-confirm-ok>${esc(o.okLabel)}</button>
         <button class="btn btn-ghost btn-block" data-confirm-cancel>${esc(o.cancelLabel)}</button>
@@ -10346,7 +10345,7 @@ function attachHandlers(){
   app.querySelectorAll("[data-treasurer-take]").forEach(el => el.onclick = async () => {
     const g = getGame(nav.gameId); if (!g) return;
     const mine = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
-    if (!(await showConfirm("להיות גזבר הערב? רק אתה תבצע ריביי וביטול ריביי לכל השחקנים. כל שחקן יוכל לסיים את הערב בעצמו, או שהגזבר יסיים עבורו."))) return;
+    if (!(await showConfirm("להיות גזבר הערב? רק אתה תבצע ריביי וביטול ריביי לכל השחקנים.\nכל שחקן יוכל לסיים את הערב בעצמו, או שאתה הגזבר תסיים עבורו."))) return;
     el.disabled = true;
     try { await v2SetTreasurer(g.id, mine); }
     catch(e) {
