@@ -1273,21 +1273,22 @@ html.theme-light.theme-sand .pp-me-card{border-color:rgba(110,65,25,.65);}
 .pp-me-card .pp-me-name{font-size:24px;font-weight:800;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .player-page .pp-me-card .pp-total{font-size:42px;line-height:1.05;margin:0;}
 .pp-me-card .pp-self-return{margin:4px 0 2px;}
-/* גזבר הערב, right of my card */
-.pp-me-row{position:relative;}
-.pp-me-row.has-tr .pp-me-card{max-width:calc(100% - 172px);min-width:0;}
-.pp-tr{position:absolute;right:0;top:calc(50% - 9px);transform:translateY(-50%);width:80px;display:flex;flex-direction:column;align-items:center;gap:4px;
-  background:none;border:none;padding:0;font-family:inherit;font-size:13px;font-weight:700;line-height:1.15;color:var(--text);text-align:center;cursor:pointer;-webkit-tap-highlight-color:transparent;}
-/* the same box as "סיימתי את הערב" (.lv-arm input) */
-.pp-tr input{width:24px;height:24px;margin:0;accent-color:var(--gold);pointer-events:none;flex-shrink:0;}
-.lux-page.pp-other .pp-tr input{accent-color:#9a5f12;}
-.pp-tr.info{cursor:default;gap:1px;font-weight:600;}
-.pp-tr.info b{font-size:15px;font-weight:800;color:var(--gold);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-html.theme-light .pp-tr.info b{color:#9a5f12;}
-.pp-tr-clear{margin-top:3px;background:none;border:none;padding:0;font:inherit;font-size:12px;color:var(--muted);text-decoration:underline;cursor:pointer;}
-.pp-ci[data-pp-noview]{cursor:default;}
-.game-status-col{display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0;}
-.game-treasurer{font-size:13px;color:var(--muted);white-space:nowrap;}
+/* גזבר הערב: the strip over the players carousel */
+.tr-strip{display:flex;align-items:center;gap:8px;margin:0 0 10px;padding:9px 14px;border-radius:12px;border:1px solid var(--frame-c,var(--gold));
+  background:rgba(0,0,0,.18);font-size:15px;color:var(--text);flex-shrink:0;text-align:right;}
+html.theme-light .tr-strip{background:rgba(255,255,255,.35);}
+.tr-strip.info{justify-content:center;}
+.tr-pick{display:flex;align-items:center;gap:8px;font-size:17px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+.tr-pick input{width:24px;height:24px;margin:0;accent-color:var(--gold);pointer-events:none;flex-shrink:0;}
+.lux-page.pp-other .tr-pick input{accent-color:#9a5f12;}
+.tr-strip b{color:var(--gold);} html.theme-light .tr-strip b{color:#9a5f12;} html.theme-light.theme-blue .tr-strip b{color:#0e2633;}
+.tr-ic{width:20px;height:20px;flex-shrink:0;fill:none;stroke:var(--gold);stroke-width:2;stroke-linecap:round;}
+html.theme-light .tr-ic{stroke:#9a5f12;}
+.tr-clear{margin-inline-start:6px;background:none;border:none;padding:0;font:inherit;font-size:13px;color:var(--muted);text-decoration:underline;cursor:pointer;}
+.tr-tag{position:absolute;top:-4px;left:50%;transform:translateX(-50%);padding:1px 7px;border-radius:999px;font-size:11px;font-weight:800;line-height:1.5;white-space:nowrap;
+  background:linear-gradient(180deg,#fde9a8,#e9c46a 50%,#c99a3a);color:#2a1d05;box-shadow:0 2px 4px rgba(0,0,0,.4);z-index:3;pointer-events:none;}
+.pp-ci{position:relative;}
+.seat-card .tr-tag{top:-10px;left:3px;transform:none;}
 .tr-note{margin:4px 0 14px;padding:12px;border:1.5px dashed var(--frame-c,var(--gold));border-radius:14px;text-align:center;font-size:17px;color:var(--text);flex-shrink:0;}
 .tr-note b{color:var(--gold);}
 html.theme-light .tr-note b{color:#9a5f12;}
@@ -7279,19 +7280,20 @@ function renderPlayerScreen(gameId){
   return `
     <div class="player-screen-scroll">
       <div style="text-align:center;padding:6px 0 ${cashedOut?16:4}px;flex-shrink:0;">
-        ${carouselHtml}
         ${(() => {
-          // גזבר הערב, right of my card: nobody yet - a seated player can take it ("אני גזבר
-          // הערב"); taken - everyone sees who, the treasurer (and a table admin) can let it go.
-          if (g.closed) return `<div class="pp-me-row">${nameHtml}</div>`;
+          // גזבר הערב - a strip over the players: nobody yet - a seated player ticks "אני גזבר
+          // הערב" (the same box as "סיימתי את הערב"); I am - the box ticked, untick to let it
+          // go; someone else - who, and a table admin can remove them ("ללא גזבר").
+          if (g.closed) return "";
           const tr = gameTreasurer(g);
           const mineSeated = myPlayerId && (g.seats || []).includes(myPlayerId) && !(myPlayerId in (g.cashouts || {}));
-          let trHtml = "";
-          if (!tr && mineSeated) trHtml = `<div class="pp-tr" role="button" data-treasurer-take><input type="checkbox" tabindex="-1" onclick="return false;"><span>אני גזבר הערב</span></div>`;
-          else if (tr && tr === myPlayerId) trHtml = `<div class="pp-tr on" role="button" data-treasurer-clear><input type="checkbox" checked tabindex="-1" onclick="return false;"><span>אני גזבר הערב</span></div>`;
-          else if (tr) trHtml = `<div class="pp-tr info"><b><bdi>${esc(tableShortName(g, tr))}</bdi></b><span>${playerIsFemale(g, c, tr) ? "גזברית" : "גזבר"} הערב</span>${isAdminView ? `<button type="button" class="pp-tr-clear" data-treasurer-clear>ללא גזבר</button>` : ""}</div>`;
-          return `<div class="pp-me-row${trHtml ? " has-tr" : ""}">${trHtml}${nameHtml}</div>`;
+          if (!tr && mineSeated) return `<div class="tr-strip"><div class="tr-pick" role="button" data-treasurer-take><input type="checkbox" tabindex="-1" onclick="return false;"><span>אני גזבר הערב</span></div></div>`;
+          if (tr && tr === myPlayerId) return `<div class="tr-strip"><div class="tr-pick" role="button" data-treasurer-clear><input type="checkbox" checked tabindex="-1" onclick="return false;"><span>אני גזבר הערב</span></div></div>`;
+          if (tr) return `<div class="tr-strip info">${TREASURER_ICON}<span>${playerIsFemale(g, c, tr) ? "גזברית" : "גזבר"} הערב: <b><bdi>${esc(tableShortName(g, tr))}</bdi></b></span>${isAdminView ? `<button type="button" class="tr-clear" data-treasurer-clear>ללא גזבר</button>` : ""}</div>`;
+          return "";
         })()}
+        ${carouselHtml}
+        ${nameHtml}
         ${viewingOther || cashedOut ? "" : paymentNotesHtml}
         ${(() => {
           // Direct-settlement arrangement(s) involving this player (either side - see
@@ -7697,7 +7699,7 @@ function renderTable(gameId){
     // only raising the whole open seat's wrap actually lifts its popup above every other
     // seat, regardless of table order.
     const wrapZ = openHistorySeatPlayerId === pid ? 'z-index:70;' : '';
-    return `<div class="seat-wrap seat-card${pid === myPlayerId ? ' seat-card-me' : ''}${cashedOut ? ' seat-card-out' : ''}" style="left:${x}%;top:${y}%;${wrapZ}" data-seat="${i}" data-x="${x}">
+    return `<div class="seat-wrap seat-card${pid === myPlayerId ? ' seat-card-me' : ''}${cashedOut ? ' seat-card-out' : ''}" style="left:${x}%;top:${y}%;${wrapZ}" data-seat="${i}" data-x="${x}">${pid === gameTreasurer(g) ? TREASURER_TAG : ""}
       <div class="seat-circle filled ${cashedOut?'cashed-out':''}${ringClass}"${circleStyle}>${circleInner}</div>
       <div class="seat-info" data-seat-info style="position:relative;${infoRadius}">
         ${historyToggleHtml}
@@ -7814,6 +7816,9 @@ function tableSeatOrder(g, ids, myPlayerId){
 // "Back to the game" arrow: a line along the bottom ending in an arrowhead, turning up
 // and back in a horseshoe whose end stops above the middle of that bottom line. Not
 // underlined (only the words next to it are).
+const TREASURER_ICON = `<svg class="tr-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 6.5v11M14.6 9.4c0-1-1.2-1.8-2.6-1.8s-2.6.8-2.6 1.8 1.2 1.6 2.6 1.8 2.6.8 2.6 1.9-1.2 1.8-2.6 1.8-2.6-.8-2.6-1.8"/></svg>`;
+// The "גזבר" tag over the treasurer's picture - in the players carousel and on the table.
+const TREASURER_TAG = `<span class="tr-tag">גזבר</span>`;
 const RETURN_ICON = `<svg class="ret-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 6.5h5.5a5 5 0 0 1 0 10H4.5M8.5 12.5l-4 4 4 4"/></svg>`;
 function playersCarouselHtml(key, g, c, ids, {onId = null, meId = null, attr, under = null, legend = ""}){
   if (!ids.length) return "";
@@ -7821,7 +7826,7 @@ function playersCarouselHtml(key, g, c, ids, {onId = null, meId = null, attr, un
     const out = id in (g.cashouts || {});
     const rp = c.roster.find(r => r.id === id);
     const photo = (rp && getPlayerPhoto(rp)) || "/static/logo-watermark.png";
-    return `<button type="button" class="pp-ci${id === onId ? " on" : ""}${id === meId ? " me" : ""}${out ? " out" : ""}" ${attr}="${id}">
+    return `<button type="button" class="pp-ci${id === onId ? " on" : ""}${id === meId ? " me" : ""}${out ? " out" : ""}" ${attr}="${id}">${id === gameTreasurer(g) ? TREASURER_TAG : ""}
       <span class="pp-ci-av" style="background-image:url('${photo}')"></span>
       <bdi class="pp-ci-name">${esc(tableShortName(g, id))}</bdi>${under ? under(id) : ""}</button>`;
   }).join("");
