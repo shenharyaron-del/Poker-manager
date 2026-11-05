@@ -1148,7 +1148,12 @@ html.theme-light.theme-sand .pp-ci-amt,html.theme-light.theme-sand .pp-ci-out{co
 .pp-ci.on .pp-ci-name{color:var(--gold);}
 .pp-ci-amt{font-size:14px;font-weight:600;color:var(--muted);}
 .pp-ci-out{font-size:14px;font-weight:600;color:var(--muted);}
-.pp-ci-return{font-size:13px;font-weight:800;color:var(--gold);text-decoration:underline;text-underline-offset:2px;}
+.pp-ci-return{font-size:13px;font-weight:800;color:var(--gold);}
+/* "החזר" / "חזור למשחק": the words underlined, the arrow beside them not */
+.pp-ci-return,.pp-self-return{display:inline-flex;align-items:center;gap:2px;text-decoration:none!important;}
+.ret-txt{text-decoration:underline;text-underline-offset:2px;}
+.pp-self-return .ret-txt{text-underline-offset:3px;}
+.ret-ic{width:1.3em;height:1.3em;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;}
 .pp-car-arrow{position:absolute;top:38%;transform:translateY(-50%);width:20px;height:40px;display:flex;align-items:center;justify-content:center;background:none;border:none;padding:0;cursor:pointer;color:#5fd3b0;}
 .pp-car-arrow svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;}
 .pp-car-arrow.prev{right:0;}
@@ -7167,7 +7172,7 @@ function renderPlayerScreen(gameId){
     // closed the night, which only they reopen.
     const selfReturn = cashedOut && !viewingOther && (isAdminView || !g.closed);
     const outPart = !cashedOut ? "" : selfReturn
-      ? `<button type="button" class="pp-self-return" data-self-return="${pid}">↩ חזור למשחק</button>`
+      ? `<button type="button" class="pp-self-return" data-self-return="${pid}">${RETURN_ICON}<span class="ret-txt">חזור למשחק</span></button>`
       : ' · יצא';
     const box = `<div class="pp-name-box" dir="rtl"${font ? ` style="font-size:${font}px;"` : ''}><bdi>${esc(nm)}</bdi>${outPart}</div>`;
     // Looking at someone else: my own name, as a button beside theirs, takes me back to my
@@ -7187,7 +7192,7 @@ function renderPlayerScreen(gameId){
     if (viewingOther && me) {
       return `<button type="button" class="pp-me-card" dir="rtl" data-pp-back-me title="חזרה למסך שלי"><span class="pp-me-name"><bdi>${esc(me.name)}</bdi></span>${mineOut ? "" : `<span class="pp-total" data-player-total>₪${myTotal}</span>`}</button>`;
     }
-    return `<div class="pp-me-card" dir="rtl"><span class="pp-me-name"${font ? ` style="font-size:${Math.min(font + 3, 23)}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut && !selfReturn ? ' · יצא' : ''}</span>${cashedOut ? (selfReturn ? `<button type="button" class="pp-self-return" data-self-return="${pid}">↩ חזור למשחק</button>` : "") : `<span class="pp-total" data-player-total>₪${buyinTotal}</span>`}</div>`;
+    return `<div class="pp-me-card" dir="rtl"><span class="pp-me-name"${font ? ` style="font-size:${Math.min(font + 3, 23)}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut && !selfReturn ? ' · יצא' : ''}</span>${cashedOut ? (selfReturn ? `<button type="button" class="pp-self-return" data-self-return="${pid}">${RETURN_ICON}<span class="ret-txt">חזור למשחק</span></button>` : "") : `<span class="pp-total" data-player-total>₪${buyinTotal}</span>`}</div>`;
   })();
   // Tiles above the name: everyone who entered tonight, in order, then a "הזמן שחקן" tile
   // in the next free spot (it replaces the header's invite button here).
@@ -7203,7 +7208,7 @@ function renderPlayerScreen(gameId){
       // Only the table's admins act for someone else - for them the frame says so.
       legend: isAdminView ? "בחר שחקן כדי לפעול בשמו" : "",
       under: id => !(id in (g.cashouts || {})) ? `<span class="pp-ci-amt">₪${Math.round((totals[id] || 0) * 100) / 100}</span>`
-        : isAdminView ? `<span class="pp-ci-return" role="button" data-admin-return-to-game="${id}">↩ החזר</span>`
+        : isAdminView ? `<span class="pp-ci-return" role="button" data-admin-return-to-game="${id}">${RETURN_ICON}<span class="ret-txt">החזר</span></span>`
         : `<span class="pp-ci-out">יצא</span>`,
     });
   })();
@@ -7735,6 +7740,10 @@ function tableSeatOrder(g, ids, myPlayerId){
   };
   return ids.map((id, n) => ({id, n, k: key(id)})).sort((a, b) => a.k - b.k || a.n - b.n).map(x => x.id);
 }
+// "Back to the game" arrow: a line along the bottom ending in an arrowhead, turning up
+// and back in a horseshoe whose end stops above the middle of that bottom line. Not
+// underlined (only the words next to it are).
+const RETURN_ICON = `<svg class="ret-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 6.5h5.5a5 5 0 0 1 0 10H4.5M8.5 12.5l-4 4 4 4"/></svg>`;
 function playersCarouselHtml(key, g, c, ids, {onId = null, meId = null, attr, under = null, legend = ""}){
   if (!ids.length) return "";
   const items = ids.map(id => {
