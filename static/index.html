@@ -1283,6 +1283,7 @@ html.theme-light.theme-sand .pp-me-card{border-color:rgba(110,65,25,.65);}
 .pp-tr.info b{font-size:15px;font-weight:800;color:var(--gold);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 html.theme-light .pp-tr.info b{color:#9a5f12;}
 .pp-tr-clear{margin-top:3px;background:none;border:none;padding:0;font:inherit;font-size:12px;color:var(--muted);text-decoration:underline;cursor:pointer;}
+.pp-ci[data-pp-noview]{cursor:default;}
 .game-status-col{display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0;}
 .game-treasurer{font-size:13px;color:var(--muted);white-space:nowrap;}
 .tr-note{margin:4px 0 14px;padding:12px;border:1.5px dashed var(--frame-c,var(--gold));border-radius:14px;text-align:center;font-size:17px;color:var(--text);flex-shrink:0;}
@@ -3714,6 +3715,10 @@ function iAmTreasurer(g){
 }
 // May I make or cancel a rebuy (for anyone) tonight?
 function canHandleMoney(g){ return !gameTreasurer(g) || iAmTreasurer(g) || isSuperAdmin(); }
+// May I open another player's screen (act on their behalf)? With a treasurer tonight only
+// they do - for anyone else there's nothing there to do (no rebuys, and only my own night
+// to end), so the players carousel is just a list.
+function canActForOthers(g){ return !gameTreasurer(g) || iAmTreasurer(g) || isSuperAdmin(); }
 // May I end player pid's night (or bring them back)?
 function canEndNightFor(g, pid){
   return canHandleMoney(g) || pid === (myIdentity.myPlayers && myIdentity.myPlayers[g.communityId]);
@@ -6952,7 +6957,7 @@ function renderPlayerScreen(gameId){
   // Any player can work on another player's screen (rebuy / end of night for them) - only
   // removing someone from the table or bringing them back stays admin-only (see
   // adminPlayerActions).
-  const pid = (playerViewTarget && playerViewTarget !== "__tools__" && g.players.some(pl => pl.id === playerViewTarget)) ? playerViewTarget : myPlayerId;
+  const pid = (playerViewTarget && playerViewTarget !== "__tools__" && g.players.some(pl => pl.id === playerViewTarget) && canActForOthers(g)) ? playerViewTarget : myPlayerId;
   const viewingOther = pid !== myPlayerId;
   const p = g.players.find(pl => pl.id === pid);
   const myBuyins = g.buyins.filter(b => b.playerId === pid).slice().sort((a,b) => (a.ts||0)-(b.ts||0));
@@ -7254,7 +7259,7 @@ function renderPlayerScreen(gameId){
     const totals = {};
     (g.buyins || []).forEach(b => { totals[b.playerId] = (totals[b.playerId] || 0) + (b.amount || 0); });
     return playersCarouselHtml("player:" + g.id, g, c, tableSeatOrder(g, othersTonight, myPlayerId), {
-      onId: pid, attr: "data-pp-view",
+      onId: pid, attr: canActForOthers(g) ? "data-pp-view" : "data-pp-noview",
       // The table's admins (and tonight's treasurer) act for someone else - for them the frame says so.
       legend: (isAdminView || iAmTreasurer(g)) ? "בחר שחקן כדי לפעול בשמו" : "",
       under: id => !(id in (g.cashouts || {})) ? `<span class="pp-ci-amt">₪${Math.round((totals[id] || 0) * 100) / 100}</span>`
@@ -7323,7 +7328,7 @@ function tableShortName(g, id){
 // on someone else's seat.
 function playerScreenViewingOther(){
   const g = getGame(nav.gameId);
-  if (!g || !playerViewTarget || !g.players.some(pl => pl.id === playerViewTarget)) return false;
+  if (!g || !playerViewTarget || !g.players.some(pl => pl.id === playerViewTarget) || !canActForOthers(g)) return false;
   const mine = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
   return playerViewTarget !== mine;
 }
@@ -10400,6 +10405,7 @@ function attachHandlers(){
     const g = getGame(nav.gameId);
     const mine = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
     const id = el.dataset.ppView;
+    if (!canActForOthers(g)) return;
     // Tapping the player already shown goes back to my own screen.
     playerViewTarget = (id === mine || id === playerViewTarget) ? null : id;
     render();
