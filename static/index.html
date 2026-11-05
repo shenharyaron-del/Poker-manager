@@ -1285,7 +1285,9 @@ html.theme-light .tr-strip{background:rgba(255,255,255,.35);}
 .tr-pick input{width:24px;height:24px;margin:0;accent-color:var(--gold);pointer-events:none;flex-shrink:0;}
 .lux-page.pp-other .tr-pick input{accent-color:#9a5f12;}
 .tr-strip b{color:var(--gold);} html.theme-light .tr-strip b{color:#9a5f12;} html.theme-light.theme-blue .tr-strip b{color:#0e2633;}
-.tr-ic{width:38px;height:38px;flex-shrink:0;margin:-8px 0;}
+.tr-ic{width:38px;height:38px;flex-shrink:0;margin:-8px 0;
+  /* a soft gold glow around it (the picture's own glow was cut out with its white background) */
+  filter:drop-shadow(0 0 4px rgba(255,214,102,.9)) drop-shadow(0 0 9px rgba(255,196,64,.55));}
 .tr-clear{margin-inline-start:auto;background:none;border:none;padding:0;font:inherit;font-size:14px;font-weight:700;color:var(--gold);text-decoration:underline;text-underline-offset:3px;cursor:pointer;white-space:nowrap;}
 html.theme-light .tr-clear{color:#9a5f12;} html.theme-light.theme-blue .tr-clear{color:#0e2633;}
 .tr-strip.info:has(.tr-clear){justify-content:flex-start;}
