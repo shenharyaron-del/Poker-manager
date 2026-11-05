@@ -2533,7 +2533,9 @@ def v2_decide_join_request(request_id):
 
 @app.route("/api/v2/games/<game_id>/seats/swap", methods=["PUT"])
 def v2_swap_seats(game_id):
-    denied = _guard(game_id=game_id)
+    # Moving players around the table is the table admin's (its creator, or a club admin) -
+    # a player touching the table can't shuffle the others by accident.
+    denied = _guard(game_id=game_id, need="table_admin")
     if denied:
         return denied
     # Single atomic UPDATE reading both old values off the same row image under the row
