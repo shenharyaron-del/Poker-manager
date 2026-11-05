@@ -1285,9 +1285,12 @@ html.theme-light .tr-strip{background:rgba(255,255,255,.35);}
 .tr-pick input{width:24px;height:24px;margin:0;accent-color:var(--gold);pointer-events:none;flex-shrink:0;}
 .lux-page.pp-other .tr-pick input{accent-color:#9a5f12;}
 .tr-strip b{color:var(--gold);} html.theme-light .tr-strip b{color:#9a5f12;} html.theme-light.theme-blue .tr-strip b{color:#0e2633;}
-.tr-ic{width:38px;height:38px;flex-shrink:0;margin:-8px 0;
-  /* a soft gold glow around it (the picture's own glow was cut out with its white background) */
-  filter:drop-shadow(0 0 4px rgba(255,214,102,.9)) drop-shadow(0 0 9px rgba(255,196,64,.55));}
+.tr-ic{position:relative;display:block;width:38px;height:38px;flex-shrink:0;margin:-8px 0;}
+.tr-ic img{position:relative;z-index:1;display:block;width:100%;height:100%;}
+/* a soft gold glow behind the chips, above the hand - like the picture's own glow, which
+   was cut out with its white background */
+.tr-ic::before{content:"";position:absolute;z-index:0;left:16%;top:-6%;width:70%;height:66%;border-radius:50%;
+  background:radial-gradient(circle,rgba(255,220,110,.95) 0,rgba(255,206,84,.55) 38%,rgba(255,196,64,0) 70%);}
 .tr-clear{margin-inline-start:auto;background:none;border:none;padding:0;font:inherit;font-size:14px;font-weight:700;color:var(--gold);text-decoration:underline;text-underline-offset:3px;cursor:pointer;white-space:nowrap;}
 html.theme-light .tr-clear{color:#9a5f12;} html.theme-light.theme-blue .tr-clear{color:#0e2633;}
 .tr-strip.info:has(.tr-clear){justify-content:flex-start;}
@@ -7822,7 +7825,7 @@ function tableSeatOrder(g, ids, myPlayerId){
 // "Back to the game" arrow: a line along the bottom ending in an arrowhead, turning up
 // and back in a horseshoe whose end stops above the middle of that bottom line. Not
 // underlined (only the words next to it are).
-const TREASURER_ICON = `<img class="tr-ic" src="/static/treasurer.webp" width="38" height="38" alt="" draggable="false">`;
+const TREASURER_ICON = `<span class="tr-ic"><img src="/static/treasurer.webp" width="38" height="38" alt="" draggable="false"></span>`;
 // The "גזבר" tag over the treasurer's picture - in the players carousel and on the table.
 const TREASURER_TAG = `<span class="tr-tag">גזבר</span>`;
 const RETURN_ICON = `<svg class="ret-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 6.5h5.5a5 5 0 0 1 0 10H4.5M8.5 12.5l-4 4 4 4"/></svg>`;
