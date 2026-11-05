@@ -606,6 +606,9 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .client-errors .ce-msg{color:var(--muted);font-size:14px;margin-top:2px;word-break:break-word;}
 .login-invite{font-size:18px;line-height:1.5;text-align:center;margin:0 0 14px;padding:10px 12px;border:1px solid rgba(212,175,55,.45);border-radius:12px;background:rgba(212,175,55,.08);}
 .game-focus-head{justify-content:center;font-size:15px;padding-left:100px;padding-right:100px;}
+/* The table / club title level with the ☰ menu button's middle (it sat 6px lower) - the
+   6px move to the bottom, so the tabs under it stay put. */
+.screen-tag.game-focus-head{padding-top:calc(14px + env(safe-area-inset-top,0px));padding-bottom:14px;}
 /* ☰ sits on the right (the theme toggle's spot is the left corner) - the menu opens under it. */
 .screen-tag .game-menu-btn{left:auto;right:12px;}
 .game-focus-head .crumb-here{flex-shrink:1;min-width:0;overflow:hidden;text-overflow:ellipsis;}
@@ -1284,7 +1287,9 @@ html.theme-light .tr-strip{background:rgba(255,255,255,.35);}
 .tr-strip b{color:var(--gold);} html.theme-light .tr-strip b{color:#9a5f12;} html.theme-light.theme-blue .tr-strip b{color:#0e2633;}
 .tr-ic{width:20px;height:20px;flex-shrink:0;fill:none;stroke:var(--gold);stroke-width:2;stroke-linecap:round;}
 html.theme-light .tr-ic{stroke:#9a5f12;}
-.tr-clear{margin-inline-start:6px;background:none;border:none;padding:0;font:inherit;font-size:13px;color:var(--muted);text-decoration:underline;cursor:pointer;}
+.tr-clear{margin-inline-start:auto;background:none;border:none;padding:0;font:inherit;font-size:14px;font-weight:700;color:var(--gold);text-decoration:underline;text-underline-offset:3px;cursor:pointer;white-space:nowrap;}
+html.theme-light .tr-clear{color:#9a5f12;} html.theme-light.theme-blue .tr-clear{color:#0e2633;}
+.tr-strip.info:has(.tr-clear){justify-content:flex-start;}
 .tr-tag{position:absolute;top:-4px;left:50%;transform:translateX(-50%);padding:1px 7px;border-radius:999px;font-size:11px;font-weight:800;line-height:1.5;white-space:nowrap;
   background:linear-gradient(180deg,#fde9a8,#e9c46a 50%,#c99a3a);color:#2a1d05;box-shadow:0 2px 4px rgba(0,0,0,.4);z-index:3;pointer-events:none;}
 .pp-ci{position:relative;}
@@ -7289,7 +7294,7 @@ function renderPlayerScreen(gameId){
           const mineSeated = myPlayerId && (g.seats || []).includes(myPlayerId) && !(myPlayerId in (g.cashouts || {}));
           if (!tr && mineSeated) return `<div class="tr-strip"><div class="tr-pick" role="button" data-treasurer-take><input type="checkbox" tabindex="-1" onclick="return false;"><span>אני גזבר הערב</span></div></div>`;
           if (tr && tr === myPlayerId) return `<div class="tr-strip"><div class="tr-pick" role="button" data-treasurer-clear><input type="checkbox" checked tabindex="-1" onclick="return false;"><span>אני גזבר הערב</span></div></div>`;
-          if (tr) return `<div class="tr-strip info">${TREASURER_ICON}<span>${playerIsFemale(g, c, tr) ? "גזברית" : "גזבר"} הערב: <b><bdi>${esc(tableShortName(g, tr))}</bdi></b></span>${isAdminView ? `<button type="button" class="tr-clear" data-treasurer-clear>ללא גזבר</button>` : ""}</div>`;
+          if (tr) return `<div class="tr-strip info">${TREASURER_ICON}<span>${playerIsFemale(g, c, tr) ? "גזברית" : "גזבר"} הערב: <b><bdi>${esc(tableShortName(g, tr))}</bdi></b></span>${isAdminView ? `<button type="button" class="tr-clear" data-treasurer-clear>הסר מגזברות</button>` : ""}</div>`;
           return "";
         })()}
         ${carouselHtml}
@@ -10361,7 +10366,8 @@ function attachHandlers(){
   });
   app.querySelectorAll("[data-treasurer-clear]").forEach(el => el.onclick = async () => {
     const g = getGame(nav.gameId); if (!g) return;
-    if (!(await showConfirm(iAmTreasurer(g) ? "לוותר על תפקיד גזבר הערב? כל שחקן יוכל שוב לעשות ריביי בעצמו." : "להסיר את גזבר הערב? כל שחקן יוכל שוב לעשות ריביי בעצמו."))) return;
+    const trName = gameTreasurer(g) ? tableShortName(g, gameTreasurer(g)) : "";
+    if (!(await showConfirm(iAmTreasurer(g) ? "לוותר על תפקיד גזבר הערב? כל שחקן יוכל שוב לעשות ריביי בעצמו." : `להסיר את ${trName} מגזברות הערב? כל שחקן יוכל שוב לעשות ריביי בעצמו.`))) return;
     el.disabled = true;
     try { await v2SetTreasurer(g.id, null); }
     catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
