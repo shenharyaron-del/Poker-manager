@@ -9221,8 +9221,8 @@ function renderModal(m){
       ]],
       ["המועדון", [
         club && tile('data-game-menu-go="club"', '<span class="menu-club">♣\uFE0E</span>', `המועדון ${esc(club.name)}`),
-        setupClub && tile('data-game-menu-go="report"', "🏆", "דוח מנצחים"),
         canSetupClub && tile(`data-open-chip-setup="${setupClub.id}"`, icon('gear'), "פרופיל מועדון"),
+        setupClub && tile('data-game-menu-go="report"', "🏆", "דוח מנצחים"),
       ]],
       ["אני", [
         tile('data-game-menu-go="profile"', "👤", "הפרופיל שלי"),
