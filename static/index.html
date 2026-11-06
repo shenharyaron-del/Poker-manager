@@ -1276,6 +1276,10 @@ html.theme-light.theme-sand .pp-me-card{border-color:rgba(110,65,25,.65);}
 .pp-me-card .pp-me-name{font-size:24px;font-weight:800;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .player-page .pp-me-card .pp-total{font-size:42px;line-height:1.05;margin:0;}
 .pp-me-card .pp-self-return{margin:4px 0 2px;}
+/* my picture beside my name and total */
+.pp-me-card{flex-direction:row;gap:14px;padding:10px 18px 10px 14px;}
+.pp-me-av{width:64px;height:64px;border-radius:12px;flex-shrink:0;background-size:cover;background-position:center;box-shadow:0 2px 6px rgba(0,0,0,.4);}
+.pp-me-txt{display:flex;flex-direction:column;align-items:center;min-width:0;max-width:100%;}
 /* גיזבר הערב: the strip over the players carousel */
 .tr-strip{display:flex;align-items:center;gap:8px;margin:0 0 10px;padding:9px 14px;border-radius:12px;border:1px solid var(--frame-c,var(--gold));
   background:transparent;font-size:15px;color:var(--text);flex-shrink:0;text-align:right;}
@@ -5989,11 +5993,10 @@ function gameTabsScreen(g, c, seated){
   const canInvite = hasFreeSeat(g);
   const tab = tableSubView === "invite" && canInvite ? "invite"
     : tableSubView === "player" ? "game" : (tableTimelineOn() ? "timeline" : "table");
-  // One tab pulses to draw the eye: "הזמנה" until the game starts or it's been opened once
-  // for this game (on this device); after that, "משחק" whenever another tab is open.
-  let inviteOpened = false;
-  try { inviteOpened = !!localStorage.getItem("poker-invite-tab-opened:" + g.id); } catch(e) {}
-  const invitePulse = canInvite && tab !== "invite" && !gameStarted(g) && !inviteOpened;
+  // One tab pulses to draw the eye: "הזמנה" until two players sit at the table; after that,
+  // "משחק" whenever another tab is open.
+  const atTable = (g.seats || []).filter(Boolean).length;
+  const invitePulse = canInvite && tab !== "invite" && atTable < 2;
   const gamePulse = !invitePulse && tab !== "game";
   const tabs = [["game", "משחק"], ["table", "שולחן"], ["timeline", "ציר זמן"], ...(canInvite ? [["invite", "הזמנה"]] : [])];
   // "משחק" is where everything that matters happens (rebuys, ending the night) - wider than
@@ -7374,10 +7377,16 @@ function renderPlayerScreen(gameId){
     // acting for someone else goes back to my own screen.
     const mineOut = !myPlayerId || myPlayerId in (g.cashouts || {});
     const myTotal = (g.buyins || []).filter(b => b.playerId === myPlayerId).reduce((s2, b) => s2 + b.amount, 0);
+    // My picture, square like the seat cards on the table (no photo: the logo on navy).
+    const meAv = id => {
+      const rp = (c.roster || []).find(r => r.id === id);
+      const photo = rp && getPlayerPhoto(rp);
+      return `<span class="pp-me-av" style="${photo ? `background-image:url('${photo}');` : `background:url('/static/logo-watermark.png') center/112% no-repeat,linear-gradient(135deg,#46566f,#14213a);`}"></span>`;
+    };
     if (viewingOther && me) {
-      return `<button type="button" class="pp-me-card" dir="rtl" data-pp-back-me title="חזרה למסך שלי"><span class="pp-me-name"><bdi>${esc(me.name)}</bdi></span>${mineOut ? "" : `<span class="pp-total" data-player-total>₪${myTotal}</span>`}</button>`;
+      return `<button type="button" class="pp-me-card" dir="rtl" data-pp-back-me title="חזרה למסך שלי">${meAv(myPlayerId)}<span class="pp-me-txt"><span class="pp-me-name"><bdi>${esc(me.name)}</bdi></span>${mineOut ? "" : `<span class="pp-total" data-player-total>₪${myTotal}</span>`}</span></button>`;
     }
-    return `<div class="pp-me-card" dir="rtl"><span class="pp-me-name"${font ? ` style="font-size:${Math.min(font + 3, 23)}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut && !selfReturn ? ' · יצא' : ''}</span>${cashedOut ? (selfReturn ? `<button type="button" class="pp-self-return" data-self-return="${pid}">${RETURN_ICON}<span class="ret-txt">חזור למשחק</span></button>` : "") : `<span class="pp-total" data-player-total>₪${buyinTotal}</span>`}</div>`;
+    return `<div class="pp-me-card" dir="rtl">${meAv(pid)}<span class="pp-me-txt"><span class="pp-me-name"${font ? ` style="font-size:${Math.min(font + 3, 23)}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut && !selfReturn ? ' · יצא' : ''}</span>${cashedOut ? (selfReturn ? `<button type="button" class="pp-self-return" data-self-return="${pid}">${RETURN_ICON}<span class="ret-txt">חזור למשחק</span></button>` : "") : `<span class="pp-total" data-player-total>₪${buyinTotal}</span>`}</span></div>`;
   })();
   // Tiles above the name: everyone who entered tonight, in order, then a "הזמן שחקן" tile
   // in the next free spot (it replaces the header's invite button here).
@@ -10531,10 +10540,7 @@ function attachHandlers(){
   app.querySelectorAll("[data-game-tab]").forEach(el => el.onclick = () => {
     const t = el.dataset.gameTab;
     if (t === "game") tableSubView = "player";
-    else if (t === "invite") {
-      tableSubView = "invite";
-      try { localStorage.setItem("poker-invite-tab-opened:" + nav.gameId, "1"); } catch(e) {}
-    }
+    else if (t === "invite") tableSubView = "invite";
     else { tableSubView = "table"; setTableView(t); }
     render();
   });
