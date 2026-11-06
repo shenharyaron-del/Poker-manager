@@ -7426,6 +7426,8 @@ function renderPlayerScreen(gameId){
           // ending my night ("סיימתי את הערב" ticked): no point picking one now - the strip
           // makes room (with a treasurer, who it is still shows)
           if (!tr && mineSeated && armed && !viewingOther) return "";
+          // the game is on and nobody took it: the strip goes - "אני גיזבר הערב" is in the ☰ menu
+          if (!tr && !notStarted) return "";
           if (!tr && mineSeated) return `<div class="tr-strip has-hint"><div class="tr-hint">כדי למנוע טעויות, מומלץ לבחור גיזבר שיהיה אחראי על חלוקת הז'יטונים ורישום הריביי.</div><div class="tr-pick" role="button" data-treasurer-take><input type="checkbox" tabindex="-1" onclick="return false;"><span>אני גיזבר הערב</span></div></div>`;
           if (tr && tr === myPlayerId) return `<div class="tr-strip"><div class="tr-pick" role="button" data-treasurer-clear><input type="checkbox" checked tabindex="-1" onclick="return false;"><span>אני גיזבר הערב</span></div></div>`;
           if (tr) return `<div class="tr-strip info">${TREASURER_ICON}<span>${playerIsFemale(g, c, tr) ? "גיזברית" : "גיזבר"} הערב: <b><bdi>${esc(tableShortName(g, tr))}</bdi></b></span>${isAdminView ? `<button type="button" class="tr-clear" data-treasurer-clear>הסר מגיזברות</button>` : ""}</div>`;
@@ -9190,6 +9192,10 @@ function renderModal(m){
     const canCloseNight = g && club && isTableAdmin(g, club);
     const setupClub = club || (nav.screen === "community" && getCommunity(nav.communityId));
     const canSetupClub = setupClub && (isSuperAdmin() || isClubCreator(setupClub));
+    // Once the game is on with no treasurer, taking the role lives here (the strip is gone).
+    const myPid = g && myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+    const canTakeTreasurerFromMenu = !!(g && !g.closed && gameStarted(g) && !gameTreasurer(g) && myPid
+      && (g.seats || []).includes(myPid) && !(myPid in (g.cashouts || {})));
     title = "תפריט";
     body = `
       <div class="game-menu">
@@ -9201,6 +9207,7 @@ function renderModal(m){
         <button class="btn btn-ghost btn-block" data-game-menu-go="stats">${icon('bar')} הביצועים שלי</button>
         <button class="btn btn-ghost btn-block" data-game-menu-go="theme">🎨 עיצוב</button>
         ${installMode() ? `<button class="btn btn-ghost btn-block" data-install-app>📲 התקנת האפליקציה</button>` : ""}
+        ${canTakeTreasurerFromMenu ? `<button class="btn btn-ghost btn-block" data-treasurer-take>💰 אני גיזבר הערב</button>` : ""}
         ${canCloseNight ? (g.closed
           ? `<button class="btn btn-ghost btn-block" data-game-menu-go="reopen">🔓 ביטול סגירת ערב</button>`
           : `<button class="btn btn-ghost btn-block" data-game-menu-go="close">🔒 סגור משחק</button>`) : ""}
@@ -10520,6 +10527,7 @@ function attachHandlers(){
   // גיזבר הערב: take it (nobody has it yet), or let it go (the treasurer, or a table admin).
   app.querySelectorAll("[data-treasurer-take]").forEach(el => el.onclick = async () => {
     const g = getGame(nav.gameId); if (!g) return;
+    if (modal && modal.type === "gameMenu") { modal = null; render(); }
     const mine = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
     if (!(await showConfirm("להיות גיזבר הערב? רק אתה תבצע ריביי וביטול ריביי לכל השחקנים.\nכל שחקן יוכל לסיים את הערב בעצמו, או שאתה הגיזבר תסיים עבורו."))) return;
     el.disabled = true;
