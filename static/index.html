@@ -2468,6 +2468,12 @@ async function v2LinkRosterPlayer(communityId, playerId, clientId){
   if (clientId === myIdentity.id && myIdentity.gender) {
     try { await v2SetGenderEverywhere(clientId, myIdentity.gender); } catch(e) { /* best-effort */ }
   }
+  // Took over a row saved with my first name only ("אורן"): it gets my full name ("אורן כהן")
+  // - in every night saved for it too.
+  if (clientId === myIdentity.id && p && myIdentity.name && !sameName(p.name, myIdentity.name)
+      && !String(p.name || "").trim().includes(" ") && sameName(p.name, splitName(myIdentity.name)[0])) {
+    try { await v2RenamePlayerEverywhere(clientId, myIdentity.name); } catch(e) { /* best-effort - the next login fixes it */ }
+  }
 }
 
 // Toggles a roster player's community-level admin flag (the admin screen) - see
@@ -3725,7 +3731,16 @@ function findMyRosterRow(c, noNameMatch){
   const ids = myIdSet();
   const byId = roster.find(r => r.clientId && ids.has(r.clientId));
   if (byId || noNameMatch || !myIdentity.name) return byId || null;
-  return roster.find(r => sameName(r.name, myIdentity.name) && rosterRowIsClaimable(r)) || null;
+  const exact = roster.find(r => sameName(r.name, myIdentity.name) && rosterRowIsClaimable(r));
+  if (exact) return exact;
+  // A row saved with my first name only ("אורן" while I'm "אורן כהן") that no phone has
+  // taken yet is me - taken over with no questions (and renamed to my full name when linked,
+  // see v2LinkRosterPlayer). One taken by another phone goes through a question instead
+  // (nameTakenInClub).
+  const first = splitName(myIdentity.name)[0];
+  if (first === myIdentity.name.trim()) return null;
+  return roster.find(r => !String(r.name || "").trim().includes(" ") && sameName(r.name, first)
+    && (!r.clientId || r.clientId === r.id)) || null;
 }
 function isCommunityAdmin(c){
   if (!c) return false;
@@ -4655,7 +4670,7 @@ function nameTakenInClub(c){
   // My full name on someone else's device; or an older row saved with a first name only
   // ("אורן" while I'm "אורן כהן") - maybe me, so someone at the table confirms.
   return roster.find(r => r.clientId && r.clientId !== r.id && !ids.has(r.clientId) && sameName(r.name, myIdentity.name))
-    || (first !== myIdentity.name.trim() && roster.find(r => !ids.has(r.clientId) && !String(r.name || "").trim().includes(" ") && sameName(r.name, first)))
+    || (first !== myIdentity.name.trim() && roster.find(r => r.clientId && r.clientId !== r.id && !ids.has(r.clientId) && !String(r.name || "").trim().includes(" ") && sameName(r.name, first)))
     || null;
 }
 // A one-off guest someone seated at this table under my name (not on the club's roster):
@@ -4691,8 +4706,11 @@ function setJoinWait(jw){
   try { jw ? localStorage.setItem("poker-join-wait", JSON.stringify(jw)) : localStorage.removeItem("poker-join-wait"); } catch(e) {}
 }
 async function requestJoinAs(c, row, gameId){
-  const res = await v2Fetch("POST", `/communities/${c.id}/join-requests`, {playerId: row.id, gameId: gameId || null});
-  setJoinWait({requestId: res.id, communityId: c.id, gameId: gameId || null, playerId: row.id, name: row.name, status: "pending"});
+  const res = await v2Fetch("POST", `/communities/${c.id}/join-requests`, {playerId: row.id, gameId: gameId || null, requesterName: myIdentity.name});
+  // firstNameOnly: the club's row is my first name only ("אורן" while I'm "אורן כהן") - a
+  // "no" then makes me a new player under my full name instead of a rejection.
+  setJoinWait({requestId: res.id, communityId: c.id, gameId: gameId || null, playerId: row.id, name: row.name, status: "pending",
+    firstNameOnly: !sameName(row.name, myIdentity.name)});
   openModal({type: "joinWait"});
 }
 // Approved: this device becomes that player. Rejected: the window offers "נסה שוב" or a
@@ -4718,6 +4736,23 @@ async function checkMyJoinRequest(){
     if (jw.gameId && getGame(jw.gameId)) go("table", {gameId: jw.gameId, communityId: jw.communityId});
     else go("community", {communityId: jw.communityId});
     showAlert(`אושר - נכנסת בתור ${jw.name} ✓${others.length ? ` (וחזרו אליך עוד ${others.length === 1 ? "מועדון אחד" : others.length + " מועדונים"})` : ""}`);
+  } else if (joinWait.firstNameOnly && myIdentity.name) {
+    // "Not the same person": a new player under my full name, and in.
+    const jw = joinWait;
+    setJoinWait(null);
+    const c = getCommunity(jw.communityId);
+    try {
+      const np = {id: uid(), name: myIdentity.name};
+      await v2AddRosterPlayer(jw.communityId, np.id, np.name);
+      await v2LinkRosterPlayer(jw.communityId, np.id, myIdentity.id);
+      if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
+      myIdentity.myPlayers[jw.communityId] = np.id;
+      await saveIdentity();
+    } catch(e) { showAlert("ההצטרפות נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+    if (modal && modal.type === "joinWait") modal = null;
+    if (jw.gameId && getGame(jw.gameId)) go("table", {gameId: jw.gameId, communityId: jw.communityId});
+    else go("community", {communityId: jw.communityId});
+    showAlert(`נכנסת למועדון${c ? " " + c.name : ""} כשחקן חדש: ${myIdentity.name} ✓`);
   } else {
     setJoinWait({...joinWait, status: "rejected", decidedByName: r.decidedByName || null});
     if (!modal || modal.type === "joinWait") openModal({type: "joinWait"});
@@ -9259,6 +9294,8 @@ function renderModal(m){
     body = `
       <p style="font-size:17px;line-height:1.6;margin:0 0 12px;">${rejected
         ? `הבקשה להיכנס בתור <b>${esc(jw.name || "")}</b>${jw.decidedByName ? ` נדחתה ע"י ${esc(jw.decidedByName)}` : " נדחתה"}.`
+        : jw.firstNameOnly
+        ? `במועדון <b>${esc(club)}</b> כבר יש <b>${esc(jw.name || "")}</b>, שמחובר לטלפון אחר.<br>ביקשנו ממי שיושב בשולחן לאשר אם זה אתה. אם לא - תיכנס כשחקן חדש בשם <b>${esc(myIdentity.name || "")}</b>.`
         : `השם <b>${esc(jw.name || "")}</b> כבר קיים במועדון <b>${esc(club)}</b>.<br>ביקשנו ממי שיושב בשולחן לאשר שזה אתה. אם אף אחד לא יושב עכשיו - הבקשה תחכה עד שמישהו ייכנס.`}</p>
       ${rejected ? `<button class="btn btn-primary btn-block" data-join-retry style="margin-bottom:14px;">נסה שוב</button>` : `<div class="join-wait-dots"><span></span><span></span><span></span></div>`}
       <div class="section-title" style="padding:0;margin:4px 0 6px;">או כניסה בשם אחר</div>
@@ -9270,7 +9307,13 @@ function renderModal(m){
     const r = m.req || {};
     const club = (getCommunity(r.communityId) || {}).name || "";
     title = "מישהו מבקש להיכנס";
-    body = `
+    // Signed up as "אורן כהן", the club has "אורן" (on another phone): the same person, or a
+    // new player? A "no" here makes them a new player under their full name.
+    const firstOnly = r.requesterName && !sameName(r.requesterName, r.name);
+    body = firstOnly ? `
+      <p style="font-size:18px;line-height:1.6;margin:0 0 14px;"><b>${esc(r.requesterName)}</b> נכנס מטלפון חדש למועדון <b>${esc(club)}</b>.<br>במועדון כבר יש <b>${esc(r.name || "")}</b>, שמחובר לטלפון אחר. זה אותו אדם?</p>
+      <button class="btn btn-primary btn-block" data-join-decide="1" style="margin-bottom:8px;">כן, זה אותו אדם</button>
+      <button class="btn btn-ghost btn-block" data-join-decide="0">לא - להכניס כשחקן חדש</button>` : `
       <p style="font-size:18px;line-height:1.6;margin:0 0 14px;">מישהו נכנס מטלפון חדש בשם <b>${esc(r.name || "")}</b>, שכבר קיים במועדון <b>${esc(club)}</b>.<br>זה באמת ${esc(r.name || "")}?</p>
       <button class="btn btn-primary btn-block" data-join-decide="1" style="margin-bottom:8px;">כן, זה הוא - אישור</button>
       <button class="btn btn-ghost btn-block" data-join-decide="0">לא - דחייה</button>`;
