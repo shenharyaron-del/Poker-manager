@@ -6115,7 +6115,9 @@ function render(){
     : `<div class="screen-tag${nav.screen === "home" ? " screen-tag-lg" : ""}">${esc(screenLabel)}</div>`;
   // "התקן אפליקציה" sits under the עיצוב button (not beside the screen name, which it
   // covered); the header grows a little to make room for it.
-  const installChip = installChipHtml();
+  // Not on the screens with the ☰ menu (table, club): it sat over the tabs there, and the
+  // menu has "התקנת האפליקציה" anyway.
+  const installChip = menuHead ? "" : installChipHtml();
   document.documentElement.classList.toggle("has-install-chip", !!installChip);
   const cornerBtn = menuHead ? `<button type="button" class="theme-toggle game-menu-btn" data-game-menu>☰ תפריט</button>` : themeToggleHtml();
   html = screenTag.replace(/^<div class="screen-tag"/, installChip ? '<div class="screen-tag with-install"' : '<div class="screen-tag"').replace(/<\/div>$/, cornerBtn + installChip + '</div>') + html;
@@ -9245,7 +9247,7 @@ function renderModal(m){
       </div>
       <button class="btn btn-primary btn-block" data-install-offer-yes>📲 התקן</button>
       <button class="btn btn-ghost btn-block" style="margin-top:8px;" data-close-modal>לא עכשיו</button>
-      <p class="install-offer-later">אפשר להתקין גם אחר כך, מהכפתור "התקן אפליקציה" למעלה.</p>
+      <p class="install-offer-later">${(nav.screen === "table" || nav.screen === "community") ? `אפשר להתקין גם אחר כך, מהתפריט ☰ ← "התקנת האפליקציה".` : `אפשר להתקין גם אחר כך, מהכפתור "התקן אפליקציה" למעלה.`}</p>
     `;
   } else if (m.type === "installIOS") {
     // iPhone has no install API - the steps, each with a small drawing of the Safari screen
