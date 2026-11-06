@@ -8066,10 +8066,16 @@ function setupOneCarousel(car){
   };
   // A picked player who isn't fully shown comes in at the start; one already shown stays put.
   const shown = el => { const r = el.getBoundingClientRect(), t = track.getBoundingClientRect(); return r.left >= t.left - 2 && r.right <= t.right + 2; };
+  const prevBtn = car.querySelector(".pp-car-arrow.prev"), nextBtn = car.querySelector(".pp-car-arrow.next");
   const markDots = () => {
     const i = middleIndex();
     dots.forEach((d, k) => d.classList.toggle("on", k === i));
     ppCarScroll[gid] = track.scrollLeft;
+    // At an end, that end's arrow hides (its place kept, so nothing shifts).
+    if (!fits && items.length) {
+      if (prevBtn) prevBtn.style.visibility = shown(items[0]) ? "hidden" : "";
+      if (nextBtn) nextBtn.style.visibility = shown(items[items.length - 1]) ? "hidden" : "";
+    }
   };
   if (car.classList.contains("many")) {
     // Stays exactly where it was across re-renders (picking a player included - nothing
