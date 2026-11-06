@@ -6212,6 +6212,7 @@ function layoutTableSize(){
   inner.style.transform = "translateX(-50%)";
   // the seat cards are placed against the table's final size (see keepSeatCardsInside)
   keepSeatCardsInside();
+  placeVacantSeatsOutside();
 }
 window.addEventListener("resize", () => requestAnimationFrame(layoutTableSize));
 
@@ -6627,6 +6628,50 @@ function liftGamePageBackground(){
 // The seat cards are wider than the old circles. After each render: the side seats hug the
 // screen's edges (clear of the felt's middle - totals, the odds calculator), every card stays
 // fully on screen, and cards that would overlap are pushed apart.
+// The light tables' picture (table-felt-blue/sand.webp): how wide the rail's outer edge is
+// at 41 heights from top to bottom, as a fraction of half the picture's width.
+const FELT_HALF_WIDTHS = [0.088,0.409,0.561,0.668,0.751,0.813,0.862,0.903,0.931,0.952,0.962,0.965,0.965,0.969,0.969,0.972,0.972,0.976,0.979,0.979,0.983,0.983,0.986,0.986,0.99,0.993,0.997,1,1,0.993,0.983,0.965,0.938,0.907,0.865,0.817,0.751,0.668,0.558,0.402,0.033];
+// An empty seat's "+" sits just outside the table's wood rail (its spot in SEAT_POS is on
+// the rail): moved out from the table's middle along the same line, to a few px past the
+// rail's outer edge - kept on screen.
+function placeVacantSeatsOutside(){
+  const inner = document.querySelector(".poker-table-inner"), felt = inner && inner.querySelector(".poker-table-felt");
+  const seats = inner ? [...inner.querySelectorAll(".seat-wrap.seat-vacant")] : [];
+  if (!seats.length || !felt || !inner.clientWidth) return;
+  const IW = inner.clientWidth, IH = inner.clientHeight;
+  const fx = felt.offsetLeft, fy = felt.offsetTop, FW = felt.offsetWidth, FH = felt.offsetHeight;
+  const cx = fx + FW / 2, cy = fy + FH / 2;
+  const light = document.documentElement.classList.contains("theme-light");
+  // inside the rail's outer edge? (dark: the photo is clipped to a stadium - half-circle ends)
+  const inside = (x, y) => {
+    const dy = y - cy, dx = Math.abs(x - cx);
+    if (Math.abs(dy) > FH / 2) return false;
+    if (light) {
+      const t = (dy / (FH / 2) + 1) * 20, i = Math.min(39, Math.floor(t)), f = t - i;
+      const hw = FELT_HALF_WIDTHS[i] + (FELT_HALF_WIDTHS[i + 1] - FELT_HALF_WIDTHS[i]) * f;
+      return dx <= hw * FW / 2;
+    }
+    const r = FW / 2, straight = FH / 2 - r, over = Math.abs(dy) - straight;
+    return over <= 0 ? dx <= r : (dx * dx + over * over) <= r * r;
+  };
+  // the screen's edges and the visible table area, in the inner box's own pixels
+  const ir = inner.getBoundingClientRect(), wrap = inner.closest(".poker-table-wrap");
+  const wr = wrap ? wrap.getBoundingClientRect() : ir;
+  const scale = ir.width / IW || 1;
+  const minX = (wr.left - ir.left) / scale + 16, maxX = (wr.right - ir.left) / scale - 16;
+  const minY = (wr.top - ir.top) / scale + 16, maxY = (wr.bottom - ir.top) / scale - 16;
+  const GAP = 12;
+  seats.forEach(w => {
+    const sx = parseFloat(w.dataset.x) / 100 * IW, sy = parseFloat(w.dataset.y) / 100 * IH;
+    const dx = sx - cx, dy = sy - cy, len = Math.hypot(dx, dy) || 1;
+    // out along the line until past the rail (binary search on the distance)
+    let lo = 0, hi = Math.max(IW, IH);
+    for (let k = 0; k < 24; k++) { const m = (lo + hi) / 2; if (inside(cx + dx / len * m, cy + dy / len * m)) lo = m; else hi = m; }
+    let x = cx + dx / len * (hi + GAP), y = cy + dy / len * (hi + GAP);
+    x = Math.min(maxX, Math.max(minX, x)); y = Math.min(maxY, Math.max(minY, y));
+    w.style.left = (x / IW * 100) + "%"; w.style.top = (y / IH * 100) + "%";
+  });
+}
 function keepSeatCardsInside(){
   const M = 6;
   const cards = [...document.querySelectorAll(".seat-wrap.seat-card")];
@@ -7633,7 +7678,7 @@ function renderTable(gameId){
       // The top-left seat sits right under "מחשבון סיכויי יד" - there the hint's text goes
       // beside the hand (on its left) instead of above it, clear of that label.
       const hintCls = hintHere ? (visualPos(i) === 0 ? ' seat-hint seat-hint-side' : ' seat-hint') : '';
-      return `<div class="seat-wrap${hintCls}" style="left:${x}%;top:${y}%;" data-seat="${i}"><div class="seat-circle vacant">${(admin || canTakeSeatHere(g))?'+':''}</div></div>`;
+      return `<div class="seat-wrap seat-vacant${hintCls}" style="left:${x}%;top:${y}%;" data-seat="${i}" data-x="${x}" data-y="${y}"><div class="seat-circle vacant">${(admin || canTakeSeatHere(g))?'+':''}</div></div>`;
     }
     const p = g.players.find(pl => pl.id === pid);
     const name = p ? p.name : "?";
