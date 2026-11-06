@@ -1172,7 +1172,7 @@ def _money_denied(game_id, self_players=None, entry_for=None):
     """None when the caller may touch this night's money, else a 403 response.
 
     No treasurer tonight: None (the endpoint's own _guard decides, as before). With a
-    treasurer, only that player (or the super admin) - except: a player ending their own
+    treasurer, only that player (not even the super admin) - except: a player ending their own
     night (self_players: the cash-out's player is the caller's), and a player's very first
     buy-in, their entry, which comes with sitting down (entry_for: by that player, or a
     table admin seating them)."""
@@ -1191,7 +1191,7 @@ def _money_denied(game_id, self_players=None, entry_for=None):
                 cur.execute("SELECT 1 FROM buyins WHERE game_id = %s AND player_id = %s LIMIT 1", (game_id, entry_for))
                 entry_ok = cur.fetchone() is None
         conn.commit()
-    if caller["is_super"] or treasurer in r["my_players"] or entry_ok:
+    if treasurer in r["my_players"] or entry_ok:   # nobody bypasses a treasurer, the super admin included
         return None
     if self_players and all(pid in r["my_players"] for pid in self_players):
         return None
