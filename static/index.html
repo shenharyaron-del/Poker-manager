@@ -5183,26 +5183,43 @@ function themeToggleHtml(){
 function installChipHtml(){
   return installMode() ? `<button type="button" class="install-chip" data-install-app>📲 התקן<span class="chip-long"> אפליקציה</span></button>` : "";
 }
-// A one-time "install the app?" window for someone who hasn't: on the 2nd (or, if that
-// visit wasn't a good moment, the 3rd) time the app is opened in a browser, on the home or
-// club screen, nothing else open. Opens are counted once per browser session.
+// A one-time "install the app?" window for someone who hasn't: from the 2nd time the app is
+// opened in a browser, at the first calm moment - on the home or club screen, or at a table
+// once I'm seated with my entry recorded - with nothing else open (no window, welcome
+// screen or walkthrough). Most players come in from a game link straight to the table, so
+// the table counts too. Opens are counted once per browser session; shown once per device.
 function maybeOfferInstall(){
   let opens = 0;
   try {
-    if (sessionStorage.getItem("poker-open-counted")) return;
-    sessionStorage.setItem("poker-open-counted", "1");
-    opens = (parseInt(localStorage.getItem("poker-opens"), 10) || 0) + 1;
-    localStorage.setItem("poker-opens", String(opens));
+    if (!sessionStorage.getItem("poker-open-counted")) {
+      sessionStorage.setItem("poker-open-counted", "1");
+      localStorage.setItem("poker-opens", String((parseInt(localStorage.getItem("poker-opens"), 10) || 0) + 1));
+    }
+    opens = parseInt(localStorage.getItem("poker-opens"), 10) || 0;
     if (localStorage.getItem("poker-install-offered")) return;
   } catch(e) { return; }
-  if (opens < 2 || opens > 3) return;
-  // a moment in - Chrome's install offer (beforeinstallprompt) arrives after load
-  setTimeout(() => {
-    if (!installMode() || modal || gameTourGameId || !myIdentity.name) return;
-    if (nav.screen !== "home" && nav.screen !== "community") return;
+  if (opens < 2) return;
+  const calm = () => {
+    if (!installMode() || modal || gameTourGameId || !myIdentity.name) return false;
+    if (document.querySelector(".game-welcome-overlay, .custom-confirm, .custom-alert")) return false;
+    if (nav.screen === "home" || nav.screen === "community") return true;
+    if (nav.screen !== "table") return false;
+    const g = getGame(nav.gameId);
+    const mine = g && myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+    return !!(mine && (g.seats || []).includes(mine) && (g.buyins || []).some(b => b.playerId === mine)
+      && !pendingBuyinRequest && !seatDragInProgress);
+  };
+  // first look a moment in (Chrome's install offer - beforeinstallprompt - arrives after
+  // load), then every few seconds until a calm moment comes
+  let timer = null;
+  const tryNow = () => {
+    try { if (localStorage.getItem("poker-install-offered")) { clearInterval(timer); return; } } catch(e) { clearInterval(timer); return; }
+    if (!calm()) return;
+    clearInterval(timer);
     try { localStorage.setItem("poker-install-offered", "1"); } catch(e) {}
     openModal({type: "installOffer"});
-  }, 3000);
+  };
+  setTimeout(() => { tryNow(); timer = setInterval(tryNow, 4000); }, 3000);
 }
 async function startInstall(){
   const mode = installMode();
