@@ -266,6 +266,9 @@ _INIT_STATEMENTS = (
     "  decided_at TIMESTAMPTZ"
     ")",
     "CREATE INDEX IF NOT EXISTS join_requests_community_idx ON join_requests(community_id)",
+    # The name the newcomer signed up with ("אורן כהן") - the club's row may be shorter
+    # ("אורן"); the approve window shows both.
+    "ALTER TABLE join_requests ADD COLUMN IF NOT EXISTS requester_name TEXT",
     # Saves that failed on a player's phone (after its retries) - reported by the app so
     # the super admin can see what actually goes wrong at the table. Kept short: the
     # oldest rows are trimmed on insert (see report_client_error).
@@ -2464,10 +2467,11 @@ def _can_decide_joins(cur, caller, community_id):
     return False
 
 
-def _join_request_json(row):
+def _join_request_json(row, requester_name=None):
     rid, community_id, game_id, player_id, name, status, decided_by_name = row
     return {"id": rid, "communityId": community_id, "gameId": game_id, "playerId": player_id,
-            "name": name, "status": status, "decidedByName": decided_by_name}
+            "name": name, "status": status, "decidedByName": decided_by_name,
+            "requesterName": requester_name}
 
 
 @app.route("/api/v2/communities/<community_id>/join-requests", methods=["POST"])
@@ -2482,6 +2486,7 @@ def v2_create_join_request(community_id):
     player_id, game_id = body.get("playerId"), body.get("gameId")
     if not _valid_id(player_id) or (game_id is not None and not _valid_id(game_id)):
         return jsonify({"error": "playerId required"}), 400
+    requester_name = (str(body.get("requesterName") or caller.get("name") or "").strip()[:80]) or None
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -2498,9 +2503,9 @@ def v2_create_join_request(community_id):
             )
             rid = secrets.token_hex(8)
             cur.execute(
-                "INSERT INTO join_requests (id, community_id, game_id, player_id, client_id, name) "
-                "VALUES (%s, %s, %s, %s, %s, %s)",
-                (rid, community_id, game_id, player_id, caller["client_id"], row[0]),
+                "INSERT INTO join_requests (id, community_id, game_id, player_id, client_id, name, requester_name) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                (rid, community_id, game_id, player_id, caller["client_id"], row[0], requester_name),
             )
         conn.commit()
     return jsonify({"id": rid, "status": "pending"})
@@ -2543,8 +2548,8 @@ def v2_pending_join_requests():
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, community_id, game_id, player_id, name, status, decided_by_name, client_id FROM join_requests "
-                f"WHERE status = 'pending' AND created_at > now() - interval '{_JOIN_REQUEST_TTL}' ORDER BY created_at"
+                "SELECT id, community_id, game_id, player_id, name, status, decided_by_name, client_id, requester_name "
+                f"FROM join_requests WHERE status = 'pending' AND created_at > now() - interval '{_JOIN_REQUEST_TTL}' ORDER BY created_at"
             )
             rows = cur.fetchall()
             allowed = {}
@@ -2555,7 +2560,7 @@ def v2_pending_join_requests():
                 if cid not in allowed:
                     allowed[cid] = _can_decide_joins(cur, caller, cid)
                 if allowed[cid]:
-                    out.append(_join_request_json(row[:7]))
+                    out.append(_join_request_json(row[:7], row[8]))
         conn.commit()
     return jsonify(out)
 
