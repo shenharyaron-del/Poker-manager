@@ -1276,11 +1276,11 @@ html.theme-light.theme-sand .pp-me-card{border-color:rgba(110,65,25,.65);}
 .pp-me-card .pp-me-name{font-size:24px;font-weight:800;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .player-page .pp-me-card .pp-total{font-size:42px;line-height:1.05;margin:0;}
 .pp-me-card .pp-self-return{margin:4px 0 2px;}
-/* גזבר הערב: the strip over the players carousel */
+/* גיזבר הערב: the strip over the players carousel */
 .tr-strip{display:flex;align-items:center;gap:8px;margin:0 0 10px;padding:9px 14px;border-radius:12px;border:1px solid var(--frame-c,var(--gold));
   background:transparent;font-size:15px;color:var(--text);flex-shrink:0;text-align:right;}
 .tr-strip.info{justify-content:center;}
-/* nobody yet: a line under the box suggesting one */
+/* nobody yet: a line over the box suggesting one */
 .tr-strip.has-hint{flex-direction:column;align-items:flex-start;gap:5px;}
 .tr-hint{font-size:14px;line-height:1.35;color:var(--muted);}
 html.theme-light.theme-blue .lux-page:not(.pp-other) .tr-hint{color:#1d4558;}
@@ -3719,7 +3719,7 @@ function computePotFixChanges(g, selectedIds, diff){
 function isTableAdmin(g, c){
   return isGameCreator(g) || isCommunityAdmin(c);
 }
-// גזבר הערב: while a night has one, only they handle the money - rebuys and cancelling
+// גיזבר הערב: while a night has one, only they handle the money - rebuys and cancelling
 // them, for everyone; each player still ends their own night (the treasurer may do it for
 // them too). The server enforces the same (_money_denied).
 function gameTreasurer(g){
@@ -6560,7 +6560,7 @@ function renderCommunity(communityId){
     const canDelete = isSuperAdmin() || isTableAdmin(g, c);
     const front = `
     <div class="card club-front ${g.closed?"":"card-open"}" data-open-game="${g.id}">
-      <div class="row flex1"><div class="flex1"><div class="name serif">${esc(g.name || ilDate(g.date))}</div>${g.name ? `<div style="font-size:15px;color:var(--muted);margin-top:2px;">${esc(ilDate(g.date))}</div>` : ""}${gameAlert ? `<div class="game-alert-line">${gameAlert.text}</div>` : ""}</div><div class="game-status-col">${gameStatusBadge(g)}${treasurerFirstName(g) ? `<div class="game-treasurer">גזבר: <bdi>${esc(treasurerFirstName(g))}</bdi></div>` : ""}</div></div>
+      <div class="row flex1"><div class="flex1"><div class="name serif">${esc(g.name || ilDate(g.date))}</div>${g.name ? `<div style="font-size:15px;color:var(--muted);margin-top:2px;">${esc(ilDate(g.date))}</div>` : ""}${gameAlert ? `<div class="game-alert-line">${gameAlert.text}</div>` : ""}</div><div class="game-status-col">${gameStatusBadge(g)}${treasurerFirstName(g) ? `<div class="game-treasurer">גיזבר: <bdi>${esc(treasurerFirstName(g))}</bdi></div>` : ""}</div></div>
       <div class="chev">${icon('chev')}</div>
     </div>`;
     if (!canInvite && !canDelete) return front.replace('class="card club-front ', 'class="card ');
@@ -7293,15 +7293,15 @@ function renderPlayerScreen(gameId){
     <div class="player-screen-scroll">
       <div style="text-align:center;padding:6px 0 ${cashedOut?16:4}px;flex-shrink:0;">
         ${(() => {
-          // גזבר הערב - a strip over the players: nobody yet - a seated player ticks "אני גזבר
+          // גיזבר הערב - a strip over the players: nobody yet - a seated player ticks "אני גיזבר
           // הערב" (the same box as "סיימתי את הערב"); I am - the box ticked, untick to let it
-          // go; someone else - who, and a table admin can remove them ("ללא גזבר").
+          // go; someone else - who, and a table admin can remove them ("ללא גיזבר").
           if (g.closed) return "";
           const tr = gameTreasurer(g);
           const mineSeated = myPlayerId && (g.seats || []).includes(myPlayerId) && !(myPlayerId in (g.cashouts || {}));
-          if (!tr && mineSeated) return `<div class="tr-strip has-hint"><div class="tr-pick" role="button" data-treasurer-take><input type="checkbox" tabindex="-1" onclick="return false;"><span>אני גזבר הערב</span></div><div class="tr-hint">כדי למנוע טעויות, מומלץ לבחור גזבר שיהיה אחראי על חלוקת הז'יטונים ורישום הריביי.</div></div>`;
-          if (tr && tr === myPlayerId) return `<div class="tr-strip"><div class="tr-pick" role="button" data-treasurer-clear><input type="checkbox" checked tabindex="-1" onclick="return false;"><span>אני גזבר הערב</span></div></div>`;
-          if (tr) return `<div class="tr-strip info">${TREASURER_ICON}<span>${playerIsFemale(g, c, tr) ? "גזברית" : "גזבר"} הערב: <b><bdi>${esc(tableShortName(g, tr))}</bdi></b></span>${isAdminView ? `<button type="button" class="tr-clear" data-treasurer-clear>הסר מגזברות</button>` : ""}</div>`;
+          if (!tr && mineSeated) return `<div class="tr-strip has-hint"><div class="tr-hint">כדי למנוע טעויות, מומלץ לבחור גיזבר שיהיה אחראי על חלוקת הז'יטונים ורישום הריביי.</div><div class="tr-pick" role="button" data-treasurer-take><input type="checkbox" tabindex="-1" onclick="return false;"><span>אני גיזבר הערב</span></div></div>`;
+          if (tr && tr === myPlayerId) return `<div class="tr-strip"><div class="tr-pick" role="button" data-treasurer-clear><input type="checkbox" checked tabindex="-1" onclick="return false;"><span>אני גיזבר הערב</span></div></div>`;
+          if (tr) return `<div class="tr-strip info">${TREASURER_ICON}<span>${playerIsFemale(g, c, tr) ? "גיזברית" : "גיזבר"} הערב: <b><bdi>${esc(tableShortName(g, tr))}</bdi></b></span>${isAdminView ? `<button type="button" class="tr-clear" data-treasurer-clear>הסר מגיזברות</button>` : ""}</div>`;
           return "";
         })()}
         ${carouselHtml}
@@ -7317,7 +7317,7 @@ function renderPlayerScreen(gameId){
         ${cashedOutInfoHtml}
       </div>
       ${(cashedOut || armed) ? "" : canHandleMoney(g) ? `<fieldset class="leave-frame rb-frame"><legend>ריביי${forName}</legend>${rebuyHtml}</fieldset>`
-        : `<div class="tr-note">הריביי אצל <b><bdi>${esc(tableShortName(g, gameTreasurer(g)))}</bdi></b> - ${playerIsFemale(g, c, gameTreasurer(g)) ? "גזברית" : "גזבר"} הערב</div>`}
+        : `<div class="tr-note">הריביי אצל <b><bdi>${esc(tableShortName(g, gameTreasurer(g)))}</bdi></b> - ${playerIsFemale(g, c, gameTreasurer(g)) ? "גיזברית" : "גיזבר"} הערב</div>`}
       ${(cashedOut || (notStarted && !armed) || !canEndNightFor(g, pid)) ? "" : `<fieldset class="leave-frame lv-frame${armed?' lv-frame-top':''}">${leaveHtml}</fieldset>`}
       ${(notStarted && !cashedOut) ? `<button type="button" class="btn btn-primary btn-block gs-start" data-start-game="${g.id}">${icon('check')} תחילת משחק</button>` : ""}
       ${adminPlayerActions}
@@ -7829,8 +7829,8 @@ function tableSeatOrder(g, ids, myPlayerId){
 // and back in a horseshoe whose end stops above the middle of that bottom line. Not
 // underlined (only the words next to it are).
 const TREASURER_ICON = `<span class="tr-ic"><img src="/static/treasurer.webp" width="38" height="38" alt="" draggable="false"></span>`;
-// The "גזבר" tag over the treasurer's picture - in the players carousel and on the table.
-const TREASURER_TAG = `<span class="tr-tag">גזבר</span>`;
+// The "גיזבר" tag over the treasurer's picture - in the players carousel and on the table.
+const TREASURER_TAG = `<span class="tr-tag">גיזבר</span>`;
 const RETURN_ICON = `<svg class="ret-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 6.5h5.5a5 5 0 0 1 0 10H4.5M8.5 12.5l-4 4 4 4"/></svg>`;
 function playersCarouselHtml(key, g, c, ids, {onId = null, meId = null, attr, under = null, legend = ""}){
   if (!ids.length) return "";
@@ -9269,14 +9269,14 @@ function renderModal(m){
         ["ריביי לעצמי", Y, Y, Y],
         ["ריביי / סיום ערב לשחקן אחר", Y, Y, Y],
         ["ביטול ריביי", Y, Y, Y],
-        ["לקחת את תפקיד גזבר הערב", Y, Y, Y],
-        ["להסיר את גזבר הערב", Y, Y, N],
+        ["לקחת את תפקיד גיזבר הערב", Y, Y, Y],
+        ["להסיר את גיזבר הערב", Y, Y, N],
         ["הוצאת שחקן מהשולחן / החזרה", Y, Y, N],
         ["סידור קופה", Y, Y, N],
         ["סימון ערב סגור (העברות ישירות)", Y, Y, N],
       ])}
       <p style="color:var(--muted);font-size:14px;margin:10px 0 16px;line-height:1.5;">יוצר = מי שפתח את המועדון (בטבלת המועדון) או את השולחן (בטבלת המשחק). יוצר המועדון הוא גם אדמין בכל השולחנות שלו.</p>
-      <p style="color:var(--muted);font-size:14px;margin:0 0 16px;line-height:1.5;">גזבר הערב: כשיש גזבר, רק הוא מבצע ריביי וביטול ריביי (לכולם, גם ליוצר ולאדמין), וסידור קופה. כל שחקן עדיין מסיים את הערב בעצמו, והגזבר יכול לסיים גם בשבילו. בלי גזבר - הכל כמו בטבלה.</p>
+      <p style="color:var(--muted);font-size:14px;margin:0 0 16px;line-height:1.5;">גיזבר הערב: כשיש גיזבר, רק הוא מבצע ריביי וביטול ריביי (לכולם, גם ליוצר ולאדמין), וסידור קופה. כל שחקן עדיין מסיים את הערב בעצמו, והגיזבר יכול לסיים גם בשבילו. בלי גיזבר - הכל כמו בטבלה.</p>
     `;
   } else if (m.type === "buyinSetup") {
     const c = getCommunity(m.communityId);
@@ -10358,15 +10358,15 @@ function attachHandlers(){
     return (playerViewTarget && playerViewTarget !== "__tools__" && g.players.some(pl => pl.id === playerViewTarget)) ? playerViewTarget : mine;
   };
   app.querySelectorAll("[data-pp-back-me]").forEach(el => el.onclick = () => { playerViewTarget = null; render(); });
-  // גזבר הערב: take it (nobody has it yet), or let it go (the treasurer, or a table admin).
+  // גיזבר הערב: take it (nobody has it yet), or let it go (the treasurer, or a table admin).
   app.querySelectorAll("[data-treasurer-take]").forEach(el => el.onclick = async () => {
     const g = getGame(nav.gameId); if (!g) return;
     const mine = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
-    if (!(await showConfirm("להיות גזבר הערב? רק אתה תבצע ריביי וביטול ריביי לכל השחקנים.\nכל שחקן יוכל לסיים את הערב בעצמו, או שאתה הגזבר תסיים עבורו."))) return;
+    if (!(await showConfirm("להיות גיזבר הערב? רק אתה תבצע ריביי וביטול ריביי לכל השחקנים.\nכל שחקן יוכל לסיים את הערב בעצמו, או שאתה הגיזבר תסיים עבורו."))) return;
     el.disabled = true;
     try { await v2SetTreasurer(g.id, mine); }
     catch(e) {
-      showAlert(String(e && e.message || "").includes("already") ? "מישהו אחר כבר גזבר הערב." : "שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב.");
+      showAlert(String(e && e.message || "").includes("already") ? "מישהו אחר כבר גיזבר הערב." : "שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב.");
       try { await reloadV2Data(); } catch(e2) {}
     }
     render();
@@ -10374,7 +10374,7 @@ function attachHandlers(){
   app.querySelectorAll("[data-treasurer-clear]").forEach(el => el.onclick = async () => {
     const g = getGame(nav.gameId); if (!g) return;
     const trName = gameTreasurer(g) ? tableShortName(g, gameTreasurer(g)) : "";
-    if (!(await showConfirm(iAmTreasurer(g) ? "לוותר על תפקיד גזבר הערב? כל שחקן יוכל שוב לעשות ריביי בעצמו." : `להסיר את ${trName} מגזברות הערב? כל שחקן יוכל שוב לעשות ריביי בעצמו.`))) return;
+    if (!(await showConfirm(iAmTreasurer(g) ? "לוותר על תפקיד גיזבר הערב? כל שחקן יוכל שוב לעשות ריביי בעצמו." : `להסיר את ${trName} מגיזברות הערב? כל שחקן יוכל שוב לעשות ריביי בעצמו.`))) return;
     el.disabled = true;
     try { await v2SetTreasurer(g.id, null); }
     catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
