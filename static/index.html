@@ -1301,6 +1301,31 @@ html.theme-light .tr-clear{color:#9a5f12;} html.theme-light.theme-blue .tr-clear
   background:linear-gradient(180deg,#fde9a8,#e9c46a 50%,#c99a3a);color:#2a1d05;box-shadow:0 2px 4px rgba(0,0,0,.4);z-index:3;pointer-events:none;}
 .pp-ci{position:relative;}
 .seat-card .tr-tag{top:-10px;left:3px;transform:none;}
+/* (restored - lost with an earlier CSS block swap) the nights list's status + "גיזבר:" and
+   the players carousel when it's only a list */
+.pp-ci[data-pp-noview]{cursor:default;}
+.game-status-col{display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0;}
+.game-treasurer{font-size:13px;color:var(--muted);white-space:nowrap;}
+/* "התקנה באייפון": the steps, each with a small drawing of the Safari screen */
+.ios-steps{display:flex;flex-direction:column;gap:12px;margin-top:4px;text-align:right;}
+.ios-step{display:flex;gap:12px;align-items:center;border:1px solid var(--frame-c,var(--gold));border-radius:14px;padding:10px;}
+.ios-num{width:28px;height:28px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:800;background:linear-gradient(180deg,#fde9a8,#e9c46a 50%,#c99a3a);color:#2a1d05;}
+.ios-txt{flex:1;font-size:16px;line-height:1.4;}
+.ios-txt b{color:var(--gold);} html.theme-light .ios-txt b{color:#9a5f12;}
+.ios-pic{width:118px;height:86px;flex-shrink:0;border-radius:10px;overflow:hidden;background:#f2f2f7;position:relative;box-shadow:0 2px 6px rgba(0,0,0,.3);direction:ltr;color:#000;}
+.ios-page{position:absolute;left:8px;right:8px;border-radius:6px;background:#fff;}
+.ios-bar{position:absolute;left:0;right:0;bottom:0;height:30px;background:#f9f9f9;border-top:1px solid #d1d1d6;display:flex;align-items:center;color:#007aff;font-size:15px;}
+.ios-bar>span{flex:1;display:flex;justify-content:center;}
+.ios-addr{position:absolute;left:6px;right:6px;top:5px;height:22px;border-radius:7px;background:#e9e9ee;display:flex;flex-direction:row-reverse;align-items:center;justify-content:space-between;padding:0 6px;font-size:9px;color:#555;}
+.ios-sheet{position:absolute;left:6px;right:6px;top:6px;bottom:6px;border-radius:8px;background:#fff;display:flex;flex-direction:column;justify-content:center;font-size:10px;direction:rtl;}
+.ios-sheet>div{padding:6px 8px;display:flex;justify-content:space-between;border-bottom:1px solid #e5e5ea;}
+.ios-sheet>div:last-child{border-bottom:none;}
+.ios-top{position:absolute;left:0;right:0;top:0;height:24px;background:#f9f9f9;border-bottom:1px solid #d1d1d6;display:flex;justify-content:space-between;align-items:center;padding:0 8px;font-size:11px;color:#007aff;direction:rtl;}
+.ios-app{position:absolute;left:10px;right:10px;top:34px;display:flex;gap:8px;align-items:center;direction:rtl;}
+.ios-app img{width:34px;height:34px;border-radius:8px;}
+.ios-app div{flex:1;font-size:11px;border-bottom:1px solid #d1d1d6;padding-bottom:4px;}
+.ios-ring{position:absolute;border:2.5px solid #ff3b30;border-radius:10px;box-shadow:0 0 0 3px rgba(255,59,48,.25);}
+.ios-note{margin-top:12px;font-size:14px;color:var(--muted);line-height:1.45;}
 .tr-note{margin:4px 0 14px;padding:12px;border:1.5px dashed var(--frame-c,var(--gold));border-radius:14px;text-align:center;font-size:17px;color:var(--text);flex-shrink:0;}
 .tr-note b{color:var(--gold);}
 html.theme-light .tr-note b{color:#9a5f12;}
@@ -5170,10 +5195,8 @@ async function startInstall(){
     const ua = navigator.userAgent || "";
     if (/FBAN|FBAV|Instagram|WhatsApp|Line\//i.test(ua)) {
       showAlert("כדי להתקין, פתחו את הקישור ב-Safari (בתפריט ⋯ ← \"פתח ב-Safari\"), ושם לחצו שוב \"התקן אפליקציה\".");
-    } else if (/CriOS/i.test(ua)) {
-      showAlert("להתקנה על כל המסך: לחצו על כפתור השיתוף ⬆️ ליד שורת הכתובת, ובחרו \"הוסף למסך הבית\".");
     } else {
-      showAlert("להתקנה על כל המסך: לחצו על כפתור השיתוף ⬆️ ובחרו \"הוסף למסך הבית\". נכנסתם מקישור בוואטסאפ? לחצו קודם על סמל ה-Safari 🧭 בפינת המסך, ושם לחצו שוב \"התקן אפליקציה\".");
+      openModal({type: "installIOS", browser: /CriOS/i.test(ua) ? "chrome" : "safari"});
     }
   }
 }
@@ -9169,6 +9192,27 @@ function renderModal(m){
       <div style="display:flex;gap:10px;margin-bottom:6px;">
         ${THEMES.map(t => `<button class="theme-opt${cur===t.key?' on':''}" data-pick-theme="${t.key}"><span style="background:${t.swatch};"></span>${t.label}</button>`).join("")}
       </div>
+    `;
+  } else if (m.type === "installIOS") {
+    // iPhone has no install API - the steps, each with a small drawing of the Safari screen
+    // and a red ring where to tap. Chrome on iPhone has its share button by the address bar.
+    title = "התקנה באייפון";
+    const chrome = m.browser === "chrome";
+    const ring = (css) => `<div class="ios-ring" style="${css}"></div>`;
+    const shareIc = `<svg width="15" height="17" viewBox="0 0 24 26" fill="none" stroke="#007aff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V2M7 7l5-5 5 5"/><path d="M6 11H4v13h16V11h-2"/></svg>`;
+    const pic1 = chrome
+      ? `<div class="ios-pic"><div class="ios-addr">${shareIc}<span>poker-manager…</span></div><div class="ios-page" style="top:34px;bottom:6px;"></div>${ring("right:9px;top:4px;width:24px;height:24px;")}</div>`
+      : `<div class="ios-pic"><div class="ios-page" style="top:8px;height:40px;"></div><div class="ios-bar"><span>‹</span><span>›</span><span>${shareIc}</span><span>⧉</span><span>□</span></div>${ring("left:47px;bottom:2px;width:24px;height:25px;")}</div>`;
+    const pic2 = `<div class="ios-pic" style="background:#e5e5ea;"><div class="ios-sheet"><div><span>העתקה</span><span>⧉</span></div><div style="font-weight:700;"><span>הוספה למסך הבית</span><span>⊞</span></div><div><span>הוספה לסימניות</span><span>☆</span></div></div>${ring("left:4px;right:4px;top:33px;height:24px;")}</div>`;
+    const pic3 = `<div class="ios-pic"><div class="ios-top"><span>ביטול</span><span style="font-weight:700;">הוספה</span></div><div class="ios-app"><img src="/static/icon-192.png" alt=""><div>Poker Manager</div></div>${ring("left:2px;top:1px;width:38px;height:22px;")}</div>`;
+    body = `
+      <div class="ios-steps">
+        <div class="ios-step"><div class="ios-num">1</div><div class="ios-txt">${chrome ? `לחצו על <b>כפתור השיתוף</b> ליד שורת הכתובת למעלה` : `לחצו על <b>כפתור השיתוף</b> בתחתית המסך (או ליד שורת הכתובת, אם היא למעלה)`}</div>${pic1}</div>
+        <div class="ios-step"><div class="ios-num">2</div><div class="ios-txt">גללו ובחרו <b>"הוספה למסך הבית"</b></div>${pic2}</div>
+        <div class="ios-step"><div class="ios-num">3</div><div class="ios-txt">לחצו <b>"הוספה"</b> למעלה - והאפליקציה על המסך</div>${pic3}</div>
+      </div>
+      ${chrome ? "" : `<div class="ios-note">נכנסתם מקישור בוואטסאפ? לחצו קודם על סמל ה-Safari 🧭 בפינת המסך, ושם לחצו שוב "התקן אפליקציה".</div>`}
+      <button class="btn btn-primary btn-block" style="margin-top:14px;" data-close-modal>הבנתי</button>
     `;
   } else if (m.type === "installViaChrome") {
     title = "התקנה דרך Chrome";
