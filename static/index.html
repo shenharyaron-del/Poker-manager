@@ -633,6 +633,18 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 @keyframes menuRollUp{from{clip-path:inset(0 0 0 0 round 14px);transform:none;opacity:1}to{clip-path:inset(0 0 100% 0 round 14px);transform:translateY(-6px);opacity:.4}}
 @keyframes menuShadeOut{to{background:rgba(0,0,0,0)}}
 .game-menu{display:flex;flex-direction:column;gap:6px;}
+/* grouped by area, tiles two to a row (an odd one out spans the row) */
+.game-menu.menu-tiles{gap:0;}
+.menu-sec{font-size:13px;font-weight:800;color:var(--gold);letter-spacing:.02em;margin:12px 4px 6px;text-align:right;}
+html.theme-light .menu-sec{color:#9a5f12;}
+.menu-sec:first-child{margin-top:0;}
+.menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.game-menu .menu-grid .btn{flex-direction:column;justify-content:center;gap:4px;padding:10px 6px;margin:0;font-size:14px;line-height:1.2;min-height:70px;text-align:center;}
+.game-menu .menu-grid .btn.wide{grid-column:1 / -1;flex-direction:row;min-height:0;gap:10px;font-size:16px;}
+.menu-ic{font-size:22px;line-height:1;display:flex;align-items:center;justify-content:center;}
+.menu-ic svg{width:22px;height:22px;}
+.menu-grid .menu-tr-ic{width:30px;height:30px;margin:0;}
+.menu-club{color:var(--gold);font-size:26px;} html.theme-light .menu-club{color:#9a5f12;}
 .game-menu .btn{display:flex;align-items:center;justify-content:flex-start;gap:10px;font-size:17px;padding:10px 12px;}
 .login-alt button{background:none;border:none;padding:0;font:inherit;font-size:14px;color:var(--muted);text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
 .join-wait-dots{display:flex;justify-content:center;gap:8px;margin:4px 0 18px;}
@@ -9199,20 +9211,33 @@ function renderModal(m){
     const canTakeTreasurerFromMenu = !!(g && !g.closed && gameStarted(g) && !gameTreasurer(g) && myPid
       && (g.seats || []).includes(myPid) && !(myPid in (g.cashouts || {})));
     title = "תפריט";
+    // Grouped by area - this night, the club, me, the app - as tiles, two to a row (an odd
+    // one out spans the row). A group with nothing in it isn't shown.
+    const tile = (attrs, ic, label) => ({attrs, ic, label});
+    const groups = [
+      ["הערב הזה", [
+        canTakeTreasurerFromMenu && tile('data-treasurer-take', '<img class="menu-tr-ic" src="/static/treasurer.webp" alt="" draggable="false">', "אני גיזבר הערב"),
+        canCloseNight && (g.closed ? tile('data-game-menu-go="reopen"', "🔓", "ביטול סגירת ערב") : tile('data-game-menu-go="close"', "🔒", "סגור משחק")),
+      ]],
+      ["המועדון", [
+        club && tile('data-game-menu-go="club"', '<span class="menu-club">♣\uFE0E</span>', `המועדון ${esc(club.name)}`),
+        setupClub && tile('data-game-menu-go="report"', "🏆", "דוח מנצחים"),
+        canSetupClub && tile(`data-open-chip-setup="${setupClub.id}"`, icon('gear'), "פרופיל מועדון"),
+      ]],
+      ["אני", [
+        tile('data-game-menu-go="profile"', "👤", "הפרופיל שלי"),
+        tile('data-game-menu-go="stats"', icon('bar'), "הביצועים שלי"),
+      ]],
+      ["אפליקציה", [
+        tile('data-game-menu-go="home"', "🏠", "מסך הבית"),
+        tile('data-game-menu-go="theme"', "🎨", "עיצוב"),
+        installMode() && tile('data-install-app', "📲", "התקנת האפליקציה"),
+      ]],
+    ].map(([t, items]) => [t, items.filter(Boolean)]).filter(([, items]) => items.length);
     body = `
-      <div class="game-menu">
-        <button class="btn btn-ghost btn-block" data-game-menu-go="home">🏠 מסך הבית</button>
-        ${club ? `<button class="btn btn-ghost btn-block" data-game-menu-go="club">♣️ המועדון ${esc(club.name)}</button>` : ""}
-        ${canSetupClub ? `<button class="btn btn-ghost btn-block" data-open-chip-setup="${setupClub.id}">${icon('gear')} פרופיל מועדון</button>` : ""}
-        ${setupClub ? `<button class="btn btn-ghost btn-block" data-game-menu-go="report">🏆 דוח מנצחים</button>` : ""}
-        <button class="btn btn-ghost btn-block" data-game-menu-go="profile">👤 הפרופיל שלי</button>
-        <button class="btn btn-ghost btn-block" data-game-menu-go="stats">${icon('bar')} הביצועים שלי</button>
-        <button class="btn btn-ghost btn-block" data-game-menu-go="theme">🎨 עיצוב</button>
-        ${installMode() ? `<button class="btn btn-ghost btn-block" data-install-app>📲 התקנת האפליקציה</button>` : ""}
-        ${canTakeTreasurerFromMenu ? `<button class="btn btn-ghost btn-block" data-treasurer-take><img class="menu-tr-ic" src="/static/treasurer.webp" alt="" draggable="false"> אני גיזבר הערב</button>` : ""}
-        ${canCloseNight ? (g.closed
-          ? `<button class="btn btn-ghost btn-block" data-game-menu-go="reopen">🔓 ביטול סגירת ערב</button>`
-          : `<button class="btn btn-ghost btn-block" data-game-menu-go="close">🔒 סגור משחק</button>`) : ""}
+      <div class="game-menu menu-tiles">
+        ${groups.map(([t, items]) => `<div class="menu-sec">${t}</div><div class="menu-grid">${items.map((it, i) =>
+          `<button class="btn btn-ghost${items.length % 2 && i === items.length - 1 ? " wide" : ""}" ${it.attrs}><span class="menu-ic">${it.ic}</span><span>${it.label}</span></button>`).join("")}</div>`).join("")}
       </div>`;
   } else if (m.type === "renamePlayer") {
     const c = getCommunity(m.communityId) || {roster: []};
