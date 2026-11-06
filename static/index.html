@@ -3796,11 +3796,12 @@ function iAmTreasurer(g){
   return !!t && t === (myIdentity.myPlayers && myIdentity.myPlayers[g.communityId]);
 }
 // May I make or cancel a rebuy (for anyone) tonight?
-function canHandleMoney(g){ return !gameTreasurer(g) || iAmTreasurer(g) || isSuperAdmin(); }
+// (Nobody bypasses a treasurer - not even the super admin.)
+function canHandleMoney(g){ return !gameTreasurer(g) || iAmTreasurer(g); }
 // May I open another player's screen (act on their behalf)? With a treasurer tonight only
 // they do - and a table admin, for "הסר מהשולחן" (their money is the treasurer's); for
 // anyone else there's nothing there to do, so the players carousel is just a list.
-function canActForOthers(g){ return !gameTreasurer(g) || iAmTreasurer(g) || isTableAdmin(g, getCommunity(g.communityId)) || isSuperAdmin(); }
+function canActForOthers(g){ return !gameTreasurer(g) || iAmTreasurer(g) || isTableAdmin(g, getCommunity(g.communityId)); }
 // May I end player pid's night (or bring them back)?
 function canEndNightFor(g, pid){
   return canHandleMoney(g) || pid === (myIdentity.myPlayers && myIdentity.myPlayers[g.communityId]);
