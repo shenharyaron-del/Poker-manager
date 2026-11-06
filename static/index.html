@@ -8250,10 +8250,9 @@ function renderTableTimeline(g, c, myPlayerId){
 }
 
 // Pre-filled name for a new table: the short Hebrew date, e.g. "אוק 14".
-const HE_MONTHS_SHORT = ["ינו","פבר","מרץ","אפר","מאי","יוני","יולי","אוג","ספט","אוק","נוב","דצמ"];
-function defaultGameName(isoDate){
-  const d = isoDate ? new Date(isoDate + "T12:00:00") : new Date();
-  return `${HE_MONTHS_SHORT[d.getMonth()]} ${d.getDate()}`;
+// A new table's suggested name: "ערב#8" - the club's nights so far plus one.
+function defaultGameName(communityId){
+  return `ערב#${gamesForCommunity(communityId).length + 1}`;
 }
 // One player's night as rows, oldest first: the entry ("קנייה ראשונית"), numbered rebuys,
 // cancelled rebuys struck through at the time they were cancelled (game_events only keep
@@ -9168,7 +9167,7 @@ function renderModal(m){
     const c = getCommunity(m.communityId);
     title = "שולחן חדש";
     body = `
-      <div class="field"><label>שם השולחן</label><input type="text" id="new-game-name" value="${esc(defaultGameName(m.date))}" placeholder="${esc(c ? c.name : "")}" onfocus="this.select()" autofocus></div>
+      <div class="field"><label>שם השולחן</label><input type="text" id="new-game-name" value="${esc(defaultGameName(m.communityId))}" placeholder="${esc(c ? c.name : "")}" onfocus="this.select()" autofocus></div>
       <p style="color:var(--muted);font-size:16px;margin-top:-6px;">אחרי היצירה תוכלו להושיב שחקנים סביב השולחן.</p>
       <button class="btn btn-primary btn-block" data-create-game>פתח שולחן</button>
     `;
