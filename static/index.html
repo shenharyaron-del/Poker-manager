@@ -3799,9 +3799,9 @@ function iAmTreasurer(g){
 // (Nobody bypasses a treasurer - not even the super admin.)
 function canHandleMoney(g){ return !gameTreasurer(g) || iAmTreasurer(g); }
 // May I open another player's screen (act on their behalf)? With a treasurer tonight only
-// they do - and a table admin, for "הסר מהשולחן" (their money is the treasurer's); for
+// they do (the table admin included - "הסר מהשולחן" is the treasurer's then too); for
 // anyone else there's nothing there to do, so the players carousel is just a list.
-function canActForOthers(g){ return !gameTreasurer(g) || iAmTreasurer(g) || isTableAdmin(g, getCommunity(g.communityId)); }
+function canActForOthers(g){ return !gameTreasurer(g) || iAmTreasurer(g); }
 // May I end player pid's night (or bring them back)?
 function canEndNightFor(g, pid){
   return canHandleMoney(g) || pid === (myIdentity.myPlayers && myIdentity.myPlayers[g.communityId]);
@@ -7452,7 +7452,7 @@ function renderPlayerScreen(gameId){
     return playersCarouselHtml("player:" + g.id, g, c, tableSeatOrder(g, othersTonight, myPlayerId), {
       onId: pid, attr: canActForOthers(g) ? "data-pp-view" : "data-pp-noview",
       // The table's admins (and tonight's treasurer) act for someone else - for them the frame says so.
-      legend: (isAdminView || iAmTreasurer(g)) ? "בחר שחקן כדי לפעול בשמו" : "",
+      legend: canActForOthers(g) && (isAdminView || iAmTreasurer(g)) ? "בחר שחקן כדי לפעול בשמו" : "",
       under: id => !(id in (g.cashouts || {})) ? `<span class="pp-ci-amt">₪${Math.round((totals[id] || 0) * 100) / 100}</span>`
         : (gameTreasurer(g) ? iAmTreasurer(g) : isAdminView) ? `<span class="pp-ci-return" role="button" data-admin-return-to-game="${id}">${RETURN_ICON}<span class="ret-txt">החזר</span></span>`
         : `<span class="pp-ci-out">יצא</span>`,
