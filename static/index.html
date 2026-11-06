@@ -1306,6 +1306,11 @@ html.theme-light .tr-clear{color:#9a5f12;} html.theme-light.theme-blue .tr-clear
 .pp-ci[data-pp-noview]{cursor:default;}
 .game-status-col{display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0;}
 .game-treasurer{font-size:13px;color:var(--muted);white-space:nowrap;}
+/* the one-time "install the app?" window */
+.install-offer{display:flex;align-items:center;gap:14px;margin:0 0 16px;text-align:right;}
+.install-offer img{border-radius:16px;flex-shrink:0;box-shadow:0 3px 8px rgba(0,0,0,.35);}
+.install-offer p{margin:0;font-size:17px;line-height:1.5;}
+.install-offer-later{margin:12px 0 0;font-size:14px;color:var(--muted);text-align:center;}
 /* "התקנה באייפון": the steps, each with a small drawing of the Safari screen */
 .ios-steps{display:flex;flex-direction:column;gap:12px;margin-top:4px;text-align:right;}
 .ios-step{display:flex;gap:12px;align-items:center;border:1px solid var(--frame-c,var(--gold));border-radius:14px;padding:10px;}
@@ -5177,6 +5182,27 @@ function themeToggleHtml(){
 }
 function installChipHtml(){
   return installMode() ? `<button type="button" class="install-chip" data-install-app>📲 התקן<span class="chip-long"> אפליקציה</span></button>` : "";
+}
+// A one-time "install the app?" window for someone who hasn't: on the 2nd (or, if that
+// visit wasn't a good moment, the 3rd) time the app is opened in a browser, on the home or
+// club screen, nothing else open. Opens are counted once per browser session.
+function maybeOfferInstall(){
+  let opens = 0;
+  try {
+    if (sessionStorage.getItem("poker-open-counted")) return;
+    sessionStorage.setItem("poker-open-counted", "1");
+    opens = (parseInt(localStorage.getItem("poker-opens"), 10) || 0) + 1;
+    localStorage.setItem("poker-opens", String(opens));
+    if (localStorage.getItem("poker-install-offered")) return;
+  } catch(e) { return; }
+  if (opens < 2 || opens > 3) return;
+  // a moment in - Chrome's install offer (beforeinstallprompt) arrives after load
+  setTimeout(() => {
+    if (!installMode() || modal || gameTourGameId || !myIdentity.name) return;
+    if (nav.screen !== "home" && nav.screen !== "community") return;
+    try { localStorage.setItem("poker-install-offered", "1"); } catch(e) {}
+    openModal({type: "installOffer"});
+  }, 3000);
 }
 async function startInstall(){
   const mode = installMode();
@@ -9193,6 +9219,17 @@ function renderModal(m){
         ${THEMES.map(t => `<button class="theme-opt${cur===t.key?' on':''}" data-pick-theme="${t.key}"><span style="background:${t.swatch};"></span>${t.label}</button>`).join("")}
       </div>
     `;
+  } else if (m.type === "installOffer") {
+    title = "להתקין את האפליקציה?";
+    body = `
+      <div class="install-offer">
+        <img src="/static/icon-192.png" alt="" width="72" height="72">
+        <p>Poker Manager ייפתח במסך מלא, בלי שורת כתובת, ישר מהמסך הבית - כמו כל אפליקציה.</p>
+      </div>
+      <button class="btn btn-primary btn-block" data-install-offer-yes>📲 התקן</button>
+      <button class="btn btn-ghost btn-block" style="margin-top:8px;" data-close-modal>לא עכשיו</button>
+      <p class="install-offer-later">אפשר להתקין גם אחר כך, מהכפתור "התקן אפליקציה" למעלה.</p>
+    `;
   } else if (m.type === "installIOS") {
     // iPhone has no install API - the steps, each with a small drawing of the Safari screen
     // and a red ring where to tap. Chrome on iPhone has its share button by the address bar.
@@ -11036,6 +11073,7 @@ function attachHandlers(){
     closeModal();
   };
   app.querySelectorAll("[data-close-modal]").forEach(el => el.onclick = closeModalOrBack);
+  app.querySelectorAll("[data-install-offer-yes]").forEach(el => el.onclick = () => { modal = null; render(); startInstall(); });
 
   // The blocking first-entry welcome screen (see renderGameWelcomeOverlay) has no close-x
   // and no overlay-click dismissal anywhere - only this button clears its per-device flag.
@@ -13116,6 +13154,7 @@ window.addEventListener("popstate", async () => {
   joinRequestsTick();
   connectLiveSync();
   prefetchAvatars();
+  maybeOfferInstall();
   // No keep-alive ping from here: an external cron-job.org job hits /api/version every
   // 10 minutes so Render's free tier never spins the server down (listed under the Super
   // Admin's third-party services), and an open app already talks to the server every
