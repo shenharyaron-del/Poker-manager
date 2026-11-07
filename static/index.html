@@ -321,7 +321,7 @@ body.table-screen .player-screen-scroll > *{flex-shrink:0;}
 .lv-types-sep{display:flex;align-items:center;gap:8px;margin:12px 0 4px;color:var(--muted);font-size:14px;}
 .lv-types-sep::before,.lv-types-sep::after{content:"";flex:1;height:1px;background:currentColor;opacity:.4;}
 .lv-types{display:grid;gap:6px 8px;align-items:center;}
-.lv-types img,.lv-type-noimg{width:min(38px,100%);aspect-ratio:1;justify-self:center;border-radius:7px;object-fit:cover;box-shadow:0 1px 3px rgba(0,0,0,.35);}
+.lv-types img,.lv-type-noimg{width:min(38px,100%);aspect-ratio:1;justify-self:center;border-radius:50%;object-fit:cover;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4));}
 .lv-type-noimg{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:var(--gold);border:1px solid var(--gold);box-shadow:none;}
 .lv-types input{width:100%;min-width:0;box-sizing:border-box;padding:2px 2px;font-size:18px;text-align:center;border-radius:9px;border:1px solid var(--gold);background:var(--input);color:var(--text);-moz-appearance:textfield;}
 .lv-types input::-webkit-outer-spin-button,.lv-types input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
@@ -4458,6 +4458,87 @@ function setPlayerPhoto(p, photo){ if (p.clientId) setGlobalPlayer(p.clientId, {
 // data: string - no render-site changes needed, only the handful of places that
 // capture/create a new photo need to upload it first.
 function photoUrl(id){ return "/api/photos/" + id; }
+// A chip photo cropped round, the background around it gone (transparent) - whatever the
+// table looked like: chips are always round. From the square crop around the chip it finds
+// the chip's rim along 72 rays from the middle (the outermost strong colour change - the
+// chip's own inner rings are further in), fits an ellipse to those points (a chip shot at
+// an angle is an ellipse, and rarely dead centre), then keeps that ellipse, straightened
+// into a circle. Takes a few milliseconds.
+function roundChipCrop(srcCanvas, px, py, size){
+  const S = 160, half = Math.max(1, Math.round(size / 2));
+  const sx = Math.max(0, px - half), sy = Math.max(0, py - half);
+  const sw = Math.min(srcCanvas.width, px + half) - sx, sh = Math.min(srcCanvas.height, py + half) - sy;
+  const tmp = document.createElement("canvas"); tmp.width = S; tmp.height = S;
+  const tctx = tmp.getContext("2d", {willReadFrequently: true});
+  tctx.drawImage(srcCanvas, sx, sy, sw, sh, 0, 0, S, S);
+  const c = S / 2, maxR = S / 2 - 1;
+  let ex = {cx: c, cy: c, a: maxR - 2, b: maxR - 2};
+  try {
+    const d = tctx.getImageData(0, 0, S, S).data;
+    const at = (x, y) => { const i = (Math.round(y) * S + Math.round(x)) * 4; return [d[i], d[i + 1], d[i + 2]]; };
+    const diff = (p, q) => Math.abs(p[0] - q[0]) + Math.abs(p[1] - q[1]) + Math.abs(p[2] - q[2]);
+    // The crop's corners lie outside any circle in it - background, whatever it is. Learn
+    // its colour there; along each ray the rim is where the colour turns into it (and stays).
+    const bgPx = [];
+    for (let y = 0; y < S; y += 2) for (let x = 0; x < S; x += 2) if (Math.hypot(x - c, y - c) > maxR + 2) bgPx.push(at(x, y));
+    const mean = [0, 1, 2].map(i => bgPx.reduce((t, q) => t + q[i], 0) / bgPx.length);
+    const dists = bgPx.map(q => diff(q, mean)).sort((p, q) => p - q);
+    // (capped: a busy background - a neighbour chip in a corner - mustn't make the chip's own
+    // colours count as background)
+    const T = Math.min(100, Math.max(45, dists[Math.floor(dists.length * 0.8)] * 1.3));
+    let pts = [];
+    for (let k = 0; k < 72; k++) {
+      const ang = k / 72 * Math.PI * 2, ca = Math.cos(ang), sa = Math.sin(ang);
+      const rEnd = Math.min(maxR * 1.4, ...[ca ? (ca > 0 ? (S - 1 - c) / ca : -c / ca) : Infinity, sa ? (sa > 0 ? (S - 1 - c) / sa : -c / sa) : Infinity]);
+      let rim = null;
+      for (let r = Math.round(maxR * 0.3); r <= rEnd - 4; r++) {
+        let bg = true;
+        for (let k2 = 0; k2 < 4 && bg; k2++) bg = diff(at(c + ca * (r + k2), c + sa * (r + k2)), mean) < T;
+        if (bg) { rim = r; break; }
+      }
+      if (rim != null) pts.push([c + ca * rim, c + sa * rim]);
+    }
+    // axis-aligned ellipse, least squares: A x² + C y² + D x + E y = 1; refit without the
+    // quarter of points that fit worst (a ray that caught a shadow or the table's grain)
+    const fit = P => {
+      const M = [[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]], v = [0,0,0,0];
+      // measured from the crop's middle, so the ellipse holds the origin (A, C > 0)
+      P.forEach(([x0, y0]) => { const x = x0 - c, y = y0 - c, r = [x*x, y*y, x, y]; for (let i = 0; i < 4; i++) { v[i] += r[i]; for (let j = 0; j < 4; j++) M[i][j] += r[i] * r[j]; } });
+      for (let i = 0; i < 4; i++) {   // Gauss-Jordan
+        let piv = i; for (let k = i + 1; k < 4; k++) if (Math.abs(M[k][i]) > Math.abs(M[piv][i])) piv = k;
+        [M[i], M[piv]] = [M[piv], M[i]]; [v[i], v[piv]] = [v[piv], v[i]];
+        const m = M[i][i]; if (Math.abs(m) < 1e-12) return null;
+        for (let j = 0; j < 4; j++) M[i][j] /= m; v[i] /= m;
+        for (let k = 0; k < 4; k++) if (k !== i) { const f = M[k][i]; for (let j = 0; j < 4; j++) M[k][j] -= f * M[i][j]; v[k] -= f * v[i]; }
+      }
+      const [A, C, D, E] = v;
+      if (!(A > 0 && C > 0)) return null;
+      const cx = c - D / (2 * A), cy = c - E / (2 * C), F = 1 + D * D / (4 * A) + E * E / (4 * C);
+      if (!(F > 0)) return null;
+      return {cx, cy, a: Math.sqrt(F / A), b: Math.sqrt(F / C)};
+    };
+    if (pts.length >= 16) {
+      let e = fit(pts);
+      if (e) {
+        const res = p => Math.abs(Math.hypot((p[0] - e.cx) / e.a, (p[1] - e.cy) / e.b) - 1);
+        pts = pts.sort((p, q) => res(p) - res(q)).slice(0, Math.ceil(pts.length * 0.75));
+        e = fit(pts) || e;
+      }
+      const sane = e && e.a > maxR * 0.3 && e.b > maxR * 0.3 && e.a < maxR * 1.15 && e.b < maxR * 1.15
+        && Math.abs(e.cx - c) < S * 0.22 && Math.abs(e.cy - c) < S * 0.22 && Math.max(e.a, e.b) / Math.min(e.a, e.b) < 1.8;
+      if (sane) ex = e;
+    }
+  } catch(e) { /* a canvas we can't read - keep the inscribed circle */ }
+  // a hair inside the rim, so no sliver of table shows at the edge
+  const ia = ex.a * 0.95, ib = ex.b * 0.95;
+  const out = document.createElement("canvas"); out.width = S; out.height = S;
+  const ctx = out.getContext("2d");
+  ctx.drawImage(tmp, ex.cx - ia, ex.cy - ib, ia * 2, ib * 2, 0, 0, S, S);
+  ctx.globalCompositeOperation = "destination-in";
+  ctx.beginPath(); ctx.arc(c, c, c - 0.5, 0, Math.PI * 2); ctx.fill();
+  // WebP keeps the transparency (JPEG can't); a browser that can't write WebP gives PNG.
+  return out.toDataURL("image/webp", 0.9);
+}
 async function uploadPhoto(dataUrl){
   const res = await fetch("/api/photos", { method: "POST", headers: {"Content-Type":"text/plain"}, body: dataUrl });
   if (!res.ok) throw new Error("photo upload failed: " + res.status);
@@ -12046,15 +12127,7 @@ function attachHandlers(){
         const canvas = document.createElement("canvas");
         canvas.width = width; canvas.height = height;
         canvas.getContext("2d").drawImage(imgEl, 0, 0);
-        const cropAt = (px, py, size) => {
-          const half = Math.max(1, Math.round(size/2));
-          const sx = Math.max(0, px - half), sy = Math.max(0, py - half);
-          const sw = Math.min(width, px + half) - sx, sh = Math.min(height, py + half) - sy;
-          const out = document.createElement("canvas");
-          out.width = 160; out.height = 160;
-          out.getContext("2d").drawImage(canvas, sx, sy, sw, sh, 0, 0, 160, 160);
-          return out.toDataURL("image/jpeg", 0.85);
-        };
+        const cropAt = (px, py, size) => roundChipCrop(canvas, px, py, Math.round(size * 1.08));
         const newPoints = boxes.map(({box}) => {
           const [x1,y1,x2,y2] = box;
           const x = Math.round((x1+x2)/2), y = Math.round((y1+y2)/2);
@@ -12097,18 +12170,7 @@ function attachHandlers(){
       canvas.getContext("2d").drawImage(photoEl, 0, 0);
       return canvas;
     };
-    const cropChipImage = (canvas, px, py, size) => {
-      const half = Math.max(1, Math.round(size/2));
-      const sx = Math.max(0, px - half);
-      const sy = Math.max(0, py - half);
-      const sw = Math.min(canvas.width, px + half) - sx;
-      const sh = Math.min(canvas.height, py + half) - sy;
-      const out = document.createElement("canvas");
-      const outSize = 160;
-      out.width = outSize; out.height = outSize;
-      out.getContext("2d").drawImage(canvas, sx, sy, sw, sh, 0, 0, outSize, outSize);
-      return out.toDataURL("image/jpeg", 0.85);
-    };
+    const cropChipImage = (canvas, px, py, size) => roundChipCrop(canvas, px, py, size);
     const updatePointDisplay = (pt) => {
       const imgEl = document.querySelector(`[data-point-image="${pt.id}"]`);
       if (imgEl && pt.image) imgEl.src = pt.image;
