@@ -317,6 +317,8 @@ body.table-screen .player-screen-scroll > *{flex-shrink:0;}
 .lv-calc{display:flex;align-items:center;gap:8px;margin-top:12px;color:var(--text);font-size:18px;white-space:nowrap;}
 .lv-calc input{flex:0 0 90px;width:90px!important;min-width:0;padding:8px;font-size:20px;text-align:center;border-radius:10px;border:1px solid rgba(212,175,55,.6);background:var(--input);color:var(--text);}
 .lv-calc b{color:var(--gold);font-size:20px;}
+/* club profile chip photo: what will be cut out of each chip, live as it's moved / resized */
+.chip-cut{position:absolute;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.6),inset 0 0 0 1px rgba(0,0,0,.4);pointer-events:none;box-sizing:border-box;}
 /* count by chip type, in the end-of-night frame */
 .lv-types-sep{display:flex;align-items:center;gap:8px;margin:12px 0 4px;color:var(--muted);font-size:14px;}
 .lv-types-sep::before,.lv-types-sep::after{content:"";flex:1;height:1px;background:currentColor;opacity:.4;}
@@ -4531,6 +4533,8 @@ function roundChipCrop(srcCanvas, px, py, size){
   } catch(e) { /* a canvas we can't read - keep the inscribed circle */ }
   // a hair inside the rim, so no sliver of table shows at the edge
   const ia = ex.a * 0.95, ib = ex.b * 0.95;
+  // where the cut sits in the square crop (fractions) - the setup photo outlines it
+  roundChipCrop.last = {l: (ex.cx - ia) / S, t: (ex.cy - ib) / S, w: 2 * ia / S, h: 2 * ib / S};
   const out = document.createElement("canvas"); out.width = S; out.height = S;
   const ctx = out.getContext("2d");
   ctx.drawImage(tmp, ex.cx - ia, ex.cy - ib, ia * 2, ib * 2, 0, 0, S, S);
@@ -4539,6 +4543,14 @@ function roundChipCrop(srcCanvas, px, py, size){
   // WebP keeps the transparency (JPEG can't); a browser that can't write WebP gives PNG.
   return out.toDataURL("image/webp", 0.9);
 }
+// The last roundChipCrop's cut as % of the setup photo's marker box (the crop was `scale`
+// times the box, centred on it).
+function chipCutPct(scale){
+  const c = roundChipCrop.last; if (!c) return null;
+  const off = (scale - 1) / 2;
+  return {l: (c.l * scale - off) * 100, t: (c.t * scale - off) * 100, w: c.w * scale * 100, h: c.h * scale * 100};
+}
+function chipCutStyle(cut){ return cut ? `left:${cut.l}%;top:${cut.t}%;width:${cut.w}%;height:${cut.h}%;` : "inset:0;"; }
 async function uploadPhoto(dataUrl){
   const res = await fetch("/api/photos", { method: "POST", headers: {"Content-Type":"text/plain"}, body: dataUrl });
   if (!res.ok) throw new Error("photo upload failed: " + res.status);
@@ -9017,7 +9029,7 @@ function renderModal(m){
               <button class="icon-btn" data-move-chip-down="${pt.id}" ${i===m.points.length-1?"disabled":""} style="width:22px;height:18px;padding:0;align-items:center;justify-content:center;${i===m.points.length-1?"opacity:.35;":""}">${icon('down')}</button>
             </div>
             ${pt.image
-              ? `<img data-point-image="${pt.id}" src="${pt.image}" style="width:40px;height:40px;object-fit:cover;border-radius:8px;flex-shrink:0;border:1px solid rgba(255,255,255,.2);">`
+              ? `<img data-point-image="${pt.id}" src="${pt.image}" style="width:40px;height:40px;object-fit:cover;border-radius:50%;flex-shrink:0;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4));">`
               : `<div data-point-image="${pt.id}" style="width:40px;height:40px;border-radius:8px;flex-shrink:0;border:1px dashed var(--muted);"></div>`}
             <div style="flex:1;position:relative;min-width:0;">
               <input type="number" inputmode="decimal" placeholder="ערך (למשל 10)" value="${esc(pt.value||'')}" data-chip-value-input="${pt.id}" style="width:100%;padding-left:32px;box-sizing:border-box;">
@@ -9064,7 +9076,8 @@ function renderModal(m){
         const wPct = (size / m.imageW) * 100;
         const hPct = (size / m.imageH) * 100;
         return `
-          <div data-color-marker="${pt.id}" style="position:absolute;left:${leftPct}%;top:${topPct}%;width:${wPct}%;height:${hPct}%;transform:translate(-50%,-50%);border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.6);cursor:grab;touch-action:none;">
+          <div data-color-marker="${pt.id}" style="position:absolute;left:${leftPct}%;top:${topPct}%;width:${wPct}%;height:${hPct}%;transform:translate(-50%,-50%);border:1px dashed rgba(255,255,255,.55);cursor:grab;touch-action:none;">
+            <div class="chip-cut" data-chip-cut="${pt.id}" style="${chipCutStyle(pt.cut)}"></div>
             ${[["tl","left","top","nwse"],["tr","right","top","nesw"],["bl","left","bottom","nesw"],["br","right","bottom","nwse"]].map(([corner,h,v,cur]) => `<div data-color-marker-resize="${pt.id}" data-corner="${corner}" style="position:absolute;${h}:-9px;${v}:-9px;width:18px;height:18px;cursor:${cur}-resize;touch-action:none;display:flex;align-items:center;justify-content:center;"><div style="width:6px;height:6px;border-radius:50%;background:#fff;border:1px solid rgba(0,0,0,.6);"></div></div>`).join("")}
           </div>`;
       }).join("") : "";
@@ -12132,7 +12145,8 @@ function attachHandlers(){
           const [x1,y1,x2,y2] = box;
           const x = Math.round((x1+x2)/2), y = Math.round((y1+y2)/2);
           const size = Math.max(8, Math.round(Math.max(x2-x1, y2-y1)));
-          return {id: uid(), value: "", x, y, size, image: cropAt(x, y, size)};
+          const image = cropAt(x, y, size);
+          return {id: uid(), value: "", x, y, size, image, cut: chipCutPct(1.08)};
         });
         if (modal && modal.type === "chipSetup") updateModal({points: (modal.points||[]).concat(newPoints), analyzingChips: false});
       } catch(e) {
@@ -12174,6 +12188,8 @@ function attachHandlers(){
     const updatePointDisplay = (pt) => {
       const imgEl = document.querySelector(`[data-point-image="${pt.id}"]`);
       if (imgEl && pt.image) imgEl.src = pt.image;
+      const cutEl = document.querySelector(`[data-chip-cut="${pt.id}"]`);
+      if (cutEl) cutEl.style.cssText = chipCutStyle(pt.cut);
     };
     if (photoEl) photoEl.onclick = (e) => {
       const rect = photoEl.getBoundingClientRect();
@@ -12184,7 +12200,7 @@ function attachHandlers(){
       const targetDisplayPx = 1.5 * 37.795; // ~1.5cm on the user's screen
       const defaultSize = Math.round(targetDisplayPx * scaleX);
       const image = cropChipImage(buildSourceCanvas(), px, py, defaultSize);
-      updateModal({points: modal.points.concat([{id: uid(), value: "", x: px, y: py, size: defaultSize, image}])});
+      updateModal({points: modal.points.concat([{id: uid(), value: "", x: px, y: py, size: defaultSize, image, cut: chipCutPct(1)}])});
     };
     app.querySelectorAll("[data-color-marker]").forEach(markerEl => {
       const ptId = markerEl.dataset.colorMarker;
@@ -12206,7 +12222,7 @@ function attachHandlers(){
         const py = Math.round((e.clientY - rect.top) * scaleY);
         pt.x = Math.max(0, Math.min(photoEl.naturalWidth, px));
         pt.y = Math.max(0, Math.min(photoEl.naturalHeight, py));
-        pt.image = cropChipImage(drag.canvas, pt.x, pt.y, pt.size || 20);
+        pt.image = cropChipImage(drag.canvas, pt.x, pt.y, pt.size || 20); pt.cut = chipCutPct(1);
         markerEl.style.left = (pt.x/photoEl.naturalWidth*100) + "%";
         markerEl.style.top = (pt.y/photoEl.naturalHeight*100) + "%";
         updatePointDisplay(pt);
@@ -12237,7 +12253,7 @@ function attachHandlers(){
           pt.size = newSize;
           pt.x = Math.round(rdrag.ax + sx*newSize/2);
           pt.y = Math.round(rdrag.ay + sy*newSize/2);
-          pt.image = cropChipImage(rdrag.canvas, pt.x, pt.y, pt.size);
+          pt.image = cropChipImage(rdrag.canvas, pt.x, pt.y, pt.size); pt.cut = chipCutPct(1);
           markerEl.style.left = (pt.x/photoEl.naturalWidth*100) + "%";
           markerEl.style.top = (pt.y/photoEl.naturalHeight*100) + "%";
           markerEl.style.width = (newSize/photoEl.naturalWidth*100) + "%";
