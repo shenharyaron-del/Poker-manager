@@ -4498,6 +4498,46 @@ function bestRimCircle(at, diff, S, minR, offShare){
   if (!coarse) return null;
   return search(range(coarse.cx - 4, coarse.cx + 4, 1), range(coarse.cy - 4, coarse.cy + 4, 1), range(coarse.r - 3, coarse.r + 3, 1)) || coarse;
 }
+// The found circle can still be a touch big on one side (a sliver of table or the chip's
+// shadow - a dark crescent). The background's colour is read just outside the circle; the
+// circle then shrinks (up to 8%) and shifts (up to 4px) to the biggest one whose inner edge
+// has (almost) none of that colour. Kept as found when that doesn't clearly help.
+function shrinkToClean(at, diff, S, circ){
+  const N = 72, cos = [], sin = [];
+  for (let k = 0; k < N; k++) { cos.push(Math.cos(k / N * 2 * Math.PI)); sin.push(Math.sin(k / N * 2 * Math.PI)); }
+  const inPic = (x, y) => x >= 0 && y >= 0 && x <= S - 1 && y <= S - 1;
+  const bg = [];
+  for (let k = 0; k < N; k++) for (const dr of [3, 5, 7]) {
+    const x = circ.cx + cos[k] * (circ.r + dr), y = circ.cy + sin[k] * (circ.r + dr);
+    if (inPic(x, y)) bg.push(at(x, y));
+  }
+  // plus the picture's corners (outside any circle in it) - for a tight picture the ring
+  // around the circle is mostly off the picture
+  for (let y = 0; y < S; y += 2) for (let x = 0; x < S; x += 2) {
+    if (Math.hypot(x - S / 2, y - S / 2) > S / 2 + 2 && Math.hypot(x - circ.cx, y - circ.cy) > circ.r + 2) bg.push(at(x, y));
+  }
+  if (bg.length < 40) return circ;   // hardly any table to learn from
+  const mean = [0, 1, 2].map(i => bg.reduce((t, q) => t + q[i], 0) / bg.length);
+  const T = 55;
+  const dirty = (cx, cy, r) => {   // share of the inner edge that looks like the table
+    let n = 0, bad = 0;
+    for (let k = 0; k < N; k++) for (const dr of [2, 4]) {
+      const x = cx + cos[k] * (r - dr), y = cy + sin[k] * (r - dr);
+      if (!inPic(x, y)) continue;
+      n++; if (diff(at(x, y), mean) < T) bad++;
+    }
+    return n ? bad / n : 1;
+  };
+  const start = dirty(circ.cx, circ.cy, circ.r);
+  if (start <= 0.03) return circ;
+  let best = {cx: circ.cx, cy: circ.cy, r: circ.r, cost: start};
+  for (let sh = 1; sh >= 0.919; sh -= 0.01) for (let dx = -4; dx <= 4; dx += 1) for (let dy = -4; dy <= 4; dy += 1) {
+    const r = circ.r * sh, f = dirty(circ.cx + dx, circ.cy + dy, r);
+    const cost = f + (1 - sh) * 0.6;   // a smaller circle costs a little - keep as much chip as we can
+    if (cost < best.cost) best = {cx: circ.cx + dx, cy: circ.cy + dy, r, cost, f};
+  }
+  return best.f != null && best.f <= start * 0.5 ? best : circ;
+}
 // A chip photo cropped round, the background around it gone (transparent) - whatever the
 // table looked like. The club's chips are photographed from above, so each chip is a
 // circle: of all the circles in the crop (centre and radius free), the one whose rim shows
@@ -4519,7 +4559,10 @@ function roundChipCrop(srcCanvas, px, py, size, minFit){
     const at = (x, y) => { const i = (Math.round(y) * S + Math.round(x)) * 4; return [d[i], d[i + 1], d[i + 2]]; };
     const diff = (p, q) => Math.abs(p[0] - q[0]) + Math.abs(p[1] - q[1]) + Math.abs(p[2] - q[2]);
     const found = bestRimCircle(at, diff, S, minFit || 0.35, minFit ? 0.15 : 0.25);
-    if (found) circ = {cx: found.cx, cy: found.cy, r: found.r * 0.97};   // a hair inside the rim
+    if (found) {
+      const clean = shrinkToClean(at, diff, S, found);
+      circ = {cx: clean.cx, cy: clean.cy, r: clean.r * 0.97};   // a hair inside the rim
+    }
   } catch(e) { /* a canvas we can't read - keep the inscribed circle */ }
   // where the cut sits in the square crop (fractions) - the setup photo outlines it
   roundChipCrop.last = {l: (circ.cx - circ.r) / S, t: (circ.cy - circ.r) / S, w: 2 * circ.r / S, h: 2 * circ.r / S};
