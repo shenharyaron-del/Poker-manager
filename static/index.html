@@ -328,13 +328,13 @@ html.theme-light .round-cut-note button{color:#9a5f12;}
 .lv-types{display:grid;gap:6px 8px;align-items:center;}
 .lv-types img,.lv-type-noimg{width:min(38px,100%);aspect-ratio:1;justify-self:center;border-radius:50%;object-fit:cover;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4));}
 .lv-type-noimg{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:var(--gold);border:1px solid var(--gold);box-shadow:none;}
-.lv-types input{width:100%;min-width:0;box-sizing:border-box;padding:2px 2px;font-size:18px;text-align:center;border-radius:9px;border:1px solid var(--gold);background:var(--input);color:var(--text);-moz-appearance:textfield;}
+.lv-types input[type=number]{width:100%;min-width:0;box-sizing:border-box;padding:2px 2px;font-size:18px;text-align:center;border-radius:9px;border:1px solid var(--gold);background:var(--input);color:var(--text);-moz-appearance:textfield;}
 .lv-types input::-webkit-outer-spin-button,.lv-types input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
 .lv-type-x{font-size:12px;line-height:1.2;color:var(--muted);text-align:center;margin-top:-2px;direction:ltr;white-space:nowrap;}
 .lv-types.many .lv-type-x{font-size:11px;white-space:normal;}
 /* numbers read left to right (a narrow RTL number box clipped "30" to "0") */
 .lv-types input{direction:ltr;}
-.lv-types.many input{font-size:17px;padding:2px 0;}
+.lv-types.many input[type=number]{font-size:17px;padding:2px 0;}
 .lv-types.many img,.lv-types.many .lv-type-noimg{width:min(34px,100%);}
 .lv-pot{margin-top:8px;padding:8px 12px;border-radius:12px;background:rgba(0,0,0,.3);border:1px solid rgba(212,175,55,.35);}
 .lv-pot > div:first-child{display:flex;justify-content:center;align-items:baseline;gap:8px;color:var(--text);font-size:20px;}
