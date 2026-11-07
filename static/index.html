@@ -323,13 +323,13 @@ body.table-screen .player-screen-scroll > *{flex-shrink:0;}
 .lv-types{display:grid;gap:6px 8px;align-items:center;}
 .lv-types img,.lv-type-noimg{width:min(38px,100%);aspect-ratio:1;justify-self:center;border-radius:7px;object-fit:cover;box-shadow:0 1px 3px rgba(0,0,0,.35);}
 .lv-type-noimg{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:var(--gold);border:1px solid var(--gold);box-shadow:none;}
-.lv-types input{width:100%;min-width:0;box-sizing:border-box;padding:6px 2px;font-size:18px;text-align:center;border-radius:9px;border:1px solid var(--gold);background:var(--input);color:var(--text);-moz-appearance:textfield;}
+.lv-types input{width:100%;min-width:0;box-sizing:border-box;padding:2px 2px;font-size:18px;text-align:center;border-radius:9px;border:1px solid var(--gold);background:var(--input);color:var(--text);-moz-appearance:textfield;}
 .lv-types input::-webkit-outer-spin-button,.lv-types input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
 .lv-type-x{font-size:12px;line-height:1.2;color:var(--muted);text-align:center;margin-top:-2px;direction:ltr;white-space:nowrap;}
 .lv-types.many .lv-type-x{font-size:11px;white-space:normal;}
 /* numbers read left to right (a narrow RTL number box clipped "30" to "0") */
 .lv-types input{direction:ltr;}
-.lv-types.many input{font-size:17px;padding:6px 0;}
+.lv-types.many input{font-size:17px;padding:2px 0;}
 .lv-types.many img,.lv-types.many .lv-type-noimg{width:min(34px,100%);}
 .lv-pot{margin-top:8px;padding:8px 12px;border-radius:12px;background:rgba(0,0,0,.3);border:1px solid rgba(212,175,55,.35);}
 .lv-pot > div:first-child{display:flex;justify-content:center;align-items:baseline;gap:8px;color:var(--text);font-size:20px;}
@@ -345,7 +345,7 @@ body.table-screen .player-screen-scroll > *{flex-shrink:0;}
   background:linear-gradient(180deg,#fde68a 0%,#f2c14e 45%,#c8922a 100%);border:1px solid rgba(0,0,0,.25);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 5px 12px rgba(0,0,0,.45);}
 .lv-photo:disabled,.lv-confirm:disabled{cursor:not-allowed;}
 .lv-row{display:flex;gap:10px;align-items:flex-end;}
-.lv-confirm.lv-confirm-side{width:auto;flex:0 0 auto;margin-top:0;padding:12px 18px;font-size:20px;white-space:nowrap;}
+.lv-confirm.lv-confirm-side{width:auto;flex:0 0 auto;margin-top:0;padding:8px 18px;font-size:20px;white-space:nowrap;}
 #lv-amount::placeholder{color:#9ca3af;opacity:1;}
 .lv-confirm-side svg{width:20px;height:20px;}
 /* Counting by photo: a quiet text link, not another big button */
@@ -7359,7 +7359,7 @@ function renderPlayerScreen(gameId){
         <div style="flex:1;min-width:0;">
           <div class="lv-amount-label" style="color:var(--muted);font-size:16px;margin-bottom:4px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">סכום הז'יטונים שנשארו</div>
           <div style="position:relative;">
-            <input type="number" inputmode="decimal" id="lv-amount" placeholder="0" value="${esc(leaveAmountDraft[pickKey] || '')}" ${armed?'':'disabled'} style="width:100%;box-sizing:border-box;padding:12px 30px 12px 8px;font-size:22px;border-radius:12px;border:1px solid var(--gold);background:var(--input);color:var(--text);">
+            <input type="number" inputmode="decimal" id="lv-amount" placeholder="0" value="${esc(leaveAmountDraft[pickKey] || '')}" ${armed?'':'disabled'} style="width:100%;box-sizing:border-box;padding:7px 30px 7px 8px;font-size:22px;border-radius:12px;border:1px solid var(--gold);background:var(--input);color:var(--text);">
             <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--gold);font-size:20px;">₪</span>
           </div>
         </div>
