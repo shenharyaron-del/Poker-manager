@@ -9073,7 +9073,7 @@ function renderModal(m){
         <p style="color:var(--muted);font-size:17px;margin-top:0;">צלמו תמונה עם כל הז'יטונים פרוסים בנפרד על משטח, ממבט על (מלמעלה).<br>באמצעות הגדרה זו נוכל לספור ז'יטונים בסיום ערב.</p>
         ${editableList}
         ${m.roundCutUndo ? `<div class="round-cut-note">✂️ התמונות נחתכו לעיגול. בדקו אותן ולחצו "שמור שינויים" למטה - או <button type="button" data-round-cut-undo>ביטול</button>.</div>`
-          : `<button type="button" class="btn btn-ghost btn-block round-cut-btn" data-round-cut style="display:none;margin-bottom:10px;">✂️ חיתוך עגול לתמונות הקיימות</button>`}
+          : (m.points || []).some(pt => pt.image && squareChipImages[pt.image] !== false) ? `<button type="button" class="btn btn-ghost btn-block round-cut-btn" data-round-cut style="margin-bottom:10px;">✂️ חיתוך עגול לתמונות הקיימות</button>` : ""}
         ${pickButtons}
         </fieldset>
       `;
@@ -12196,12 +12196,18 @@ function attachHandlers(){
         const cv = document.createElement("canvas"); cv.width = 16; cv.height = 16;
         const ctx = cv.getContext("2d"); ctx.drawImage(im, 0, 0, 16, 16);
         const corner = ctx.getImageData(0, 0, 1, 1).data[3];
-        return squareChipImages[src] = corner > 200;   // a round cut leaves its corners clear
-      } catch(e) { return squareChipImages[src] = false; }
+        return squareChipImages[src] = corner > 60;   // a round cut leaves its corners clear
+      } catch(e) {
+        // couldn't read it - offer the cut anyway (cutting a picture that turns out round
+        // already does no harm; hiding the button for a square one did)
+        console.warn("round-cut check failed", src, e);
+        return squareChipImages[src] = true;
+      }
     };
     if (roundCutBtn) {
+      // shown until the pictures are checked; gone once they're all known to be round
       Promise.all((modal.points || []).map(pt => isSquareChip(pt.image))).then(flags => {
-        if (flags.some(Boolean) && document.body.contains(roundCutBtn)) roundCutBtn.style.display = "";
+        if (!flags.some(Boolean) && document.body.contains(roundCutBtn)) roundCutBtn.remove();
       });
       roundCutBtn.onclick = async () => {
         roundCutBtn.disabled = true; showButtonLoading(roundCutBtn);
