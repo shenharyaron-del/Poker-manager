@@ -4463,6 +4463,41 @@ function setPlayerPhoto(p, photo){ if (p.clientId) setGlobalPlayer(p.clientId, {
 // data: string - no render-site changes needed, only the handful of places that
 // capture/create a new photo need to upload it first.
 function photoUrl(id){ return "/api/photos/" + id; }
+// The circle in an S×S crop whose rim shows the sharpest colour change (inside vs just
+// outside it), centre within ±15% of the middle, radius from minR×(S/2) to the crop's half;
+// of the circles nearly as sharp as the best, the biggest. A coarse pass, then a fine one.
+function bestRimCircle(at, diff, S, minR){
+  const c = S / 2, maxR = S / 2 - 1, N = 60;
+  const cos = [], sin = [];
+  for (let k = 0; k < N; k++) { cos.push(Math.cos(k / N * 2 * Math.PI)); sin.push(Math.sin(k / N * 2 * Math.PI)); }
+  const score = (cx, cy, r) => {
+    let t = 0, n = 0;
+    for (let k = 0; k < N; k++) {
+      const xi = cx + cos[k] * (r - 3), yi = cy + sin[k] * (r - 3), xo = cx + cos[k] * (r + 3), yo = cy + sin[k] * (r + 3);
+      if (xo < 0 || yo < 0 || xo > S - 1 || yo > S - 1) continue;   // rim off the picture
+      t += diff(at(xi, yi), at(xo, yo)); n++;
+    }
+    return n >= N * 0.5 ? t / n : 0;
+  };
+  const search = (cxs, cys, rs) => {
+    const all = [];
+    for (const cx of cxs) for (const cy of cys) for (const r of rs) {
+      // the whole circle inside the picture (one sticking out gets flat sides)
+      if (cx - r < -1 || cy - r < -1 || cx + r > S || cy + r > S) continue;
+      all.push({cx, cy, r, s: score(cx, cy, r)});
+    }
+    if (!all.length) return null;
+    const top = Math.max(...all.map(o => o.s));
+    if (!(top > 30)) return null;
+    // nearly the sharpest, and the biggest of those
+    return all.filter(o => o.s >= top * 0.85).sort((a, b) => b.r - a.r || b.s - a.s)[0];
+  };
+  const range = (from, to, step) => { const out = []; for (let v = from; v <= to + 1e-9; v += step) out.push(v); return out; };
+  const off = S * 0.15;
+  const coarse = search(range(c - off, c + off, 4), range(c - off, c + off, 4), range(maxR * minR, maxR + 2, 3));
+  if (!coarse) return null;
+  return search(range(coarse.cx - 4, coarse.cx + 4, 1), range(coarse.cy - 4, coarse.cy + 4, 1), range(coarse.r - 3, coarse.r + 3, 1)) || coarse;
+}
 // A chip photo cropped round, the background around it gone (transparent) - whatever the
 // table looked like: chips are always round. From the square crop around the chip it finds
 // the chip's rim along 72 rays from the middle (the outermost strong colour change - the
@@ -4534,6 +4569,16 @@ function roundChipCrop(srcCanvas, px, py, size, minFit){
       const sane = e && e.a > maxR * 0.3 && e.b > maxR * 0.3 && e.a < maxR * 1.15 && e.b < maxR * 1.15
         && Math.abs(e.cx - c) < S * 0.22 && Math.abs(e.cy - c) < S * 0.22 && Math.max(e.a, e.b) / Math.min(e.a, e.b) < 1.8;
       if (sane && !(minFit && Math.min(e.a, e.b) < maxR * minFit)) ex = e;
+      else {
+        // no trustworthy ellipse: search for the circle whose rim has the sharpest colour
+        // change - centre and radius both free (an old crop isn't exactly centred on its
+        // chip) - preferring the outermost strong one (the chip's own inner rings are smaller)
+        const circ = bestRimCircle(at, diff, S, minFit || 0.7);
+        if (circ) ex = {cx: circ.cx, cy: circ.cy, a: circ.r / 0.95 * 0.97, b: circ.r / 0.95 * 0.97};
+      }
+    } else {
+      const circ = bestRimCircle(at, diff, S, minFit || 0.7);
+      if (circ) ex = {cx: circ.cx, cy: circ.cy, a: circ.r / 0.95 * 0.97, b: circ.r / 0.95 * 0.97};
     }
   } catch(e) { /* a canvas we can't read - keep the inscribed circle */ }
   // a hair inside the rim, so no sliver of table shows at the edge
