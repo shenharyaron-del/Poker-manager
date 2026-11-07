@@ -317,6 +317,9 @@ body.table-screen .player-screen-scroll > *{flex-shrink:0;}
 .lv-calc{display:flex;align-items:center;gap:8px;margin-top:12px;color:var(--text);font-size:18px;white-space:nowrap;}
 .lv-calc input{flex:0 0 90px;width:90px!important;min-width:0;padding:8px;font-size:20px;text-align:center;border-radius:10px;border:1px solid rgba(212,175,55,.6);background:var(--input);color:var(--text);}
 .lv-calc b{color:var(--gold);font-size:20px;}
+.round-cut-note{margin:0 0 10px;padding:9px 12px;border:1px dashed var(--frame-c,var(--gold));border-radius:12px;font-size:15px;line-height:1.5;color:var(--text);}
+.round-cut-note button{background:none;border:none;padding:0;font:inherit;color:var(--gold);text-decoration:underline;cursor:pointer;}
+html.theme-light .round-cut-note button{color:#9a5f12;}
 /* club profile chip photo: what will be cut out of each chip, live as it's moved / resized */
 .chip-cut{position:absolute;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.6),inset 0 0 0 1px rgba(0,0,0,.4);pointer-events:none;box-sizing:border-box;}
 /* count by chip type, in the end-of-night frame */
@@ -4466,7 +4469,9 @@ function photoUrl(id){ return "/api/photos/" + id; }
 // chip's own inner rings are further in), fits an ellipse to those points (a chip shot at
 // an angle is an ellipse, and rarely dead centre), then keeps that ellipse, straightened
 // into a circle. Takes a few milliseconds.
-function roundChipCrop(srcCanvas, px, py, size){
+// minFit (0-1): don't trust a fitted rim smaller than this share of the crop - for pictures
+// already cropped tight around the chip, where the inscribed circle is right.
+function roundChipCrop(srcCanvas, px, py, size, minFit){
   const S = 160, half = Math.max(1, Math.round(size / 2));
   const sx = Math.max(0, px - half), sy = Math.max(0, py - half);
   const sw = Math.min(srcCanvas.width, px + half) - sx, sh = Math.min(srcCanvas.height, py + half) - sy;
@@ -4528,7 +4533,7 @@ function roundChipCrop(srcCanvas, px, py, size){
       }
       const sane = e && e.a > maxR * 0.3 && e.b > maxR * 0.3 && e.a < maxR * 1.15 && e.b < maxR * 1.15
         && Math.abs(e.cx - c) < S * 0.22 && Math.abs(e.cy - c) < S * 0.22 && Math.max(e.a, e.b) / Math.min(e.a, e.b) < 1.8;
-      if (sane) ex = e;
+      if (sane && !(minFit && Math.min(e.a, e.b) < maxR * minFit)) ex = e;
     }
   } catch(e) { /* a canvas we can't read - keep the inscribed circle */ }
   // a hair inside the rim, so no sliver of table shows at the edge
@@ -7229,6 +7234,8 @@ let playerViewTarget = null;
 // "סיום ערב" box is ticked (unlocks the cash-out controls) and the typed chip count - kept
 // across the periodic re-render.
 const rebuyPick = {}, leaveArmed = {}, leaveAmountDraft = {}, rebuyCancelOpen = {}, leaveChipsDraft = {};
+// Chip pictures already checked for being square (saved before chips were cut round).
+const squareChipImages = {};
 // The end-of-night count by chip type ("או ספרו לפי סוג"): game:player -> {chipValueId: count}.
 const leaveTypeCounts = {};
 let undoRebuyTimer = null;
@@ -9065,6 +9072,8 @@ function renderModal(m){
         <legend>הוספת ויזואליות של הז'יטונים</legend>
         <p style="color:var(--muted);font-size:17px;margin-top:0;">צלמו תמונה עם כל הז'יטונים פרוסים בנפרד על משטח, ממבט על (מלמעלה).<br>באמצעות הגדרה זו נוכל לספור ז'יטונים בסיום ערב.</p>
         ${editableList}
+        ${m.roundCutUndo ? `<div class="round-cut-note">✂️ התמונות נחתכו לעיגול. בדקו אותן ולחצו "שמור שינויים" למטה - או <button type="button" data-round-cut-undo>ביטול</button>.</div>`
+          : `<button type="button" class="btn btn-ghost btn-block round-cut-btn" data-round-cut style="display:none;margin-bottom:10px;">✂️ חיתוך עגול לתמונות הקיימות</button>`}
         ${pickButtons}
         </fieldset>
       `;
@@ -12174,6 +12183,44 @@ function attachHandlers(){
       };
       reader.readAsDataURL(file);
     };
+    // One-time: chips saved before photos were cut round (square, background in the
+    // corners) - the button shows only when there are such pictures, and cuts them round
+    // (shown in the list; saved with "שמור שינויים", or undone).
+    const roundCutBtn = app.querySelector("[data-round-cut]");
+    const loadImg = src => new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src; });
+    const isSquareChip = async (src) => {
+      if (!src) return false;
+      if (src in squareChipImages) return squareChipImages[src];
+      try {
+        const im = await loadImg(src.startsWith("data:") ? src : await urlToDataUrl(src));
+        const cv = document.createElement("canvas"); cv.width = 16; cv.height = 16;
+        const ctx = cv.getContext("2d"); ctx.drawImage(im, 0, 0, 16, 16);
+        const corner = ctx.getImageData(0, 0, 1, 1).data[3];
+        return squareChipImages[src] = corner > 200;   // a round cut leaves its corners clear
+      } catch(e) { return squareChipImages[src] = false; }
+    };
+    if (roundCutBtn) {
+      Promise.all((modal.points || []).map(pt => isSquareChip(pt.image))).then(flags => {
+        if (flags.some(Boolean) && document.body.contains(roundCutBtn)) roundCutBtn.style.display = "";
+      });
+      roundCutBtn.onclick = async () => {
+        roundCutBtn.disabled = true; showButtonLoading(roundCutBtn);
+        const before = (modal.points || []).map(pt => Object.assign({}, pt));
+        const points = [];
+        for (const pt of before) {
+          if (!(await isSquareChip(pt.image))) { points.push(pt); continue; }
+          try {
+            const im = await loadImg(pt.image.startsWith("data:") ? pt.image : await urlToDataUrl(pt.image));
+            const cv = document.createElement("canvas"); cv.width = im.naturalWidth; cv.height = im.naturalHeight;
+            cv.getContext("2d").drawImage(im, 0, 0);
+            points.push(Object.assign({}, pt, {image: roundChipCrop(cv, cv.width / 2, cv.height / 2, Math.max(cv.width, cv.height), 0.88)}));
+          } catch(e) { points.push(pt); }
+        }
+        updateModal({points, roundCutUndo: before});
+      };
+    }
+    const roundCutUndo = app.querySelector("[data-round-cut-undo]");
+    if (roundCutUndo) roundCutUndo.onclick = () => updateModal({points: modal.roundCutUndo, roundCutUndo: null});
     const cameraInput = app.querySelector("#chip-camera-input");
     if (cameraInput) cameraInput.onchange = handleChipSetupFile;
     const photoEl = app.querySelector("[data-chip-photo]");
