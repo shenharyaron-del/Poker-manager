@@ -317,6 +317,20 @@ body.table-screen .player-screen-scroll > *{flex-shrink:0;}
 .lv-calc{display:flex;align-items:center;gap:8px;margin-top:12px;color:var(--text);font-size:18px;white-space:nowrap;}
 .lv-calc input{flex:0 0 90px;width:90px!important;min-width:0;padding:8px;font-size:20px;text-align:center;border-radius:10px;border:1px solid rgba(212,175,55,.6);background:var(--input);color:var(--text);}
 .lv-calc b{color:var(--gold);font-size:20px;}
+/* count by chip type, in the end-of-night frame */
+.lv-types-sep{display:flex;align-items:center;gap:8px;margin:12px 0 4px;color:var(--muted);font-size:14px;}
+.lv-types-sep::before,.lv-types-sep::after{content:"";flex:1;height:1px;background:currentColor;opacity:.4;}
+.lv-types{display:grid;gap:6px 8px;align-items:center;}
+.lv-types img,.lv-type-noimg{width:min(38px,100%);aspect-ratio:1;justify-self:center;border-radius:7px;object-fit:cover;box-shadow:0 1px 3px rgba(0,0,0,.35);}
+.lv-type-noimg{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:var(--gold);border:1px solid var(--gold);box-shadow:none;}
+.lv-types input{width:100%;min-width:0;box-sizing:border-box;padding:6px 2px;font-size:18px;text-align:center;border-radius:9px;border:1px solid var(--gold);background:var(--input);color:var(--text);-moz-appearance:textfield;}
+.lv-types input::-webkit-outer-spin-button,.lv-types input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+.lv-type-x{font-size:12px;line-height:1.2;color:var(--muted);text-align:center;margin-top:-2px;direction:ltr;white-space:nowrap;}
+.lv-types.many .lv-type-x{font-size:11px;white-space:normal;}
+/* numbers read left to right (a narrow RTL number box clipped "30" to "0") */
+.lv-types input{direction:ltr;}
+.lv-types.many input{font-size:17px;padding:6px 0;}
+.lv-types.many img,.lv-types.many .lv-type-noimg{width:min(34px,100%);}
 .lv-pot{margin-top:8px;padding:8px 12px;border-radius:12px;background:rgba(0,0,0,.3);border:1px solid rgba(212,175,55,.35);}
 .lv-pot > div:first-child{display:flex;justify-content:center;align-items:baseline;gap:8px;color:var(--text);font-size:20px;}
 .lv-pot b{color:var(--gold);font-size:22px;}
@@ -7122,6 +7136,8 @@ let playerViewTarget = null;
 // "סיום ערב" box is ticked (unlocks the cash-out controls) and the typed chip count - kept
 // across the periodic re-render.
 const rebuyPick = {}, leaveArmed = {}, leaveAmountDraft = {}, rebuyCancelOpen = {}, leaveChipsDraft = {};
+// The end-of-night count by chip type ("או ספרו לפי סוג"): game:player -> {chipValueId: count}.
+const leaveTypeCounts = {};
 let undoRebuyTimer = null;
 // Ratios easy enough to convert in your head (1 ₪ = 1/2/10/100 chips) - any other one gets
 // a chips → ₪ converter in the end-of-evening area.
@@ -7363,7 +7379,24 @@ function renderPlayerScreen(gameId){
         </div>
         <div style="color:var(--muted);font-size:15px;margin-top:4px;">היחס במועדון: ₪1 = ${ratio} ז'יטונים</div>`;
       })()}
-      <button class="lv-photo-link" data-leave-photo ${armed?'':'disabled'}>${icon('camera')}<span>צילום / ספירת ז'יטונים לפי סוג</span></button>
+      ${(() => {
+        // Count by chip type, right here: the club's chips (club profile) in one row, a count
+        // under each and "×value = ₪" under that; the sum goes straight into the amount above.
+        // 3-6 types share the row; with 5-6 the small line breaks in two.
+        const cvs = (c.chipValues || []).filter(cv => parseFloat(cv.value) > 0);
+        if (!cvs.length) return "";
+        const counts = leaveTypeCounts[pickKey] || {};
+        const many = cvs.length >= 5;
+        const line = cv => { const n = parseFloat(counts[cv.id]) || 0, v = parseFloat(cv.value); const t = Math.round(n * v * 100) / 100;
+          return many ? `×${v}<br>₪${t}` : `×${v} = ₪${t}`; };
+        return `
+        <div class="lv-types-sep">או ספרו לפי סוג</div>
+        <div class="lv-types${many ? " many" : ""}" style="grid-template-columns:repeat(${cvs.length},1fr);">
+          ${cvs.map(cv => cv.image ? `<img src="${esc(cv.image)}" alt="" draggable="false">` : `<span class="lv-type-noimg">₪${esc(String(cv.value))}</span>`).join("")}
+          ${cvs.map(cv => `<input type="number" inputmode="numeric" min="0" placeholder="0" data-lv-type="${cv.id}" data-lv-type-value="${esc(String(cv.value))}" value="${esc(String(counts[cv.id] ?? ""))}" ${armed?'':'disabled'} onfocus="this.select()">`).join("")}
+          ${cvs.map(cv => `<div class="lv-type-x" data-lv-type-x="${cv.id}">${line(cv)}</div>`).join("")}
+        </div>`;
+      })()}
       ${(() => {
         // The pot as it stands - what was bought in, what's already been taken out by players
         // who left, and what should still be on the table. Updates as others leave.
@@ -10755,7 +10788,25 @@ function attachHandlers(){
     const resultEl = el.closest(".lv-calc").querySelector("#lv-chips-result");
     if (resultEl) resultEl.textContent = "₪" + (amount || 0);
   });
-  app.querySelectorAll("[data-leave-photo]").forEach(el => el.onclick = () => openModal({type:"seatChips", gameId: nav.gameId, playerId: viewedPid()}));
+  // Count by chip type: every change recomputes the sum into "סכום הז'יטונים שנשארו".
+  app.querySelectorAll("[data-lv-type]").forEach(el => el.oninput = () => {
+    const key = nav.gameId + ":" + viewedPid();
+    const counts = leaveTypeCounts[key] = leaveTypeCounts[key] || {};
+    counts[el.dataset.lvType] = el.value;
+    const box = el.closest(".lv-types");
+    const many = box.classList.contains("many");
+    let total = 0;
+    box.querySelectorAll("[data-lv-type]").forEach(inp => {
+      const n = Math.max(0, parseFloat(inp.value) || 0), v = parseFloat(inp.dataset.lvTypeValue) || 0;
+      const t = Math.round(n * v * 100) / 100; total += n * v;
+      const x = box.querySelector(`[data-lv-type-x="${inp.dataset.lvType}"]`);
+      if (x) x.innerHTML = many ? `×${v}<br>₪${t}` : `×${v} = ₪${t}`;
+    });
+    total = Math.round(total * 100) / 100;
+    const amt = document.getElementById("lv-amount");
+    if (amt) amt.value = total ? String(total) : "";
+    leaveAmountDraft[key] = total ? String(total) : "";
+  });
   app.querySelectorAll("[data-leave-confirm]").forEach(el => el.onclick = async () => {
     const gameId = nav.gameId, pid = viewedPid();
     const key = gameId + ":" + pid;
@@ -10780,7 +10831,7 @@ function attachHandlers(){
         maybeAutoCloseNight(freshG);
       });
     }
-    delete leaveArmed[key]; delete leaveAmountDraft[key]; delete leaveChipsDraft[key];
+    delete leaveArmed[key]; delete leaveAmountDraft[key]; delete leaveChipsDraft[key]; delete leaveTypeCounts[key];
     render();
     maybeOpenDirectPayAfterCashout(gameId, pid, rounded);
   });
