@@ -5903,7 +5903,7 @@ function tourPrizesHtml(t, count, potIn){
   const bbLabel = bb === places - 1 ? `${places}` : `${bb + 1}–${places}`;
   // too wide for the screen: 3rd place goes first, then the one before the bubble (tourFitPrizes)
   const drop = i => places > 5 && i === 2 && bb > 3 ? ` data-prz-drop="1"` : places > 5 && i === bb - 1 && i > 2 ? ` data-prz-drop="2"` : "";
-  const cell = i => i === null ? `<div class="gap">…</div>` : `<div class="${i === bb ? "bb" : ""}"${drop(i)}><b>₪${am[i].toLocaleString("en-US")}</b>${i === bb ? `🫧 באבל · <span dir="ltr">${bbLabel}</span>` : i < 3 ? `${medals[i]} מקום ${i + 1}` : `מקום ${i + 1}`}</div>`;
+  const cell = i => i === null ? `<div class="gap">…</div>` : `<div class="${i === bb ? "bb" : ""}"${drop(i)}><b>₪${am[i].toLocaleString("en-US")}</b>${i === bb ? `🫧 <span dir="ltr">${bbLabel}</span>` : i < 3 ? `${medals[i]} מקום ${i + 1}` : `מקום ${i + 1}`}</div>`;
   return `<div class="ck-prz"><div class="h">פרסים לפי ${count} רשומים · ${places} מקומות בפרס</div><div class="pl" dir="ltr">${idx.map(cell).join("")}</div></div>`;
 }
 // A prize row wider than its box drops cells until it fits: 3rd place, then the place
