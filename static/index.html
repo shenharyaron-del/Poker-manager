@@ -5956,7 +5956,7 @@ let tourCcEdit = false;
 let tourCcAdmin = false;   // the admin's "enter a player's count" list
 let tourCcFor = null;      // ...and the player picked there
 function tourStandingsHtml(P, myPid){
-  if (!P.lastKey && !P.approved.some(r => r.bustedAt)) return "";
+  if (!P.approved.length) return "";
   const rows = P.standings.map(({r, place, counted}) => {
     const extra = r.bustedAt ? `יצא ${hhmm(r.bustedAt)}${r.bustLevel ? ` · שלב ${r.bustLevel}` : ""}` : counted ? Number(r.chips).toLocaleString("en-US") : "—";
     const rb = "";   // re-buys aren't shown in the standings
@@ -6096,7 +6096,7 @@ function renderTourClock(g, c, isAdmin){
         <div class="ck-dots"><button type="button" class="${tourClockPage ? "" : "on"}" data-ck-page="0">שעון</button><button type="button" class="${tourClockPage ? "on" : ""}" data-ck-page="1">דירוג ומבנה</button></div></div>
       <div class="ck-pages" data-ck-pages>
         <div class="ck-page">${admin}${chips ? `<div class="ck-chips">${chips}</div>` : ""}${acts}${panel || `<div class="ck-lower">${adminAlerts}${me}${stats}${tourPrizesHtml(t, approved.length, tourPot(g, t))}</div>`}${tools}</div>
-        <div class="ck-page">${meOut}${tourStandingsHtml(P, myPid) || `<p class="lb-note">הדירוג יופיע אחרי הספירה הראשונה או היציאה הראשונה.</p>`}${tourClockBlindsHtml(k)}${tourClockFull ? `<div style="text-align:right">${tourPayReadHtml(t, approved.length)}</div>` : ""}</div>
+        <div class="ck-page">${meOut}${tourStandingsHtml(P, myPid)}${tourClockBlindsHtml(k)}${tourClockFull ? `<div style="text-align:right">${tourPayReadHtml(t, approved.length)}</div>` : ""}</div>
       </div>
     </div>`;
   }
@@ -6126,14 +6126,11 @@ function tourClockBlindsHtml(k){
 }
 let tourClockPage = 0;
 let tourPanel = null;   // the admin's open panel under the clock: qr / add / lobby / rebuy   // the admin's page under the clock (0 / 1)
-// A registered player's line: the name (חדש), their entry chips on the same line, and under
-// it only what happened (went out, re-buys, add-on) - no payment total.
+// A registered player's line (before the start): the name (חדש) and their entry chips.
 function tourRegNameHtml(g, t, r){
   const st = g.tournamentState && g.tournamentState.startedAt;
   const chips = t.chips + (!st || (r.approvedAt && r.approvedAt <= st) ? Math.round(t.chips * (+t.early || 0) / 100) : 0);
-  const notes = [r.bustedAt ? `יצא ${hhmm(r.bustedAt)}${r.bustLevel ? ` · שלב ${r.bustLevel}` : ""}` : "",
-    (r.rebuys || []).length ? `🔁 ${(r.rebuys || []).map(hhmm).join(", ")}` : "", r.addOnAt ? `Add-on ${hhmm(r.addOnAt)}` : ""].filter(Boolean).join(" · ");
-  return `<div class="nm"><div class="nm-l"><span>${esc(r.name || "")}${r.isNew ? `<span class="reg-new">חדש</span>` : ""}</span><span class="nm-chips">${chips.toLocaleString("en-US")} ז'יטונים</span></div>${notes ? `<small>${notes}</small>` : ""}</div>`;
+  return `<div class="nm"><div class="nm-l"><span>${esc(r.name || "")}${r.isNew ? `<span class="reg-new">חדש</span>` : ""}</span><span class="nm-chips">${chips.toLocaleString("en-US")} ז'יטונים</span></div></div>`;
 }
 // The registered list (4 rows, scroll, "רשימה מלאה"); actions only on the admin's screen.
 function tourRegListHtml(g, approved, rowTail){
@@ -6198,12 +6195,11 @@ function renderTourGame(g, c){
   const head = (sub) => `<div class="lb-head"><div class="t2">${esc(ilDate(g.date))}${sub ? ` · ${sub}` : ""}</div></div>`;
   const isAdmin = c && (isTableAdmin(g, c) || isSuperAdmin());
   const started = !!(g.tournamentState && g.tournamentState.startedAt) && !g.closed;
-  if (started && !(isAdmin && tourAdminView === "reg")) return renderTourClock(g, c, isAdmin);
+  if (started) return renderTourClock(g, c, isAdmin);   // once on: the clock (standings there)
   if (g.closed) return `<div class="tour-page">${head("")}<div class="lb-state"><div class="big">הטורניר הסתיים</div></div>${tourInfoHtml(t)}</div>`;
   if (isAdmin) {
     return `<div class="tour-page">${head("ניהול הרשמה")}
-      ${started ? `<div style="text-align:center;margin:0 0 10px;"><button type="button" class="reg-me" data-tour-view="clock">⏱ חזרה לשעון</button></div>`
-        : `<button type="button" class="btn btn-primary btn-block" data-tour-start ${approved.length >= 2 ? "" : "disabled"} style="margin:0 0 6px;font-size:19px;">▶ התחל טורניר</button>
+      ${`<button type="button" class="btn btn-primary btn-block" data-tour-start ${approved.length >= 2 ? "" : "disabled"} style="margin:0 0 6px;font-size:19px;">▶ התחל טורניר</button>
         ${approved.length >= 2 ? "" : `<div class="lb-note" style="margin-top:0">אפשר להתחיל כשיש לפחות 2 רשומים</div>`}`}
       <div class="ad-sum"><div><b>${approved.length}</b>רשומים</div><div><b>${pending.length}</b>ממתינים</div><div><b>₪${n(tourPot(g, t))}</b>בקופה</div></div>
       ${tourPotNowHtml(t, approved.length)}
@@ -6218,22 +6214,7 @@ function renderTourGame(g, c){
         return myPid && approved.some(r => r.playerId === myPid) ? "" : `<div style="text-align:center;margin:0 0 10px;"><button type="button" class="reg-me" data-reg-me>＋ רשום אותי</button></div>`;
       })()}
       <div class="ad-btns"><button type="button" class="btn btn-ghost" data-reg-add>＋ רישום שחקן</button><button type="button" class="btn btn-ghost" data-invite-game="${g.id}">📤 הזמנת שחקנים</button></div>
-      ${!approved.length ? "" : `<fieldset class="leave-frame setup-frame"><legend>✓ רשומים (${approved.length})</legend>
-        <div class="reg-list${approved.length > 4 && !tourRegFull ? " capped" : ""}">
-        ${approved.length ? approved.map((r, i) => `<div class="reg-row${r.bustedAt ? " out" : ""}${r.playerId === tourMyPid(g) ? " me" : ""}">${tourAvatar(r.name, i, r.playerId, g.communityId)}${tourRegNameHtml(g, t, r)}
-          ${started ? (() => {
-            // the admin records a re-buy (while open) / the add-on (on the add-on break) - asked for or not
-            const kk = tourClockInfo(g, c);
-            const rbBtn = kk.rbLeft > 0 && (!t.rebuys || (r.rebuys || []).length < t.rebuys) ? `<button type="button" class="reg-rm" data-ra="rebuy" data-pid="${esc(r.playerId)}" data-confirm="לרשום ריביי ל${esc(r.name || "")} (שולם ₪${Number(t.rebuyPrice ?? total).toLocaleString("en-US")})?">ריביי</button>` : "";
-            const aoBtn = t.addOn && kk.row.brk && kk.row.addOn && !r.addOnAt && !r.bustedAt ? `<button type="button" class="reg-rm" data-ra="addon" data-pid="${esc(r.playerId)}" data-confirm="לרשום Add-on ל${esc(r.name || "")} (שולם ₪${Number(t.addOnPrice ?? total).toLocaleString("en-US")})?">Add-on</button>` : "";
-            return r.bustedAt ? `<button type="button" class="reg-rm" data-ra="unbust" data-pid="${esc(r.playerId)}">החזר</button>${rbBtn}`
-              : `${aoBtn}${rbBtn}<button type="button" class="reg-rm" data-ra="bust" data-pid="${esc(r.playerId)}" data-confirm="לסמן ש${esc(r.name || "")} יצא מהטורניר?">יצא</button>`;
-          })()
-          : `<button type="button" class="reg-rm" data-reg-remove="${esc(r.playerId)}">הסר</button>`}</div>`).join("")
-          : ""}
-        </div>
-        ${approved.length > 4 ? `<button type="button" class="tour-full-link" data-reg-full>${tourRegFull ? "הסתר ▴" : `רשימה מלאה (${approved.length}) ▾`}</button>` : ""}
-      </fieldset>`}
+      ${tourRegListHtml(g, approved, r => `<button type="button" class="reg-rm" data-reg-remove="${esc(r.playerId)}">הסר</button>`)}
       ${tourBlindsReadHtml(t, c)}${tourPayReadHtml(t, approved.length)}
     </div>`;
   }
