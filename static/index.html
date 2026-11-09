@@ -1423,6 +1423,7 @@ html.theme-light .ng-tour-edit{color:#9a5f12;border-color:#c8922a;}
 .reg-row .nm small{display:block;font-weight:500;font-size:13px;color:var(--muted);}
 .reg-ok{padding:7px 12px;border-radius:10px;border:none;background:linear-gradient(180deg,#5fe0a8,#2fa877);color:#062a1b;font:inherit;font-weight:800;font-size:15px;cursor:pointer;}
 .reg-no{padding:7px 10px;border-radius:10px;border:1px solid rgba(239,68,68,.6);background:transparent;color:#f87171;font:inherit;font-weight:700;font-size:15px;cursor:pointer;}
+.reg-new{font-size:11.5px;font-weight:700;padding:1px 7px;border-radius:999px;background:#2563eb;color:#fff;margin-inline-start:6px;vertical-align:middle;}
 .reg-rm{background:none;border:none;color:var(--muted);font:inherit;font-size:14px;text-decoration:underline;cursor:pointer;}
 .ad-pend{border-color:#e0a43a !important;}
 .ad-pend legend{color:#f3c26b !important;} html.theme-light .ad-pend legend{color:#b45309 !important;}
@@ -5557,12 +5558,12 @@ function renderTourGame(g, c){
     return `<div class="tour-page">${head("ניהול הרשמה")}
       <div class="ad-sum"><div><b>${approved.length}</b>רשומים</div><div><b>${pending.length}</b>ממתינים</div><div><b>₪${n(approved.length * (+t.prize || 0))}</b>בקופה</div></div>
       ${pending.length ? `<fieldset class="leave-frame setup-frame ad-pend"><legend>⏳ ממתינים לאישור (${pending.length})</legend>
-        ${pending.map((r, i) => `<div class="reg-row">${tourAvatar(r.name, i + 3)}<div class="nm">${esc(r.name || "")}<small>${r.requestedAt ? `ביקש ב-${new Date(r.requestedAt).toLocaleTimeString("he-IL", {hour: "2-digit", minute: "2-digit"})}` : ""}</small></div>
+        ${pending.map((r, i) => `<div class="reg-row">${tourAvatar(r.name, i + 3)}<div class="nm">${esc(r.name || "")}${r.isNew ? `<span class="reg-new">חדש</span>` : ""}<small>${r.isNew ? "ערב ראשון במועדון · " : ""}${r.requestedAt ? `ביקש ב-${new Date(r.requestedAt).toLocaleTimeString("he-IL", {hour: "2-digit", minute: "2-digit"})}` : ""}</small></div>
           <button type="button" class="reg-no" data-reg-decline="${esc(r.playerId)}" aria-label="דחה">✕</button><button type="button" class="reg-ok" data-reg-approve="${esc(r.playerId)}">✓ אשר</button></div>`).join("")}
         <div class="lb-note">אישור = השחקן נרשם ושילם ₪${n(total)}</div>
       </fieldset>` : ""}
       <fieldset class="leave-frame setup-frame"><legend>✓ רשומים (${approved.length})</legend>
-        ${approved.length ? approved.map((r, i) => `<div class="reg-row">${tourAvatar(r.name, i)}<div class="nm">${esc(r.name || "")}<small>שילם ₪${n(total)}</small></div><button type="button" class="reg-rm" data-reg-remove="${esc(r.playerId)}">הסר</button></div>`).join("")
+        ${approved.length ? approved.map((r, i) => `<div class="reg-row">${tourAvatar(r.name, i)}<div class="nm">${esc(r.name || "")}${r.isNew ? `<span class="reg-new">חדש</span>` : ""}<small>שילם ₪${n(total)}</small></div><button type="button" class="reg-rm" data-reg-remove="${esc(r.playerId)}">הסר</button></div>`).join("")
           : `<div class="lb-note">עוד אין רשומים - הזמינו שחקנים או רשמו אותם מהמועדון.</div>`}
       </fieldset>
       <div class="ad-btns"><button type="button" class="btn btn-ghost" data-reg-add>＋ רשום מהמועדון</button><button type="button" class="btn btn-ghost" data-invite-game="${g.id}">📤 הזמנת שחקנים</button></div>
@@ -7193,6 +7194,9 @@ function treasurerFirstName(g){
   return full.trim().split(/\s+/)[0] || "";
 }
 function gameStatusBadge(g, small){
+  // A tournament night: registration open, or over (the clock's live states come later).
+  if (g && g.gameType === "tournament")
+    return `<span class="status-badge${small ? ' small' : ''}" style="background:${g.closed ? "#64748b" : "#c2410c"};">${g.closed ? "הסתיים" : "רישום פתוח"}</span>`;
   const st = gameStatus(g);
   return `<span class="status-badge${small ? ' small' : ''}" style="background:${GAME_STATUS_COLORS[st.key]};">${st.label}</span>`;
 }
@@ -7270,7 +7274,7 @@ function renderCommunity(communityId){
     const regWait = regs ? regs.filter(r => r.status === "pending").length : (g.regPending || 0);
     const tourSub = !isTour ? "" : g.closed
       ? `${regOk || (g.players || []).length} משתתפים`
-      : `רישום פתוח · <b>${regOk}</b> נרשמו · ₪${((+tt.fee || 0) + (+tt.prize || 0)).toLocaleString("en-US")}`
+      : `<b>${regOk}</b> נרשמו · כניסה ₪${((+tt.fee || 0) + (+tt.prize || 0)).toLocaleString("en-US")}`
         + (regWait && canDelete ? `<div class="gc-wait">⏳ ${regWait === 1 ? "ממתין אחד" : `${regWait} ממתינים`} לאישור</div>` : "");
     const front = `
     <div class="card club-front ${g.closed?"":"card-open"}" data-open-game="${g.id}">

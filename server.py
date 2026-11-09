@@ -1439,14 +1439,18 @@ def _games_full(cur, base_rows):
             "id": ev_id, "ts": _ms(ts), "type": ev_type, "playerId": pid, "actorName": actor_name,
             "amount": _num(amount) if amount is not None else None,
         })
+    # is_new: never played another night in this club (the admin's "חדש" tag)
     cur.execute(
-        "SELECT game_id, player_id, name, status, requested_at, approved_at FROM tournament_registrations "
-        "WHERE game_id = ANY(%s) ORDER BY requested_at",
+        "SELECT r.game_id, r.player_id, r.name, r.status, r.requested_at, r.approved_at, NOT EXISTS ("
+        "  SELECT 1 FROM game_players gp JOIN games g2 ON g2.id = gp.game_id"
+        "  WHERE gp.player_id = r.player_id AND gp.game_id <> r.game_id AND g2.community_id = g.community_id"
+        ") FROM tournament_registrations r JOIN games g ON g.id = r.game_id "
+        "WHERE r.game_id = ANY(%s) ORDER BY r.requested_at",
         (ids,),
     )
-    for gid, pid, pname, status, requested_at, approved_at in cur.fetchall():
+    for gid, pid, pname, status, requested_at, approved_at, is_new in cur.fetchall():
         games[gid]["registrations"].append({
-            "playerId": pid, "name": pname, "status": status,
+            "playerId": pid, "name": pname, "status": status, "isNew": bool(is_new),
             "requestedAt": _ms(requested_at), "approvedAt": _ms(approved_at),
         })
     return list(games.values())
