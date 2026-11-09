@@ -5381,6 +5381,8 @@ async function saveAllSetup(andClose){
 
 // "💵 קאש | 🏆 טורניר" over the club profile's tabs.
 function setupModeSwitchHtml(communityId, on){
+  const c = getCommunity(communityId);
+  if (!c || !(isSuperAdmin() || isClubCreator(c))) return "";   // the tournament profile is the club owner's
   return `<div class="tm-switch"><button type="button" class="${on === "cash" ? "on" : ""}" ${on === "cash" ? "" : `data-setup-mode="cash" data-setup-community="${communityId}"`}>💵 קאש</button><button type="button" class="${on === "tour" ? "on" : ""}" ${on === "tour" ? "" : `data-setup-mode="tour" data-setup-community="${communityId}"`}>🏆 טורניר</button></div>`;
 }
 // ---------- Tournament (club profile) - stage 1: the screen only, nothing saved ----------
@@ -5407,8 +5409,11 @@ function tourSavedPart(t){
   Object.keys(TOUR_DEFAULTS).forEach(k => { if (!TOUR_VIEW_KEYS.includes(k)) out[k] = t[k] === undefined ? TOUR_DEFAULTS[k] : t[k]; });
   return out;
 }
+// Like the club profile itself (the menu's "פרופיל מועדון"): its creator and the super admin
+// only - a player sees a tournament only through the game they join.
 function openTourSetupModal(communityId){
   const c = getCommunity(communityId);
+  if (!c || !(isSuperAdmin() || isClubCreator(c))) return;
   const t = Object.assign({}, TOUR_DEFAULTS, (c && c.tournamentSettings) || {});
   modal = {type: "tourSetup", communityId, tour: t, tourSaved: JSON.stringify(tourSavedPart(t))};
   render();
@@ -9407,9 +9412,7 @@ function renderModal(m){
       ${setupModeSwitchHtml(m.communityId, "tour")}
       ${tabs}
       <div class="tour-panel tp-${t.tab === "chips" ? "chips" : "struct"}">${inner}</div>
-      ${isCommunityAdmin(c) || isSuperAdmin()
-        ? `<div class="setup-footer" style="display:flex;flex-direction:column;gap:8px;margin-top:12px;"><button class="btn btn-primary btn-block" data-tour-save ${tourSetupDirty() ? "" : "disabled"}>${tourSetupDirty() ? "שמור שינויים" : "✓ נשמר"}</button></div>`
-        : `<p class="tour-note" style="margin-top:10px;">רק מנהלי המועדון יכולים לשנות את הגדרות הטורניר.</p>`}
+      <div class="setup-footer" style="display:flex;flex-direction:column;gap:8px;margin-top:12px;"><button class="btn btn-primary btn-block" data-tour-save ${tourSetupDirty() ? "" : "disabled"}>${tourSetupDirty() ? "שמור שינויים" : "✓ נשמר"}</button></div>
     `;
   } else if (m.type === "chipSetup") {
     const c = getCommunity(m.communityId);
