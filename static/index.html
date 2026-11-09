@@ -1452,6 +1452,9 @@ html.theme-light.theme-blue .ck-tools{background:rgba(214,233,242,.97);}
 html.theme-light .ck-ao{color:#9a3412;border-color:#c2410c;}
 .ck-ao small{display:block;font-weight:500;color:var(--muted);font-size:13.5px;}
 .ck-admin{margin-top:14px;border:1px solid rgba(212,175,55,.45);border-radius:14px;padding:10px;}
+.ck-page .ck-admin{margin-top:2px;padding:8px;}
+.ck-admin .ck-row button{white-space:nowrap;}
+.ck-sticky:has(.ck-dots){padding-bottom:4px;}
 .ck-admin .h{font-size:13.5px;color:var(--muted);margin-bottom:8px;}
 .ck-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;}
 .ck-row button{padding:10px 4px;border-radius:12px;border:1px solid rgba(212,175,55,.5);background:rgba(0,0,0,.2);color:var(--text);font:inherit;font-weight:700;font-size:15px;cursor:pointer;}
@@ -5886,7 +5889,7 @@ function renderTourClock(g, c, isAdmin){
         ${mine.pendingAction ? `<div class="lb-note" style="color:#f3c26b">⏳ ${mine.pendingAction === "addon" ? "Add-on" : "ריביי"} ממתין לאישור המנהל <button type="button" class="lb-cancel" data-ra="cancel_request" data-pid="${esc(myPid)}">ביטול</button></div>`
           : k.row.brk && k.row.addOn && t.addOn && !mine.addOnAt ? `<button type="button" class="btn btn-primary btn-block" data-ra="request_addon" data-pid="${esc(myPid)}" style="margin-bottom:8px">Add-on · ₪${Number(t.addOnPrice ?? tourEntryTotal(t)).toLocaleString("en-US")}</button>` : ""}
 `;
-      meOut = `<div style="text-align:center;margin:2px 0 10px"><button type="button" class="reg-out" data-me-out>🏳 יצאתי מהטורניר</button></div>`;
+      meOut = `<div style="text-align:center;margin:2px 0 10px"><button type="button" class="reg-out" data-me-out>🏳 נגמרו לי הז'יטונים</button></div>`;
     }
   }
   // admins: requests to approve, and the chip count check on a break
@@ -5952,7 +5955,7 @@ function renderTourClock(g, c, isAdmin){
   // the clock's controls in one row (the changes are in the menu; registration on the re-buy line)
   const admin = !isAdmin ? "" : `<div class="ck-admin">
       <div class="ck-row"><button type="button" data-ck="prev">⏮ שלב קודם</button>${k.cs.paused ? `<button type="button" class="main" data-ck="resume">▶ המשך</button>` : `<button type="button" class="main" data-ck="pause">⏸ השהה</button>`}<button type="button" data-ck="next">⏭ שלב הבא</button></div>
-      <div class="ck-row"><button type="button" data-ck="minus">−1 דק'</button><button type="button" data-ck="break" ${k.cs.paused ? "disabled" : ""}>☕ הפסקה עכשיו</button><button type="button" data-ck="plus">+1 דק'</button></div></div>`;
+      <div class="ck-row"><button type="button" data-ck="minus">−1 דק'</button><button type="button" data-ck="break" ${k.cs.paused ? "disabled" : ""}>☕ הפסקה</button><button type="button" data-ck="plus">+1 דק'</button></div></div>`;
   const tools = `<div class="ck-tools"><button type="button" data-ck-sound>${tourSoundOn() ? "🔊 צליל" : "🔇 צליל כבוי"}</button><button type="button" data-ck-fs>⛶ מסך מלא</button><button type="button" data-ck-full>📋 ${tourClockFull ? "הסתר מבנה" : "מבנה מלא"}</button></div>`;
   const stats = `<div class="ck-stats"><div><b>${P.alive.length}/${approved.length}</b>נשארו</div><div><b>₪${tourPot(g, t).toLocaleString("en-US")}</b>קופה</div><div><b>${Math.floor(playedMin / 60)}:${String(playedMin % 60).padStart(2, "0")}</b>זמן משחק</div></div>`;
   if (isAdmin) {
