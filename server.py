@@ -2994,14 +2994,26 @@ def v2_registration_action(game_id, player_id):
                 cur.execute("INSERT INTO buyins (id, game_id, player_id, amount, ts) VALUES (%s,%s,%s,%s,now()) "
                             "ON CONFLICT (id) DO NOTHING",
                             (f"rb:{game_id}:{player_id}:{suffix}", game_id, player_id, price))
+                # a re-buy adds its stack to the player's last count (they had 0 at a break, now
+                # they have the re-buy chips) - a new re-buy row only, not a retried one
+                stack = _num(ts.get("rebuyChips")) or _num(ts.get("chips")) or 0
+                cur.execute("UPDATE tournament_registrations SET busted_at = NULL, bust_level = NULL, pending_action = NULL, "
+                            "chips = CASE WHEN chips IS NULL THEN NULL ELSE chips + %s END "
+                            "WHERE game_id = %s AND player_id = %s AND %s",
+                            (stack, game_id, player_id, cur.rowcount > 0))
                 cur.execute("UPDATE tournament_registrations SET busted_at = NULL, bust_level = NULL, pending_action = NULL "
                             "WHERE game_id = %s AND player_id = %s", (game_id, player_id))
             elif action == "addon":
                 price = float(ts.get("addOnPrice") if ts.get("addOnPrice") is not None else entry)
                 cur.execute("INSERT INTO buyins (id, game_id, player_id, amount, ts) VALUES (%s,%s,%s,%s,now()) "
                             "ON CONFLICT (id) DO NOTHING", (f"ao:{game_id}:{player_id}", game_id, player_id, price))
-                cur.execute("UPDATE tournament_registrations SET pending_action = NULL WHERE game_id = %s AND player_id = %s",
-                            (game_id, player_id))
+                added = cur.rowcount > 0
+                # the add-on's stack joins the player's last count too (once)
+                stack = _num(ts.get("addOnChips")) or _num(ts.get("chips")) or 0
+                cur.execute("UPDATE tournament_registrations SET pending_action = NULL, "
+                            "chips = CASE WHEN chips IS NULL OR NOT %s THEN chips ELSE chips + %s END "
+                            "WHERE game_id = %s AND player_id = %s",
+                            (added, stack, game_id, player_id))
             else:
                 conn.rollback()
                 return jsonify({"error": "invalid action"}), 400
