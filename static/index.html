@@ -5878,7 +5878,7 @@ function tourStandingsHtml(P, myPid){
   if (!P.lastKey && !P.approved.some(r => r.bustedAt)) return "";
   const rows = P.standings.map(({r, place, counted}) => {
     const extra = r.bustedAt ? `יצא ${hhmm(r.bustedAt)}${r.bustLevel ? ` · שלב ${r.bustLevel}` : ""}` : counted ? Number(r.chips).toLocaleString("en-US") : "—";
-    const rb = (r.rebuys || []).length ? ` · 🔁 ${(r.rebuys || []).map(hhmm).join(", ")}` : "";
+    const rb = "";   // re-buys aren't shown in the standings
     return `<tr class="${r.playerId === myPid ? "me" : ""}${r.bustedAt ? " out" : ""}"><td>${place}</td><td class="nm">${esc(r.name || "")}</td><td class="ltr">${extra}<small>${rb}</small></td></tr>`;
   }).join("");
   return `<fieldset class="leave-frame setup-frame"><legend>🏅 דירוג${P.lastLevel ? ` · נכון לסוף שלב ${P.lastLevel}` : ""}</legend>
@@ -6024,9 +6024,9 @@ function renderTourClock(g, c, isAdmin){
 // (the whole table with "מבנה מלא").
 function tourClockBlindsHtml(k){
   return `<fieldset class="leave-frame setup-frame"><legend>מבנה בליינדים</legend>
-    <div class="ck-blinds-wrap${tourClockFull ? "" : " capped"}" data-ck-blinds>
+    <div class="ck-blinds-wrap capped" data-ck-blinds>
     <table class="tour-tbl"><thead><tr><th>רמה</th><th>טווח זמן</th><th>בליינדים</th><th>אנטה</th></tr></thead><tbody>
-    ${k.rows.map((r, i) => r.brk ? `<tr class="brk${i === k.i ? " cur" : ""}"><td>☕</td><td class="ltr">${r.from + 1}–${r.to}</td><td colspan="2">${r.addOn ? "הפסקה + Add-on" : "הפסקה"}</td></tr>`
+    ${k.rows.map((r, i) => i < k.i ? "" : r.brk ? `<tr class="brk${i === k.i ? " cur" : ""}"><td>☕</td><td class="ltr">${r.from + 1}–${r.to}</td><td colspan="2">${r.addOn ? "הפסקה + Add-on" : "הפסקה"}</td></tr>`
       : `<tr class="${i === k.i ? "cur" : ""}"><td>${r.level}</td><td class="ltr">${r.from ? r.from + 1 : 0}–${r.to}</td><td class="ltr">${r.sb.toLocaleString("en-US")}/${r.bb.toLocaleString("en-US")}</td><td class="ltr${r.ante ? "" : " off"}">${r.ante ? r.ante.toLocaleString("en-US") : "–"}</td></tr>`).join("")}
     </tbody></table></div></fieldset>`;
 }
@@ -11565,8 +11565,10 @@ function attachHandlers(){
     render();
   };
   app.querySelectorAll("[data-lobby-pay]").forEach(el => el.onclick = () => { const n = Number(el.dataset.lobbyPay); tourLobbyFull.payOpen = tourLobbyFull.payOpen === n ? 0 : n; render(); });
-  { const w = app.querySelector("[data-ck-blinds].capped"), cur = w && w.querySelector("tr.cur");
-    if (cur) w.scrollTop = Math.max(0, cur.offsetTop - w.querySelector("thead").offsetHeight - 30); }
+  // the blind table starts at the current level (past ones are gone): 4 rows, the rest scroll
+  { const w = app.querySelector("[data-ck-blinds].capped");
+    if (w) { const rows = [...w.querySelectorAll("tbody tr")].slice(0, 4), th = w.querySelector("thead");
+      w.style.maxHeight = (th ? th.offsetHeight : 0) + rows.reduce((h, r) => h + r.offsetHeight, 0) + 1 + "px"; } }
   // the strip behind the sticky clock wears the page's own background (no dark band)
   { const st = app.querySelector(".ck-sticky");
     if (st) { const bs = getComputedStyle(document.body); st.style.backgroundImage = bs.backgroundImage; st.style.backgroundColor = bs.backgroundColor !== "rgba(0, 0, 0, 0)" ? bs.backgroundColor : ""; st.style.backgroundSize = bs.backgroundSize; st.style.backgroundAttachment = "fixed"; } }
