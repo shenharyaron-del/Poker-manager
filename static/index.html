@@ -5791,7 +5791,9 @@ function tourPayReadHtml(t, count){
   const pot = (count || 0) * (+t.prize || 0);
   const amountsRow = g => {
     const places = Math.min(count, g.pl), medals = ["🥇", "🥈", "🥉"];
-    return `<tr class="pay-detail pay-now"><td colspan="3" dir="ltr">${tourPrizeShares(places).slice(0, count).map((x, i) => `<span>${medals[i] || (i + 1) + "."} <b>₪${Math.round(pot * x / 100).toLocaleString("en-US")}</b></span>`).join("")}</td></tr>`;
+    // not final: the amounts grow with more players joining (and re-buys / add-ons)
+    const tip = `ערך לא סופי - תלוי בכמות האנשים שיצטרפו${t.addOn ? ", בכמות הריביי וה-Add-on" : " ובכמות הריביי"}`;
+    return `<tr class="pay-detail pay-now"><td colspan="3" dir="ltr">${tourPrizeShares(places).slice(0, count).map((x, i) => `<span>${medals[i] || (i + 1) + "."} <b>₪${Math.round(pot * x / 100).toLocaleString("en-US")}</b></span>`).join("")}<button type="button" class="info-i" data-info-tip="${esc(tip)}" data-tip-ms="5000" aria-label="מידע">i</button></td></tr>`;
   };
   return `<fieldset class="leave-frame setup-frame"><legend>חלוקת פרסים · ${t.payoutPct}% זוכים</legend>
     <div class="tbl-scroll${tourLobbyFull.pay ? "" : " capped"}" data-keep-scroll="pay">
@@ -11730,7 +11732,7 @@ function attachHandlers(){
     const r = el.getBoundingClientRect();
     tip.style.top = (r.top - tip.offsetHeight - 8) + "px";
     tip.style.left = Math.max(8, Math.min(window.innerWidth - tip.offsetWidth - 8, r.left + r.width / 2 - tip.offsetWidth / 2)) + "px";
-    setTimeout(() => { tip.classList.add("out"); setTimeout(() => tip.remove(), 300); }, 3000);
+    setTimeout(() => { tip.classList.add("out"); setTimeout(() => tip.remove(), 300); }, Number(el.dataset.tipMs) || 3000);
   });
   app.querySelectorAll("[data-lobby-full]").forEach(el => el.onclick = () => { tourLobbyFull[el.dataset.lobbyFull] = !tourLobbyFull[el.dataset.lobbyFull]; render(); });
   app.querySelectorAll("[data-tour-register]").forEach(el => el.onclick = () => tourAct(el, async () => {
