@@ -1426,7 +1426,8 @@ html.theme-light .ng-tour-edit{color:#9a5f12;border-color:#c8922a;}
 .pot-now{border:1px solid rgba(212,175,55,.5);border-radius:12px;padding:8px 12px;margin:0 0 12px;text-align:center;}
 .pot-now-h{font-size:16px;font-weight:700;} .pot-now-h b{color:var(--gold);font-size:20px;margin-inline-start:4px;} html.theme-light .pot-now-h b{color:#9a5f12;}
 .pot-now-sub{font-size:13.5px;color:var(--muted);margin-top:1px;}
-.pot-now-pl{display:flex;justify-content:center;gap:14px;margin-top:4px;font-size:15.5px;font-weight:700;direction:ltr;}
+.tour-pay tr.pay-cur td{background:rgba(242,193,78,.14);font-weight:700;}
+.tour-pay tr.pay-detail.pay-now td{background:rgba(242,193,78,.07);text-align:center;color:var(--text);font-size:14.5px;}
 .reg-new{font-size:11.5px;font-weight:700;padding:1px 7px;border-radius:999px;background:#2563eb;color:#fff;margin-inline-start:6px;vertical-align:middle;}
 .reg-rm{background:none;border:none;color:var(--muted);font:inherit;font-size:14px;text-decoration:underline;cursor:pointer;}
 .ad-pend{border-color:#e0a43a !important;}
@@ -5534,13 +5535,21 @@ function tourBlindsReadHtml(t, c){
     ${cut >= 0 ? `<button type="button" class="tour-full-link" data-lobby-full="blinds">${tourLobbyFull.blinds ? "הסתר ▴" : `טבלה מלאה - ${nLevels} שלבים · כ-${hours} שעות ▾`}</button>` : ""}
   </fieldset>`;
 }
-function tourPayReadHtml(t){
+// count: players registered so far - their row is marked, with each place's amount under it.
+function tourPayReadHtml(t, count){
   const groups = [];
   for (let e = 1; e <= 200; e++) { const pl = tourPlacesPaid(e, t.payoutPct); const g = groups[groups.length - 1]; if (g && g.pl === pl) g.to = e; else groups.push({pl, from: e, to: e}); }
-  const shown = tourLobbyFull.pay ? groups : groups.slice(0, 3);
+  const cur = count ? groups.find(g => count >= g.from && count <= g.to) : null;
+  let shown = tourLobbyFull.pay ? groups : groups.slice(0, 3);
+  if (cur && !shown.includes(cur)) shown = shown.concat([cur]);
+  const pot = (count || 0) * (+t.prize || 0);
+  const amountsRow = g => {
+    const places = Math.min(count, g.pl), medals = ["🥇", "🥈", "🥉"];
+    return `<tr class="pay-detail pay-now"><td colspan="3" dir="ltr">${tourPrizeShares(places).slice(0, count).map((x, i) => `<span>${medals[i] || (i + 1) + "."} <b>₪${Math.round(pot * x / 100).toLocaleString("en-US")}</b></span>`).join("")}</td></tr>`;
+  };
   return `<fieldset class="leave-frame setup-frame"><legend>חלוקת פרסים · ${t.payoutPct}% זוכים</legend>
     <table class="tour-tbl tour-pay"><thead><tr><th>משתתפים</th><th>מקומות</th><th>חלוקה (%)</th></tr></thead><tbody>
-    ${shown.map(g => { const sh = tourPrizeShares(g.pl); return `<tr><td class="ltr">${g.from}–${g.to}</td><td>${g.pl}</td><td class="ltr">${g.pl > 6 ? sh.slice(0, 3).join(" / ") + " …" : sh.join(" / ")}</td></tr>`; }).join("")}
+    ${shown.map(g => { const sh = tourPrizeShares(g.pl); return `<tr${g === cur ? ` class="pay-cur"` : ""}><td class="ltr">${g.from}–${g.to}</td><td>${g.pl}</td><td class="ltr">${g.pl > 6 ? sh.slice(0, 3).join(" / ") + " …" : sh.join(" / ")}</td></tr>` + (g === cur ? amountsRow(g) : ""); }).join("")}
     </tbody></table>
     <button type="button" class="tour-full-link" data-lobby-full="pay">${tourLobbyFull.pay ? "הסתר ▴" : "טבלה מלאה ▾"}</button>
   </fieldset>`;
@@ -5550,12 +5559,8 @@ function tourPayReadHtml(t){
 function tourPotNowHtml(t, count){
   if (!count) return "";
   const pot = count * (+t.prize || 0), places = Math.min(count, tourPlacesPaid(count, t.payoutPct));
-  const sh = tourPrizeShares(places).slice(0, count), medals = ["🥇", "🥈", "🥉"];
-  const amounts = sh.map(x => Math.round(pot * x / 100));
-  const shown = amounts.slice(0, 3).map((a, i) => `<span>${medals[i]} ₪${a.toLocaleString("en-US")}</span>`).join("");
   return `<div class="pot-now"><div class="pot-now-h">קופת פרסים עד כה <b>₪${pot.toLocaleString("en-US")}</b></div>
-    <div class="pot-now-sub">${count} רשומים · ${places} מקומות בפרס${places > 3 ? ` (עוד ${places - 3} מקומות)` : ""}</div>
-    <div class="pot-now-pl" dir="ltr">${shown}</div></div>`;
+    <div class="pot-now-sub">${count} רשומים · ${places} מקומות בפרס · הסכומים בטבלת הפרסים</div></div>`;
 }
 function tourAvatar(name, i){
   const colors = ["#f2c14e", "#6ee7b7", "#93c5fd", "#fca5a5", "#d8b4fe", "#fdba74", "#a7f3d0", "#fde68a"];
@@ -5584,7 +5589,7 @@ function renderTourGame(g, c){
           : `<div class="lb-note">עוד אין רשומים - הזמינו שחקנים או רשמו אותם מהמועדון.</div>`}
       </fieldset>
       <div class="ad-btns"><button type="button" class="btn btn-ghost" data-reg-add>＋ רשום מהמועדון</button><button type="button" class="btn btn-ghost" data-invite-game="${g.id}">📤 הזמנת שחקנים</button></div>
-      ${tourInfoHtml(t)}${tourBlindsReadHtml(t, c)}${tourPayReadHtml(t)}
+      ${tourInfoHtml(t)}${tourBlindsReadHtml(t, c)}${tourPayReadHtml(t, approved.length)}
     </div>`;
   }
   const myPid = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
@@ -5599,7 +5604,7 @@ function renderTourGame(g, c){
     ${status}
     ${tourPotNowHtml(t, approved.length)}
     ${approved.length ? `<div class="lb-names">${approved.map(r => `<span class="${r.playerId === myPid ? "me" : ""}">${esc(r.playerId === myPid ? "אתה" : (r.name || ""))}</span>`).join("")}</div>` : ""}
-    ${tourInfoHtml(t)}${tourBlindsReadHtml(t, c)}${tourPayReadHtml(t)}
+    ${tourInfoHtml(t)}${tourBlindsReadHtml(t, c)}${tourPayReadHtml(t, approved.length)}
   </div>`;
 }
 // The tournament screen has three uses: the club's profile (default), a new table's settings
