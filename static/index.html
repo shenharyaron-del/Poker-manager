@@ -5603,7 +5603,7 @@ function tourEntryTotal(t){ return (+t.fee || 0) + (+t.prize || 0); }
 function tourInfoHtml(t){
   const n = v => Number(v || 0).toLocaleString("en-US"), total = tourEntryTotal(t);
   const bonus = Math.round(t.chips * (+t.early || 0) / 100);
-  const allIn = `<span class="lb-all">הכל לפרסים</span>`;
+  const allIn = `<span class="lb-all">הסכום במלואו יועבר לפרסים</span>`;   // only when no fee is taken from it
   return `<fieldset class="leave-frame setup-frame"><legend>🏆 פרטי הטורניר</legend><div class="lb-info">
     <div>כניסה <b>₪${n(total)}</b></div>
     <div>ז'יטונים <b>${n(t.chips)}${bonus ? ` + ${n(bonus)}` : ""}</b>${bonus ? ` <span class="lb-sub">(בונוס הרשמה מוקדמת)</span>` : ""}</div>
