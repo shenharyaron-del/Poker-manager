@@ -1530,6 +1530,7 @@ html.theme-light .reg-out{color:#b91c1c;}
 .lb-sub{color:var(--muted);font-size:14px;}
 .info-i{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;border:1.5px solid #6ee7b7;background:none;color:#6ee7b7;font:italic 700 12px/1 Georgia,serif;padding:0;margin-inline-start:4px;vertical-align:super;cursor:pointer;}
 html.theme-light .info-i{border-color:#047857;color:#047857;}
+.pend-note{color:#f3c26b;font-weight:700;} html.theme-light .pend-note{color:#9a3412;}
 .info-tip{position:fixed;z-index:9999;max-width:260px;padding:8px 12px;border-radius:10px;background:#1c1917;color:#fde68a;font-size:14px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.4);transition:opacity .3s;}
 .info-tip.out{opacity:0;}
 .lb-all{font-size:12.5px;font-weight:700;padding:1px 8px;border-radius:999px;background:rgba(63,179,131,.18);color:#6ee7b7;white-space:nowrap;} html.theme-light .lb-all{color:#047857;}
@@ -5900,13 +5901,13 @@ function renderTourClock(g, c, isAdmin){
     const st = P.standings.find(x => x.r.playerId === myPid);
     if (mine.bustedAt) {
       me = `<div class="lb-state" style="border:1.5px solid rgba(239,68,68,.5);padding:10px"><div class="big" style="font-size:18px">יצאת מהטורניר · מקום ${st ? st.place : "—"}</div><div class="sm">${hhmm(mine.bustedAt)}${mine.bustLevel ? ` · שלב ${mine.bustLevel}` : ""}</div>
-        ${mine.pendingAction === "rebuy" ? `<div class="sm" style="color:#f3c26b;margin-top:4px">⏳ ריביי ממתין לאישור המנהל <button type="button" class="lb-cancel" data-ra="cancel_request" data-pid="${esc(myPid)}">ביטול</button></div>`
-          : canRebuy(mine) ? `<button type="button" class="btn btn-primary btn-block" data-ra="request_rebuy" data-pid="${esc(myPid)}" style="margin-top:8px">🔁 ריביי · ₪${Number(t.rebuyPrice ?? tourEntryTotal(t)).toLocaleString("en-US")}</button>` : ""}</div>`;
+        ${mine.pendingAction === "rebuy" ? `<div class="sm pend-note" style="margin-top:4px">⏳ ריביי ממתין לאישור המנהל <button type="button" class="lb-cancel" data-ra="cancel_request" data-pid="${esc(myPid)}">ביטול</button></div>`
+          : canRebuy(mine) ? `<button type="button" class="btn btn-primary btn-block" data-ra="${isAdmin ? "rebuy" : "request_rebuy"}" data-pid="${esc(myPid)}" style="margin-top:8px">🔁 ריביי · ₪${Number(t.rebuyPrice ?? tourEntryTotal(t)).toLocaleString("en-US")}</button>` : ""}</div>`;
     } else {
       me = `${st && st.counted ? `<div class="my-pos">המקום שלך: <b>${st.place}</b> מתוך ${P.alive.length} · ${Number(mine.chips).toLocaleString("en-US")} ז'יטונים <small>(סוף שלב ${mine.chipsLevel})</small></div>` : ""}
         ${P.key ? tourChipCountHtml(g, c, t, mine, P.key, level) : ""}
-        ${mine.pendingAction ? `<div class="lb-note" style="color:#f3c26b">⏳ ${mine.pendingAction === "addon" ? "Add-on" : "ריביי"} ממתין לאישור המנהל <button type="button" class="lb-cancel" data-ra="cancel_request" data-pid="${esc(myPid)}">ביטול</button></div>`
-          : k.row.brk && k.row.addOn && t.addOn && !mine.addOnAt ? `<button type="button" class="btn btn-primary btn-block" data-ra="request_addon" data-pid="${esc(myPid)}" style="margin-bottom:8px">Add-on · ₪${Number(t.addOnPrice ?? tourEntryTotal(t)).toLocaleString("en-US")}</button>` : ""}
+        ${mine.pendingAction ? `<div class="lb-note pend-note">⏳ ${mine.pendingAction === "addon" ? "Add-on" : "ריביי"} ממתין לאישור המנהל <button type="button" class="lb-cancel" data-ra="cancel_request" data-pid="${esc(myPid)}">ביטול</button></div>`
+          : k.row.brk && k.row.addOn && t.addOn && !mine.addOnAt ? `<button type="button" class="btn btn-primary btn-block" data-ra="${isAdmin ? "addon" : "request_addon"}" data-pid="${esc(myPid)}" style="margin-bottom:8px">Add-on · ₪${Number(t.addOnPrice ?? tourEntryTotal(t)).toLocaleString("en-US")}</button>` : ""}
 `;
       meOut = `<div style="text-align:center;margin:2px 0 10px"><button type="button" class="reg-out" data-me-out>🏳 נגמרו לי הז'יטונים</button></div>`;
     }
@@ -11692,9 +11693,11 @@ function attachHandlers(){
     const pid = tourMyPid(g), me = (g.registrations || []).find(r => r.playerId === pid);
     const rebuyOk = k && k.rbLeft > 0 && (!t.rebuys || (me.rebuys || []).length < t.rebuys);
     if (rebuyOk) {
-      const a = await showConfirm(`נגמרו לך הז'יטונים? אפשר לעשות ריביי ב-₪${Number(t.rebuyPrice ?? tourEntryTotal(t)).toLocaleString("en-US")} (המנהל יאשר), או לצאת מהטורניר.`, {okLabel: "🔁 ריביי", cancelLabel: "יצאתי"});
+      // a table admin records their own re-buy straight away - no request to approve
+      const admin = c && (isTableAdmin(g, c) || isSuperAdmin());
+      const a = await showConfirm(`נגמרו לך הז'יטונים? אפשר לעשות ריביי ב-₪${Number(t.rebuyPrice ?? tourEntryTotal(t)).toLocaleString("en-US")}${admin ? "" : " (המנהל יאשר)"}, או לצאת מהטורניר.`, {okLabel: "🔁 ריביי", cancelLabel: "יצאתי"});
       if (a === null) return;
-      return tourAct(el, () => v2TourAction(tourGid, pid, a ? "request_rebuy" : "bust", {level: k.curLevel.level}));
+      return tourAct(el, () => v2TourAction(tourGid, pid, a ? (admin ? "rebuy" : "request_rebuy") : "bust", {level: k.curLevel.level}));
     }
     if (!(await showConfirm("לסמן שיצאת מהטורניר?", {okLabel: "יצאתי", cancelLabel: "ביטול"}))) return;
     tourAct(el, () => v2TourAction(tourGid, pid, "bust", {level: k ? k.curLevel.level : null}));
