@@ -1587,6 +1587,13 @@ html.theme-light :is(.cc-check,.ck-panel,.ck-prz,.pot-now,.ck-admin,.ck-acts but
 html.theme-light .reg-row,html.theme-light .tour-tbl td{border-bottom-color:rgba(154,95,18,.22);}
 html.theme-light.theme-blue :is(.cc-check,.ck-panel,.ck-prz,.pot-now,.ck-admin,.ck-acts button,.ck .setup-frame,.tour-page .setup-frame){border-color:rgba(255,227,154,.75);}
 html.theme-light.theme-blue .reg-row,html.theme-light.theme-blue .tour-tbl td{border-bottom-color:rgba(255,255,255,.28);}
+/* blind / payout table headers: one clear colour per theme */
+.tour-tbl thead th{color:#fde68a;}
+html.theme-light .tour-tbl thead th{color:#6b4410;}
+html.theme-light.theme-blue .tour-tbl thead th,html.theme-light.theme-blue :is(.tbl-scroll.capped,.ck-blinds-wrap) thead th{color:#fff;}
+html.theme-light.theme-blue .ck-blinds-wrap tr.cur td{background:rgba(255,227,154,.35);color:#0e2633;}
+/* 'נגמרו לי הז'יטונים' / 'יצא': a light red button with dark red text on every theme */
+.reg-out{background:#fff1f2 !important;color:#b91c1c !important;border:1.5px solid #f87171 !important;}
 .pend-note{color:#f3c26b;font-weight:700;} html.theme-light .pend-note{color:#9a3412;}
 .info-tip{position:fixed;z-index:9999;max-width:260px;padding:8px 12px;border-radius:10px;background:#1c1917;color:#fde68a;font-size:14px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.4);transition:opacity .3s;}
 .info-tip.out{opacity:0;}
@@ -1625,7 +1632,7 @@ html.theme-light .reg-me{color:#047857;}
 .tbl-scroll.st-cap{max-height:156px;}
 .tbl-scroll.capped thead th{position:sticky;top:0;z-index:1;background:#0f3f2e;}
 html.theme-light .tbl-scroll.capped thead th{background:#f6eee0;}
-html.theme-light.theme-blue .tbl-scroll.capped thead th{background:#3f7d9c;color:#e3f1f7;}
+html.theme-light.theme-blue .tbl-scroll.capped thead th{background:#3f7d9c;color:#fff;}
 .reg-row.me{background:rgba(242,193,78,.16);border-radius:10px;box-shadow:inset 3px 0 0 #f2c14e;}
 html.theme-light .reg-row.me{background:rgba(242,193,78,.25);}
 .reg-pick-list{max-height:212px;overflow-y:auto;}
@@ -1662,7 +1669,7 @@ html.theme-light .tour-full-link{color:#9a5f12;}
 .tf-sl input{width:100%;accent-color:#f2c14e;margin:6px 0 0;}
 .tf-sl-mm{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);}
 .tour-tbl{width:100%;border-collapse:collapse;font-size:15px;text-align:center;margin-top:4px;}
-.tour-tbl th{color:var(--muted);font-weight:700;padding:6px 2px;border-bottom:1px solid rgba(212,175,55,.35);}
+.tour-tbl th{font-weight:700;padding:6px 2px;border-bottom:1px solid rgba(212,175,55,.35);}
 .tour-tbl td{padding:4px 2px;border-bottom:1px solid rgba(212,175,55,.15);}
 .tour-tbl td.ltr{direction:ltr;}
 .tour-tbl tr.brk td{color:#3fb383;font-weight:800;}
