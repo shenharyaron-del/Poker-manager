@@ -5225,7 +5225,7 @@ function saveFailedText(e){
   return "שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב.";
 }
 function setupSaveErrorText(e, tab){
-  const where = {chips: "הז'יטונים", payments: "התשלומים", buyins: "הריביי"}[tab] || "";
+  const where = {chips: "הז'יטונים", payments: "התשלומים", buyins: "הריביי", tour: "הגדרות הטורניר"}[tab] || "";
   try { logSync(`setup save (${tab}) failed: ${e && e.status ? e.status + " " : ""}${e && e.message}`); } catch(_) {}
   if (e && e.status) return `שמירת ${where} נכשלה: ${e.message} (${e.status})`;
   if (e && /timed out/.test(e.message || "")) return `שמירת ${where} נכשלה - השרת לא ענה בזמן. נסו שוב בעוד רגע.`;
@@ -5400,6 +5400,44 @@ function tourSpeedOf(level, jump){
 // chip of 25 - scaled to the club's smallest chip, so every blind can be paid in chips.
 const TOUR_LADDER_25 = [25, 50, 75, 100, 150, 200, 300, 400, 500, 600, 800, 1000, 1200, 1500, 2000, 2500, 3000, 4000, 5000,
   6000, 8000, 10000, 12000, 15000, 20000, 25000, 30000, 40000, 50000, 60000, 80000, 100000, 120000, 150000, 200000, 250000, 300000, 400000, 500000];
+// Saving: everything in TOUR_DEFAULTS except the screen's own view state.
+const TOUR_VIEW_KEYS = ["tab", "fullTable", "payFull", "payOpen"];
+function tourSavedPart(t){
+  const out = {};
+  Object.keys(TOUR_DEFAULTS).forEach(k => { if (!TOUR_VIEW_KEYS.includes(k)) out[k] = t[k] === undefined ? TOUR_DEFAULTS[k] : t[k]; });
+  return out;
+}
+function openTourSetupModal(communityId){
+  const c = getCommunity(communityId);
+  const t = Object.assign({}, TOUR_DEFAULTS, (c && c.tournamentSettings) || {});
+  modal = {type: "tourSetup", communityId, tour: t, tourSaved: JSON.stringify(tourSavedPart(t))};
+  render();
+}
+function tourSetupDirty(){
+  return !!modal && modal.type === "tourSetup" && JSON.stringify(tourSavedPart(Object.assign({}, TOUR_DEFAULTS, modal.tour))) !== modal.tourSaved;
+}
+async function saveTourSettings(){
+  const cid = modal.communityId, settings = tourSavedPart(Object.assign({}, TOUR_DEFAULTS, modal.tour));
+  if (USE_RELATIONAL_API) {
+    try { await v2UpdateCommunity(cid, {tournamentSettings: settings}); }
+    catch (e) { showAlert(setupSaveErrorText(e, "tour")); return false; }
+  } else {
+    getCommunity(cid).tournamentSettings = settings;
+    saveState();
+  }
+  if (modal && modal.type === "tourSetup") { modal.tourSaved = JSON.stringify(settings); render(); }
+  return true;
+}
+// ✕ / back / switching to cash with unsaved tournament changes: the same question as the cash tabs.
+async function leaveTourSetup(then){
+  if (tourSetupDirty()) {
+    const shouldSave = await showConfirm("יש שינויים שלא נשמרו. לשמור?", {okLabel: "שמור", cancelLabel: "צא בלי לשמור", outside: null});
+    if (shouldSave === null) return false;
+    if (shouldSave && !(await saveTourSettings())) return false;
+  }
+  then();
+  return true;
+}
 // "משך הפסקה": 1-5 minutes one by one, then 5 at a time up to 30 (the slider walks this list).
 const TOUR_BREAK_LENS = [0, 1, 2, 3, 4, 5, 10, 15, 20, 25, 30];   // 0 = no breaks
 // The blind levels for a starting stack: the first small blind is the ladder's first rung at
@@ -9369,7 +9407,9 @@ function renderModal(m){
       ${setupModeSwitchHtml(m.communityId, "tour")}
       ${tabs}
       <div class="tour-panel tp-${t.tab === "chips" ? "chips" : "struct"}">${inner}</div>
-      <p class="tour-note" style="margin-top:10px;">בשלב זה מסך הטורניר לתצוגה בלבד - השינויים לא נשמרים.</p>
+      ${isCommunityAdmin(c) || isSuperAdmin()
+        ? `<div class="setup-footer" style="display:flex;flex-direction:column;gap:8px;margin-top:12px;"><button class="btn btn-primary btn-block" data-tour-save ${tourSetupDirty() ? "" : "disabled"}>${tourSetupDirty() ? "שמור שינויים" : "✓ נשמר"}</button></div>`
+        : `<p class="tour-note" style="margin-top:10px;">רק מנהלי המועדון יכולים לשנות את הגדרות הטורניר.</p>`}
     `;
   } else if (m.type === "chipSetup") {
     const c = getCommunity(m.communityId);
@@ -10678,15 +10718,20 @@ function attachHandlers(){
     const cid = el.dataset.setupCommunity;
     if (el.dataset.setupMode === "tour") {
       if (isSetupModal(modal)) captureSetupDraft();
-      modal = {type: "tourSetup", communityId: cid, tour: Object.assign({}, TOUR_DEFAULTS, (modal && modal.tour) || {})};
-      render();
-    } else openChipSetupModal(cid);
+      openTourSetupModal(cid);
+    } else if (modal && modal.type === "tourSetup") leaveTourSetup(() => openChipSetupModal(cid));
+    else openChipSetupModal(cid);
   });
   if (modal && modal.type === "tourSetup") {
     // re-render in place (updateModal keeps the scroll position)
     const setTour = (patch) => updateModal({tour: Object.assign({}, TOUR_DEFAULTS, modal.tour, patch)});
     app.querySelectorAll("[data-tour-tab]").forEach(el => el.onclick = () => setTour({tab: el.dataset.tourTab}));
     app.querySelectorAll("[data-tour-full]").forEach(el => el.onclick = () => setTour({fullTable: modal.tour.fullTable ? 0 : 1}));
+    app.querySelectorAll("[data-tour-save]").forEach(el => el.onclick = async () => {
+      el.disabled = true; el.textContent = "שומר...";
+      if (await saveTourSettings()) showAlert("הגדרות הטורניר נשמרו");
+      else render();
+    });
     app.querySelectorAll("[data-tour-payfull]").forEach(el => el.onclick = () => setTour({payFull: modal.tour.payFull ? 0 : 1}));
     app.querySelectorAll("[data-tour-pay]").forEach(el => el.onclick = () => { const n = Number(el.dataset.tourPay); setTour({payOpen: modal.tour.payOpen === n ? 0 : n}); });
     app.querySelectorAll("[data-tour-seg]").forEach(el => el.onclick = () => {
@@ -11760,6 +11805,7 @@ function attachHandlers(){
   // tap near its edge. Only the explicit X button closes/backs out of a modal.
   const closeModalOrBack = () => {
     if (modal && (modal.type === "chipSetup" || modal.type === "payboxSettings" || modal.type === "buyinSetup")) { tryCloseSetupModal(); return; }
+    if (modal && modal.type === "tourSetup") { leaveTourSetup(closeModal); return; }
     closeModal();
   };
   app.querySelectorAll("[data-close-modal]").forEach(el => el.onclick = closeModalOrBack);
@@ -13661,6 +13707,11 @@ window.addEventListener("popstate", async () => {
     const t = modal.type;
     const dismissable = t !== "loginRequired" && !(t === "identityName" && modal.forced) && t !== "directPay" && t !== "entryBuyin";
     if (!dismissable) return;
+    if (t === "tourSetup") {
+      await leaveTourSetup(closeModal);
+      if (!modal && nav.screen !== "home") go("home");
+      return;
+    }
     if (t === "chipSetup" || t === "payboxSettings" || t === "buyinSetup" || t === "permSetup") {
       await tryCloseSetupModal();
       if (!modal && nav.screen !== "home") go("home");

@@ -230,6 +230,9 @@ _INIT_STATEMENTS = (
     # existed before this column get the migration time; the client falls back to the
     # date of a club's first game for those (see renderHome).
     "ALTER TABLE communities ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now()",
+    # The club profile's tournament settings (buy-in, chips, re-buys, blind structure,
+    # payouts) - one JSON object the client owns; NULL = the client's defaults.
+    "ALTER TABLE communities ADD COLUMN IF NOT EXISTS tournament_settings JSONB",
     # Super Admin's own cheat-sheet of the 3rd-party services this app depends on (hosting,
     # DB, email, the Claude API, source control) - not app data at all, so it's gated by
     # _require_super_admin on every endpoint rather than living under any community/game.
@@ -885,7 +888,7 @@ def _num(x):
 def _row_to_community(row):
     (cid, name, created_by, created_by_name, chip_ratio, active_paybox_link_id,
      settlement_default, updated_at, last_participants, buyin_amounts, active_bit_link_id,
-     created_at) = row
+     created_at, tournament_settings) = row
     return {
         "id": cid, "name": name, "createdBy": _pub(created_by), "createdByName": created_by_name,
         "chipRatio": _num(chip_ratio), "activePayboxLinkId": active_paybox_link_id,
@@ -895,6 +898,7 @@ def _row_to_community(row):
         "lastParticipants": last_participants,
         "buyinAmounts": buyin_amounts,
         "createdAt": created_at.isoformat() if created_at else None,
+        "tournamentSettings": tournament_settings,
     }
 
 
@@ -1261,7 +1265,7 @@ def v2_list_communities():
             cur.execute(
                 "SELECT id, name, created_by, created_by_name, chip_ratio, active_paybox_link_id, "
                 "settlement_default, updated_at, last_participants, buyin_amounts, active_bit_link_id, "
-                "created_at FROM communities ORDER BY name"
+                "created_at, tournament_settings FROM communities ORDER BY name"
             )
             communities = [_row_to_community(r) for r in cur.fetchall()]
             if visible is not None:
@@ -1694,6 +1698,10 @@ def v2_update_community(community_id):
                 or not all(_valid_amount(a) for a in amounts)
                 or any(amounts[i] <= amounts[i - 1] for i in range(1, len(amounts)))):
             return jsonify({"error": "buyinAmounts must be ascending positive numbers"}), 400
+    if "tournamentSettings" in body and body["tournamentSettings"] is not None:
+        ts = body["tournamentSettings"]
+        if not isinstance(ts, dict) or len(json.dumps(ts)) > 20000:
+            return jsonify({"error": "tournamentSettings must be an object (up to 20KB)"}), 400
     fields, params = [], []
     if "name" in body:
         fields.append("name = %s"); params.append(body["name"])
@@ -1712,6 +1720,8 @@ def v2_update_community(community_id):
         fields.append("created_by_name = %s"); params.append(str(body.get("createdByName") or "")[:80] or None)
     if "buyinAmounts" in body:
         fields.append("buyin_amounts = %s"); params.append(Json(body["buyinAmounts"]) if body["buyinAmounts"] is not None else None)
+    if "tournamentSettings" in body:
+        fields.append("tournament_settings = %s"); params.append(Json(body["tournamentSettings"]) if body["tournamentSettings"] is not None else None)
     if not fields:
         return jsonify({"error": "no fields to update"}), 400
     fields.append("updated_at = now()")
