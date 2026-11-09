@@ -2026,7 +2026,18 @@ def v2_set_gender_everywhere(client_id):
 
 @app.route("/api/v2/communities/<community_id>/chip-values", methods=["PUT"])
 def v2_set_chip_values(community_id):
+    # A club admin; or any club member while the club has no chips set up yet (the end-of-
+    # night frame's "הגדר כאן" - setting them up the first time is open to everyone, changing
+    # them after that stays the admins').
     denied = _guard(community_id=community_id, need="community_admin")
+    if denied and _guard(community_id=community_id) is None:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM chip_values WHERE community_id = %s LIMIT 1", (community_id,))
+                none_yet = cur.fetchone() is None
+            conn.commit()
+        if none_yet:
+            denied = None
     if denied:
         return denied
     # Full replace, not incremental - matches the client's chipSetup save exactly (it
