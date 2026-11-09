@@ -1507,6 +1507,9 @@ html.theme-light .reg-out{color:#b91c1c;}
 .tour-pay tr.pay-detail.pay-now td{background:rgba(242,193,78,.07);text-align:center;color:var(--text);font-size:14.5px;}
 .reg-me{padding:6px 16px;border-radius:999px;border:1.5px solid #3fb383;background:rgba(63,179,131,.12);color:#6ee7b7;font:inherit;font-weight:700;font-size:15px;cursor:pointer;}
 html.theme-light .reg-me{color:#047857;}
+/* up to 4 players, then scroll */
+.reg-list.capped{max-height:212px;overflow-y:auto;}
+.reg-pick-list{max-height:212px;overflow-y:auto;}
 .reg-new{font-size:11.5px;font-weight:700;padding:1px 7px;border-radius:999px;background:#2563eb;color:#fff;margin-inline-start:6px;vertical-align:middle;}
 .reg-rm{background:none;border:none;color:var(--muted);font:inherit;font-size:14px;text-decoration:underline;cursor:pointer;}
 .ad-pend{border-color:#e0a43a !important;}
@@ -5598,7 +5601,7 @@ function tourSummaryHtml(t){
     <div class="l">אנטה ${ante} · <b>${t.payoutPct}%</b> זוכים</div>`;
 }
 // ---------- a tournament night: the player's lobby and the admin's registration screen ----------
-let tourLobbyFull = {blinds: false, pay: false};   // the read-only tables' "טבלה מלאה"
+let tourLobbyFull = {blinds: false, pay: false, payOpen: 0};   // the read-only tables' "טבלה מלאה"
 function tourSmallChip(c, t){
   const chipDefaults = [25, 100, 500, 1000, 5000, 10000];
   const small = Math.min(...((c && c.chipValues) || []).map((cv, i) => +((t.points || {})[cv.id] ?? chipDefaults[i]) || Infinity), Infinity);
@@ -5645,7 +5648,12 @@ function tourPayReadHtml(t, count){
   };
   return `<fieldset class="leave-frame setup-frame"><legend>חלוקת פרסים · ${t.payoutPct}% זוכים</legend>
     <table class="tour-tbl tour-pay"><thead><tr><th>משתתפים</th><th>מקומות</th><th>חלוקה (%)</th></tr></thead><tbody>
-    ${shown.map(g => { const sh = tourPrizeShares(g.pl); return `<tr${g === cur ? ` class="pay-cur"` : ""}><td class="ltr">${g.from}–${g.to}</td><td>${g.pl}</td><td class="ltr">${g.pl > 6 ? sh.slice(0, 3).join(" / ") + " …" : sh.join(" / ")}</td></tr>` + (g === cur ? amountsRow(g) : ""); }).join("")}
+    ${shown.map(g => {
+      const sh = tourPrizeShares(g.pl), long = g.pl > 6, open = long && tourLobbyFull.payOpen === g.pl;
+      // a row with more than 6 places shows the top 3 and "…" - tapping it opens the whole split
+      const detail = open ? `<tr class="pay-detail"><td colspan="3" dir="ltr">${tourPrizeBands(g.pl).map(b => `<span>${b.from === b.to ? b.from : `${b.from}–${b.to}`}: <b>${b.pct}%</b></span>`).join("")}</td></tr>` : "";
+      return `<tr class="${g === cur ? "pay-cur" : ""}${long ? " pay-more" + (open ? " open" : "") : ""}"${long ? ` data-lobby-pay="${g.pl}"` : ""}><td class="ltr">${g.from}–${g.to}</td><td>${g.pl}</td><td class="ltr">${long ? sh.slice(0, 3).join(" / ") + " …" : sh.join(" / ")}</td></tr>` + detail + (g === cur ? amountsRow(g) : "");
+    }).join("")}
     </tbody></table>
     <button type="button" class="tour-full-link" data-lobby-full="pay">${tourLobbyFull.pay ? "הסתר ▴" : "טבלה מלאה ▾"}</button>
   </fieldset>`;
@@ -5863,7 +5871,8 @@ function renderTourClock(g, c, isAdmin){
     ${tourClockFull ? `<div style="text-align:right;margin-top:10px">${tourBlindsReadHtml(t, c)}${tourPayReadHtml(t, approved.length)}</div>` : ""}
   </div>`;
 }
-let tourAdminView = null;   // the admin's "👥 הרשמה" from the clock
+let tourAdminView = null;
+let tourRegFull = false;   // the registered list opened in full   // the admin's "👥 הרשמה" from the clock
 // One tick a second while a running clock is on screen: only the numbers change; a new level
 // (or break) re-renders and beeps. The screen is kept awake meanwhile.
 let tourTickTimer = null, tourTickRow = null, tourWakeLock = null;
@@ -5925,6 +5934,7 @@ function renderTourGame(g, c){
         <div class="lb-note">אישור = השחקן נרשם ושילם ₪${n(total)}</div>
       </fieldset>` : ""}
       ${!approved.length ? "" : `<fieldset class="leave-frame setup-frame"><legend>✓ רשומים (${approved.length})</legend>
+        <div class="reg-list${approved.length > 4 && !tourRegFull ? " capped" : ""}">
         ${approved.length ? approved.map((r, i) => `<div class="reg-row${r.bustedAt ? " out" : ""}">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}${r.isNew ? `<span class="reg-new">חדש</span>` : ""}<small>${r.bustedAt ? `יצא ${hhmm(r.bustedAt)}${r.bustLevel ? ` · שלב ${r.bustLevel}` : ""}` : `שילם ₪${n(total)} · ${n(t.chips + (!g.tournamentState || !g.tournamentState.startedAt || (r.approvedAt && r.approvedAt <= g.tournamentState.startedAt) ? Math.round(t.chips * (+t.early || 0) / 100) : 0))} ז'יטונים`}${(r.rebuys || []).length ? ` · 🔁 ${(r.rebuys || []).map(hhmm).join(", ")}` : ""}${r.addOnAt ? ` · Add-on ${hhmm(r.addOnAt)}` : ""}</small></div>
           ${started ? (() => {
             // the admin records a re-buy (while open) / the add-on (on the add-on break) - asked for or not
@@ -5936,6 +5946,8 @@ function renderTourGame(g, c){
           })()
           : `<button type="button" class="reg-rm" data-reg-remove="${esc(r.playerId)}">הסר</button>`}</div>`).join("")
           : ""}
+        </div>
+        ${approved.length > 4 ? `<button type="button" class="tour-full-link" data-reg-full>${tourRegFull ? "הסתר ▴" : `רשימה מלאה (${approved.length}) ▾`}</button>` : ""}
       </fieldset>`}
       ${(() => { const mp = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId]; return mp && approved.some(r => r.playerId === mp) ? "" : tourInfoHtml(t); })()}
       ${(() => {   // the admin registers themself (only while not registered yet)
@@ -10330,7 +10342,7 @@ function renderModal(m){
       </div>
       <p class="lb-note" style="text-align:right;margin:0 0 8px;">רישום = השחקן שילם את הכניסה. שחקן חדש נכנס גם לרשימת השחקנים של המועדון.</p>
       <div class="section-title" style="padding:0;margin:6px 0 6px;" data-tr-list-title>${roster.length ? "שחקני המועדון" : "כל שחקני המועדון כבר רשומים"}</div>
-      <div class="scroll-list" data-tr-list>${roster.map((p, i) => `<button type="button" class="reg-pick" data-reg-pick="${esc(p.id)}" data-name="${esc(String(p.name || "").toLowerCase())}">${tourAvatar(p.name, i, p.id, c && c.id)}<span>${esc(p.name)}</span><b>＋</b></button>`).join("")}</div>
+      <div class="scroll-list reg-pick-list" data-tr-list>${roster.map((p, i) => `<button type="button" class="reg-pick" data-reg-pick="${esc(p.id)}" data-name="${esc(String(p.name || "").toLowerCase())}">${tourAvatar(p.name, i, p.id, c && c.id)}<span>${esc(p.name)}</span><b>＋</b></button>`).join("")}</div>
       <p class="lb-note" data-tr-none style="display:none;">אין שחקן כזה במועדון - "הוסף למועדון ורשום" יוסיף אותו.</p>`;
   } else if (m.type === "newGame") {
     const c = getCommunity(m.communityId);
@@ -11367,6 +11379,8 @@ function attachHandlers(){
     try { await fn(); } catch (e) { showAlert(saveFailedText(e)); }
     render();
   };
+  app.querySelectorAll("[data-lobby-pay]").forEach(el => el.onclick = () => { const n = Number(el.dataset.lobbyPay); tourLobbyFull.payOpen = tourLobbyFull.payOpen === n ? 0 : n; render(); });
+  app.querySelectorAll("[data-reg-full]").forEach(el => el.onclick = () => { tourRegFull = !tourRegFull; render(); });
   app.querySelectorAll("[data-lobby-full]").forEach(el => el.onclick = () => { tourLobbyFull[el.dataset.lobbyFull] = !tourLobbyFull[el.dataset.lobbyFull]; render(); });
   app.querySelectorAll("[data-tour-register]").forEach(el => el.onclick = () => tourAct(el, async () => {
     const g = getGame(tourGid), c = getCommunity(g.communityId);
