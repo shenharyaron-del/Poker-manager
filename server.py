@@ -238,6 +238,17 @@ _INIT_STATEMENTS = (
     # so changing the club's profile later never rewrites a night already played.
     "ALTER TABLE games ADD COLUMN IF NOT EXISTS game_type TEXT NOT NULL DEFAULT 'cash'",
     "ALTER TABLE games ADD COLUMN IF NOT EXISTS tournament_settings JSONB",
+    # Who asked to play a tournament night, and who the table's admin let in. 'approved'
+    # means registered and paid the entry - that buy-in is a buyins row (id 'reg:<game>:<player>').
+    "CREATE TABLE IF NOT EXISTS tournament_registrations ("
+    "  game_id TEXT REFERENCES games(id) ON DELETE CASCADE,"
+    "  player_id TEXT NOT NULL,"
+    "  name TEXT,"
+    "  status TEXT NOT NULL DEFAULT 'pending',"
+    "  requested_at TIMESTAMPTZ NOT NULL DEFAULT now(),"
+    "  approved_at TIMESTAMPTZ,"
+    "  PRIMARY KEY (game_id, player_id)"
+    ")",
     # Super Admin's own cheat-sheet of the 3rd-party services this app depends on (hosting,
     # DB, email, the Claude API, source control) - not app data at all, so it's gated by
     # _require_super_admin on every endpoint rather than living under any community/game.
@@ -1334,7 +1345,7 @@ def v2_list_all_game_summaries():
             visible = _visible_community_ids(cur, caller)
             cur.execute(
                 "SELECT id, community_id, name, date, created_by_name, closed, updated_at, created_by, created_at, "
-                + _TREASURER_NAME_SQL + ", game_type, tournament_settings FROM games ORDER BY date DESC"
+                + _TREASURER_NAME_SQL + ", game_type, tournament_settings" + _REG_COUNTS_SQL + " FROM games ORDER BY date DESC"
             )
             games = [_row_to_game_summary(r) for r in cur.fetchall()]
             if visible is not None:
@@ -1354,7 +1365,7 @@ def v2_list_games(community_id):
                 return jsonify({"error": "not found"}), 404
             cur.execute(
                 "SELECT id, community_id, name, date, created_by_name, closed, updated_at, created_by, created_at, "
-                + _TREASURER_NAME_SQL + ", game_type, tournament_settings FROM games WHERE community_id = %s ORDER BY date DESC",
+                + _TREASURER_NAME_SQL + ", game_type, tournament_settings" + _REG_COUNTS_SQL + " FROM games WHERE community_id = %s ORDER BY date DESC",
                 (community_id,),
             )
             games = [_row_to_game_summary(r) for r in cur.fetchall()]
@@ -1394,7 +1405,7 @@ def _games_full(cur, base_rows):
             "createdAt": created_at.isoformat() if created_at else None,
             "seats": seats, "liveChips": live_chips,
             "players": [], "buyins": [], "cashouts": {},
-            "payboxPayments": [], "playerPayments": [], "events": [],
+            "payboxPayments": [], "playerPayments": [], "events": [], "registrations": [],
         }
     ids = list(games)
     if not ids:
@@ -1427,6 +1438,16 @@ def _games_full(cur, base_rows):
         games[gid]["events"].append({
             "id": ev_id, "ts": _ms(ts), "type": ev_type, "playerId": pid, "actorName": actor_name,
             "amount": _num(amount) if amount is not None else None,
+        })
+    cur.execute(
+        "SELECT game_id, player_id, name, status, requested_at, approved_at FROM tournament_registrations "
+        "WHERE game_id = ANY(%s) ORDER BY requested_at",
+        (ids,),
+    )
+    for gid, pid, pname, status, requested_at, approved_at in cur.fetchall():
+        games[gid]["registrations"].append({
+            "playerId": pid, "name": pname, "status": status,
+            "requestedAt": _ms(requested_at), "approvedAt": _ms(approved_at),
         })
     return list(games.values())
 
@@ -2254,6 +2275,11 @@ def v2_delete_bit_link(community_id, link_id):
 _TREASURER_NAME_SQL = (
     "(SELECT gp.name FROM game_players gp WHERE gp.game_id = games.id AND gp.player_id = games.treasurer_id)"
 )
+# A tournament night's registration counts, for its card (pending, approved).
+_REG_COUNTS_SQL = (
+    ", (SELECT count(*) FROM tournament_registrations r WHERE r.game_id = games.id AND r.status = 'pending')"
+    ", (SELECT count(*) FROM tournament_registrations r WHERE r.game_id = games.id AND r.status = 'approved')"
+)
 
 
 def _row_to_game_summary(row):
@@ -2267,6 +2293,8 @@ def _row_to_game_summary(row):
         "createdAt": row[8].isoformat() if len(row) > 8 and row[8] else None,
         "gameType": row[10] if len(row) > 10 else "cash",
         "tournamentSettings": row[11] if len(row) > 11 else None,
+        "regPending": row[12] if len(row) > 12 else 0,
+        "regApproved": row[13] if len(row) > 13 else 0,
     }
 
 
@@ -2753,6 +2781,124 @@ def v2_remove_game_player(game_id, player_id):
                 "UPDATE games SET closed = %s, updated_at = now() WHERE id = %s",
                 (False if closed else closed, game_id),
             )
+        conn.commit()
+    return jsonify({"ok": True})
+
+
+# ---------- tournament registration ----------
+def _tour_game(cur, game_id):
+    """(entry total, error response) for an open tournament night."""
+    cur.execute("SELECT game_type, closed, tournament_settings FROM games WHERE id = %s", (game_id,))
+    row = cur.fetchone()
+    if not row:
+        return None, (jsonify({"error": "game not found"}), 404)
+    game_type, closed, ts = row
+    if game_type != "tournament" or closed:
+        return None, (jsonify({"error": "not an open tournament"}), 400)
+    ts = ts or {}
+    try:
+        total = float(ts.get("fee") or 0) + float(ts.get("prize") or 0)
+    except (TypeError, ValueError):
+        total = 0
+    return total, None
+
+
+def _approve_registration(cur, game_id, player_id, name, total):
+    """Registered and paid: the registration row, the night's player row and the entry buy-in."""
+    cur.execute(
+        "INSERT INTO tournament_registrations (game_id, player_id, name, status, approved_at) "
+        "VALUES (%s,%s,%s,'approved',now()) ON CONFLICT (game_id, player_id) "
+        "DO UPDATE SET status = 'approved', approved_at = now(), name = COALESCE(EXCLUDED.name, tournament_registrations.name)",
+        (game_id, player_id, name),
+    )
+    cur.execute(
+        "INSERT INTO game_players (game_id, player_id, name) VALUES (%s,%s,%s) ON CONFLICT (game_id, player_id) DO NOTHING",
+        (game_id, player_id, name),
+    )
+    if total > 0:
+        cur.execute(
+            "INSERT INTO buyins (id, game_id, player_id, amount, ts) VALUES (%s,%s,%s,%s,now()) ON CONFLICT (id) DO NOTHING",
+            (f"reg:{game_id}:{player_id}", game_id, player_id, total),
+        )
+
+
+@app.route("/api/v2/games/<game_id>/registrations", methods=["POST"])
+def v2_register_tournament(game_id):
+    # A player asks to play (pending) - for their own player only; the table's admin may
+    # register anyone straight away (approve: true), which also records the paid entry.
+    body = request.get_json(silent=True) or {}
+    player_id, name, approve = body.get("playerId"), (str(body.get("name") or "")[:80] or None), bool(body.get("approve"))
+    if not _valid_id(player_id):
+        return jsonify({"error": "playerId required"}), 400
+    denied = _guard(game_id=game_id, need="table_admin", players=None if approve else [player_id])
+    if denied:
+        return denied
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            total, err = _tour_game(cur, game_id)
+            if err:
+                conn.rollback()
+                return err
+            if approve:
+                _approve_registration(cur, game_id, player_id, name, total)
+            else:
+                cur.execute(
+                    "INSERT INTO tournament_registrations (game_id, player_id, name) VALUES (%s,%s,%s) "
+                    "ON CONFLICT (game_id, player_id) DO NOTHING",
+                    (game_id, player_id, name),
+                )
+            cur.execute("UPDATE games SET updated_at = now() WHERE id = %s", (game_id,))
+        conn.commit()
+    return jsonify({"ok": True}), 201
+
+
+@app.route("/api/v2/games/<game_id>/registrations/<player_id>/approve", methods=["POST"])
+def v2_approve_registration(game_id, player_id):
+    denied = _guard(game_id=game_id, need="table_admin")
+    if denied:
+        return denied
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            total, err = _tour_game(cur, game_id)
+            if err:
+                conn.rollback()
+                return err
+            cur.execute("SELECT name FROM tournament_registrations WHERE game_id = %s AND player_id = %s", (game_id, player_id))
+            row = cur.fetchone()
+            if not row:
+                conn.rollback()
+                return jsonify({"error": "no such registration"}), 404
+            _approve_registration(cur, game_id, player_id, row[0], total)
+            cur.execute("UPDATE games SET updated_at = now() WHERE id = %s", (game_id,))
+        conn.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/v2/games/<game_id>/registrations/<player_id>", methods=["DELETE"])
+def v2_remove_registration(game_id, player_id):
+    # A pending request: the player themself or the table's admin (decline). An approved
+    # one: the table's admin only - and its entry buy-in goes with it.
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT status FROM tournament_registrations WHERE game_id = %s AND player_id = %s", (game_id, player_id))
+            row = cur.fetchone()
+        conn.commit()
+    if not row:
+        return jsonify({"error": "no such registration"}), 404
+    denied = _guard(game_id=game_id, need="table_admin", players=[player_id] if row[0] == "pending" else None)
+    if denied:
+        return denied
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM tournament_registrations WHERE game_id = %s AND player_id = %s", (game_id, player_id))
+            if row[0] == "approved":
+                cur.execute("DELETE FROM buyins WHERE id = %s", (f"reg:{game_id}:{player_id}",))
+                cur.execute(
+                    "DELETE FROM game_players gp WHERE gp.game_id = %s AND gp.player_id = %s "
+                    "AND NOT EXISTS (SELECT 1 FROM buyins b WHERE b.game_id = gp.game_id AND b.player_id = gp.player_id)",
+                    (game_id, player_id),
+                )
+            cur.execute("UPDATE games SET updated_at = now() WHERE id = %s", (game_id,))
         conn.commit()
     return jsonify({"ok": True})
 
