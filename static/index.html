@@ -1413,6 +1413,13 @@ html.theme-light .ck-card{background:radial-gradient(120% 90% at 50% 0%,rgba(242
 .ck-next b{display:block;font-size:18px;color:var(--text);direction:ltr;}
 .ck-na{display:block;font-size:13.5px;color:var(--muted);margin-top:1px;}
 .ck-chips{display:flex;justify-content:center;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0;}
+.ck-acts{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:2px 0 8px;}
+.ck-acts button{position:relative;padding:9px 2px;background:none;border:1px solid rgba(212,175,55,.3);border-radius:12px;color:var(--muted);font:inherit;font-size:14px;font-weight:600;cursor:pointer;}
+.ck-acts button.on{border-color:#f2c14e;color:var(--text);background:rgba(242,193,78,.12);}
+.ck-acts .bd{position:absolute;top:-7px;left:6px;min-width:18px;height:18px;line-height:18px;border-radius:9px;background:#f59e0b;color:#1c1917;font-size:12px;font-weight:800;padding:0 4px;}
+.ck-panel{border:1px solid rgba(212,175,55,.45);border-radius:14px;padding:8px 10px;margin:0 0 10px;text-align:right;}
+.ck-panel-h{display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:15px;margin-bottom:6px;}
+.ck-qr{background:#fff;border-radius:14px;padding:10px;margin:0 auto;max-width:230px;} .ck-qr img{display:block;width:100%;height:auto;}
 .ck-reg{background:rgba(242,193,78,.14);border:1px solid #f2c14e;border-radius:999px;padding:4px 12px;font:inherit;font-size:14px;font-weight:700;color:var(--text);cursor:pointer;}
 .ck-reg b{display:inline-block;min-width:18px;padding:0 5px;border-radius:9px;background:#f59e0b;color:#1c1917;margin-inline-start:2px;}
 .ck-ctl{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin:8px 0 2px;}
@@ -5870,8 +5877,7 @@ function renderTourClock(g, c, isAdmin){
   // admins: requests to approve, and the chip count check on a break
   let adminAlerts = "";
   if (isAdmin) {
-    const reqs = P.approved.filter(r => r.pendingAction);
-    if (reqs.length) adminAlerts += `<fieldset class="leave-frame setup-frame ad-pend"><legend>⏳ בקשות (${reqs.length})</legend>${reqs.map((r, i) => `<div class="reg-row">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}<small>${r.pendingAction === "addon" ? "Add-on" : "ריביי"} · ₪${Number((r.pendingAction === "addon" ? t.addOnPrice : t.rebuyPrice) ?? tourEntryTotal(t)).toLocaleString("en-US")}</small></div><button type="button" class="reg-no" data-ra="decline" data-pid="${esc(r.playerId)}">✕</button><button type="button" class="reg-ok" data-ra="${r.pendingAction}" data-pid="${esc(r.playerId)}">✓ שולם</button></div>`).join("")}</fieldset>`;
+    if (false) adminAlerts += `<fieldset class="leave-frame setup-frame ad-pend"><legend>⏳ בקשות (${reqs.length})</legend>${reqs.map((r, i) => `<div class="reg-row">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}<small>${r.pendingAction === "addon" ? "Add-on" : "ריביי"} · ₪${Number((r.pendingAction === "addon" ? t.addOnPrice : t.rebuyPrice) ?? tourEntryTotal(t)).toLocaleString("en-US")}</small></div><button type="button" class="reg-no" data-ra="decline" data-pid="${esc(r.playerId)}">✕</button><button type="button" class="reg-ok" data-ra="${r.pendingAction}" data-pid="${esc(r.playerId)}">✓ שולם</button></div>`).join("")}</fieldset>`;
     if (P.key) {
       const missing = P.alive.filter(r => r.chipsKey !== P.key);
       const diff = P.reportedSum - P.expected;
@@ -5903,18 +5909,35 @@ function renderTourClock(g, c, isAdmin){
         <div class="ck-next"><div>שלב הבא<b>${k.nextLevel ? fmtBlinds(k.nextLevel) : "—"}</b>${k.nextLevel ? `<span class="ck-na">${k.nextLevel.ante ? `אנטה ${k.nextLevel.ante.toLocaleString("en-US")}` : "ללא אנטה"}</span>` : ""}</div>
           <div>הפסקה בעוד<b data-ck-brk>${k.breakIn != null ? Math.max(1, Math.ceil(k.breakIn / 60000)) + " דק'" : "—"}</b></div></div></div>`;
   const chips = (lateOpen ? `<span class="rb">🔁 ריביי ורישום מאוחר עוד <b data-ck-rb>${Math.max(1, Math.ceil(k.rbLeft / 60000))}</b> דק'</span>` : `<span>סוף זמן ריביי ורישום</span>`)
-    + (isAdmin ? `<button type="button" class="ck-reg" data-tour-view="reg">👥 הרשמה${pending.length ? ` <b>${pending.length}</b>` : ""}</button>` : "");
+    ;
+  // the admin's four quiet buttons: each opens its panel in place of what's below
+  const reqs = P.approved.filter(r => r.pendingAction);
+  const acts = !isAdmin ? "" : `<div class="ck-acts">${[["qr", "QR", 0], ["add", "הוספת שחקן", 0], ["lobby", "לובי", pending.length], ["rebuy", "אישור ריביי", reqs.length]]
+    .map(([id, label, n]) => `<button type="button" class="${tourPanel === id ? "on" : ""}" data-ck-panel="${id}">${n ? `<span class="bd">${n}</span>` : ""}${label}</button>`).join("")}</div>`;
+  const total = tourEntryTotal(t), nn = v => Number(v || 0).toLocaleString("en-US");
+  const panel = !isAdmin || !tourPanel ? "" : tourPanel === "qr"
+    ? `<div class="ck-panel"><div class="ck-panel-h">סרקו כדי להירשם ל${esc(g.name || ilDate(g.date))}<button type="button" class="lb-cancel" data-ck-panel="">סגור</button></div>
+        <div class="ck-qr"><img src="/api/qr?text=${encodeURIComponent(gameInviteUrl(g, c))}" alt="QR"></div></div>`
+    : tourPanel === "add"
+    ? (() => { const taken = new Set(approved.map(r => r.playerId));
+        const roster = ((c && c.roster) || []).filter(p2 => !taken.has(p2.id)).sort((a, b) => String(a.name).localeCompare(String(b.name), "he"));
+        return `<div class="ck-panel"><div class="ck-panel-h">הוספת שחקן · שולם ₪${nn(total)}<button type="button" class="lb-cancel" data-ck-panel="">סגור</button></div>
+          <div class="name-pair" style="margin-bottom:6px;"><input type="text" id="tr-first" placeholder="שם פרטי" autocomplete="off"><input type="text" id="tr-last" placeholder="שם משפחה" autocomplete="off"></div>
+          <div style="display:flex;gap:8px;margin-bottom:6px;"><div class="gender-seg" role="group"><button type="button" class="on" data-tr-gender="male">ז</button><button type="button" data-tr-gender="female">נ</button></div><button class="btn btn-primary" data-tr-add style="flex:1;" disabled>הוסף למועדון ורשום</button></div>
+          <div class="scroll-list reg-pick-list" data-tr-list>${roster.map((p2, i) => `<button type="button" class="reg-pick" data-reg-pick="${esc(p2.id)}" data-name="${esc(String(p2.name || "").toLowerCase())}">${tourAvatar(p2.name, i, p2.id, c && c.id)}<span>${esc(p2.name)}</span><b>＋</b></button>`).join("")}</div>
+          <p class="lb-note" data-tr-none style="display:none;">אין שחקן כזה במועדון - "הוסף למועדון ורשום" יוסיף אותו.</p></div>`; })()
+    : tourPanel === "lobby"
+    ? `<div class="ck-panel"><div class="ck-panel-h">בלובי · ${pending.length ? `${pending.length} מחכים לאישור` : "אין ממתינים"}<button type="button" class="lb-cancel" data-ck-panel="">סגור</button></div>
+        ${pending.map((r, i) => `<div class="reg-row">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}${r.isNew ? `<span class="reg-new">חדש</span>` : ""}<small>רישום מאוחר · ₪${nn(total)}</small></div><button type="button" class="reg-no" data-reg-decline="${esc(r.playerId)}">✕</button><button type="button" class="reg-ok" data-reg-approve="${esc(r.playerId)}">✓ אשר</button></div>`).join("")}</div>`
+    : `<div class="ck-panel"><div class="ck-panel-h">בקשות ריביי ו-Add-on · ${reqs.length || "אין"}<button type="button" class="lb-cancel" data-ck-panel="">סגור</button></div>
+        ${reqs.map((r, i) => `<div class="reg-row">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}<small>${r.pendingAction === "addon" ? "Add-on" : "ריביי"} · ₪${nn((r.pendingAction === "addon" ? t.addOnPrice : t.rebuyPrice) ?? total)}</small></div><button type="button" class="reg-no" data-ra="decline" data-pid="${esc(r.playerId)}">✕</button><button type="button" class="reg-ok" data-ra="${r.pendingAction}" data-pid="${esc(r.playerId)}">✓ שולם</button></div>`).join("")}</div>`;
   const playedMin = Math.floor(k.cs.elapsed / 60000);
   const join = !isAdmin && lateOpen && !mine ? `<button type="button" class="btn btn-primary btn-block lb-req" data-tour-register style="margin:0 0 10px">רישום מאוחר · ₪${tourEntryTotal(t).toLocaleString("en-US")}</button>`
     : !isAdmin && mine && mine.status === "pending" ? `<div class="lb-state wait" style="padding:8px"><div class="big" style="font-size:17px">⏳ ממתין לאישור המנהל</div><button type="button" class="lb-cancel" data-tour-cancel>ביטול הבקשה</button></div>` : "";
   // the clock's controls in one row (the changes are in the menu; registration on the re-buy line)
-  const admin = !isAdmin ? "" : `<div class="ck-ctl">
-      <button type="button" data-ck="prev"><i>⏮</i>קודם</button>
-      <button type="button" data-ck="minus"><i>−1</i>דק'</button>
-      ${k.cs.paused ? `<button type="button" class="main" data-ck="resume"><i>▶</i>המשך</button>` : `<button type="button" class="main" data-ck="pause"><i>⏸</i>השהה</button>`}
-      <button type="button" data-ck="plus"><i>+1</i>דק'</button>
-      <button type="button" data-ck="next"><i>⏭</i>הבא</button>
-      <button type="button" data-ck="break" ${k.cs.paused ? "disabled" : ""}><i>☕</i>הפסקה</button></div>`;
+  const admin = !isAdmin ? "" : `<div class="ck-admin">
+      <div class="ck-row"><button type="button" data-ck="prev">⏮ שלב קודם</button>${k.cs.paused ? `<button type="button" class="main" data-ck="resume">▶ המשך</button>` : `<button type="button" class="main" data-ck="pause">⏸ השהה</button>`}<button type="button" data-ck="next">⏭ שלב הבא</button></div>
+      <div class="ck-row"><button type="button" data-ck="minus">−1 דק'</button><button type="button" data-ck="break" ${k.cs.paused ? "disabled" : ""}>☕ הפסקה עכשיו</button><button type="button" data-ck="plus">+1 דק'</button></div></div>`;
   const tools = `<div class="ck-tools"><button type="button" data-ck-sound>${tourSoundOn() ? "🔊 צליל" : "🔇 צליל כבוי"}</button><button type="button" data-ck-fs>⛶ מסך מלא</button><button type="button" data-ck-full>📋 ${tourClockFull ? "הסתר מבנה" : "מבנה מלא"}</button></div>`;
   const stats = `<div class="ck-stats"><div><b>${P.alive.length}/${approved.length}</b>נשארו</div><div><b>₪${tourPot(g, t).toLocaleString("en-US")}</b>קופה</div><div><b>${Math.floor(playedMin / 60)}:${String(playedMin % 60).padStart(2, "0")}</b>זמן משחק</div></div>`;
   if (isAdmin) {
@@ -5924,7 +5947,7 @@ function renderTourClock(g, c, isAdmin){
       <div class="ck-sticky">${card}
         <div class="ck-dots"><button type="button" class="${tourClockPage ? "" : "on"}" data-ck-page="0">שעון</button><button type="button" class="${tourClockPage ? "on" : ""}" data-ck-page="1">דירוג ומבנה ←</button></div></div>
       <div class="ck-pages" data-ck-pages>
-        <div class="ck-page">${admin}<div class="ck-chips">${chips}</div>${adminAlerts}${me}${stats}${tourPrizesHtml(t, approved.length, tourPot(g, t))}${tools}</div>
+        <div class="ck-page">${admin}<div class="ck-chips">${chips}</div>${acts}${panel || `${adminAlerts}${me}${stats}${tourPrizesHtml(t, approved.length, tourPot(g, t))}`}${tools}</div>
         <div class="ck-page">${meOut}${tourStandingsHtml(P, myPid) || `<p class="lb-note">הדירוג יופיע אחרי הספירה הראשונה או היציאה הראשונה.</p>`}${tourClockBlindsHtml(k)}${tourClockFull ? `<div style="text-align:right">${tourPayReadHtml(t, approved.length)}</div>` : ""}</div>
       </div>
     </div>`;
@@ -5953,7 +5976,8 @@ function tourClockBlindsHtml(k){
       : `<tr class="${i === k.i ? "cur" : ""}"><td>${r.level}</td><td class="ltr">${r.from ? r.from + 1 : 0}–${r.to}</td><td class="ltr">${r.sb.toLocaleString("en-US")}/${r.bb.toLocaleString("en-US")}</td><td class="ltr${r.ante ? "" : " off"}">${r.ante ? r.ante.toLocaleString("en-US") : "–"}</td></tr>`).join("")}
     </tbody></table></div></fieldset>`;
 }
-let tourClockPage = 0;   // the admin's page under the clock (0 / 1)
+let tourClockPage = 0;
+let tourPanel = null;   // the admin's open panel under the clock: qr / add / lobby / rebuy   // the admin's page under the clock (0 / 1)
 let tourAdminView = null;
 let tourRegFull = false;   // the registered list opened in full
 let tourRegListScroll = null;   // where the registered list was scrolled to (null: at my own row)   // the admin's "👥 הרשמה" from the clock
@@ -11483,6 +11507,9 @@ function attachHandlers(){
   app.querySelectorAll("[data-lobby-pay]").forEach(el => el.onclick = () => { const n = Number(el.dataset.lobbyPay); tourLobbyFull.payOpen = tourLobbyFull.payOpen === n ? 0 : n; render(); });
   { const w = app.querySelector("[data-ck-blinds].capped"), cur = w && w.querySelector("tr.cur");
     if (cur) w.scrollTop = Math.max(0, cur.offsetTop - w.querySelector("thead").offsetHeight - 30); }
+  // the strip behind the sticky clock wears the page's own background (no dark band)
+  { const st = app.querySelector(".ck-sticky");
+    if (st) { const bs = getComputedStyle(document.body); st.style.backgroundImage = bs.backgroundImage; st.style.backgroundColor = bs.backgroundColor !== "rgba(0, 0, 0, 0)" ? bs.backgroundColor : ""; st.style.backgroundSize = bs.backgroundSize; st.style.backgroundAttachment = "fixed"; } }
   { const pages = app.querySelector("[data-ck-pages]");
     if (pages) {
       const pg = pages.children[tourClockPage];
@@ -11562,6 +11589,7 @@ function attachHandlers(){
   app.querySelectorAll("[data-ck-sound]").forEach(el => el.onclick = () => { try { localStorage.setItem("tour-sound", tourSoundOn() ? "0" : "1"); } catch (e) {} if (tourSoundOn()) tourBeep(); render(); });
   app.querySelectorAll("[data-ck-fs]").forEach(el => el.onclick = () => { const d = document; if (d.fullscreenElement) d.exitFullscreen(); else if (d.documentElement.requestFullscreen) d.documentElement.requestFullscreen().catch(() => {}); });
   app.querySelectorAll("[data-ck-full]").forEach(el => el.onclick = () => { tourClockFull = !tourClockFull; render(); });
+  app.querySelectorAll("[data-ck-panel]").forEach(el => el.onclick = () => { const v = el.dataset.ckPanel || null; tourPanel = tourPanel === v ? null : v; render(); });
   app.querySelectorAll("[data-ck-changes]").forEach(el => el.onclick = () => openModal({type: "tourChanges", gameId: tourGid}));
   if (modal && modal.type === "tourChanges") {
     const sl = app.querySelector("[data-tc-rebuy]");
@@ -11623,9 +11651,10 @@ function attachHandlers(){
     tourAct(el, async () => { for (const r of missing) await v2TourAction(tourGid, r.playerId, "bust", {level: k.curLevel.level}); });
   });
   app.querySelectorAll("[data-reg-add]").forEach(el => el.onclick = () => openModal({type: "tourRegPick", gameId: tourGid}));
-  if (modal && modal.type === "tourRegPick") {
+  if ((modal && modal.type === "tourRegPick") || (!modal && tourPanel === "add" && tourGid)) {
+    const regGid = modal ? modal.gameId : tourGid;
     app.querySelectorAll("[data-reg-pick]").forEach(el => el.onclick = () => {
-      const g = getGame(modal.gameId), c = getCommunity(g.communityId), p = c.roster.find(x => x.id === el.dataset.regPick);
+      const g = getGame(regGid), c = getCommunity(g.communityId), p = c.roster.find(x => x.id === el.dataset.regPick);
       tourAct(el, () => v2TourRegister(g.id, p.id, p.name, true));
     });
     // typing narrows the club's list (first / last name, anywhere in the name)
@@ -11642,7 +11671,7 @@ function attachHandlers(){
     if (addBtn) addBtn.onclick = () => {
       const name = [first.value.trim(), last.value.trim()].filter(Boolean).join(" ");
       if (!name) return;
-      const g = getGame(modal.gameId), c = getCommunity(g.communityId);
+      const g = getGame(regGid), c = getCommunity(g.communityId);
       const same = c.roster.find(p => String(p.name).trim() === name);
       const gender = (app.querySelector("[data-tr-gender].on") || {}).dataset ? app.querySelector("[data-tr-gender].on").dataset.trGender : "male";
       tourAct(addBtn, async () => {
