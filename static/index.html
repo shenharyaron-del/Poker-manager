@@ -1440,8 +1440,8 @@ html.theme-light .ck-chips span.rb{color:#065f46;border-color:#059669;background
 .ck-stats b{display:block;font-size:19px;color:var(--gold);} html.theme-light .ck-stats b{color:#9a5f12;}
 .ck-prz{border:1px solid rgba(212,175,55,.45);border-radius:14px;padding:8px 10px;margin:4px 0 8px;}
 .ck-prz .h{font-size:13.5px;color:var(--muted);margin-bottom:4px;white-space:nowrap;}
-.ck-prz .pl{display:flex;justify-content:space-around;align-items:flex-end;}
-.ck-prz .pl div{font-size:12.5px;color:var(--muted);} .ck-prz .pl b{display:block;font-size:17px;color:var(--text);}
+.ck-prz .pl{display:flex;justify-content:space-around;align-items:flex-end;gap:6px;}
+.ck-prz .pl div{font-size:12.5px;color:var(--muted);white-space:nowrap;} .ck-prz .pl b{display:block;font-size:17px;color:var(--text);}
 .ck-prz .pl .gap{font-size:18px;align-self:center;}
 .ck-prz .pl .bb b{color:#93c5fd;} html.theme-light .ck-prz .pl .bb b{color:#1d4ed8;}
 /* the bottom row stays at the bottom of the screen */
@@ -11686,13 +11686,14 @@ function attachHandlers(){
       if (tourClockPage && pg) pages.scrollLeft = pg.offsetLeft - pages.children[0].offsetLeft;
       // as tall as the page on screen (the other one must not leave empty space to scroll)
       const fitH = () => { const cur = pages.children[tourClockPage]; if (cur) pages.style.height = cur.scrollHeight + "px"; };
-      // the part under the buttons grows (up to 1.5x) to take the free height - no scroll;
+      // the part under the buttons grows (up to 1.5x) to take the free height - no scroll,
+      // and never wider than the screen (a long prize row: 1st-3rd … the last two);
       // what's still left is spread as space between its parts
       const root = app.querySelector("[data-tour-scroll]"), lower = pages.children[0] && pages.children[0].querySelector(".ck-lower");
       if (root && lower && !tourClockPage) {
         lower.style.zoom = 1; fitH();
         let z = 1;
-        while (z < 1.5) { lower.style.zoom = z + 0.05; fitH(); if (root.scrollHeight > root.clientHeight) { lower.style.zoom = z; break; } z += 0.05; }
+        while (z < 1.5) { lower.style.zoom = z + 0.05; fitH(); if (root.scrollHeight > root.clientHeight || [...lower.querySelectorAll(".ck-prz .pl")].some(e => e.scrollWidth > e.clientWidth + 1)) { lower.style.zoom = z; break; } z += 0.05; }
       }
       fitH();
       if (root && lower && !tourClockPage) {
