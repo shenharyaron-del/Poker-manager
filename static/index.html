@@ -1384,6 +1384,7 @@ html.theme-light .tf-unit{color:#9a5f12;}
 .tf-pair{display:flex;align-items:flex-end;gap:8px;}
 .tf-plus{flex:0 0 auto;padding-bottom:20px;font-size:20px;font-weight:800;color:var(--muted);}
 .tour-pay td:last-child{font-size:14px;}
+.tf-sub{display:block;font-size:13px;font-weight:400;color:var(--muted);}
 .tour-full-link{display:block;margin:8px auto 0;background:none;border:none;font:inherit;font-size:15px;font-weight:700;color:var(--gold);text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
 html.theme-light .tour-full-link{color:#9a5f12;}
 .tf-seg{display:flex;border:1px solid var(--gold);border-radius:10px;overflow:hidden;}
@@ -1425,9 +1426,11 @@ html.theme-light .tour-full-link{color:#9a5f12;}
 .tf-sl.mini .tf-sl-top b{color:#3fb383;}
 .tf-sl.mini.gold input{accent-color:#f2c14e;}
 .tf-sl.mini.gold .tf-sl-top b{color:var(--gold);} html.theme-light .tf-sl.mini.gold .tf-sl-top b{color:#9a5f12;}
-.tour-brk-strip{display:grid;grid-template-columns:1.25fr 1fr;gap:14px;margin:2px 0 10px;padding:8px 10px 6px;border:1px dashed rgba(63,179,131,.6);border-radius:10px;}
+.tour-brk-strip{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:14px;margin:2px 0 10px;padding:8px 10px 6px;border:1px dashed rgba(63,179,131,.6);border-radius:10px;}
 .tour-tbl tr.tour-ctl th{border-bottom:none;padding:2px 4px 2px;vertical-align:bottom;font-weight:inherit;}
 .tour-cust-note{margin:-4px 0 8px;}
+/* narrow phones: the two break sliders one under the other (long "שעתיים ו-50 דק' משחק") */
+@media (max-width:400px){.tour-brk-strip{grid-template-columns:1fr;gap:8px;}}
 html.theme-light.theme-blue .tf-sl.mini:not(.gold) .tf-sl-top b{color:#0b5a3a;}
 .tour-note{font-size:13px;color:var(--muted);text-align:center;margin:6px 0 8px;}
 .tour-empty{font-size:15px;line-height:1.5;color:var(--muted);margin:0;}
@@ -5444,7 +5447,16 @@ function tourBlindLevels(t){
 // Paid places for a number of entries at a payout share (at least 2), and each place's share
 // of the pot: weights falling by a quarter per place.
 // A slider's shown value: "N <unit>" ("שלב אחד" for a single level).
-function tourSlText(v, unit){ return unit === "שלבים" && v === 1 ? "שלב אחד" : unit === "מדרגות" && v === 1 ? "מדרגה אחת" : `${v} ${unit}`; }
+// Play minutes from an hour on read as hours: "שעה ו-15 דק' משחק", "שעתיים".
+function tourSlText(v, unit){
+  if (unit === "שלבים" && v === 1) return "שלב אחד";
+  if (unit === "מדרגות" && v === 1) return "מדרגה אחת";
+  if (unit === "דק' משחק" && v >= 60) {
+    const h = Math.floor(v / 60), m = v % 60, hs = h === 1 ? "שעה" : h === 2 ? "שעתיים" : `${h} שעות`;
+    return (m ? `${hs} ו-${m} דק'` : hs) + " משחק";
+  }
+  return `${v} ${unit}`;
+}
 function tourPlacesPaid(entries, pct){ return Math.max(2, Math.round(entries * pct / 100)); }
 // The usual payout split (% of the pot) by number of paid places.
 const TOUR_PAYOUTS = {2: [65, 35], 3: [50, 30, 20], 4: [45, 25, 18, 12], 5: [40, 23, 16, 12, 9], 6: [38, 22, 15, 11, 8, 6],
@@ -9294,11 +9306,12 @@ function renderModal(m){
         </fieldset>
         <fieldset class="leave-frame setup-frame"><legend>ז'יטונים ראשוניים (Starting Chips)</legend>
           <div class="tf"><span>כמות ז'יטונים בסיסית</span>${num("chips", t.chips)}</div>
-          <div class="tf"><span>בונוס הרשמה מוקדמת (Early Bird)</span>${seg("early", [[0, "ללא"], [5, "+5%"], [10, "+10%"], [15, "+15%"], [20, "+20%"]], t.early)}</div>
+          <div class="tf"><span>בונוס הרשמה מוקדמת (Early Bird) <small class="tf-sub">למי שיושב בתחילת שלב 1</small></span>${seg("early", [[0, "ללא"], [5, "+5%"], [10, "+10%"], [15, "+15%"], [20, "+20%"]], t.early)}</div>
         </fieldset>
         <fieldset class="leave-frame setup-frame"><legend>הגדרות ריביי (Re-buy)</legend>
           <div class="tf-pair"><div class="tf"><span>כמות ריביי מותרת</span>${seg("rebuys", [[1, "1"], [2, "2"], [3, "3"], [0, "∞"]], t.rebuys)}</div><div class="tf"><span>ז'יטונים לריביי</span>${num("rebuyChips", t.rebuyChips)}</div></div>
-          <div class="tf-pair"><div class="tf"><span>מחיר ריביי</span>${money("rebuyPrice", rebuyPrice)}</div><div class="tf tf-wide"><span>דמי טיפול על ריביי</span>${seg("rebuyFee", [[0, "ללא - הכל לפרס", true], [1, "כמו בכניסה"]], t.rebuyFee)}</div></div>
+          <div class="tf"><span>מחיר ריביי</span>${money("rebuyPrice", rebuyPrice)}</div>
+          <div class="tf"><span>דמי טיפול על ריביי</span>${seg("rebuyFee", [[0, "ללא - הכל לפרס", true], [1, "כמו בכניסה"]], t.rebuyFee)}</div>
           ${slider("rebuyLevels", "ריביי מותר במשך", "שלבים", 1, 9, t.rebuyLevels, [1, 2, 3, 4, 5, 6, 7, 8, 9])}
           <div class="tf"><span>Add-on בסוף זמן הריביי</span>${seg("addOn", [[0, "ללא"], [1, "יש Add-on"]], t.addOn)}</div>
           ${t.addOn ? `<div class="tf-pair"><div class="tf"><span>מחיר Add-on</span>${money("addOnPrice", addOnPrice)}</div><div class="tf"><span>ז'יטונים ל-Add-on</span>${num("addOnChips", t.addOnChips)}</div></div>
@@ -9319,14 +9332,13 @@ function renderModal(m){
               + (r === rbRow ? `<tr class="rb-end"><td>🔁</td><td class="ltr">${r.to}</td><td colspan="${cols - 2}">סוף זמן ריביי</td></tr>` : "")).join("")}
           </tbody></table>
           ${cut >= 0 ? `<button type="button" class="tour-full-link" data-tour-full>${t.fullTable ? "הסתר ▴" : `טבלה מלאה - ${nLevels} שלבים · כ-${hours} שעות ▾`}</button>` : ""}
-          <p class="tour-note">סולם בליינדים מקובל, בכפולות של הז'יטון הקטן · אנטה = בליינד גדול (Big Blind Ante) משלב 3</p>
         </fieldset>
         <fieldset class="leave-frame setup-frame"><legend>חלוקת פרסים (Payout Structure)</legend>
           <div class="tf"><span>אחוז הזוכים</span>${seg("payoutPct", [[10, "10%"], [12, "12%"], [15, "15%"], [20, "20%"]], t.payoutPct)}</div>
           <table class="tour-tbl tour-pay"><thead><tr><th>משתתפים</th><th>מקומות</th><th>חלוקה (%)</th></tr></thead><tbody>
             ${groups.slice(0, 5).map(g => `<tr><td class="ltr">${g.from}–${g.to}</td><td>${g.pl}</td><td class="ltr">${tourPrizeShares(g.pl).join(" / ")}</td></tr>`).join("")}
           </tbody></table>
-          <p class="tour-note">מהקופה: כל הכניסות, הריביי וה-Add-on (בלי דמי הטיפול)</p>
+
         </fieldset>`;
     }
     body = `
