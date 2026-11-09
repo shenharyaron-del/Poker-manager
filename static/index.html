@@ -5369,17 +5369,23 @@ function niceChips(v){
 }
 // The blind levels for a starting stack: small blind from stack/400, rising; an ante of
 // ~12% of the big blind; a break after every `breakEvery` minutes of play (whole levels).
+// The blind levels for a starting stack: small blind from stack/400, rising; an ante of
+// ~12% of the big blind. Breaks: every `breakEvery` minutes (play + break - a round number,
+// e.g. 60), the break taking that cycle's last minutes - with a 2-minute break, play 0-58,
+// break 58-60, play again from 60 (the level before the break is that much shorter).
 function tourBlindLevels(t){
   const sb0 = niceChips(t.chips / 400) || 25;
   const mult = [1, 1.2, 1.6, 2, 3, 4, 6, 8, 10, 12, 16, 20];
-  const per = Math.max(1, Math.round(t.breakEvery / t.level));
-  const rows = []; let minute = 0, lvl = 0;
+  const cycle = Math.max(t.level, t.breakEvery), brk = Math.min(t.breakLen, cycle - 1);
+  const rows = []; let minute = 0, lvl = 0, nextBreak = cycle - brk;
   while (lvl < 9) {
     const sb = niceChips(sb0 * mult[lvl]), bb = sb * 2;
-    rows.push({level: lvl + 1, from: minute, to: minute + t.level, sb, bb, ante: Math.max(1, Math.round(bb * 0.12))});
-    minute += t.level; lvl++;
-    // after a break, play resumes on a round five minutes (a 2-minute break at 80 → back at 85)
-    if (lvl % per === 0 && lvl < 9) { const end = Math.ceil((minute + t.breakLen) / 5) * 5; rows.push({brk: true, from: minute, to: end, len: t.breakLen}); minute = end; }
+    let end = minute + t.level;
+    const breakNow = end >= nextBreak - 0.5 * t.level;   // the level that reaches the break ends at it
+    if (breakNow) end = nextBreak;
+    rows.push({level: lvl + 1, from: minute, to: end, sb, bb, ante: Math.max(1, Math.round(bb * 0.12))});
+    minute = end; lvl++;
+    if (breakNow && lvl < 9) { rows.push({brk: true, from: minute, to: minute + brk}); minute += brk; nextBreak = minute + cycle - brk; }
   }
   return rows;
 }
@@ -9189,10 +9195,11 @@ function renderModal(m){
     const num = (id, v) => `<div class="tf-in"><input type="number" inputmode="numeric" data-tour-num="${id}" value="${esc(String(v))}"></div>`;
     const seg = (id, opts, cur) => `<div class="tf-seg">${opts.map(([v, l, long]) => `<button type="button" class="${String(v) === String(cur) ? "on" : ""}${long ? " long" : ""}" data-tour-seg="${id}" data-v="${v}">${l}</button>`).join("")}</div>`;
     // list: a slider that walks given values (by index) instead of a plain min..max range
-    const slider = (id, label, unit, min, max, v, list) => `
-      <div class="tf-sl"><div class="tf-sl-top"><span>${label}</span><b data-tour-sl-val="${id}">${v} ${unit}</b></div>
-        <input type="range" ${list ? `min="0" max="${list.length - 1}" step="1" value="${Math.max(0, list.indexOf(v))}" data-list="${list.join(",")}"` : `min="${min}" max="${max}" step="5" value="${v}"`} data-tour-slider="${id}" data-unit="${unit}">
-        <div class="tf-sl-mm"><span>${list ? list[0] : min}</span><span>${list ? list[list.length - 1] : max}</span></div></div>`;
+    // shift: shown = value + shift ("הפסקה כל" shows the play minutes: the cycle less the break)
+    const slider = (id, label, unit, min, max, v, list, shift) => `
+      <div class="tf-sl"><div class="tf-sl-top"><span>${label}</span><b data-tour-sl-val="${id}">${v + (shift || 0)} ${unit}</b></div>
+        <input type="range" ${list ? `min="0" max="${list.length - 1}" step="1" value="${Math.max(0, list.indexOf(v))}" data-list="${list.join(",")}"` : `min="${min}" max="${max}" step="5" value="${v}"`} data-tour-slider="${id}" data-unit="${unit}" data-shift="${shift || 0}">
+        <div class="tf-sl-mm"><span>${(list ? list[0] : min) + (shift || 0)}</span><span>${(list ? list[list.length - 1] : max) + (shift || 0)}</span></div></div>`;
     const tabs = `<div class="tour-tabs"><button type="button" class="${t.tab === "chips" ? "on" : ""}" data-tour-tab="chips">ז'יטונים</button><button type="button" class="${t.tab === "struct" ? "on" : ""}" data-tour-tab="struct">מבנה טורניר</button></div>`;
     let inner;
     if (t.tab === "chips") {
@@ -9226,12 +9233,12 @@ function renderModal(m){
         </fieldset>
         <fieldset class="leave-frame setup-frame"><legend>זמני משחק והפסקות</legend>
           ${slider("level", "משך כל שלב בליינדים", "דקות", 5, 60, t.level)}
-          <div class="tf-sl-pair">${slider("breakEvery", "הפסקה כל", "דק' משחק", 30, 180, t.breakEvery)}${slider("breakLen", "משך הפסקה", "דק'", 1, 30, t.breakLen, TOUR_BREAK_LENS)}</div>
+          <div class="tf-sl-pair">${slider("breakEvery", "הפסקה כל", "דק' משחק", 30, 180, t.breakEvery, null, -t.breakLen)}${slider("breakLen", "משך הפסקה", "דק'", 1, 30, t.breakLen, TOUR_BREAK_LENS)}</div>
         </fieldset>
         <fieldset class="leave-frame setup-frame"><legend>מבנה בליינדים</legend>
           <table class="tour-tbl"><thead><tr><th>רמה</th><th>טווח זמן</th><th>בליינדים</th><th>אנטה</th></tr></thead><tbody>
             ${levels.map(r => r.brk
-              ? `<tr class="brk"><td>☕</td><td class="ltr">${r.from + 1}–${r.to}</td><td colspan="2">הפסקה${r.len !== r.to - r.from ? ` · ${r.len} דק'` : ""}</td></tr>`
+              ? `<tr class="brk"><td>☕</td><td class="ltr">${r.from + 1}–${r.to}</td><td colspan="2">הפסקה</td></tr>`
               : `<tr><td>${r.level}</td><td class="ltr">${r.from ? r.from + 1 : 0}–${r.to}</td><td>${cell("b" + r.level, r.sb + "/" + r.bb)}</td><td>${cell("a" + r.level, r.ante)}</td></tr>`).join("")}
           </tbody></table>
           <p class="tour-note">נבנה אוטומטית לפי הז'יטונים והזמנים · אפשר לערוך כל ערך</p>
@@ -10597,7 +10604,7 @@ function attachHandlers(){
     });
     app.querySelectorAll("[data-tour-slider]").forEach(el => {
       const val = () => el.dataset.list ? Number(el.dataset.list.split(",")[el.value]) : Number(el.value);
-      el.oninput = () => { const v = app.querySelector(`[data-tour-sl-val="${el.dataset.tourSlider}"]`); if (v) v.textContent = val() + " " + el.dataset.unit; };
+      el.oninput = () => { const v = app.querySelector(`[data-tour-sl-val="${el.dataset.tourSlider}"]`); if (v) v.textContent = (val() + Number(el.dataset.shift || 0)) + " " + el.dataset.unit; };
       el.onchange = () => setTour({[el.dataset.tourSlider]: val()});
     });
     // a field's value is selected on focus - typing replaces it
