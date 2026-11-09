@@ -1440,6 +1440,21 @@ html.theme-light .ck-row button{background:rgba(255,255,255,.5);}
 .ck-row button:disabled{opacity:.45;}
 .ck-row button.main{background:linear-gradient(180deg,#fde68a,#f2c14e 45%,#c8922a);color:#2a1d05;border:none;font-size:17px;}
 .ck-row.two{grid-template-columns:1fr 1fr;}
+/* the clock stays on top while the rest scrolls */
+.ck-sticky{position:sticky;top:0;z-index:6;padding:2px 0 10px;margin:0 -16px;padding-inline:16px;background:rgba(10,46,34,.94);backdrop-filter:blur(4px);}
+html.theme-light .ck-sticky{background:rgba(246,238,224,.95);}
+html.theme-light.theme-blue .ck-sticky{background:rgba(214,233,242,.95);}
+.ck-blinds-wrap{position:relative;}
+.ck-blinds-wrap.capped{max-height:250px;overflow-y:auto;}
+.ck-blinds-wrap thead th{position:sticky;top:0;z-index:1;background:#0f3f2e;}
+html.theme-light .ck-blinds-wrap thead th{background:#f6eee0;}
+html.theme-light.theme-blue .ck-blinds-wrap thead th{background:#d6e9f2;}
+.ck-blinds-wrap tr.cur td{background:rgba(242,193,78,.22);font-weight:800;}
+.ck-blinds-wrap tr.cur td:first-child{box-shadow:inset -3px 0 0 #f2c14e;}
+.cc-mode{display:flex;margin:0 0 10px;} .cc-mode button{flex:1;font-size:14px;}
+.cc-find-list{max-height:212px;overflow-y:auto;margin-top:6px;}
+.cc-find-list .reg-pick small{color:var(--muted);font-size:13px;font-weight:500;}
+.cc-for-h{text-align:right;margin:0 0 8px;font-size:15px;color:var(--muted);} .cc-for-h b{color:var(--text);font-size:17px;}
 .ck .setup-frame{text-align:right;margin-bottom:12px;}
 .my-pos{font-size:16px;margin:0 0 10px;padding:8px;border-radius:12px;background:rgba(242,193,78,.1);}
 .my-pos b{color:var(--gold);font-size:20px;} html.theme-light .my-pos b{color:#9a5f12;} .my-pos small{color:var(--muted);}
@@ -5767,24 +5782,35 @@ function tourPlayers(g, c, k){
     reportedSum: reportedNow.reduce((s2, r) => s2 + (+r.chips || 0), 0)};
 }
 // The chip count window during a break - the club's chips (their points value), or one total.
-function tourChipCountHtml(g, c, t, mine, key, level){
+// Entering a chip count: by the club's chips (a count under each, like cash) or by typing
+// the total. box: whose count it is (a player id) - the inputs and the send button sit in it.
+let tourCcMode = "count";
+function tourCcWidget(c, t, box, initial){
   const cvs = (c && c.chipValues) || [], defaults = [25, 100, 500, 1000, 5000, 10000];
   const pts = cvs.map((cv, i) => +((t.points || {})[cv.id] ?? defaults[i]) || 0);
-  const done = mine.chipsKey === key;
-  return `<fieldset class="leave-frame setup-frame cc-frame"><legend>🪙 ספירת ז'יטונים · סוף שלב ${level}</legend>
-    ${done && !tourCcEdit ? `<div class="cc-done">✓ דיווחת <b>${Number(mine.chips).toLocaleString("en-US")}</b> ז'יטונים <button type="button" class="lb-cancel" data-cc-edit>עדכן</button></div>`
-    : cvs.length ? `<div class="lv-types${cvs.length >= 5 ? " many" : ""}" style="grid-template-columns:repeat(${cvs.length},1fr);">
+  const mode = cvs.length ? tourCcMode : "sum";
+  return `<div data-cc-box="${esc(box)}">
+    ${cvs.length ? `<div class="gender-seg cc-mode" role="group"><button type="button" class="${mode === "count" ? "on" : ""}" data-cc-mode="count">ספירה לפי ז'יטונים</button><button type="button" class="${mode === "sum" ? "on" : ""}" data-cc-mode="sum">הקלדת סכום</button></div>` : ""}
+    ${mode === "count" ? `<div class="lv-types${cvs.length >= 5 ? " many" : ""}" style="grid-template-columns:repeat(${cvs.length},1fr);">
         ${cvs.map((cv, i) => cv.image ? `<img src="${esc(cv.image)}" alt="" draggable="false">` : `<span class="lv-type-noimg">${pts[i]}</span>`).join("")}
         ${cvs.map((cv, i) => `<input type="number" inputmode="numeric" min="0" placeholder="0" data-cc-n="${i}" data-cc-pt="${pts[i]}" onfocus="this.select()">`).join("")}
         ${cvs.map((cv, i) => `<div class="lv-type-x" dir="ltr" data-cc-x="${i}">${cvs.length >= 5 ? `×${pts[i].toLocaleString("en-US")}<br>0` : `×${pts[i].toLocaleString("en-US")} = 0`}</div>`).join("")}
       </div>
       <div class="cc-total">סה"כ <b data-cc-total>0</b> ז'יטונים</div>`
-    : `<div class="tf-in"><input type="number" inputmode="numeric" min="0" data-cc-sum placeholder="כמה ז'יטונים יש לך"></div>`}
-    ${done && !tourCcEdit ? "" : `<button type="button" class="btn btn-primary btn-block" data-cc-send style="margin-top:8px">שלח ספירה</button>`}
+    : `<div class="tf-in"><input type="number" inputmode="numeric" min="0" data-cc-sum placeholder="כמה ז'יטונים" value="${initial != null ? esc(String(initial)) : ""}" onfocus="this.select()"></div>`}
+    <button type="button" class="btn btn-primary btn-block" data-cc-send="${esc(box)}" style="margin-top:8px">שלח ספירה</button>
+  </div>`;
+}
+function tourChipCountHtml(g, c, t, mine, key, level){
+  const done = mine.chipsKey === key;
+  return `<fieldset class="leave-frame setup-frame cc-frame"><legend>🪙 ספירת ז'יטונים · סוף שלב ${level}</legend>
+    ${done && !tourCcEdit ? `<div class="cc-done">✓ דיווחת <b>${Number(mine.chips).toLocaleString("en-US")}</b> ז'יטונים <button type="button" class="lb-cancel" data-cc-edit>עדכן</button></div>`
+      : tourCcWidget(c, t, mine.playerId, done ? mine.chips : null)}
   </fieldset>`;
 }
 let tourCcEdit = false;
 let tourCcAdmin = false;   // the admin's "enter a player's count" list
+let tourCcFor = null;      // ...and the player picked there
 function tourStandingsHtml(P, myPid){
   if (!P.lastKey && !P.approved.some(r => r.bustedAt)) return "";
   const rows = P.standings.map(({r, place, counted}) => {
@@ -5836,7 +5862,12 @@ function renderTourClock(g, c, isAdmin){
           : diff === 0 ? `<div class="big">הסכום מתאים - ${missing.length === 1 ? "שחקן אחד לא דיווח" : `${missing.length} שחקנים לא דיווחו`} (${missing.map(r => esc(r.name)).join(", ")})</div><button type="button" class="btn btn-ghost btn-block" data-mark-rest style="margin-top:6px">סמן אותם כפרשו</button>`
           : `<div class="sm">מחכים ל: ${missing.map(r => esc(r.name)).join(", ")}</div>`}
         <button type="button" class="lb-cancel" data-cc-admin-toggle style="margin-top:6px">${tourCcAdmin ? "סגור ▴" : "✎ הזנת ספירה לשחקן (מי שאין לו טלפון) ▾"}</button>
-        ${tourCcAdmin ? `<div class="cc-admin">${P.alive.map(r => `<div class="cc-admin-row"><span class="nm">${esc(r.name || "")}${r.chipsKey === P.key ? " ✓" : ""}</span><input type="number" inputmode="numeric" min="0" data-cc-for="${esc(r.playerId)}" value="${r.chipsKey === P.key ? esc(String(r.chips)) : ""}" placeholder="ז'יטונים"><button type="button" class="reg-ok" data-cc-for-save="${esc(r.playerId)}">שמור</button></div>`).join("")}</div>` : ""}</div>`;
+        ${!tourCcAdmin ? "" : (() => {
+          const sel = tourCcFor && P.alive.find(r => r.playerId === tourCcFor);
+          if (sel) return `<div class="cc-admin"><div class="cc-for-h"><b>${esc(sel.name || "")}</b>${sel.chipsKey === P.key ? ` · דווח ${Number(sel.chips).toLocaleString("en-US")}` : ""} <button type="button" class="lb-cancel" data-cc-pick="">שחקן אחר</button></div>${tourCcWidget(c, t, sel.playerId, sel.chipsKey === P.key ? sel.chips : null)}</div>`;
+          return `<div class="cc-admin"><div class="tf-in"><input type="text" data-cc-find placeholder="חיפוש שחקן" autocomplete="off"></div>
+            <div class="cc-find-list">${P.alive.map(r => `<button type="button" class="reg-pick" data-cc-pick="${esc(r.playerId)}" data-name="${esc(String(r.name || "").toLowerCase())}">${tourAvatar(r.name, 0, r.playerId, g.communityId)}<span>${esc(r.name || "")}</span><small>${r.chipsKey === P.key ? "✓ " + Number(r.chips).toLocaleString("en-US") : "לא דיווח"}</small></button>`).join("")}</div></div>`;
+        })()}</div>`;
     }
   }
   const stLabel = k.cs.paused ? (k.cs.reason === "break" ? "☕ הפסקה" : "⏸ מושהה") : onBreak ? "☕ הפסקה" : "▶ פעיל";
@@ -5861,17 +5892,28 @@ function renderTourClock(g, c, isAdmin){
       <div class="ck-row"><button type="button" data-ck="minus">−1 דק'</button><button type="button" data-ck="break" ${k.cs.paused ? "disabled" : ""}>☕ הפסקה עכשיו</button><button type="button" data-ck="plus">+1 דק'</button></div>
       <div class="ck-row two"><button type="button" data-ck-changes>⚙ שינויים</button><button type="button" data-tour-view="reg">👥 הרשמה${pending.length ? ` (${pending.length} ממתינים)` : ""}</button></div></div>`;
   return `<div class="ck${onBreak ? " ck-brk" : ""}">
-    <div class="ck-top"><span>🏆 <b>${esc(g.name || ilDate(g.date))}</b></span><span>${stLabel}</span></div>
-    ${join}${card}
+    ${join}
+    <div class="ck-sticky">${card}</div>
+    ${admin}
     <div class="ck-chips">${chips}</div>
     ${adminAlerts}${me}
     <div class="ck-stats"><div><b>${P.alive.length}/${approved.length}</b>נשארו</div><div><b>₪${tourPot(g, t).toLocaleString("en-US")}</b>קופה</div><div><b>${Math.floor(playedMin / 60)}:${String(playedMin % 60).padStart(2, "0")}</b>זמן משחק</div></div>
     ${tourPrizesHtml(t, approved.length, tourPot(g, t))}
     ${tourStandingsHtml(P, myPid)}
-    ${admin}
+    ${tourClockBlindsHtml(k)}
+    ${tourClockFull ? `<div style="text-align:right">${tourPayReadHtml(t, approved.length)}</div>` : ""}
     <div class="ck-tools"><button type="button" data-ck-sound>${tourSoundOn() ? "🔊 צליל" : "🔇 צליל כבוי"}</button><button type="button" data-ck-fs>⛶ מסך מלא</button><button type="button" data-ck-full>📋 ${tourClockFull ? "הסתר מבנה" : "מבנה מלא"}</button></div>
-    ${tourClockFull ? `<div style="text-align:right;margin-top:10px">${tourBlindsReadHtml(t, c)}${tourPayReadHtml(t, approved.length)}</div>` : ""}
   </div>`;
+}
+// The blind structure under the clock: the current row marked, the table scrolled to it
+// (the whole table with "מבנה מלא").
+function tourClockBlindsHtml(k){
+  return `<fieldset class="leave-frame setup-frame"><legend>מבנה בליינדים</legend>
+    <div class="ck-blinds-wrap${tourClockFull ? "" : " capped"}" data-ck-blinds>
+    <table class="tour-tbl"><thead><tr><th>רמה</th><th>טווח זמן</th><th>בליינדים</th><th>אנטה</th></tr></thead><tbody>
+    ${k.rows.map((r, i) => r.brk ? `<tr class="brk${i === k.i ? " cur" : ""}"><td>☕</td><td class="ltr">${r.from + 1}–${r.to}</td><td colspan="2">${r.addOn ? "הפסקה + Add-on" : "הפסקה"}</td></tr>`
+      : `<tr class="${i === k.i ? "cur" : ""}"><td>${r.level}</td><td class="ltr">${r.from ? r.from + 1 : 0}–${r.to}</td><td class="ltr">${r.sb.toLocaleString("en-US")}/${r.bb.toLocaleString("en-US")}</td><td class="ltr${r.ante ? "" : " off"}">${r.ante ? r.ante.toLocaleString("en-US") : "–"}</td></tr>`).join("")}
+    </tbody></table></div></fieldset>`;
 }
 let tourAdminView = null;
 let tourRegFull = false;   // the registered list opened in full
@@ -11400,6 +11442,8 @@ function attachHandlers(){
     render();
   };
   app.querySelectorAll("[data-lobby-pay]").forEach(el => el.onclick = () => { const n = Number(el.dataset.lobbyPay); tourLobbyFull.payOpen = tourLobbyFull.payOpen === n ? 0 : n; render(); });
+  { const w = app.querySelector("[data-ck-blinds].capped"), cur = w && w.querySelector("tr.cur");
+    if (cur) w.scrollTop = Math.max(0, cur.offsetTop - w.querySelector("thead").offsetHeight - 30); }
   // the registered list starts at my own row (marked) - and stays wherever it's scrolled to
   { const list = app.querySelector(".reg-list.capped");
     if (list) {
@@ -11498,28 +11542,30 @@ function attachHandlers(){
     if (!(await showConfirm("לסמן שיצאת מהטורניר?", {okLabel: "יצאתי", cancelLabel: "ביטול"}))) return;
     tourAct(el, () => v2TourAction(tourGid, pid, "bust", {level: k ? k.curLevel.level : null}));
   });
-  // chip count: live total, send
-  const ccTotal = () => { let s2 = 0; app.querySelectorAll("[data-cc-n]").forEach(i => { s2 += (parseInt(i.value, 10) || 0) * Number(i.dataset.ccPt); }); return s2; };
+  // chip count: live total per box, mode, send (my own count, or the admin's for a player)
+  const ccTotal = box => { let s2 = 0; box.querySelectorAll("[data-cc-n]").forEach(i => { s2 += (parseInt(i.value, 10) || 0) * Number(i.dataset.ccPt); }); return s2; };
   app.querySelectorAll("[data-cc-n]").forEach(i => i.oninput = () => {
-    const tEl = app.querySelector("[data-cc-total]"); if (tEl) tEl.textContent = ccTotal().toLocaleString("en-US");
-    const x = app.querySelector(`[data-cc-x="${i.dataset.ccN}"]`), pt = Number(i.dataset.ccPt), tot = ((parseInt(i.value, 10) || 0) * pt).toLocaleString("en-US");
+    const box = i.closest("[data-cc-box]"), tEl = box.querySelector("[data-cc-total]"); if (tEl) tEl.textContent = ccTotal(box).toLocaleString("en-US");
+    const x = box.querySelector(`[data-cc-x="${i.dataset.ccN}"]`), pt = Number(i.dataset.ccPt), tot = ((parseInt(i.value, 10) || 0) * pt).toLocaleString("en-US");
     if (x) x.innerHTML = x.innerHTML.includes("<br>") ? `×${pt.toLocaleString("en-US")}<br>${tot}` : `×${pt.toLocaleString("en-US")} = ${tot}`;
   });
+  app.querySelectorAll("[data-cc-mode]").forEach(el => el.onclick = () => { tourCcMode = el.dataset.ccMode; render(); });
   app.querySelectorAll("[data-cc-edit]").forEach(el => el.onclick = () => { tourCcEdit = true; render(); });
   app.querySelectorAll("[data-cc-send]").forEach(el => el.onclick = () => {
-    const g = getGame(tourGid), c = getCommunity(g.communityId), k = tourClockInfo(g, c), key = tourBreakKey(g, k);
-    const sumEl = app.querySelector("[data-cc-sum]");
-    const chips = sumEl ? (parseInt(sumEl.value, 10) || 0) : ccTotal();
-    tourCcEdit = false;
-    tourAct(el, () => v2TourAction(tourGid, myIdentity.myPlayers[g.communityId], "chips", {chips, key, level: k.curLevel.level}));
-  });
-  app.querySelectorAll("[data-cc-admin-toggle]").forEach(el => el.onclick = () => { tourCcAdmin = !tourCcAdmin; render(); });
-  app.querySelectorAll("[data-cc-for-save]").forEach(el => el.onclick = () => {
-    const pid = el.dataset.ccForSave, inp = [...app.querySelectorAll("[data-cc-for]")].find(i => i.dataset.ccFor === pid);
-    const chips = parseInt(inp && inp.value, 10);
+    const box = el.closest("[data-cc-box]"), pid = el.dataset.ccSend;
+    const sumEl = box.querySelector("[data-cc-sum]");
+    const chips = sumEl ? parseInt(sumEl.value, 10) : ccTotal(box);
     if (!(chips >= 0)) { showAlert("הזינו כמות ז'יטונים"); return; }
     const g = getGame(tourGid), c = getCommunity(g.communityId), k = tourClockInfo(g, c);
+    tourCcEdit = false;
+    if (pid !== (myIdentity.myPlayers || {})[g.communityId]) tourCcFor = null;   // the admin's entry: back to the search
     tourAct(el, () => v2TourAction(tourGid, pid, "chips", {chips, key: tourBreakKey(g, k), level: k.curLevel.level}));
+  });
+  app.querySelectorAll("[data-cc-admin-toggle]").forEach(el => el.onclick = () => { tourCcAdmin = !tourCcAdmin; tourCcFor = null; render(); });
+  app.querySelectorAll("[data-cc-pick]").forEach(el => el.onclick = () => { tourCcFor = el.dataset.ccPick || null; render(); });
+  app.querySelectorAll("[data-cc-find]").forEach(inp => inp.oninput = () => {
+    const w = inp.value.trim().toLowerCase();
+    app.querySelectorAll(".cc-find-list [data-cc-pick]").forEach(b => { b.style.display = !w || b.dataset.name.includes(w) ? "" : "none"; });
   });
   app.querySelectorAll("[data-mark-rest]").forEach(el => el.onclick = async () => {
     const g = getGame(tourGid), c = getCommunity(g.communityId), k = tourClockInfo(g, c), P = tourPlayers(g, c, k);
