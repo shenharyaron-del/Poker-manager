@@ -1472,7 +1472,7 @@ html.theme-light .ck-row button{background:linear-gradient(180deg,#fffaf0,#eadfc
 .ck-sticky{position:sticky;top:0;z-index:6;padding:2px 0 10px;margin:0 -16px;padding-inline:16px;background:rgba(10,46,34,.94);backdrop-filter:blur(4px);}
 html.theme-light .ck-sticky{background:rgba(246,238,224,.95);}
 html.theme-light.theme-blue .ck-sticky{background:rgba(214,233,242,.95);}
-.ck-pages{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;margin:0 -16px;align-items:flex-start;}
+.ck-pages{display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;margin:0 -16px;align-items:flex-start;transition:height .2s;}
 .ck-pages::-webkit-scrollbar{display:none;}
 .ck-page{flex:0 0 100%;scroll-snap-align:start;box-sizing:border-box;padding:0 16px;min-width:0;}
 .ck-dots{display:flex;justify-content:center;gap:8px;margin-top:6px;}
@@ -1564,6 +1564,7 @@ html.theme-light .reg-me{color:#047857;}
 .reg-list.capped{max-height:212px;overflow-y:auto;position:relative;}
 /* the read-only tables: 4 rows, then an inner scroll - like the registered list */
 .tbl-scroll.capped{max-height:212px;overflow-y:auto;position:relative;}
+.tbl-scroll.st-cap{max-height:156px;}
 .tbl-scroll.capped thead th{position:sticky;top:0;z-index:1;background:#0f3f2e;}
 html.theme-light .tbl-scroll.capped thead th{background:#f6eee0;}
 html.theme-light.theme-blue .tbl-scroll.capped thead th{background:#d6e9f2;}
@@ -5880,7 +5881,7 @@ function tourStandingsHtml(P, myPid){
     return `<tr class="${r.playerId === myPid ? "me" : ""}${r.bustedAt ? " out" : ""}"><td>${place}</td><td class="nm">${esc(r.name || "")}</td><td class="ltr">${extra}<small>${rb}</small></td></tr>`;
   }).join("");
   return `<fieldset class="leave-frame setup-frame"><legend>🏅 דירוג${P.lastLevel ? ` · נכון לסוף שלב ${P.lastLevel}` : ""}</legend>
-    <table class="tour-tbl st-tbl"><tbody>${rows}</tbody></table></fieldset>`;
+    <div class="tbl-scroll${P.standings.length > 4 ? " capped st-cap" : ""}" data-keep-scroll="standings"><table class="tour-tbl st-tbl"><tbody>${rows}</tbody></table></div></fieldset>`;
 }
 let tourClockFull = false;   // "📋 מבנה מלא" under the clock
 function tourSoundOn(){ try { return localStorage.getItem("tour-sound") !== "0"; } catch (e) { return true; } }
@@ -11572,9 +11573,12 @@ function attachHandlers(){
     if (pages) {
       const pg = pages.children[tourClockPage];
       if (tourClockPage && pg) pages.scrollLeft = pg.offsetLeft - pages.children[0].offsetLeft;
+      // as tall as the page on screen (the other one must not leave empty space to scroll)
+      const fitH = () => { const cur = pages.children[tourClockPage]; if (cur) pages.style.height = cur.scrollHeight + "px"; };
+      fitH();
       pages.addEventListener("scroll", () => {
         const idx = Math.round(Math.abs(pages.scrollLeft) / pages.clientWidth);
-        if (idx !== tourClockPage) { tourClockPage = idx; app.querySelectorAll("[data-ck-page]").forEach(b => b.classList.toggle("on", Number(b.dataset.ckPage) === idx)); }
+        if (idx !== tourClockPage) { tourClockPage = idx; fitH(); app.querySelectorAll("[data-ck-page]").forEach(b => b.classList.toggle("on", Number(b.dataset.ckPage) === idx)); }
       }, {passive: true});
       app.querySelectorAll("[data-ck-page]").forEach(b => b.onclick = () => { const p2 = pages.children[Number(b.dataset.ckPage)]; pages.scrollTo({left: p2.offsetLeft - pages.children[0].offsetLeft, behavior: "smooth"}); });
     } }
@@ -11587,9 +11591,12 @@ function attachHandlers(){
       list.addEventListener("scroll", () => { tourRegListScroll = {gid: nav.gameId, top: list.scrollTop}; }, {passive: true});
     } }
   app.querySelectorAll("[data-reg-full]").forEach(el => el.onclick = () => { tourRegFull = !tourRegFull; render(); });
+  // the standings show exactly 4 rows, the rest scroll inside
+  app.querySelectorAll(".st-cap").forEach(el => { const rows = [...el.querySelectorAll("tr")].slice(0, 4); el.style.maxHeight = rows.reduce((h, r) => h + r.offsetHeight, 0) + 1 + "px"; });
   app.querySelectorAll("[data-keep-scroll]").forEach(el => {
     const key = (nav.gameId || "") + ":" + el.dataset.keepScroll;
-    if (tourInnerScroll[key]) el.scrollTop = tourInnerScroll[key];
+    if (tourInnerScroll[key] != null) el.scrollTop = tourInnerScroll[key];
+    else { const me = el.querySelector("tr.me"); if (me) el.scrollTop = Math.max(0, me.offsetTop - 4); }   // first time: at my own row
     el.addEventListener("scroll", () => { tourInnerScroll[key] = el.scrollTop; }, {passive: true});
   });
   app.querySelectorAll("[data-info-tip]").forEach(el => el.onclick = (e) => {
