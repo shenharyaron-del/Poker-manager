@@ -1412,6 +1412,7 @@ html.theme-light .ck-card{background:radial-gradient(120% 90% at 50% 0%,rgba(242
 .ck-next{display:flex;justify-content:space-around;margin:8px 0 0;padding-top:6px;border-top:1px solid rgba(212,175,55,.3);font-size:14px;color:var(--muted);}
 .ck-next b{display:block;font-size:18px;color:var(--text);direction:ltr;}
 .ck-na{display:block;font-size:13.5px;color:var(--muted);margin-top:1px;}
+.ck-na strong{color:var(--text);font-weight:800;}
 .ck-chips{display:flex;justify-content:center;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0;}
 .ck-acts{display:flex;justify-content:center;gap:5px;margin:2px 0 8px;}
 .ck-acts button{flex:0 1 calc((100% - 20px) / 5);}
@@ -5979,8 +5980,8 @@ function renderTourClock(g, c, isAdmin){
         ${k.row.addOn ? `<div class="ck-ao">Add-on עכשיו · ₪${Number(t.addOnPrice ?? tourEntryTotal(t)).toLocaleString("en-US")} → ${Number(t.addOnChips).toLocaleString("en-US")} ז'יטונים<small>קנייה אחת לשחקן, עד סוף ההפסקה</small></div>` : ""}</div>`
     : `<div class="ck-card"><div class="ck-lvl">שלב ${k.row.level}${k.past ? " · שלב אחרון בטבלה" : ""}</div><div class="ck-time${k.cs.paused ? " paused" : ""}" data-ck-time>${fmtClock(k.left)}</div>${k.cs.paused ? `<div class="ck-paused">⏸ השעון מושהה</div>` : ""}<div class="ck-bar"><i data-ck-bar style="width:${pct}%"></i></div>
         <div class="ck-blinds">${fmtBlinds(k.row)}</div><div class="ck-ante">${k.row.ante ? `אנטה <b>${k.row.ante.toLocaleString("en-US")}</b>` : "ללא אנטה"}</div>
-        <div class="ck-next"><div>שלב הבא<b>${k.nextLevel ? fmtBlinds(k.nextLevel) : "—"}</b>${k.nextLevel ? `<span class="ck-na">${k.nextLevel.ante ? `אנטה ${k.nextLevel.ante.toLocaleString("en-US")}` : "ללא אנטה"}</span>` : ""}</div>
-          <div>הפסקה בעוד<b data-ck-brk>${k.breakIn != null ? Math.max(1, Math.ceil(k.breakIn / 60000)) + " דק'" : "—"}</b></div></div></div>`;
+        <div class="ck-next"><div>שלב הבא<b>${k.nextLevel ? fmtBlinds(k.nextLevel) : "—"}</b>${k.nextLevel ? `<span class="ck-na">${k.nextLevel.ante ? `אנטה <strong>${k.nextLevel.ante.toLocaleString("en-US")}</strong>` : "ללא אנטה"}</span>` : ""}</div>
+          <div>הפסקה בעוד<b data-ck-brk dir="rtl" style="direction:rtl">${k.breakIn != null ? Math.max(1, Math.ceil(k.breakIn / 60000)) + " דק'" : "—"}</b></div></div></div>`;
   // "סוף זמן ריביי ורישום" shows for 10 seconds after the window closes, then goes
   const chips = lateOpen ? `<span class="rb">🔁 ריביי ורישום מאוחר עוד <b data-ck-rb>${Math.max(1, Math.ceil(k.rbLeft / 60000))}</b> דק'</span>`
     : k.rbLeft > -10000 ? `<span data-ck-rbend>סוף זמן ריביי ורישום</span>` : "";
