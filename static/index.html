@@ -1394,6 +1394,51 @@ html.theme-light .ng-tour .h{color:#9a5f12;}
 .ng-tour-edit{display:block;width:100%;margin:8px 0 2px;padding:9px;border-radius:10px;border:1.5px dashed var(--gold);background:transparent;color:var(--gold);font:inherit;font-weight:700;font-size:16px;cursor:pointer;}
 html.theme-light .ng-tour-edit{color:#9a5f12;border-color:#c8922a;}
 .gc-trophy{margin-inline-end:4px;}
+/* the blind clock */
+.ck{padding:10px 16px 24px;max-width:560px;margin:0 auto;text-align:center;}
+.ck-top{display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:14.5px;margin-bottom:8px;}
+.ck-top b{color:var(--text);font-size:17px;}
+.ck-card{border:2px solid var(--gold);border-radius:20px;padding:14px 12px 16px;background:radial-gradient(120% 90% at 50% 0%,rgba(242,193,78,.12),rgba(0,0,0,.18));box-shadow:0 0 22px rgba(242,193,78,.18);}
+html.theme-light .ck-card{background:radial-gradient(120% 90% at 50% 0%,rgba(242,193,78,.18),rgba(255,255,255,.35));}
+.ck-lvl{font-size:17px;font-weight:800;color:var(--gold);letter-spacing:.5px;} html.theme-light .ck-lvl{color:#9a5f12;}
+.ck-time{font-size:84px;font-weight:800;line-height:1;margin:6px 0 4px;font-variant-numeric:tabular-nums;direction:ltr;}
+.ck-time.paused{opacity:.55;}
+.ck-paused{color:#f3c26b;font-weight:800;margin-top:-2px;} html.theme-light .ck-paused{color:#b45309;}
+.ck-bar{height:6px;border-radius:3px;background:rgba(127,127,127,.25);overflow:hidden;margin:2px 18px 12px;direction:ltr;}
+.ck-bar i{display:block;height:100%;background:linear-gradient(90deg,#fde68a,#f2c14e);border-radius:3px;transition:width 1s linear;}
+.ck-blinds{font-size:44px;font-weight:800;direction:ltr;line-height:1.1;}
+.ck-ante{font-size:17px;color:var(--muted);margin-top:2px;} .ck-ante b{color:var(--text);}
+.ck-next{display:flex;justify-content:space-around;margin:12px 0 0;padding-top:10px;border-top:1px solid rgba(212,175,55,.3);font-size:14px;color:var(--muted);}
+.ck-next b{display:block;font-size:18px;color:var(--text);direction:ltr;}
+.ck-na{display:block;font-size:13.5px;color:var(--muted);margin-top:1px;}
+.ck-chips{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin:12px 0 10px;}
+.ck-chips span{font-size:14px;font-weight:700;padding:4px 11px;border-radius:999px;border:1px solid rgba(212,175,55,.4);}
+.ck-chips span.rb{border-color:#3fb383;color:#6ee7b7;background:rgba(63,179,131,.12);}
+html.theme-light .ck-chips span.rb{color:#065f46;border-color:#059669;background:rgba(5,150,105,.12);}
+.ck-stats{display:flex;justify-content:space-around;font-size:13.5px;color:var(--muted);margin:4px 0 6px;}
+.ck-stats b{display:block;font-size:19px;color:var(--gold);} html.theme-light .ck-stats b{color:#9a5f12;}
+.ck-prz{border:1px solid rgba(212,175,55,.45);border-radius:14px;padding:8px 10px;margin:4px 0 8px;}
+.ck-prz .h{font-size:13.5px;color:var(--muted);margin-bottom:4px;}
+.ck-prz .pl{display:flex;justify-content:space-around;align-items:flex-end;}
+.ck-prz .pl div{font-size:12.5px;color:var(--muted);} .ck-prz .pl b{display:block;font-size:17px;color:var(--text);}
+.ck-prz .pl .gap{font-size:18px;align-self:center;}
+.ck-prz .pl .bb b{color:#93c5fd;} html.theme-light .ck-prz .pl .bb b{color:#1d4ed8;}
+.ck-tools{display:flex;justify-content:center;gap:14px;margin-top:8px;}
+.ck-tools button{background:none;border:none;color:var(--muted);font:inherit;font-size:13.5px;cursor:pointer;}
+.ck-brk .ck-card{border-color:#3fb383;box-shadow:0 0 22px rgba(63,179,131,.25);background:radial-gradient(120% 90% at 50% 0%,rgba(63,179,131,.16),rgba(0,0,0,.18));}
+.ck-brk .ck-lvl{color:#6ee7b7;} html.theme-light .ck-brk .ck-lvl{color:#047857;}
+.ck-brk .ck-bar i{background:linear-gradient(90deg,#9be7c4,#3fb383);}
+.ck-ao{margin:12px 0 0;padding:10px;border-radius:12px;border:1.5px dashed #e0a43a;color:#f3c26b;font-weight:800;font-size:17px;}
+html.theme-light .ck-ao{color:#9a3412;border-color:#c2410c;}
+.ck-ao small{display:block;font-weight:500;color:var(--muted);font-size:13.5px;}
+.ck-admin{margin-top:14px;border:1px solid rgba(212,175,55,.45);border-radius:14px;padding:10px;}
+.ck-admin .h{font-size:13.5px;color:var(--muted);margin-bottom:8px;}
+.ck-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;}
+.ck-row button{padding:10px 4px;border-radius:12px;border:1px solid rgba(212,175,55,.5);background:rgba(0,0,0,.2);color:var(--text);font:inherit;font-weight:700;font-size:15px;cursor:pointer;}
+html.theme-light .ck-row button{background:rgba(255,255,255,.5);}
+.ck-row button:disabled{opacity:.45;}
+.ck-row button.main{background:linear-gradient(180deg,#fde68a,#f2c14e 45%,#c8922a);color:#2a1d05;border:none;font-size:17px;}
+.ck-row.two{grid-template-columns:1fr 1fr;}
 .gc-wait{color:#f3c26b;font-weight:700;margin-top:2px;} html.theme-light .gc-wait{color:#b45309;}
 /* a tournament night: the lobby and the registration screen */
 .tour-page{padding:10px 16px 28px;max-width:560px;margin:0 auto;}
@@ -2570,6 +2615,7 @@ async function flushErrorReports(){
   } catch(e) { /* still offline - the next try sends them */ }
   flushingErrorReports = false;
 }
+let serverSkewMs = 0;
 async function v2Fetch(method, path, body, opts){
   // Only a save counts as "in flight" (doRefreshNow waits for those and drops a GET that
   // raced one) - counting reads too, like the 4-second join-request poll, made refreshes
@@ -2597,6 +2643,9 @@ async function v2Fetch(method, path, body, opts){
       signal: controller.signal,
     });
     const data = await res.json().catch(() => ({}));
+    // the server's clock (a tournament's blind clock runs on it): newest answer wins
+    const sn = data && (data.serverNow || (Array.isArray(data) && data[0] && data[0].serverNow));
+    if (sn) serverSkewMs = sn - Date.now();
     if (!res.ok) {
       if (res.status === 409) return {conflict: true};
       const err = new Error(data.error || `${method} ${path} failed (${res.status})`);
@@ -2863,6 +2912,10 @@ async function v2UpdateGame(gameId, fields){
 // Tournament registration (see server's tournament_registrations): each call then reloads the night.
 async function v2TourRegister(gameId, playerId, name, approve){
   await v2Fetch("POST", `/games/${gameId}/registrations`, {playerId, name, approve: !!approve});
+  return v2LoadGameFull(gameId);
+}
+async function v2TourClock(gameId, action, extra){
+  await v2Fetch("POST", `/games/${gameId}/tournament/clock`, {action, ...(extra || {})});
   return v2LoadGameFull(gameId);
 }
 async function v2TourApprove(gameId, playerId){
@@ -5569,6 +5622,131 @@ function tourAvatar(name, i){
   const ini = String(name || "?").trim().split(/\s+/).map(w => w[0]).join("").slice(0, 2);
   return `<span class="reg-av" style="background:${colors[i % colors.length]}">${esc(ini)}</span>`;
 }
+// ----- the blind clock -----
+// Play time so far (ms), from the shared state (server times) - paused time left out.
+function tourClockState(g){
+  const st = g && g.tournamentState;
+  if (!st || !st.startedAt) return null;
+  const now = Date.now() + serverSkewMs, end = st.pausedAt || now;
+  return {paused: !!st.pausedAt, reason: st.pauseReason || null, pausedFor: st.pausedAt ? Math.max(0, now - st.pausedAt) : 0,
+    elapsed: Math.max(0, end - st.startedAt - (st.pausedTotal || 0) + (st.offset || 0))};
+}
+function tourGameLevels(g, c){
+  const t = Object.assign({}, TOUR_DEFAULTS, g.tournamentSettings || {});
+  const n = Math.max(2, ((g.registrations || []).filter(r => r.status === "approved").length) || t.entries);
+  return tourBlindLevels(Object.assign({}, t, {small: tourSmallChip(c, t), entries: n,
+    totalChips: n * t.chips * (1 + (+t.early || 0) / 100) + Math.round(n / 2) * t.rebuyChips + (t.addOn ? Math.round(n * 0.75) * t.addOnChips : 0)}));
+}
+// Where the clock is: the current row (a level or a break), ms left in it, what's next.
+function tourClockInfo(g, c){
+  const cs = tourClockState(g);
+  if (!cs) return null;
+  const t = Object.assign({}, TOUR_DEFAULTS, g.tournamentSettings || {});
+  const rows = tourGameLevels(g, c), min = cs.elapsed / 60000;
+  let i = rows.findIndex(r => min < r.to);
+  const past = i < 0;   // beyond the table: the last level goes on
+  if (past) i = rows.length - 1;
+  const row = rows[i];
+  const left = past ? 0 : row.to * 60000 - cs.elapsed, len = (row.to - row.from) * 60000;
+  const nextLevel = rows.slice(i + 1).find(r => !r.brk) || null;
+  const nextBreak = row.brk ? null : rows.slice(i + 1).find(r => r.brk) || null;
+  const rbRow = rows.find(r => !r.brk && r.level === t.rebuyLevels);
+  const rbLeft = rbRow ? rbRow.to * 60000 - cs.elapsed : 0;
+  const curLevel = row.brk ? (rows.slice(0, i).reverse().find(r => !r.brk) || rows[0]) : row;
+  return {cs, t, rows, i, row, left, len, nextLevel, nextBreak, rbLeft, curLevel, past,
+    breakIn: nextBreak ? nextBreak.from * 60000 - cs.elapsed : null};
+}
+const fmtClock = ms => { const s2 = Math.max(0, Math.ceil(ms / 1000)), m = Math.floor(s2 / 60); return m >= 60 ? `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}:${String(s2 % 60).padStart(2, "0")}` : `${String(m).padStart(2, "0")}:${String(s2 % 60).padStart(2, "0")}`; };
+const fmtBlinds = r => `${r.sb.toLocaleString("en-US")} / ${r.bb.toLocaleString("en-US")}`;
+// Prizes for the player: 1st-3rd, then (with 5+ paid places) the one before the bubble and the bubble.
+function tourPrizesHtml(t, count){
+  if (!count) return "";
+  const pot = count * (+t.prize || 0), places = Math.min(count, tourPlacesPaid(count, t.payoutPct));
+  const am = tourPrizeShares(places).slice(0, count).map(x => Math.round(pot * x / 100));
+  const medals = ["🥇", "🥈", "🥉"];
+  let idx = am.map((_, i) => i);
+  if (places > 5) idx = [0, 1, 2, null, places - 2, places - 1];
+  const cell = i => i === null ? `<div class="gap">…</div>` : `<div class="${i === places - 1 && places > 3 ? "bb" : ""}"><b>₪${am[i].toLocaleString("en-US")}</b>${i < 3 && !(i === places - 1 && places > 3) ? `${medals[i]} מקום ${i + 1}` : i === places - 1 && places > 3 ? `🫧 באבל · ${i + 1}` : `מקום ${i + 1}`}</div>`;
+  return `<div class="ck-prz"><div class="h">פרסים לפי ${count} רשומים · ${places} מקומות בפרס</div><div class="pl" dir="ltr">${idx.map(cell).join("")}</div></div>`;
+}
+let tourClockFull = false;   // "📋 מבנה מלא" under the clock
+function tourSoundOn(){ try { return localStorage.getItem("tour-sound") !== "0"; } catch (e) { return true; } }
+function renderTourClock(g, c, isAdmin){
+  const k = tourClockInfo(g, c), t = k.t;
+  const regs = g.registrations || [], approved = regs.filter(r => r.status === "approved"), pending = regs.filter(r => r.status === "pending");
+  const myPid = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId], mine = myPid && regs.find(r => r.playerId === myPid);
+  const lateOpen = k.rbLeft > 0;
+  const onBreak = k.row.brk || k.cs.reason === "break";
+  const stLabel = k.cs.paused ? (k.cs.reason === "break" ? "☕ הפסקה" : "⏸ מושהה") : onBreak ? "☕ הפסקה" : "▶ פעיל";
+  const pct = k.len ? Math.min(100, Math.max(0, 100 - k.left / k.len * 100)) : 100;
+  const card = k.cs.reason === "break"
+    ? `<div class="ck-card"><div class="ck-lvl">☕ הפסקה</div><div class="ck-time" data-ck-up>${fmtClock(k.cs.pausedFor)}</div>
+        <div class="ck-ante" style="margin-top:6px">אחרי ההפסקה: <b>שלב ${k.curLevel.level} · ${fmtBlinds(k.curLevel)}</b></div></div>`
+    : k.row.brk
+    ? `<div class="ck-card"><div class="ck-lvl">☕ ${k.row.addOn ? "הפסקה + Add-on" : "הפסקה"}</div><div class="ck-time${k.cs.paused ? " paused" : ""}" data-ck-time>${fmtClock(k.left)}</div>${k.cs.paused ? `<div class="ck-paused">⏸ השעון מושהה</div>` : ""}<div class="ck-bar"><i data-ck-bar style="width:${pct}%"></i></div>
+        ${k.nextLevel ? `<div class="ck-ante">אחרי ההפסקה: <b>שלב ${k.nextLevel.level} · ${fmtBlinds(k.nextLevel)}</b>${k.nextLevel.ante ? ` · אנטה ${k.nextLevel.ante.toLocaleString("en-US")}` : ""}</div>` : ""}
+        ${k.row.addOn ? `<div class="ck-ao">Add-on עכשיו · ₪${Number(t.addOnPrice ?? tourEntryTotal(t)).toLocaleString("en-US")} → ${Number(t.addOnChips).toLocaleString("en-US")} ז'יטונים<small>קנייה אחת לשחקן, עד סוף ההפסקה</small></div>` : ""}</div>`
+    : `<div class="ck-card"><div class="ck-lvl">שלב ${k.row.level}${k.past ? " · שלב אחרון בטבלה" : ""}</div><div class="ck-time${k.cs.paused ? " paused" : ""}" data-ck-time>${fmtClock(k.left)}</div>${k.cs.paused ? `<div class="ck-paused">⏸ השעון מושהה</div>` : ""}<div class="ck-bar"><i data-ck-bar style="width:${pct}%"></i></div>
+        <div class="ck-blinds">${fmtBlinds(k.row)}</div><div class="ck-ante">${k.row.ante ? `אנטה <b>${k.row.ante.toLocaleString("en-US")}</b>` : "ללא אנטה"}</div>
+        <div class="ck-next"><div>שלב הבא<b>${k.nextLevel ? fmtBlinds(k.nextLevel) : "—"}</b>${k.nextLevel ? `<span class="ck-na">${k.nextLevel.ante ? `אנטה ${k.nextLevel.ante.toLocaleString("en-US")}` : "ללא אנטה"}</span>` : ""}</div>
+          <div>הפסקה בעוד<b data-ck-brk>${k.breakIn != null ? Math.max(1, Math.ceil(k.breakIn / 60000)) + " דק'" : "—"}</b></div></div></div>`;
+  const chips = lateOpen ? `<span class="rb">🔁 ריביי ורישום מאוחר פתוחים עוד <b data-ck-rb>${Math.max(1, Math.ceil(k.rbLeft / 60000))}</b> דק'</span>` : `<span>סוף זמן ריביי ורישום</span>`;
+  const playedMin = Math.floor(k.cs.elapsed / 60000);
+  const join = !isAdmin && lateOpen && !mine ? `<button type="button" class="btn btn-primary btn-block lb-req" data-tour-register style="margin:0 0 10px">רישום מאוחר · ₪${tourEntryTotal(t).toLocaleString("en-US")}</button>`
+    : !isAdmin && mine && mine.status === "pending" ? `<div class="lb-state wait" style="padding:8px"><div class="big" style="font-size:17px">⏳ ממתין לאישור המנהל</div><button type="button" class="lb-cancel" data-tour-cancel>ביטול הבקשה</button></div>` : "";
+  const admin = !isAdmin ? "" : `<div class="ck-admin"><div class="h">שליטה בשעון · מנהלים בלבד</div>
+      <div class="ck-row"><button type="button" data-ck="prev">⏮ שלב קודם</button>${k.cs.paused ? `<button type="button" class="main" data-ck="resume">▶ המשך</button>` : `<button type="button" class="main" data-ck="pause">⏸ השהה</button>`}<button type="button" data-ck="next">⏭ שלב הבא</button></div>
+      <div class="ck-row"><button type="button" data-ck="minus">−1 דק'</button><button type="button" data-ck="break" ${k.cs.paused ? "disabled" : ""}>☕ הפסקה עכשיו</button><button type="button" data-ck="plus">+1 דק'</button></div>
+      <div class="ck-row two"><button type="button" data-ck-changes>⚙ שינויים</button><button type="button" data-tour-view="reg">👥 הרשמה${pending.length ? ` (${pending.length} ממתינים)` : ""}</button></div></div>`;
+  return `<div class="ck${onBreak ? " ck-brk" : ""}">
+    <div class="ck-top"><span>🏆 <b>${esc(g.name || ilDate(g.date))}</b></span><span>${stLabel}</span></div>
+    ${join}${card}
+    <div class="ck-chips">${chips}</div>
+    <div class="ck-stats"><div><b>${approved.length}</b>רשומים</div><div><b>₪${(approved.length * (+t.prize || 0)).toLocaleString("en-US")}</b>קופה</div><div><b>${Math.floor(playedMin / 60)}:${String(playedMin % 60).padStart(2, "0")}</b>זמן משחק</div></div>
+    ${tourPrizesHtml(t, approved.length)}
+    ${admin}
+    <div class="ck-tools"><button type="button" data-ck-sound>${tourSoundOn() ? "🔊 צליל" : "🔇 צליל כבוי"}</button><button type="button" data-ck-fs>⛶ מסך מלא</button><button type="button" data-ck-full>📋 ${tourClockFull ? "הסתר מבנה" : "מבנה מלא"}</button></div>
+    ${tourClockFull ? `<div style="text-align:right;margin-top:10px">${tourBlindsReadHtml(t, c)}${tourPayReadHtml(t, approved.length)}</div>` : ""}
+  </div>`;
+}
+let tourAdminView = null;   // the admin's "👥 הרשמה" from the clock
+// One tick a second while a running clock is on screen: only the numbers change; a new level
+// (or break) re-renders and beeps. The screen is kept awake meanwhile.
+let tourTickTimer = null, tourTickRow = null, tourWakeLock = null;
+function tourBeep(){
+  try {
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    [0, 0.25, 0.5].forEach((d, i) => { const o = ac.createOscillator(), gn = ac.createGain(); o.frequency.value = i === 2 ? 1320 : 880; o.connect(gn); gn.connect(ac.destination);
+      gn.gain.setValueAtTime(0.2, ac.currentTime + d); gn.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + d + 0.22); o.start(ac.currentTime + d); o.stop(ac.currentTime + d + 0.24); });
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+  } catch (e) {}
+}
+function tourClockTick(){
+  const g = nav.screen === "table" && getGame(nav.gameId);
+  const el = document.querySelector("[data-ck-time], [data-ck-up]");
+  if (!g || !el || g.gameType !== "tournament") { clearInterval(tourTickTimer); tourTickTimer = null; tourTickRow = null; if (tourWakeLock) { tourWakeLock.release().catch(() => {}); tourWakeLock = null; } return; }
+  const k = tourClockInfo(g, getCommunity(g.communityId));
+  if (!k) return;
+  const rowKey = g.id + ":" + k.i;
+  if (tourTickRow && tourTickRow !== rowKey) { tourTickRow = rowKey; if (tourSoundOn()) tourBeep(); if (!modal) render(); return; }
+  tourTickRow = rowKey;
+  const up = document.querySelector("[data-ck-up]");
+  if (up) up.textContent = fmtClock(k.cs.pausedFor);
+  const tm = document.querySelector("[data-ck-time]");
+  if (tm) tm.textContent = fmtClock(k.left);
+  const bar = document.querySelector("[data-ck-bar]");
+  if (bar && k.len) bar.style.width = Math.min(100, Math.max(0, 100 - k.left / k.len * 100)) + "%";
+  const brk = document.querySelector("[data-ck-brk]");
+  if (brk && k.breakIn != null) brk.textContent = Math.max(1, Math.ceil(k.breakIn / 60000)) + " דק'";
+  const rb = document.querySelector("[data-ck-rb]");
+  if (rb) { if (k.rbLeft <= 0) { if (!modal) render(); } else rb.textContent = Math.max(1, Math.ceil(k.rbLeft / 60000)); }
+}
+function tourClockEnsureTicking(){
+  if (!document.querySelector("[data-ck-time], [data-ck-up]")) return;
+  if (!tourTickTimer) tourTickTimer = setInterval(tourClockTick, 1000);
+  if (!tourWakeLock && navigator.wakeLock && document.visibilityState === "visible")
+    navigator.wakeLock.request("screen").then(l => { tourWakeLock = l; l.addEventListener("release", () => { if (tourWakeLock === l) tourWakeLock = null; }); }).catch(() => {});
+}
 function renderTourGame(g, c){
   const t = Object.assign({}, TOUR_DEFAULTS, g.tournamentSettings || {});
   const regs = g.registrations || [];
@@ -5576,9 +5754,14 @@ function renderTourGame(g, c){
   const total = tourEntryTotal(t), n = v => Number(v || 0).toLocaleString("en-US");
   const head = (sub) => `<div class="lb-head"><div class="t">🏆 ${esc(g.name || ilDate(g.date))}</div><div class="d">${esc(ilDate(g.date))} · ${esc(c ? c.name : "")}${sub ? ` · ${sub}` : ""}</div></div>`;
   const isAdmin = c && (isTableAdmin(g, c) || isSuperAdmin());
+  const started = !!(g.tournamentState && g.tournamentState.startedAt) && !g.closed;
+  if (started && !(isAdmin && tourAdminView === "reg")) return renderTourClock(g, c, isAdmin);
   if (g.closed) return `<div class="tour-page">${head("")}<div class="lb-state"><div class="big">הטורניר הסתיים</div></div>${tourInfoHtml(t)}</div>`;
   if (isAdmin) {
     return `<div class="tour-page">${head("ניהול הרשמה")}
+      ${started ? `<div style="text-align:center;margin:0 0 10px;"><button type="button" class="reg-me" data-tour-view="clock">⏱ חזרה לשעון</button></div>`
+        : `<button type="button" class="btn btn-primary btn-block" data-tour-start ${approved.length >= 2 ? "" : "disabled"} style="margin:0 0 6px;font-size:19px;">▶ התחל טורניר</button>
+        ${approved.length >= 2 ? "" : `<div class="lb-note" style="margin-top:0">אפשר להתחיל כשיש לפחות 2 רשומים</div>`}`}
       <div class="ad-sum"><div><b>${approved.length}</b>רשומים</div><div><b>${pending.length}</b>ממתינים</div><div><b>₪${n(approved.length * (+t.prize || 0))}</b>בקופה</div></div>
       ${tourPotNowHtml(t, approved.length)}
       ${pending.length ? `<fieldset class="leave-frame setup-frame ad-pend"><legend>⏳ ממתינים לאישור (${pending.length})</legend>
@@ -7224,8 +7407,12 @@ function treasurerFirstName(g){
 }
 function gameStatusBadge(g, small){
   // A tournament night: registration open, or over (the clock's live states come later).
-  if (g && g.gameType === "tournament")
-    return `<span class="status-badge${small ? ' small' : ''}" style="background:${g.closed ? "#64748b" : "#c2410c"};">${g.closed ? "הסתיים" : "רישום פתוח"}</span>`;
+  if (g && g.gameType === "tournament") {
+    const cs = !g.closed && tourClockState(g);
+    const [bg, label] = g.closed ? ["#64748b", "הסתיים"] : !cs ? ["#c2410c", "רישום פתוח"]
+      : cs.reason === "break" ? ["#0e7490", "הפסקה"] : cs.paused ? ["#a16207", "מושהה"] : ["#15803d", "פעיל"];
+    return `<span class="status-badge${small ? ' small' : ''}" style="background:${bg};">${label}</span>`;
+  }
   const st = gameStatus(g);
   return `<span class="status-badge${small ? ' small' : ''}" style="background:${GAME_STATUS_COLORS[st.key]};">${st.label}</span>`;
 }
@@ -7301,7 +7488,11 @@ function renderCommunity(communityId){
     const regs = g.registrations;
     const regOk = regs ? regs.filter(r => r.status === "approved").length : (g.regApproved || 0);
     const regWait = regs ? regs.filter(r => r.status === "pending").length : (g.regPending || 0);
-    const tourSub = !isTour ? "" : g.closed
+    const tk = isTour && !g.closed ? tourClockInfo(g, c) : null;
+    const tourSub = !isTour ? "" : tk
+      ? (tk.cs.reason === "break" || tk.row.brk ? `☕ הפסקה${tk.cs.reason === "break" ? "" : ` · עוד <b>${Math.max(1, Math.ceil(tk.left / 60000))}</b> דק'`}` : `שלב <b>${tk.row.level}</b> · <b>${fmtBlinds(tk.row)}</b>${tk.cs.paused ? " · ⏸ מושהה" : ` · עוד <b>${Math.max(1, Math.ceil(tk.left / 60000))}</b> דק'`}`)
+        + (regWait && canDelete ? `<div class="gc-wait">⏳ ${regWait === 1 ? "ממתין אחד" : `${regWait} ממתינים`} לאישור</div>` : "")
+      : g.closed
       ? `${regOk || (g.players || []).length} משתתפים`
       : `<b>${regOk}</b> נרשמו · כניסה ₪${((+tt.fee || 0) + (+tt.prize || 0)).toLocaleString("en-US")}`
         + (regWait && canDelete ? `<div class="gc-wait">⏳ ${regWait === 1 ? "ממתין אחד" : `${regWait} ממתינים`} לאישור</div>` : "");
@@ -9930,6 +10121,15 @@ function renderModal(m){
         `;
       }
     }
+  } else if (m.type === "tourChanges") {
+    // After the start: what may still change - how long re-buys / late registration stay open.
+    const g = getGame(m.gameId), t = Object.assign({}, TOUR_DEFAULTS, g.tournamentSettings || {});
+    const v = m.rebuyLevels ?? t.rebuyLevels;
+    title = "שינויים בזמן הטורניר";
+    body = `<p class="lb-note" style="text-align:right;margin:0 0 10px;">מחיר הכניסה, הז'יטונים ומבנה הבליינדים נעולים מרגע ההתחלה.</p>
+      <div class="tf-sl"><div class="tf-sl-top"><span>ריביי ורישום מאוחר עד סוף שלב</span><b>${v}</b></div>
+        <input type="range" min="1" max="12" step="1" value="${v}" data-tc-rebuy><div class="tf-sl-mm"><span>1</span><span>12</span></div></div>
+      <button class="btn btn-primary btn-block" data-tc-save style="margin-top:10px">שמור</button>`;
   } else if (m.type === "tourRegPick") {
     // The admin registers club players straight away (registered + paid).
     const g = getGame(m.gameId), c = g && getCommunity(g.communityId);
@@ -10050,7 +10250,7 @@ function renderModal(m){
       ["הערב הזה", [
         canTakeTreasurerFromMenu && tile('data-treasurer-take', '<img class="menu-tr-ic" src="/static/treasurer.webp" alt="" draggable="false">', "אני גיזבר הערב"),
         canCloseNight && (g.closed ? tile('data-game-menu-go="reopen"', "🔓", "ביטול סגירת ערב") : tile('data-game-menu-go="close"', "🔒", "סגור משחק")),
-        g && club && g.gameType === "tournament" && !g.closed && (isTableAdmin(g, club) || isSuperAdmin()) && tile(`data-open-game-tour="${g.id}"`, "🏆", "הגדרות טורניר"),
+        g && club && g.gameType === "tournament" && !g.closed && !(g.tournamentState && g.tournamentState.startedAt) && (isTableAdmin(g, club) || isSuperAdmin()) && tile(`data-open-game-tour="${g.id}"`, "🏆", "הגדרות טורניר"),
       ]],
       ["המועדון", [
         club && tile('data-game-menu-go="club"', '<span class="menu-club">♣\uFE0E</span>', `המועדון ${esc(club.name)}`),
@@ -10965,7 +11165,8 @@ function attachHandlers(){
   app.querySelectorAll(".club-act").forEach(b => b.addEventListener("click", () => { openClubSwipeId = null; }));
   app.querySelectorAll("[data-delete-community]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type:"deleteCommunity", communityId: el.dataset.deleteCommunity}); });
   app.querySelectorAll("[data-duplicate-community]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type:"duplicateCommunity", communityId: el.dataset.duplicateCommunity}); });
-  // ----- tournament night: lobby / registration -----
+  // ----- tournament night: lobby / registration / clock -----
+  tourClockEnsureTicking();
   const tourGid = nav.screen === "table" ? nav.gameId : null;
   const tourAct = async (btn, fn) => {
     if (!USE_RELATIONAL_API) { showAlert("הרשמה לטורניר דורשת חיבור לשרת."); return; }
@@ -11007,6 +11208,43 @@ function attachHandlers(){
     const row = c.roster.find(p => p.id === pid);
     await v2TourRegister(tourGid, pid, (row && row.name) || myIdentity.name, true);
   }));
+  app.querySelectorAll("[data-tour-view]").forEach(el => el.onclick = () => { tourAdminView = el.dataset.tourView === "reg" ? "reg" : null; render(); });
+  app.querySelectorAll("[data-tour-start]").forEach(el => el.onclick = async () => {
+    const g = getGame(tourGid), t = Object.assign({}, TOUR_DEFAULTS, g.tournamentSettings || {});
+    const n = (g.registrations || []).filter(r => r.status === "approved").length;
+    if (!(await showConfirm(`להתחיל את הטורניר? ${n} רשומים · קופה ₪${(n * (+t.prize || 0)).toLocaleString("en-US")}`, {okLabel: "▶ התחל", cancelLabel: "עוד לא"}))) return;
+    tourAdminView = null;
+    tourAct(el, () => v2TourClock(tourGid, "start"));
+  });
+  app.querySelectorAll("[data-ck]").forEach(el => el.onclick = () => {
+    const g = getGame(tourGid), k = tourClockInfo(g, getCommunity(g.communityId));
+    const a = el.dataset.ck;
+    if (a === "pause") return tourAct(el, () => v2TourClock(tourGid, "pause"));
+    if (a === "break") return tourAct(el, () => v2TourClock(tourGid, "pause", {reason: "break"}));
+    if (a === "resume") return tourAct(el, () => v2TourClock(tourGid, "resume"));
+    let delta = 0;
+    if (a === "plus") delta = 60000;          // +1 minute left in the level = the clock goes back a minute
+    if (a === "minus") delta = -60000;
+    if (a === "plus" || a === "minus") delta = -delta;
+    if (a === "next") delta = k.past ? 0 : k.row.to * 60000 - k.cs.elapsed;
+    if (a === "prev") { const into = k.cs.elapsed - k.row.from * 60000; const target = into > 10000 || k.i === 0 ? k.row.from : k.rows[k.i - 1].from; delta = target * 60000 - k.cs.elapsed; }
+    if (!delta) return;
+    tourAct(el, () => v2TourClock(tourGid, "adjust", {deltaMs: Math.round(delta)}));
+  });
+  app.querySelectorAll("[data-ck-sound]").forEach(el => el.onclick = () => { try { localStorage.setItem("tour-sound", tourSoundOn() ? "0" : "1"); } catch (e) {} if (tourSoundOn()) tourBeep(); render(); });
+  app.querySelectorAll("[data-ck-fs]").forEach(el => el.onclick = () => { const d = document; if (d.fullscreenElement) d.exitFullscreen(); else if (d.documentElement.requestFullscreen) d.documentElement.requestFullscreen().catch(() => {}); });
+  app.querySelectorAll("[data-ck-full]").forEach(el => el.onclick = () => { tourClockFull = !tourClockFull; render(); });
+  app.querySelectorAll("[data-ck-changes]").forEach(el => el.onclick = () => openModal({type: "tourChanges", gameId: tourGid}));
+  if (modal && modal.type === "tourChanges") {
+    const sl = app.querySelector("[data-tc-rebuy]");
+    if (sl) sl.oninput = () => { modal.rebuyLevels = Number(sl.value); sl.closest(".tf-sl").querySelector("b").textContent = sl.value; };
+    const sv = app.querySelector("[data-tc-save]");
+    if (sv) sv.onclick = async () => {
+      const g = getGame(modal.gameId), ts = Object.assign({}, g.tournamentSettings || {}, {rebuyLevels: modal.rebuyLevels ?? (g.tournamentSettings || {}).rebuyLevels});
+      sv.disabled = true;
+      try { await v2UpdateGame(g.id, {tournamentSettings: ts}); closeModal(); } catch (e) { showAlert(saveFailedText(e)); sv.disabled = false; }
+    };
+  }
   app.querySelectorAll("[data-reg-add]").forEach(el => el.onclick = () => openModal({type: "tourRegPick", gameId: tourGid}));
   if (modal && modal.type === "tourRegPick") {
     app.querySelectorAll("[data-reg-pick]").forEach(el => el.onclick = () => {
