@@ -1388,6 +1388,8 @@ html.theme-light .tf-unit{color:#9a5f12;}
 .tf-seg button:first-child{border-inline-start:none;}
 .tf-seg button.on{background:linear-gradient(180deg,#fde68a 0%,#f2c14e 45%,#c8922a 100%);color:#2a1d05;}
 .tf-sl{margin-bottom:12px;}
+.tf-sl-pair{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.tf-sl-pair .tf-sl-top span,.tf-sl-pair .tf-sl-top b{font-size:14px;white-space:nowrap;}
 .tf-sl-top{display:flex;justify-content:space-between;align-items:baseline;}
 .tf-sl-top span{font-size:15px;font-weight:700;}
 .tf-sl-top b{color:var(--gold);font-size:15px;} html.theme-light .tf-sl-top b{color:#9a5f12;}
@@ -9208,20 +9210,19 @@ function renderModal(m){
       const cell = (key, v) => `<input class="tf-cell" type="text" inputmode="numeric" data-tour-blind="${key}" value="${esc(String(t.blindEdits[key] ?? v))}">`;
       inner = `
         <fieldset class="leave-frame setup-frame"><legend>קניית כניסה ראשונית (Buy-in)</legend>
-          <div class="tf"><span>סכום כניסה כולל</span><div class="tf-in tf-sum"><b data-tour-total>${(+t.fee || 0) + (+t.prize || 0)}</b><span class="tf-unit">₪</span></div></div>
+          <div class="tf"><span>סכום כניסה כולל</span>${money("total", (+t.fee || 0) + (+t.prize || 0))}</div>
           <div class="tf-pair"><div class="tf"><span>חלק לפרס</span>${money("prize", t.prize)}</div><span class="tf-plus">+</span><div class="tf"><span>דמי טיפול / עמלה</span>${money("fee", t.fee)}</div></div>
         </fieldset>
         <fieldset class="leave-frame setup-frame"><legend>ז'יטונים ראשוניים (Starting Chips)</legend>
           <div class="tf"><span>כמות ז'יטונים בסיסית</span>${num("chips", t.chips)}</div>
-          <div class="tf"><span>בונוס הרשמה מוקדמת (Early Bird)</span>${seg("early", [[5, "+5%"], [10, "+10%"], [15, "+15%"], [20, "+20%"]], t.early)}</div>
+          <div class="tf"><span>בונוס הרשמה מוקדמת (Early Bird)</span>${seg("early", [[0, "ללא"], [5, "+5%"], [10, "+10%"], [15, "+15%"], [20, "+20%"]], t.early)}</div>
         </fieldset>
         <fieldset class="leave-frame setup-frame"><legend>הגדרות ריביי (Re-buy)</legend>
-          <div class="tf-pair"><div class="tf tf-wide"><span>כמות ריביי מותרת</span>${seg("rebuys", [[0, "ללא הגבלה", true], [1, "1"], [2, "2"], [3, "3"]], t.rebuys)}</div><div class="tf"><span>ז'יטונים לריביי</span>${num("rebuyChips", t.rebuyChips)}</div></div>
+          <div class="tf-pair"><div class="tf"><span>כמות ריביי מותרת</span>${seg("rebuys", [[1, "1"], [2, "2"], [3, "3"], [0, "∞"]], t.rebuys)}</div><div class="tf"><span>ז'יטונים לריביי</span>${num("rebuyChips", t.rebuyChips)}</div></div>
         </fieldset>
         <fieldset class="leave-frame setup-frame"><legend>זמני משחק והפסקות</legend>
           ${slider("level", "משך כל שלב בליינדים", "דקות", 5, 60, t.level)}
-          ${slider("breakEvery", "הפסקה כל", "דקות משחק", 30, 180, t.breakEvery)}
-          ${slider("breakLen", "משך הפסקה", "דקות", 5, 30, t.breakLen)}
+          <div class="tf-sl-pair">${slider("breakEvery", "הפסקה כל", "דק' משחק", 30, 180, t.breakEvery)}${slider("breakLen", "משך הפסקה", "דק'", 5, 30, t.breakLen)}</div>
         </fieldset>
         <fieldset class="leave-frame setup-frame"><legend>מבנה בליינדים</legend>
           <table class="tour-tbl"><thead><tr><th>רמה</th><th>טווח זמן</th><th>בליינדים</th><th>אנטה</th></tr></thead><tbody>
@@ -10560,17 +10561,31 @@ function attachHandlers(){
     } else openChipSetupModal(cid);
   });
   if (modal && modal.type === "tourSetup") {
-    const setTour = (patch) => { modal = Object.assign({}, modal, {tour: Object.assign({}, TOUR_DEFAULTS, modal.tour, patch)}); render(); };
+    // re-render in place (updateModal keeps the scroll position)
+    const setTour = (patch) => updateModal({tour: Object.assign({}, TOUR_DEFAULTS, modal.tour, patch)});
     app.querySelectorAll("[data-tour-tab]").forEach(el => el.onclick = () => setTour({tab: el.dataset.tourTab}));
     app.querySelectorAll("[data-tour-seg]").forEach(el => el.onclick = () => setTour({[el.dataset.tourSeg]: Number(el.dataset.v)}));
+    // Buy-in: the total is set, prize + fee always add up to it - changing the total moves
+    // the prize; changing the prize or the fee moves the other one.
+    const buyinFrom = (key, raw, t) => {
+      const v = Math.max(0, parseFloat(raw) || 0);
+      const total = (+t.fee || 0) + (+t.prize || 0);
+      if (key === "total") return {prize: Math.max(0, v - (+t.fee || 0)), fee: Math.min(+t.fee || 0, v)};
+      if (key === "prize") { const pr = Math.min(v, total); return {prize: pr, fee: total - pr}; }
+      if (key === "fee") { const fe = Math.min(v, total); return {fee: fe, prize: total - fe}; }
+      return {[key]: v};
+    };
     app.querySelectorAll("[data-tour-num]").forEach(el => {
-      el.oninput = () => {   // the total follows as you type
-        const t = Object.assign({}, TOUR_DEFAULTS, modal.tour, {[el.dataset.tourNum]: el.value});
-        modal.tour = t;
-        const tot = app.querySelector("[data-tour-total]");
-        if (tot) tot.textContent = (parseFloat(t.fee) || 0) + (parseFloat(t.prize) || 0);
-      };
-      el.onchange = () => setTour({[el.dataset.tourNum]: Math.max(0, parseFloat(el.value) || 0)});
+      const key = el.dataset.tourNum;
+      if (["total", "prize", "fee"].includes(key)) {
+        el.oninput = () => {   // the other fields follow as you type
+          const t = Object.assign({}, TOUR_DEFAULTS, modal.tour);
+          const patch = buyinFrom(key, el.value, t);
+          const show = (k, v) => { const f = app.querySelector(`[data-tour-num="${k}"]`); if (f && f !== el) f.value = v; };
+          show("prize", patch.prize); show("fee", patch.fee); show("total", patch.prize + patch.fee);
+        };
+        el.onchange = () => setTour(buyinFrom(key, el.value, Object.assign({}, TOUR_DEFAULTS, modal.tour)));
+      } else el.onchange = () => setTour({[key]: Math.max(0, parseFloat(el.value) || 0)});
     });
     app.querySelectorAll("[data-tour-slider]").forEach(el => {
       el.oninput = () => { const v = app.querySelector(`[data-tour-sl-val="${el.dataset.tourSlider}"]`); if (v) v.textContent = el.value + " " + el.dataset.unit; };
