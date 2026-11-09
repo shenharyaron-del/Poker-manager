@@ -5985,7 +5985,7 @@ function renderTourClock(g, c, isAdmin){
         ${!missing.length ? (diff ? `<div class="big">⚠ הספירה לא מתאימה - הפרש ${diff > 0 ? "+" : ""}${diff.toLocaleString("en-US")}</div>` : `<div class="big">✓ הספירה מתאימה</div>`)
           : diff === 0 ? `<div class="big">הסכום מתאים - ${missing.length === 1 ? "שחקן אחד לא דיווח" : `${missing.length} שחקנים לא דיווחו`} (${missing.map(r => esc(r.name)).join(", ")})</div><button type="button" class="btn btn-ghost btn-block" data-mark-rest style="margin-top:6px">סמן אותם כפרשו</button>`
           : ""}
-        <button type="button" class="lb-cancel" data-cc-admin-toggle style="margin-top:6px">${tourCcAdmin ? "סגור ▴" : "הזנת ספירה לשחקן (מי שאין לו טלפון) ▾"}</button>
+        <button type="button" class="lb-cancel" data-cc-admin-toggle style="margin-top:6px">${tourCcAdmin ? "סגור" : "הזנת ספירה לשחקן"}</button>
         ${!tourCcAdmin ? "" : (() => {
           const sel = tourCcFor && P.alive.find(r => r.playerId === tourCcFor);
           if (sel) return `<div class="cc-admin"><div class="cc-for-h"><b>${esc(sel.name || "")}</b>${sel.chipsKey === P.key ? ` · דווח ${Number(sel.chips).toLocaleString("en-US")}` : ""} <button type="button" class="lb-cancel" data-cc-pick="">שחקן אחר</button></div>${tourCcWidget(c, t, sel.playerId, sel.chipsKey === P.key ? sel.chips : null, P.key, level)}</div>`;
