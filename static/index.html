@@ -1408,13 +1408,31 @@ html.theme-light .tf-unit{color:#9a5f12;}
 .tour-tbl :is(th,td):nth-child(4){width:56px;}
 .tour-tbl td.off{color:var(--muted);}
 .tour-tbl th.ante-th{padding-top:2px;}
-.ante-tg{display:inline-flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;padding:0;font:inherit;font-weight:700;color:var(--muted);cursor:pointer;}
+.ante-tg{display:inline-flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;padding:0 0 4px;font:inherit;font-weight:700;color:var(--muted);cursor:pointer;}
 .ante-sw{position:relative;width:26px;height:14px;border-radius:7px;background:rgba(127,127,127,.45);transition:background .15s;}
 .ante-sw::after{content:"";position:absolute;top:2px;inset-inline-start:2px;width:10px;height:10px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.35);transition:inset-inline-start .15s;}
 .ante-tg.on .ante-sw{background:#f2c14e;}
 .ante-tg.on .ante-sw::after{inset-inline-start:14px;}
-.tour-tbl tr.rb-end td{color:#e0a43a;font-weight:800;font-size:14px;border-top:1.5px dashed #e0a43a;border-bottom:1.5px dashed #e0a43a;}
-html.theme-light .tour-tbl tr.rb-end td{color:#9a5f12;border-color:#c8922a;}
+/* end of re-buys: the text sits on a dashed line that breaks around it, like a frame's legend */
+.tour-tbl tr.rb-end td{border:none;padding:6px 0;}
+.tour-tbl tr:has(+ tr.rb-end) td{border-bottom:none;}
+.rb-line{display:flex;align-items:center;gap:8px;color:#e0a43a;font-weight:800;font-size:14px;}
+.rb-line::before,.rb-line::after{content:"";flex:1;border-top:1.5px dashed #e0a43a;}
+html.theme-light .rb-line{color:#9a5f12;} html.theme-light .rb-line::before,html.theme-light .rb-line::after{border-color:#c8922a;}
+/* the small sliders: breaks strip (green, like the break rows) and over the table's columns (gold) */
+.tf-sl.mini{margin:0;}
+.tf-sl.mini .tf-sl-mm{display:none;}
+.tf-sl.mini .tf-sl-top{gap:6px;}
+.tf-sl.mini .tf-sl-top span,.tf-sl.mini .tf-sl-top b{font-size:12.5px;white-space:nowrap;}
+.tf-sl.mini .tf-sl-top span{color:var(--muted);}
+.tf-sl.mini input{margin:3px 0 0;accent-color:#3fb383;}
+.tf-sl.mini .tf-sl-top b{color:#3fb383;}
+.tf-sl.mini.gold input{accent-color:#f2c14e;}
+.tf-sl.mini.gold .tf-sl-top b{color:var(--gold);} html.theme-light .tf-sl.mini.gold .tf-sl-top b{color:#9a5f12;}
+.tour-brk-strip{display:grid;grid-template-columns:1.25fr 1fr;gap:14px;margin:2px 0 10px;padding:8px 10px 6px;border:1px dashed rgba(63,179,131,.6);border-radius:10px;}
+.tour-tbl tr.tour-ctl th{border-bottom:none;padding:2px 4px 2px;vertical-align:bottom;font-weight:inherit;}
+.tour-cust-note{margin:-4px 0 8px;}
+html.theme-light.theme-blue .tf-sl.mini:not(.gold) .tf-sl-top b{color:#0b5a3a;}
 .tour-note{font-size:13px;color:var(--muted);text-align:center;margin:6px 0 8px;}
 .tour-empty{font-size:15px;line-height:1.5;color:var(--muted);margin:0;}
 .tour-chip{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
@@ -5369,37 +5387,41 @@ function setupModeSwitchHtml(communityId, on){
 }
 // ---------- Tournament (club profile) - stage 1: the screen only, nothing saved ----------
 const TOUR_DEFAULTS = {tab: "struct", fee: 20, prize: 80, chips: 10000, early: 5, rebuys: 0, rebuyChips: 10000,
-  rebuyLevels: 3, addOn: 0, addOnChips: 10000, addOnPrice: 100, addOnExtra: 5, level: 20, breakEvery: 70, breakLen: 10, speed: 2, ante: 1, payoutPct: 20, entries: 16, points: {}};
-// Blind speed (איטי / רגיל / מהיר): each level's small blind as a multiple of the first one.
-// Slow <= normal <= fast at every level.
-const TOUR_SPEEDS = {1: [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6], 2: [1, 1.5, 2, 3, 4, 5, 6, 8, 10], 3: [1, 2, 3, 4, 6, 8, 12, 16, 24]};
+  rebuyLevels: 3, addOn: 0, addOnChips: 10000, addOnPrice: 100, addOnExtra: 5, level: 20, jump: 1, breakEvery: 70, breakLen: 10, speed: 2, ante: 1, payoutPct: 20, entries: 16, points: {}};
+// Blind speed presets: a level's length and how many rungs of the blind ladder each level
+// climbs. Moving either slider by hand makes it "מותאם אישית" (4).
+const TOUR_PRESETS = {1: {level: 30, jump: 1}, 2: {level: 20, jump: 1}, 3: {level: 12, jump: 2}};
+const TOUR_LEVEL_LENS = [5, 6, 8, 10, 12, 15, 20, 25, 30, 40, 45, 60];
+function tourSpeedOf(level, jump){
+  const k = Object.keys(TOUR_PRESETS).find(k => TOUR_PRESETS[k].level === level && TOUR_PRESETS[k].jump === jump);
+  return k ? Number(k) : 4;
+}
+// The usual small-blind ladder (25/50, 50/100, 75/150, 100/200, 150/300 ...) for a smallest
+// chip of 25 - scaled to the club's smallest chip, so every blind can be paid in chips.
+const TOUR_LADDER_25 = [25, 50, 75, 100, 150, 200, 300, 400, 500, 600, 800, 1000, 1200, 1500, 2000, 2500, 3000, 4000, 5000,
+  6000, 8000, 10000, 12000, 15000, 20000, 25000, 30000, 40000, 50000, 60000, 80000, 100000, 120000, 150000, 200000, 250000, 300000, 400000, 500000];
 // "משך הפסקה": 1-5 minutes one by one, then 5 at a time up to 30 (the slider walks this list).
 const TOUR_BREAK_LENS = [0, 1, 2, 3, 4, 5, 10, 15, 20, 25, 30];   // 0 = no breaks
-// A "nice" chip amount: 1-2-2.5-3-4-5-6-8 × 10ⁿ.
-function niceChips(v){
-  if (!(v > 0)) return 0;
-  const p = Math.pow(10, Math.floor(Math.log10(v)));
-  const steps = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
-  const m = v / p;
-  return Math.round(steps.reduce((best, s) => Math.abs(s - m) < Math.abs(best - m) ? s : best, 1) * p);
-}
-// The blind levels for a starting stack: small blind from stack/400, rising; an ante of
-// ~12% of the big blind. Breaks: every `breakEvery` minutes (play + break - a round number,
+// The blind levels for a starting stack: the first small blind is the ladder's first rung at
+// or over stack/400 (200 big blinds deep), each level `jump` rungs up; a big-blind ante (the
+// big blind's player pays one big blind for the table) from level 3. Breaks: every `breakEvery` minutes (play + break - a round number,
 // e.g. 60), the break taking that cycle's last minutes - with a 2-minute break, play 0-58,
 // break 58-60, play again from 60 (the level before the break is that much shorter).
 function tourBlindLevels(t){
-  const sb0 = niceChips(t.chips / 400) || 25;
-  const mult = TOUR_SPEEDS[t.speed] || TOUR_SPEEDS[2];
+  const small = t.small > 0 ? t.small : 25;
+  const ladder = TOUR_LADDER_25.map(v => v / 25 * small);
+  const start = Math.max(0, ladder.findIndex(v => v >= (t.chips || 0) / 400));
+  const jump = Math.max(1, t.jump || 1);
   const cycle = Math.max(t.level, t.breakEvery), brk = Math.min(t.breakLen, cycle - 1);
   const rows = []; let minute = 0, lvl = 0, nextBreak = brk > 0 ? cycle - brk : Infinity;   // no breaks: never
   while (lvl < 9) {
-    const sb = niceChips(sb0 * mult[lvl]), bb = sb * 2;
+    const sb = ladder[Math.min(ladder.length - 1, start + lvl * jump)], bb = sb * 2;
     // A level that would run past the break is cut short at it; one that would leave less
     // than 5 minutes before it runs on to the break instead (no 2-minute levels).
     let end = minute + t.level;
     const breakNow = end > nextBreak - 5;
     if (breakNow) end = nextBreak;
-    rows.push({level: lvl + 1, from: minute, to: end, sb, bb, ante: t.ante ? Math.max(1, Math.round(bb * 0.12)) : 0});
+    rows.push({level: lvl + 1, from: minute, to: end, sb, bb, ante: t.ante && lvl >= 2 ? bb : 0});
     minute = end; lvl++;
     // With an add-on there is always a break when the re-buy period ends: the regular one if
     // it falls there, made longer by addOnExtra - otherwise one is added (10 minutes when
@@ -5416,7 +5438,7 @@ function tourBlindLevels(t){
 // Paid places for a number of entries at a payout share (at least 2), and each place's share
 // of the pot: weights falling by a quarter per place.
 // A slider's shown value: "N <unit>" ("שלב אחד" for a single level).
-function tourSlText(v, unit){ return unit === "שלבים" && v === 1 ? "שלב אחד" : `${v} ${unit}`; }
+function tourSlText(v, unit){ return unit === "שלבים" && v === 1 ? "שלב אחד" : unit === "מדרגות" && v === 1 ? "מדרגה אחת" : `${v} ${unit}`; }
 function tourPlacesPaid(entries, pct){ return Math.max(2, Math.round(entries * pct / 100)); }
 function tourPrizeShares(places){
   const w = Array.from({length: places}, (_, i) => Math.pow(0.75, i));
@@ -9222,8 +9244,9 @@ function renderModal(m){
     const seg = (id, opts, cur) => `<div class="tf-seg">${opts.map(([v, l, long]) => `<button type="button" class="${String(v) === String(cur) ? "on" : ""}${long ? " long" : ""}" data-tour-seg="${id}" data-v="${v}">${l}</button>`).join("")}</div>`;
     // list: a slider that walks given values (by index) instead of a plain min..max range
     // shift: shown = value + shift ("הפסקה כל" shows the play minutes: the cycle less the break)
-    const slider = (id, label, unit, min, max, v, list, shift, off) => `
-      <div class="tf-sl${off ? " off" : ""}"><div class="tf-sl-top"><span>${label}</span><b data-tour-sl-val="${id}">${list && v === 0 ? "ללא" : off ? "—" : tourSlText(v + (shift || 0), unit)}</b></div>
+    // cls "mini": the small sliders over the blind table (no min/max line)
+    const slider = (id, label, unit, min, max, v, list, shift, off, cls) => `
+      <div class="tf-sl${off ? " off" : ""}${cls ? " " + cls : ""}"><div class="tf-sl-top"><span>${label}</span><b data-tour-sl-val="${id}">${list && v === 0 ? "ללא" : off ? "—" : tourSlText(v + (shift || 0), unit)}</b></div>
         <input type="range" ${list ? `min="0" max="${list.length - 1}" step="1" value="${Math.max(0, list.indexOf(v))}" data-list="${list.join(",")}"` : `min="${min}" max="${max}" step="5" value="${v}"`} data-tour-slider="${id}" data-unit="${unit}" data-shift="${shift || 0}">
         <div class="tf-sl-mm"><span>${list && list[0] === 0 ? "ללא" : (list ? list[0] : min) + (shift || 0)}</span><span>${(list ? list[list.length - 1] : max) + (shift || 0)}</span></div></div>`;
     const tabs = `<div class="tour-tabs"><button type="button" class="tt-chips${t.tab === "chips" ? " on" : ""}" data-tour-tab="chips">ז'יטונים</button><button type="button" class="tt-struct${t.tab === "struct" ? " on" : ""}" data-tour-tab="struct">מבנה טורניר</button></div>`;
@@ -9238,7 +9261,10 @@ function renderModal(m){
         </fieldset>`
         : `<fieldset class="leave-frame setup-frame"><legend>ערך כל ז'יטון בנקודות</legend><p class="tour-empty">עוד לא הוגדרו ז'יטונים למועדון - צלמו אותם בקאש ← ז'יטונים, ואז קבעו כאן כמה נקודות שווה כל אחד.</p></fieldset>`;
     } else {
-      const levels = tourBlindLevels(t);
+      // the club's smallest chip (its points value) - every blind is a multiple of it
+      const chipDefaults = [25, 100, 500, 1000, 5000, 10000];
+      const small = Math.min(...(c.chipValues || []).map((cv, i) => +(t.points[cv.id] ?? chipDefaults[i]) || Infinity), Infinity);
+      const levels = tourBlindLevels(Object.assign({}, t, {small: isFinite(small) ? small : 25}));
       const places = tourPlacesPaid(t.entries, t.payoutPct);
       const shares = tourPrizeShares(places);
       // entries 1..40 grouped by how many places they pay
@@ -9248,7 +9274,7 @@ function renderModal(m){
       const rbRow = levels.find(r => !r.brk && r.level === t.rebuyLevels);
       const cols = 4;
       // ante on/off: a small switch in the ante column's header
-      const anteTh = `<th class="ante-th"><button type="button" class="ante-tg${t.ante ? " on" : ""}" data-tour-seg="ante" data-v="${t.ante ? 0 : 1}" aria-pressed="${t.ante ? "true" : "false"}"><span class="ante-sw"></span>אנטה</button></th>`;
+      const anteSw = `<button type="button" class="ante-tg${t.ante ? " on" : ""}" data-tour-seg="ante" data-v="${t.ante ? 0 : 1}" aria-pressed="${t.ante ? "true" : "false"}" aria-label="אנטה"><span class="ante-sw"></span></button>`;
       inner = `
         <fieldset class="leave-frame setup-frame"><legend>קניית כניסה ראשונית (Buy-in)</legend>
           <div class="tf"><span>סכום כניסה כולל</span>${money("total", (+t.fee || 0) + (+t.prize || 0))}</div>
@@ -9266,19 +9292,19 @@ function renderModal(m){
           <div class="tf"><span>הארכת ההפסקה ל-Add-on</span>${seg("addOnExtra", [[0, "ללא"], [5, "+5 דק'"], [10, "+10 דק'"], [15, "+15 דק'"]], t.addOnExtra)}</div>
           <p class="tour-note">קנייה אחת לשחקן, בהפסקה שבסוף זמן הריביי - גם למי שלא נגמרו לו הז'יטונים. אם אין שם הפסקה, היא נוספת אוטומטית.</p>` : ""}
         </fieldset>
-        <fieldset class="leave-frame setup-frame"><legend>זמני משחק והפסקות</legend>
-          ${slider("level", "משך כל שלב בליינדים", "דקות", 5, 60, t.level)}
-          <div class="tf-sl-pair">${slider("breakEvery", "הפסקה כל", "דק' משחק", 30, 180, t.breakEvery, null, -t.breakLen, !t.breakLen)}${slider("breakLen", "משך הפסקה", "דק'", 1, 30, t.breakLen, TOUR_BREAK_LENS)}</div>
-        </fieldset>
         <fieldset class="leave-frame setup-frame"><legend>מבנה בליינדים</legend>
-          <div class="tf"><span>קצב עליית הבליינדים</span>${seg("speed", [[1, "איטי"], [2, "רגיל"], [3, "מהיר"]], t.speed)}</div>
-          <table class="tour-tbl"><thead><tr><th>רמה</th><th>טווח זמן</th><th>בליינדים</th>${anteTh}</tr></thead><tbody>
+          <div class="tf"><span>קצב</span>${seg("speed", [[1, "איטי"], [2, "רגיל"], [3, "מהיר"], [4, "מותאם אישית", true]], t.speed)}</div>
+          ${t.speed === 4 ? `<p class="tour-note tour-cust-note">נבחר כי הזזת סליידר · "רגיל" מחזיר לברירת המחדל</p>` : ""}
+          <div class="tour-brk-strip">${slider("breakEvery", "☕ הפסקה אחרי", "דק' משחק", 30, 180, t.breakEvery, null, -t.breakLen, !t.breakLen, "mini")}${slider("breakLen", "אורך הפסקה", "דק'", 0, 30, t.breakLen, TOUR_BREAK_LENS, 0, false, "mini")}</div>
+          <table class="tour-tbl"><thead>
+            <tr class="tour-ctl"><th></th><th>${slider("level", "אורך שלב", "דק'", 5, 60, t.level, TOUR_LEVEL_LENS, 0, false, "mini gold")}</th><th>${slider("jump", "קפיצה", "מדרגות", 1, 3, t.jump, [1, 2, 3], 0, false, "mini gold")}</th><th class="ante-th">${anteSw}</th></tr>
+            <tr><th>רמה</th><th>טווח זמן</th><th>בליינדים</th><th>אנטה</th></tr></thead><tbody>
             ${levels.map(r => (r.brk
               ? `<tr class="brk"><td>☕</td><td class="ltr">${r.from + 1}–${r.to}</td><td colspan="${cols - 2}">${r.addOn ? "הפסקה + Add-on" : "הפסקה"}</td></tr>`
-              : `<tr><td>${r.level}</td><td class="ltr">${r.from ? r.from + 1 : 0}–${r.to}</td><td class="ltr">${r.sb.toLocaleString("en-US")}/${r.bb.toLocaleString("en-US")}</td><td class="ltr${t.ante ? "" : " off"}">${t.ante ? r.ante.toLocaleString("en-US") : "–"}</td></tr>`)
-              + (r === rbRow ? `<tr class="rb-end"><td colspan="${cols}">🔁 סוף זמן ריביי · דקה ${r.to}</td></tr>` : "")).join("")}
+              : `<tr><td>${r.level}</td><td class="ltr">${r.from ? r.from + 1 : 0}–${r.to}</td><td class="ltr">${r.sb.toLocaleString("en-US")}/${r.bb.toLocaleString("en-US")}</td><td class="ltr${r.ante ? "" : " off"}">${r.ante ? r.ante.toLocaleString("en-US") : "–"}</td></tr>`)
+              + (r === rbRow ? `<tr class="rb-end"><td colspan="${cols}"><div class="rb-line"><span>🔁 סוף זמן ריביי · דקה ${r.to}</span></div></td></tr>` : "")).join("")}
           </tbody></table>
-          <p class="tour-note">נבנה אוטומטית לפי הז'יטונים, הקצב והזמנים</p>
+          <p class="tour-note">סולם בליינדים מקובל, בכפולות של הז'יטון הקטן · אנטה = בליינד גדול (Big Blind Ante) משלב 3</p>
         </fieldset>
         <fieldset class="leave-frame setup-frame"><legend>חלוקת פרסים (Payout Structure)</legend>
           <div class="tf"><span>אחוז הזוכים</span>${seg("payoutPct", [[10, "10%"], [12, "12%"], [15, "15%"], [20, "20%"]], t.payoutPct)}</div>
@@ -10612,7 +10638,11 @@ function attachHandlers(){
     // re-render in place (updateModal keeps the scroll position)
     const setTour = (patch) => updateModal({tour: Object.assign({}, TOUR_DEFAULTS, modal.tour, patch)});
     app.querySelectorAll("[data-tour-tab]").forEach(el => el.onclick = () => setTour({tab: el.dataset.tourTab}));
-    app.querySelectorAll("[data-tour-seg]").forEach(el => el.onclick = () => setTour({[el.dataset.tourSeg]: Number(el.dataset.v)}));
+    app.querySelectorAll("[data-tour-seg]").forEach(el => el.onclick = () => {
+      const key = el.dataset.tourSeg, v = Number(el.dataset.v);
+      // a speed preset sets the level length and the jump (מותאם אישית keeps them)
+      setTour(key === "speed" && TOUR_PRESETS[v] ? Object.assign({speed: v}, TOUR_PRESETS[v]) : {[key]: v});
+    });
     // Buy-in: the total is set, prize + fee always add up to it - changing the total moves
     // the prize; changing the prize or the fee moves the other one.
     const buyinFrom = (key, raw, t) => {
@@ -10642,7 +10672,12 @@ function attachHandlers(){
     app.querySelectorAll("[data-tour-slider]").forEach(el => {
       const val = () => el.dataset.list ? Number(el.dataset.list.split(",")[el.value]) : Number(el.value);
       el.oninput = () => { const v = app.querySelector(`[data-tour-sl-val="${el.dataset.tourSlider}"]`); if (v) v.textContent = el.dataset.list && val() === 0 ? "ללא" : tourSlText(val() + Number(el.dataset.shift || 0), el.dataset.unit); };
-      el.onchange = () => setTour({[el.dataset.tourSlider]: val()});
+      el.onchange = () => {
+        const key = el.dataset.tourSlider, patch = {[key]: val()};
+        // moving the level length or the jump by hand: מותאם אישית (or the preset it lands on)
+        if (key === "level" || key === "jump") { const t = Object.assign({}, TOUR_DEFAULTS, modal.tour, patch); patch.speed = tourSpeedOf(t.level, t.jump); }
+        setTour(patch);
+      };
     });
     // a field's value is selected on focus - typing replaces it
     app.querySelectorAll(".tour-panel input[type=number]").forEach(el => el.addEventListener("focus", () => el.select()));
