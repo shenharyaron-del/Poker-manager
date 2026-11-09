@@ -3026,24 +3026,32 @@ async function v2UpdateGame(gameId, fields){
 }
 
 // Tournament registration (see server's tournament_registrations): each call then reloads the night.
+// They retry a few times over ~15s on no answer / a server error (a dropped connection, or
+// the server restarting with a new version) - every one of them is safe to repeat: a re-buy
+// carries its own id, and the clock's ± moves (not safe to repeat) don't retry.
+const TOUR_RETRIES = 4;
 async function v2TourRegister(gameId, playerId, name, approve){
-  await v2Fetch("POST", `/games/${gameId}/registrations`, {playerId, name, approve: !!approve});
+  await v2FetchWithRetry("POST", `/games/${gameId}/registrations`, {playerId, name, approve: !!approve}, TOUR_RETRIES);
   return v2LoadGameFull(gameId);
 }
 async function v2TourClock(gameId, action, extra){
-  await v2Fetch("POST", `/games/${gameId}/tournament/clock`, {action, ...(extra || {})});
+  const body = {action, ...(extra || {})};
+  if (action === "adjust") await v2Fetch("POST", `/games/${gameId}/tournament/clock`, body);
+  else await v2FetchWithRetry("POST", `/games/${gameId}/tournament/clock`, body, TOUR_RETRIES);
   return v2LoadGameFull(gameId);
 }
 async function v2TourAction(gameId, playerId, action, extra){
-  await v2Fetch("POST", `/games/${gameId}/registrations/${encodeURIComponent(playerId)}/action`, {action, ...(extra || {})});
+  const body = {action, ...(extra || {})};
+  if (action === "rebuy" && !body.opId) body.opId = uid();   // a retry after it landed is the same re-buy
+  await v2FetchWithRetry("POST", `/games/${gameId}/registrations/${encodeURIComponent(playerId)}/action`, body, TOUR_RETRIES);
   return v2LoadGameFull(gameId);
 }
 async function v2TourApprove(gameId, playerId){
-  await v2Fetch("POST", `/games/${gameId}/registrations/${encodeURIComponent(playerId)}/approve`);
+  await v2FetchWithRetry("POST", `/games/${gameId}/registrations/${encodeURIComponent(playerId)}/approve`, undefined, TOUR_RETRIES);
   return v2LoadGameFull(gameId);
 }
 async function v2TourRemoveReg(gameId, playerId){
-  await v2Fetch("DELETE", `/games/${gameId}/registrations/${encodeURIComponent(playerId)}`);
+  await v2FetchWithRetry("DELETE", `/games/${gameId}/registrations/${encodeURIComponent(playerId)}`, undefined, TOUR_RETRIES);
   return v2LoadGameFull(gameId);
 }
 
@@ -5466,7 +5474,9 @@ function validateSetupChips(chips){
 // rejected save doesn't masquerade as a connection problem.
 function saveFailedText(e){
   try { logSync(`save failed: ${e && e.status ? e.status + " " : ""}${e && e.message}`); } catch(_) {}
+  if (e && e.status >= 500) return `השרת לא הצליח לשמור כרגע (${e.status}) - כנראה מתעדכן לגרסה חדשה. נסו שוב בעוד דקה.`;
   if (e && e.status) return `שמירה נכשלה: ${e.message} (${e.status})`;
+  if (e && /timed out/.test(e.message || "")) return "השרת לא ענה בזמן - אולי מתעדכן לגרסה חדשה. נסו שוב בעוד דקה.";
   return "שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב.";
 }
 function setupSaveErrorText(e, tab){
@@ -5867,11 +5877,13 @@ function tourPlayers(g, c, k){
 // Entering a chip count: by the club's chips (a count under each, like cash) or by typing
 // the total. box: whose count it is (a player id) - the inputs and the send button sit in it.
 let tourCcMode = "count";
-function tourCcWidget(c, t, box, initial){
+// key / level: the break the count belongs to - taken when the window opens, so a count sent
+// just after the break ended (or the admin pressed המשך) still lands on that break.
+function tourCcWidget(c, t, box, initial, key, level){
   const cvs = (c && c.chipValues) || [], defaults = [25, 100, 500, 1000, 5000, 10000];
   const pts = cvs.map((cv, i) => +((t.points || {})[cv.id] ?? defaults[i]) || 0);
   const mode = cvs.length ? tourCcMode : "sum";
-  return `<div data-cc-box="${esc(box)}">
+  return `<div data-cc-box="${esc(box)}" data-cc-key="${esc(key || "")}" data-cc-level="${level || ""}">
     ${cvs.length ? `<div class="gender-seg cc-mode" role="group"><button type="button" class="${mode === "count" ? "on" : ""}" data-cc-mode="count">ספירה לפי ז'יטונים</button><button type="button" class="${mode === "sum" ? "on" : ""}" data-cc-mode="sum">הקלדת סכום</button></div>` : ""}
     ${mode === "count" ? `<div class="lv-types${cvs.length >= 5 ? " many" : ""}" style="grid-template-columns:repeat(${cvs.length},1fr);">
         ${cvs.map((cv, i) => cv.image ? `<img src="${esc(cv.image)}" alt="" draggable="false">` : `<span class="lv-type-noimg">${pts[i]}</span>`).join("")}
@@ -5887,7 +5899,7 @@ function tourChipCountHtml(g, c, t, mine, key, level){
   const done = mine.chipsKey === key;
   return `<fieldset class="leave-frame setup-frame cc-frame"><legend>🪙 ספירת ז'יטונים · סוף שלב ${level}</legend>
     ${done && !tourCcEdit ? `<div class="cc-done">✓ דיווחת <b>${Number(mine.chips).toLocaleString("en-US")}</b> ז'יטונים <button type="button" class="lb-cancel" data-cc-edit>עדכן</button></div>`
-      : tourCcWidget(c, t, mine.playerId, done ? mine.chips : null)}
+      : tourCcWidget(c, t, mine.playerId, done ? mine.chips : null, key, level)}
   </fieldset>`;
 }
 let tourCcEdit = false;
@@ -5946,7 +5958,7 @@ function renderTourClock(g, c, isAdmin){
         <button type="button" class="lb-cancel" data-cc-admin-toggle style="margin-top:6px">${tourCcAdmin ? "סגור ▴" : "✎ הזנת ספירה לשחקן (מי שאין לו טלפון) ▾"}</button>
         ${!tourCcAdmin ? "" : (() => {
           const sel = tourCcFor && P.alive.find(r => r.playerId === tourCcFor);
-          if (sel) return `<div class="cc-admin"><div class="cc-for-h"><b>${esc(sel.name || "")}</b>${sel.chipsKey === P.key ? ` · דווח ${Number(sel.chips).toLocaleString("en-US")}` : ""} <button type="button" class="lb-cancel" data-cc-pick="">שחקן אחר</button></div>${tourCcWidget(c, t, sel.playerId, sel.chipsKey === P.key ? sel.chips : null)}</div>`;
+          if (sel) return `<div class="cc-admin"><div class="cc-for-h"><b>${esc(sel.name || "")}</b>${sel.chipsKey === P.key ? ` · דווח ${Number(sel.chips).toLocaleString("en-US")}` : ""} <button type="button" class="lb-cancel" data-cc-pick="">שחקן אחר</button></div>${tourCcWidget(c, t, sel.playerId, sel.chipsKey === P.key ? sel.chips : null, P.key, level)}</div>`;
           return `<div class="cc-admin"><div class="tf-in"><input type="text" data-cc-find placeholder="חיפוש שחקן" autocomplete="off"></div>
             <div class="cc-find-list">${P.alive.map(r => `<button type="button" class="reg-pick" data-cc-pick="${esc(r.playerId)}" data-name="${esc(String(r.name || "").toLowerCase())}">${tourAvatar(r.name, 0, r.playerId, g.communityId)}<span>${esc(r.name || "")}</span><small>${r.chipsKey === P.key ? "✓ " + Number(r.chips).toLocaleString("en-US") : "לא דיווח"}</small></button>`).join("")}</div></div>`;
         })()}</div>`;
@@ -11738,9 +11750,11 @@ function attachHandlers(){
     const chips = sumEl ? parseInt(sumEl.value, 10) : ccTotal(box);
     if (!(chips >= 0)) { showAlert("הזינו כמות ז'יטונים"); return; }
     const g = getGame(tourGid), c = getCommunity(g.communityId), k = tourClockInfo(g, c);
+    const key = box.dataset.ccKey || tourBreakKey(g, k), level = Number(box.dataset.ccLevel) || k.curLevel.level;
+    if (!key) { showAlert("ההפסקה כבר נגמרה - הספירה תיפתח שוב בהפסקה הבאה."); return; }
     tourCcEdit = false;
     if (pid !== tourMyPid(g)) tourCcFor = null;   // the admin's entry: back to the search
-    tourAct(el, () => v2TourAction(tourGid, pid, "chips", {chips, key: tourBreakKey(g, k), level: k.curLevel.level}));
+    tourAct(el, () => v2TourAction(tourGid, pid, "chips", {chips, key, level}));
   });
   app.querySelectorAll("[data-cc-admin-toggle]").forEach(el => el.onclick = () => { tourCcAdmin = !tourCcAdmin; tourCcFor = null; render(); });
   app.querySelectorAll("[data-cc-pick]").forEach(el => el.onclick = () => { tourCcFor = el.dataset.ccPick || null; render(); });
