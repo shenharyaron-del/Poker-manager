@@ -1406,14 +1406,8 @@ html.theme-light .tour-full-link{color:#9a5f12;}
 .tour-tbl td.ltr{direction:ltr;}
 .tour-tbl tr.brk td{color:#3fb383;font-weight:800;}
 .tour-tbl td{white-space:nowrap;}
-.tour-tbl :is(th,td):nth-child(4){width:56px;}
+.tour-tbl :is(th,td):nth-child(4){width:64px;}
 .tour-tbl td.off{color:var(--muted);}
-.tour-tbl th.ante-th{padding-top:2px;}
-.ante-tg{display:inline-flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;padding:0 0 4px;font:inherit;font-weight:700;color:var(--muted);cursor:pointer;}
-.ante-sw{position:relative;width:26px;height:14px;border-radius:7px;background:rgba(127,127,127,.45);transition:background .15s;}
-.ante-sw::after{content:"";position:absolute;top:2px;inset-inline-start:2px;width:10px;height:10px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.35);transition:inset-inline-start .15s;}
-.ante-tg.on .ante-sw{background:#f2c14e;}
-.ante-tg.on .ante-sw::after{inset-inline-start:14px;}
 /* the small sliders: breaks strip (green, like the break rows) and over the table's columns (gold) */
 .tf-sl.mini{margin:0;}
 .tf-sl.mini .tf-sl-mm{display:none;}
@@ -5384,7 +5378,7 @@ function setupModeSwitchHtml(communityId, on){
 // ---------- Tournament (club profile) - stage 1: the screen only, nothing saved ----------
 const TOUR_DEFAULTS = {tab: "struct", fee: 20, prize: 80, chips: 10000, early: 5, rebuys: 0, rebuyChips: 10000,
   rebuyLevels: 4, addOn: 0, addOnChips: 10000, addOnPrice: null, addOnExtra: 5,
-  rebuyPrice: null, rebuyFee: 0, addOnFee: 0, estRebuys: null, estAddOns: null, fullTable: 0, level: 15, jump: 1, breakEvery: 70, breakLen: 10, speed: 2, ante: 1, payoutPct: 20, entries: 16, points: {}};
+  rebuyPrice: null, rebuyFee: 0, addOnFee: 0, estRebuys: null, estAddOns: null, fullTable: 0, level: 15, jump: 1, breakEvery: 70, breakLen: 10, speed: 2, ante: 0.25, payoutPct: 20, entries: 16, points: {}};
 // Blind speed presets: a level's length and how many rungs of the blind ladder each level
 // climbs. Moving either slider by hand makes it "מותאם אישית" (4).
 // A home tournament of ~16 players runs about 6 / 4.5 / 3 hours.
@@ -5401,8 +5395,8 @@ const TOUR_LADDER_25 = [25, 50, 75, 100, 150, 200, 300, 400, 500, 600, 800, 1000
 // "משך הפסקה": 1-5 minutes one by one, then 5 at a time up to 30 (the slider walks this list).
 const TOUR_BREAK_LENS = [0, 1, 2, 3, 4, 5, 10, 15, 20, 25, 30];   // 0 = no breaks
 // The blind levels for a starting stack: the first small blind is the ladder's first rung at
-// or over stack/200 (100 big blinds deep, the usual home-game start), each level `jump` rungs up; a big-blind ante (the
-// big blind's player pays one big blind for the table) from level 3. Breaks: every `breakEvery` minutes (play + break - a round number,
+// or over stack/200 (100 big blinds deep, the usual home-game start), each level `jump` rungs up; an ante (each player,
+// a share of the small blind: ¼ / ½ / all, in whole chips) from level 3. Breaks: every `breakEvery` minutes (play + break - a round number,
 // e.g. 60), the break taking that cycle's last minutes - with a 2-minute break, play 0-58,
 // break 58-60, play again from 60 (the level before the break is that much shorter).
 function tourBlindLevels(t){
@@ -5427,7 +5421,7 @@ function tourBlindLevels(t){
     let end = minute + t.level;
     const breakNow = end > nextBreak - 5;
     if (breakNow) end = nextBreak;
-    rows.push({level: lvl + 1, from: minute, to: end, sb, bb, ante: t.ante && lvl >= 2 ? bb : 0});
+    rows.push({level: lvl + 1, from: minute, to: end, sb, bb, ante: t.ante && lvl >= 2 ? Math.max(small, Math.round(sb * t.ante / small) * small) : 0});
     minute = end; lvl++;
     // With an add-on there is always a break when the re-buy period ends: the regular one if
     // it falls there, made longer by addOnExtra - otherwise one is added (10 minutes when
@@ -5448,6 +5442,7 @@ function tourBlindLevels(t){
 function tourSlText(v, unit){
   if (unit === "שלבים" && v === 1) return "שלב אחד";
   if (unit === "מדרגות" && v === 1) return "מדרגה אחת";
+  if (unit === "ante") return {0.25: "¼", 0.5: "½", 1: "מלא"}[v] || "ללא";   // a share of the small blind
   if (unit === "דק' משחק") {   // "הפסקה אחרי" reads on: "... אחרי שעה ו-15 דק'"
     if (v < 60) return `${v} דק'`;
     const h = Math.floor(v / 60), m = v % 60, hs = h === 1 ? "שעה" : h === 2 ? "שעתיים" : `${h} שעות`;
@@ -9294,7 +9289,6 @@ function renderModal(m){
       for (let e = 1; e <= 40; e++) { const pl = tourPlacesPaid(e, t.payoutPct); const g = groups[groups.length - 1]; if (g && g.pl === pl) g.to = e; else groups.push({pl, from: e, to: e}); }
       const cols = 4;
       // ante on/off: a small switch in the ante column's header
-      const anteSw = `<button type="button" class="ante-tg${t.ante ? " on" : ""}" data-tour-seg="ante" data-v="${t.ante ? 0 : 1}" aria-pressed="${t.ante ? "true" : "false"}" aria-label="אנטה"><span class="ante-sw"></span></button>`;
       inner = `
         <fieldset class="leave-frame setup-frame"><legend>קניית כניסה ראשונית (Buy-in)</legend>
           <div class="tf"><span>סכום כניסה כולל</span>${money("total", (+t.fee || 0) + (+t.prize || 0))}</div>
@@ -9320,7 +9314,7 @@ function renderModal(m){
           ${t.speed === 4 ? `<p class="tour-note tour-cust-note">נבחר כי הזזת סליידר · "רגיל" מחזיר לברירת המחדל</p>` : ""}
           <div class="tour-brk-strip">${slider("breakEvery", `<i class="tf-cup">☕ </i>הפסקה אחרי`, "דק' משחק", 30, 180, t.breakEvery, null, -t.breakLen, !t.breakLen, "mini")}${slider("breakLen", "למשך", "דק'", 0, 30, t.breakLen, TOUR_BREAK_LENS, 0, false, "mini")}</div>
           <table class="tour-tbl"><thead>
-            <tr class="tour-ctl"><th></th><th>${slider("level", "אורך שלב", "דק'", 5, 60, t.level, TOUR_LEVEL_LENS, 0, false, "mini gold")}</th><th>${slider("jump", "קפיצה", "מדרגות", 1, 3, t.jump, [1, 2, 3], 0, false, "mini gold")}</th><th class="ante-th">${anteSw}</th></tr>
+            <tr class="tour-ctl"><th></th><th>${slider("level", "אורך שלב", "דק'", 5, 60, t.level, TOUR_LEVEL_LENS, 0, false, "mini gold")}</th><th>${slider("jump", "קפיצה", "מדרגות", 1, 3, t.jump, [1, 2, 3], 0, false, "mini gold")}</th><th>${slider("ante", "אנטה", "ante", 0, 1, t.ante, [0, 0.25, 0.5, 1], 0, false, "mini gold")}</th></tr>
             <tr><th>רמה</th><th>טווח זמן</th><th>בליינדים</th><th>אנטה</th></tr></thead><tbody>
             ${shown.map(r => (r.brk
               ? `<tr class="brk"><td>☕</td><td class="ltr">${r.from + 1}–${r.to}</td><td colspan="${cols - 2}">${r.addOn ? "הפסקה + Add-on" : "הפסקה"}</td></tr>`
