@@ -1423,6 +1423,10 @@ html.theme-light .ng-tour-edit{color:#9a5f12;border-color:#c8922a;}
 .reg-row .nm small{display:block;font-weight:500;font-size:13px;color:var(--muted);}
 .reg-ok{padding:7px 12px;border-radius:10px;border:none;background:linear-gradient(180deg,#5fe0a8,#2fa877);color:#062a1b;font:inherit;font-weight:800;font-size:15px;cursor:pointer;}
 .reg-no{padding:7px 10px;border-radius:10px;border:1px solid rgba(239,68,68,.6);background:transparent;color:#f87171;font:inherit;font-weight:700;font-size:15px;cursor:pointer;}
+.pot-now{border:1px solid rgba(212,175,55,.5);border-radius:12px;padding:8px 12px;margin:0 0 12px;text-align:center;}
+.pot-now-h{font-size:16px;font-weight:700;} .pot-now-h b{color:var(--gold);font-size:20px;margin-inline-start:4px;} html.theme-light .pot-now-h b{color:#9a5f12;}
+.pot-now-sub{font-size:13.5px;color:var(--muted);margin-top:1px;}
+.pot-now-pl{display:flex;justify-content:center;gap:14px;margin-top:4px;font-size:15.5px;font-weight:700;direction:ltr;}
 .reg-new{font-size:11.5px;font-weight:700;padding:1px 7px;border-radius:999px;background:#2563eb;color:#fff;margin-inline-start:6px;vertical-align:middle;}
 .reg-rm{background:none;border:none;color:var(--muted);font:inherit;font-size:14px;text-decoration:underline;cursor:pointer;}
 .ad-pend{border-color:#e0a43a !important;}
@@ -5541,6 +5545,18 @@ function tourPayReadHtml(t){
     <button type="button" class="tour-full-link" data-lobby-full="pay">${tourLobbyFull.pay ? "הסתר ▴" : "טבלה מלאה ▾"}</button>
   </fieldset>`;
 }
+// The prize pot so far (registered x the prize part of the entry) and what each paid place
+// would get with this many players.
+function tourPotNowHtml(t, count){
+  if (!count) return "";
+  const pot = count * (+t.prize || 0), places = Math.min(count, tourPlacesPaid(count, t.payoutPct));
+  const sh = tourPrizeShares(places).slice(0, count), medals = ["🥇", "🥈", "🥉"];
+  const amounts = sh.map(x => Math.round(pot * x / 100));
+  const shown = amounts.slice(0, 3).map((a, i) => `<span>${medals[i]} ₪${a.toLocaleString("en-US")}</span>`).join("");
+  return `<div class="pot-now"><div class="pot-now-h">קופת פרסים עד כה <b>₪${pot.toLocaleString("en-US")}</b></div>
+    <div class="pot-now-sub">${count} רשומים · ${places} מקומות בפרס${places > 3 ? ` (עוד ${places - 3} מקומות)` : ""}</div>
+    <div class="pot-now-pl" dir="ltr">${shown}</div></div>`;
+}
 function tourAvatar(name, i){
   const colors = ["#f2c14e", "#6ee7b7", "#93c5fd", "#fca5a5", "#d8b4fe", "#fdba74", "#a7f3d0", "#fde68a"];
   const ini = String(name || "?").trim().split(/\s+/).map(w => w[0]).join("").slice(0, 2);
@@ -5557,6 +5573,7 @@ function renderTourGame(g, c){
   if (isAdmin) {
     return `<div class="tour-page">${head("ניהול הרשמה")}
       <div class="ad-sum"><div><b>${approved.length}</b>רשומים</div><div><b>${pending.length}</b>ממתינים</div><div><b>₪${n(approved.length * (+t.prize || 0))}</b>בקופה</div></div>
+      ${tourPotNowHtml(t, approved.length)}
       ${pending.length ? `<fieldset class="leave-frame setup-frame ad-pend"><legend>⏳ ממתינים לאישור (${pending.length})</legend>
         ${pending.map((r, i) => `<div class="reg-row">${tourAvatar(r.name, i + 3)}<div class="nm">${esc(r.name || "")}${r.isNew ? `<span class="reg-new">חדש</span>` : ""}<small>${r.isNew ? "ערב ראשון במועדון · " : ""}${r.requestedAt ? `ביקש ב-${new Date(r.requestedAt).toLocaleTimeString("he-IL", {hour: "2-digit", minute: "2-digit"})}` : ""}</small></div>
           <button type="button" class="reg-no" data-reg-decline="${esc(r.playerId)}" aria-label="דחה">✕</button><button type="button" class="reg-ok" data-reg-approve="${esc(r.playerId)}">✓ אשר</button></div>`).join("")}
@@ -5580,6 +5597,7 @@ function renderTourGame(g, c){
   return `<div class="tour-page">${head("")}
     <div class="lb-count"><span>נרשמו <b>${approved.length}</b></span><span>ממתינים <b>${pending.length}</b></span></div>
     ${status}
+    ${tourPotNowHtml(t, approved.length)}
     ${approved.length ? `<div class="lb-names">${approved.map(r => `<span class="${r.playerId === myPid ? "me" : ""}">${esc(r.playerId === myPid ? "אתה" : (r.name || ""))}</span>`).join("")}</div>` : ""}
     ${tourInfoHtml(t)}${tourBlindsReadHtml(t, c)}${tourPayReadHtml(t)}
   </div>`;
