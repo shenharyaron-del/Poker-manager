@@ -1577,6 +1577,11 @@ html.theme-light.theme-blue .ck-brk .ck-card .ck-lvl{color:#a7f3d0;}
 /* the main clock button (השהה / המשך) gold on every theme */
 html.theme-light .ck-row button.main{background:linear-gradient(180deg,#fde68a,#f2c14e 45%,#c8922a);color:#2a1d05;border:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.6),inset 0 -2px 0 rgba(120,70,0,.4),0 3px 0 #8a5a12,0 4px 10px rgba(0,0,0,.25);}
 .cc-frame .lv-types input::placeholder,.cc-frame .tf-in input::placeholder{color:var(--text);opacity:.6;}
+/* the search boxes in the clock's panels: soft, not a dark slab */
+.ck-panel .tf-in input,.cc-admin .tf-in input{background:rgba(255,255,255,.1);border:1px solid rgba(212,175,55,.45);color:var(--text);}
+.ck-panel .tf-in input::placeholder,.cc-admin .tf-in input::placeholder{color:var(--text);opacity:.55;}
+html.theme-light .ck-panel .tf-in input,html.theme-light .cc-admin .tf-in input{background:rgba(255,255,255,.55);border-color:rgba(154,95,18,.4);color:#1c1917;}
+html.theme-light.theme-blue .ck-panel .tf-in input,html.theme-light.theme-blue .cc-admin .tf-in input{background:rgba(255,255,255,.3);border-color:rgba(255,227,154,.6);color:#0e2633;}
 .pend-note{color:#f3c26b;font-weight:700;} html.theme-light .pend-note{color:#9a3412;}
 .info-tip{position:fixed;z-index:9999;max-width:260px;padding:8px 12px;border-radius:10px;background:#1c1917;color:#fde68a;font-size:14px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.4);transition:opacity .3s;}
 .info-tip.out{opacity:0;}
@@ -6043,7 +6048,7 @@ function renderTourClock(g, c, isAdmin){
     : tourPanel === "out"
     ? `<div class="ck-panel"><div class="ck-panel-h">שחקן שיצא מהטורניר<button type="button" class="lb-cancel" data-ck-panel="">סגור</button></div>
         <div class="tf-in"><input type="text" data-find placeholder="חיפוש שחקן" autocomplete="off"></div>
-        <div class="cc-find-list" data-find-list>${P.alive.map((r, i) => `<div class="reg-row" data-name="${esc(String(r.name || "").toLowerCase())}">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}</div><button type="button" class="reg-out" data-ra="bust" data-pid="${esc(r.playerId)}" data-confirm="לסמן ש${esc(r.name || "")} יצא מהטורניר?">יצא</button></div>`).join("")}</div></div>`
+        <div class="cc-find-list" data-find-list>${P.alive.filter(r => !(P.key && r.chipsKey === P.key)).map((r, i) => `<div class="reg-row" data-name="${esc(String(r.name || "").toLowerCase())}">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}</div><button type="button" class="reg-out" data-ra="bust" data-pid="${esc(r.playerId)}" data-confirm="לסמן ש${esc(r.name || "")} יצא מהטורניר?">יצא</button></div>`).join("")}</div></div>`
     : (() => {
         // requests first, then any registered player - for whoever has no phone
         const aoOpen = t.addOn && k.row.brk && k.row.addOn;
