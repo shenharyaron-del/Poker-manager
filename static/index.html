@@ -73,6 +73,7 @@ body{
 @keyframes agbLive{0%{box-shadow:0 0 0 0 rgba(239,68,68,1),0 0 0 0 rgba(239,68,68,.8);}60%{box-shadow:0 0 0 11px rgba(239,68,68,.45),0 0 0 6px rgba(239,68,68,.6);}100%{box-shadow:0 0 0 18px rgba(239,68,68,0),0 0 0 12px rgba(239,68,68,0);}}
 .active-games-bar .agb-game{background:linear-gradient(180deg,#fde68a,#f5c542 55%,#d4a017)!important;color:#1c1917!important;border:none!important;box-shadow:0 3px 8px rgba(0,0,0,.35);}
 .active-games-bar .agb-game{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:20px;}
+.active-games-bar .agb-tour{display:inline-block;font-size:13px;font-weight:800;padding:1px 8px;margin-inline-end:6px;border-radius:999px;background:#1c1917;color:#fde68a;vertical-align:middle;}
 .active-games-bar .agb-label{display:flex;flex-direction:column;align-items:flex-start;min-width:0;line-height:1.2;}
 .active-games-bar .agb-name,.active-games-bar .agb-club{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .active-games-bar .agb-name{font-size:21px;font-weight:800;}
@@ -7124,8 +7125,13 @@ function render(){
   // or already left it: a bar at the bottom with a quick way back to each of them. Taps go
   // through [data-open-game], the same handler as the game cards on the club screen.
   const myPid = g => myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+  // A tournament night: mine while I'm registered (or asked) and still in; open to me while
+  // registration (or late registration) is open.
+  const myReg = g => { const pid = myPid(g); return pid && (g.registrations || []).find(r => r.playerId === pid); };
+  const tourRegOpen = g => { const k = tourClockInfo(g, getCommunity(g.communityId)); return !k || k.rbLeft > 0; };
   const activeGames = nav.screen === "table" ? [] : (state.games || []).filter(g => {
     const pid = myPid(g);
+    if (g.gameType === "tournament") { const r = myReg(g); return !g.closed && !!r && !r.bustedAt; }
     // Still mine while I play, and after I've left as long as the night is still going -
     // not closed, or closed but someone hasn't left yet (the club screen calls that "פעיל").
     return pid && (g.seats || []).includes(pid) && (!(pid in (g.cashouts || {})) || !g.closed || gameStatus(g).key === "active");
@@ -7138,7 +7144,9 @@ function render(){
   const openedRecently = g => g.createdAt ? Date.now() - new Date(g.createdAt).getTime() < 24*60*60*1000 : g.date === today;
   const openGames = nav.screen === "table" ? [] : (state.games || []).filter(g => {
     const pid = myPid(g);
-    if (!pid || g.closed || (g.seats || []).includes(pid) || !openedRecently(g)) return false;
+    if (!pid || g.closed || !openedRecently(g)) return false;
+    if (g.gameType === "tournament") return !myReg(g) && tourRegOpen(g);
+    if ((g.seats || []).includes(pid)) return false;
     const st = gameStatus(g).key;
     return (st === "waiting" || st === "notStarted" || st === "active") && hasFreeSeat(g);
   });
@@ -7152,6 +7160,15 @@ function render(){
       <div class="agb-title"><span class="agb-live"></span>${barTitle}</div>
       ${barGames.map(g => {
         const cname = (getCommunity(g.communityId) || {}).name || "";
+        if (g.gameType === "tournament") {
+          // 🏆, how many registered, and where it stands (or that I'm registered / waiting)
+          const regs = g.registrations, r = myReg(g);
+          const n = regs ? regs.filter(x => x.status === "approved").length : (g.regApproved || 0);
+          const k = tourClockInfo(g, getCommunity(g.communityId));
+          const where = !k ? "רישום פתוח" : (k.cs.reason === "break" || k.row.brk) ? "הפסקה" : `שלב ${k.row.level} · ${fmtBlinds(k.row)}`;
+          const mineText = r ? (r.status === "pending" ? "ממתין לאישור" : (myIdentity.gender === "female" ? "את רשומה" : "אתה רשום")) : "";
+          return `<button type="button" class="btn btn-primary btn-block agb-game" data-open-game="${g.id}"><span class="agb-label"><span class="agb-name"><span class="agb-tour">🏆 טורניר</span>${esc(g.name || ilDate(g.date))}</span><span class="agb-club">${esc(cname)} · ${n} נרשמו · ${where}${mineText ? ` · ${mineText}` : ""}</span></span>${icon('chev')}</button>`;
+        }
         // Still playing - whoever already left doesn't count.
         const seated = (g.seats || []).filter(sid => sid && !(sid in (g.cashouts || {}))).length;
         const seatedText = seated === 0 ? "אין יושבים" : seated === 1 ? "יושב אחד" : `${seated} יושבים`;
