@@ -1383,9 +1383,15 @@ html.theme-light .tour-tabs button{background:rgba(255,255,255,.4);}
 html.theme-light .tf-unit{color:#9a5f12;}
 .tf-pair{display:flex;align-items:flex-end;gap:8px;}
 .tf-plus{flex:0 0 auto;padding-bottom:20px;font-size:20px;font-weight:800;color:var(--muted);}
-.tf-inline{flex-direction:row;align-items:center;gap:8px;margin-top:10px;}
-.tf-inline .tf-in{width:84px;flex:0 0 auto;}
-.tf-inline .tf-in input{padding-left:12px;text-align:center;}
+.tour-pot{border:1px solid rgba(212,175,55,.45);border-radius:12px;padding:8px 12px;margin:10px 0;font-size:15px;}
+.tour-pot .r{display:flex;justify-content:space-between;align-items:center;padding:3px 0;gap:8px;}
+.tour-pot .q{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:14px;}
+.tour-pot .q .tf-in{width:62px;flex:0 0 auto;}
+.tour-pot .q .tf-in input{padding:4px;text-align:center;font-size:15px;}
+.tour-pot .tot{border-top:1.5px solid rgba(212,175,55,.5);margin-top:4px;padding-top:6px;font-weight:800;color:var(--gold);font-size:17px;}
+html.theme-light .tour-pot .tot{color:#9a5f12;}
+.tour-full-link{display:block;margin:8px auto 0;background:none;border:none;font:inherit;font-size:15px;font-weight:700;color:var(--gold);text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
+html.theme-light .tour-full-link{color:#9a5f12;}
 .tf-seg{display:flex;border:1px solid var(--gold);border-radius:10px;overflow:hidden;}
 .tf-seg button{flex:1;padding:8px 2px;font:inherit;font-size:15px;font-weight:700;background:transparent;border:none;border-inline-start:1px solid rgba(212,175,55,.35);color:var(--text);cursor:pointer;white-space:nowrap;}
 .tf-seg button:first-child{border-inline-start:none;}
@@ -5387,7 +5393,8 @@ function setupModeSwitchHtml(communityId, on){
 }
 // ---------- Tournament (club profile) - stage 1: the screen only, nothing saved ----------
 const TOUR_DEFAULTS = {tab: "struct", fee: 20, prize: 80, chips: 10000, early: 5, rebuys: 0, rebuyChips: 10000,
-  rebuyLevels: 3, addOn: 0, addOnChips: 10000, addOnPrice: 100, addOnExtra: 5, level: 20, jump: 1, breakEvery: 70, breakLen: 10, speed: 2, ante: 1, payoutPct: 20, entries: 16, points: {}};
+  rebuyLevels: 3, addOn: 0, addOnChips: 10000, addOnPrice: null, addOnExtra: 5,
+  rebuyPrice: null, rebuyFee: 0, addOnFee: 0, estRebuys: null, estAddOns: null, fullTable: 0, level: 20, jump: 1, breakEvery: 70, breakLen: 10, speed: 2, ante: 1, payoutPct: 20, entries: 16, points: {}};
 // Blind speed presets: a level's length and how many rungs of the blind ladder each level
 // climbs. Moving either slider by hand makes it "מותאם אישית" (4).
 const TOUR_PRESETS = {1: {level: 30, jump: 1}, 2: {level: 20, jump: 1}, 3: {level: 12, jump: 2}};
@@ -5412,9 +5419,17 @@ function tourBlindLevels(t){
   const ladder = TOUR_LADDER_25.map(v => v / 25 * small);
   const start = Math.max(0, ladder.findIndex(v => v >= (t.chips || 0) / 400));
   const jump = Math.max(1, t.jump || 1);
+  // How many levels: until the big blind reaches 1/20 of all the chips in play (by then the
+  // tournament is about over) - 6 to 30 levels; 9 when the chips in play aren't given.
+  let n = 9;
+  if (t.totalChips > 0) {
+    n = 1;
+    while (n < 30 && ladder[Math.min(ladder.length - 1, start + (n - 1) * jump)] * 2 * 20 < t.totalChips) n++;
+    n = Math.max(6, n);
+  }
   const cycle = Math.max(t.level, t.breakEvery), brk = Math.min(t.breakLen, cycle - 1);
   const rows = []; let minute = 0, lvl = 0, nextBreak = brk > 0 ? cycle - brk : Infinity;   // no breaks: never
-  while (lvl < 9) {
+  while (lvl < n) {
     const sb = ladder[Math.min(ladder.length - 1, start + lvl * jump)], bb = sb * 2;
     // A level that would run past the break is cut short at it; one that would leave less
     // than 5 minutes before it runs on to the break instead (no 2-minute levels).
@@ -5427,7 +5442,7 @@ function tourBlindLevels(t){
     // it falls there, made longer by addOnExtra - otherwise one is added (10 minutes when
     // breaks are off), and the regular breaks count again from after it.
     const addOnNow = !!t.addOn && lvl === t.rebuyLevels;
-    if ((breakNow && lvl < 9) || addOnNow) {
+    if ((breakNow && lvl < n) || addOnNow) {
       const len = addOnNow ? (brk || 10) + (+t.addOnExtra || 0) : brk;
       rows.push({brk: true, addOn: addOnNow, from: minute, to: minute + len}); minute += len;
       nextBreak = brk > 0 ? minute + cycle - brk : Infinity;
@@ -9264,7 +9279,20 @@ function renderModal(m){
       // the club's smallest chip (its points value) - every blind is a multiple of it
       const chipDefaults = [25, 100, 500, 1000, 5000, 10000];
       const small = Math.min(...(c.chipValues || []).map((cv, i) => +(t.points[cv.id] ?? chipDefaults[i]) || Infinity), Infinity);
-      const levels = tourBlindLevels(Object.assign({}, t, {small: isFinite(small) ? small : 25}));
+      // prices (re-buy / add-on follow the buy-in until set) and the estimated prize pot
+      const total = (+t.fee || 0) + (+t.prize || 0);
+      const rebuyPrice = t.rebuyPrice ?? total, addOnPrice = t.addOnPrice ?? total;
+      const estRebuys = t.estRebuys ?? Math.round(t.entries / 2), estAddOns = t.estAddOns ?? Math.round(t.entries * 0.75);
+      const rebuyToPot = Math.max(0, rebuyPrice - (t.rebuyFee ? (+t.fee || 0) : 0));
+      const addOnToPot = Math.max(0, addOnPrice - (t.addOnFee ? (+t.fee || 0) : 0));
+      const pot = t.entries * (+t.prize || 0) + estRebuys * rebuyToPot + (t.addOn ? estAddOns * addOnToPot : 0);
+      const totalChips = t.entries * t.chips * (1 + (+t.early || 0) / 100) + estRebuys * t.rebuyChips + (t.addOn ? estAddOns * t.addOnChips : 0);
+      const levels = tourBlindLevels(Object.assign({}, t, {small: isFinite(small) ? small : 25, totalChips}));
+      // the table shows 4 levels; "טבלה מלאה" opens all of them
+      const cut = levels.findIndex(r => !r.brk && r.level === 5);
+      const shown = t.fullTable || cut < 0 ? levels : levels.slice(0, cut);
+      const nLevels = levels.filter(r => !r.brk).length, hours = Math.round(levels[levels.length - 1].to / 30) / 2;
+      const fmt = v => "₪" + Math.round(v).toLocaleString("en-US");
       const places = tourPlacesPaid(t.entries, t.payoutPct);
       const shares = tourPrizeShares(places);
       // entries 1..40 grouped by how many places they pay
@@ -9286,9 +9314,11 @@ function renderModal(m){
         </fieldset>
         <fieldset class="leave-frame setup-frame"><legend>הגדרות ריביי (Re-buy)</legend>
           <div class="tf-pair"><div class="tf"><span>כמות ריביי מותרת</span>${seg("rebuys", [[1, "1"], [2, "2"], [3, "3"], [0, "∞"]], t.rebuys)}</div><div class="tf"><span>ז'יטונים לריביי</span>${num("rebuyChips", t.rebuyChips)}</div></div>
+          <div class="tf-pair"><div class="tf"><span>מחיר ריביי</span>${money("rebuyPrice", rebuyPrice)}</div><div class="tf tf-wide"><span>דמי טיפול על ריביי</span>${seg("rebuyFee", [[0, "ללא - הכל לפרס", true], [1, "כמו בכניסה"]], t.rebuyFee)}</div></div>
           ${slider("rebuyLevels", "ריביי מותר במשך", "שלבים", 1, 9, t.rebuyLevels, [1, 2, 3, 4, 5, 6, 7, 8, 9])}
           <div class="tf"><span>Add-on בסוף זמן הריביי</span>${seg("addOn", [[0, "ללא"], [1, "יש Add-on"]], t.addOn)}</div>
-          ${t.addOn ? `<div class="tf-pair"><div class="tf"><span>מחיר Add-on</span>${money("addOnPrice", t.addOnPrice)}</div><div class="tf"><span>ז'יטונים ל-Add-on</span>${num("addOnChips", t.addOnChips)}</div></div>
+          ${t.addOn ? `<div class="tf-pair"><div class="tf"><span>מחיר Add-on</span>${money("addOnPrice", addOnPrice)}</div><div class="tf"><span>ז'יטונים ל-Add-on</span>${num("addOnChips", t.addOnChips)}</div></div>
+          <div class="tf"><span>דמי טיפול על Add-on</span>${seg("addOnFee", [[0, "ללא - הכל לפרס", true], [1, "כמו בכניסה"]], t.addOnFee)}</div>
           <div class="tf"><span>הארכת ההפסקה ל-Add-on</span>${seg("addOnExtra", [[0, "ללא"], [5, "+5 דק'"], [10, "+10 דק'"], [15, "+15 דק'"]], t.addOnExtra)}</div>
           <p class="tour-note">קנייה אחת לשחקן, בהפסקה שבסוף זמן הריביי - גם למי שלא נגמרו לו הז'יטונים. אם אין שם הפסקה, היא נוספת אוטומטית.</p>` : ""}
         </fieldset>
@@ -9299,11 +9329,12 @@ function renderModal(m){
           <table class="tour-tbl"><thead>
             <tr class="tour-ctl"><th></th><th>${slider("level", "אורך שלב", "דק'", 5, 60, t.level, TOUR_LEVEL_LENS, 0, false, "mini gold")}</th><th>${slider("jump", "קפיצה", "מדרגות", 1, 3, t.jump, [1, 2, 3], 0, false, "mini gold")}</th><th class="ante-th">${anteSw}</th></tr>
             <tr><th>רמה</th><th>טווח זמן</th><th>בליינדים</th><th>אנטה</th></tr></thead><tbody>
-            ${levels.map(r => (r.brk
+            ${shown.map(r => (r.brk
               ? `<tr class="brk"><td>☕</td><td class="ltr">${r.from + 1}–${r.to}</td><td colspan="${cols - 2}">${r.addOn ? "הפסקה + Add-on" : "הפסקה"}</td></tr>`
               : `<tr><td>${r.level}</td><td class="ltr">${r.from ? r.from + 1 : 0}–${r.to}</td><td class="ltr">${r.sb.toLocaleString("en-US")}/${r.bb.toLocaleString("en-US")}</td><td class="ltr${r.ante ? "" : " off"}">${r.ante ? r.ante.toLocaleString("en-US") : "–"}</td></tr>`)
               + (r === rbRow ? `<tr class="rb-end"><td colspan="${cols}"><div class="rb-line"><span>🔁 סוף זמן ריביי · דקה ${r.to}</span></div></td></tr>` : "")).join("")}
           </tbody></table>
+          ${cut >= 0 ? `<button type="button" class="tour-full-link" data-tour-full>${t.fullTable ? "הסתר ▴" : `טבלה מלאה - ${nLevels} שלבים · כ-${hours} שעות ▾`}</button>` : ""}
           <p class="tour-note">סולם בליינדים מקובל, בכפולות של הז'יטון הקטן · אנטה = בליינד גדול (Big Blind Ante) משלב 3</p>
         </fieldset>
         <fieldset class="leave-frame setup-frame"><legend>חלוקת פרסים (Payout Structure)</legend>
@@ -9311,9 +9342,14 @@ function renderModal(m){
           <table class="tour-tbl"><thead><tr><th>משתתפים</th><th>מקומות בפרס</th></tr></thead><tbody>
             ${groups.slice(0, 4).map(g => `<tr><td class="ltr">${g.from}–${g.to}</td><td>${g.pl}</td></tr>`).join("")}
           </tbody></table>
-          <div class="tf tf-inline"><span>חלוקה עבור</span>${num("entries", t.entries)}<span>משתתפים</span></div>
+          <div class="tour-pot">
+            <div class="r"><span class="q">${num("entries", t.entries)} כניסות × ${fmt(+t.prize || 0)}</span><b>${fmt(t.entries * (+t.prize || 0))}</b></div>
+            <div class="r"><span class="q">${num("estRebuys", estRebuys)} ריביי (משוער) × ${fmt(rebuyToPot)}</span><b>${fmt(estRebuys * rebuyToPot)}</b></div>
+            ${t.addOn ? `<div class="r"><span class="q">${num("estAddOns", estAddOns)} Add-on (משוער) × ${fmt(addOnToPot)}</span><b>${fmt(estAddOns * addOnToPot)}</b></div>` : ""}
+            <div class="r tot"><span>קופת פרסים</span><span>${fmt(pot)}</span></div>
+          </div>
           <table class="tour-tbl"><thead><tr><th>מקום</th><th>מהקופה</th><th>סכום</th></tr></thead><tbody>
-            ${shares.map((sh, i) => `<tr><td>${["🥇", "🥈", "🥉"][i] || ""} ${i + 1}</td><td class="ltr">${sh.toFixed(1)}%</td><td class="ltr">₪${Math.round(sh / 100 * t.entries * (+t.prize || 0))}</td></tr>`).join("")}
+            ${shares.map((sh, i) => `<tr><td>${["🥇", "🥈", "🥉"][i] || ""} ${i + 1}</td><td class="ltr">${sh.toFixed(1)}%</td><td class="ltr">${fmt(sh / 100 * pot)}</td></tr>`).join("")}
           </tbody></table>
         </fieldset>`;
     }
@@ -10638,6 +10674,7 @@ function attachHandlers(){
     // re-render in place (updateModal keeps the scroll position)
     const setTour = (patch) => updateModal({tour: Object.assign({}, TOUR_DEFAULTS, modal.tour, patch)});
     app.querySelectorAll("[data-tour-tab]").forEach(el => el.onclick = () => setTour({tab: el.dataset.tourTab}));
+    app.querySelectorAll("[data-tour-full]").forEach(el => el.onclick = () => setTour({fullTable: modal.tour.fullTable ? 0 : 1}));
     app.querySelectorAll("[data-tour-seg]").forEach(el => el.onclick = () => {
       const key = el.dataset.tourSeg, v = Number(el.dataset.v);
       // a speed preset sets the level length and the jump (מותאם אישית keeps them)
