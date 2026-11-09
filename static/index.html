@@ -1388,6 +1388,7 @@ html.theme-light .tf-unit{color:#9a5f12;}
 .tf-seg button:first-child{border-inline-start:none;}
 .tf-seg button.on{background:linear-gradient(180deg,#fde68a 0%,#f2c14e 45%,#c8922a 100%);color:#2a1d05;}
 .tf-sl{margin-bottom:12px;}
+.tf-sl.off{opacity:.4;pointer-events:none;}
 .tf-sl-pair{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .tf-sl-pair .tf-sl-top span,.tf-sl-pair .tf-sl-top b{font-size:14px;white-space:nowrap;}
 .tf-sl-top{display:flex;justify-content:space-between;align-items:baseline;}
@@ -5358,7 +5359,7 @@ function setupModeSwitchHtml(communityId, on){
 const TOUR_DEFAULTS = {tab: "struct", fee: 20, prize: 80, chips: 10000, early: 5, rebuys: 0, rebuyChips: 10000,
   level: 20, breakEvery: 60, breakLen: 10, payoutPct: 20, entries: 16, points: {}, blindEdits: {}};
 // "משך הפסקה": 1-5 minutes one by one, then 5 at a time up to 30 (the slider walks this list).
-const TOUR_BREAK_LENS = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30];
+const TOUR_BREAK_LENS = [0, 1, 2, 3, 4, 5, 10, 15, 20, 25, 30];   // 0 = no breaks
 // A "nice" chip amount: 1-2-2.5-3-4-5-6-8 × 10ⁿ.
 function niceChips(v){
   if (!(v > 0)) return 0;
@@ -5377,7 +5378,7 @@ function tourBlindLevels(t){
   const sb0 = niceChips(t.chips / 400) || 25;
   const mult = [1, 1.2, 1.6, 2, 3, 4, 6, 8, 10, 12, 16, 20];
   const cycle = Math.max(t.level, t.breakEvery), brk = Math.min(t.breakLen, cycle - 1);
-  const rows = []; let minute = 0, lvl = 0, nextBreak = cycle - brk;
+  const rows = []; let minute = 0, lvl = 0, nextBreak = brk > 0 ? cycle - brk : Infinity;   // no breaks: never
   while (lvl < 9) {
     const sb = niceChips(sb0 * mult[lvl]), bb = sb * 2;
     let end = minute + t.level;
@@ -9196,10 +9197,10 @@ function renderModal(m){
     const seg = (id, opts, cur) => `<div class="tf-seg">${opts.map(([v, l, long]) => `<button type="button" class="${String(v) === String(cur) ? "on" : ""}${long ? " long" : ""}" data-tour-seg="${id}" data-v="${v}">${l}</button>`).join("")}</div>`;
     // list: a slider that walks given values (by index) instead of a plain min..max range
     // shift: shown = value + shift ("הפסקה כל" shows the play minutes: the cycle less the break)
-    const slider = (id, label, unit, min, max, v, list, shift) => `
-      <div class="tf-sl"><div class="tf-sl-top"><span>${label}</span><b data-tour-sl-val="${id}">${v + (shift || 0)} ${unit}</b></div>
+    const slider = (id, label, unit, min, max, v, list, shift, off) => `
+      <div class="tf-sl${off ? " off" : ""}"><div class="tf-sl-top"><span>${label}</span><b data-tour-sl-val="${id}">${list && v === 0 ? "ללא" : off ? "—" : `${v + (shift || 0)} ${unit}`}</b></div>
         <input type="range" ${list ? `min="0" max="${list.length - 1}" step="1" value="${Math.max(0, list.indexOf(v))}" data-list="${list.join(",")}"` : `min="${min}" max="${max}" step="5" value="${v}"`} data-tour-slider="${id}" data-unit="${unit}" data-shift="${shift || 0}">
-        <div class="tf-sl-mm"><span>${(list ? list[0] : min) + (shift || 0)}</span><span>${(list ? list[list.length - 1] : max) + (shift || 0)}</span></div></div>`;
+        <div class="tf-sl-mm"><span>${list && list[0] === 0 ? "ללא" : (list ? list[0] : min) + (shift || 0)}</span><span>${(list ? list[list.length - 1] : max) + (shift || 0)}</span></div></div>`;
     const tabs = `<div class="tour-tabs"><button type="button" class="${t.tab === "chips" ? "on" : ""}" data-tour-tab="chips">ז'יטונים</button><button type="button" class="${t.tab === "struct" ? "on" : ""}" data-tour-tab="struct">מבנה טורניר</button></div>`;
     let inner;
     if (t.tab === "chips") {
@@ -9233,7 +9234,7 @@ function renderModal(m){
         </fieldset>
         <fieldset class="leave-frame setup-frame"><legend>זמני משחק והפסקות</legend>
           ${slider("level", "משך כל שלב בליינדים", "דקות", 5, 60, t.level)}
-          <div class="tf-sl-pair">${slider("breakEvery", "הפסקה כל", "דק' משחק", 30, 180, t.breakEvery, null, -t.breakLen)}${slider("breakLen", "משך הפסקה", "דק'", 1, 30, t.breakLen, TOUR_BREAK_LENS)}</div>
+          <div class="tf-sl-pair">${slider("breakEvery", "הפסקה כל", "דק' משחק", 30, 180, t.breakEvery, null, -t.breakLen, !t.breakLen)}${slider("breakLen", "משך הפסקה", "דק'", 1, 30, t.breakLen, TOUR_BREAK_LENS)}</div>
         </fieldset>
         <fieldset class="leave-frame setup-frame"><legend>מבנה בליינדים</legend>
           <table class="tour-tbl"><thead><tr><th>רמה</th><th>טווח זמן</th><th>בליינדים</th><th>אנטה</th></tr></thead><tbody>
@@ -10604,7 +10605,7 @@ function attachHandlers(){
     });
     app.querySelectorAll("[data-tour-slider]").forEach(el => {
       const val = () => el.dataset.list ? Number(el.dataset.list.split(",")[el.value]) : Number(el.value);
-      el.oninput = () => { const v = app.querySelector(`[data-tour-sl-val="${el.dataset.tourSlider}"]`); if (v) v.textContent = (val() + Number(el.dataset.shift || 0)) + " " + el.dataset.unit; };
+      el.oninput = () => { const v = app.querySelector(`[data-tour-sl-val="${el.dataset.tourSlider}"]`); if (v) v.textContent = el.dataset.list && val() === 0 ? "ללא" : (val() + Number(el.dataset.shift || 0)) + " " + el.dataset.unit; };
       el.onchange = () => setTour({[el.dataset.tourSlider]: val()});
     });
     // a field's value is selected on focus - typing replaces it
