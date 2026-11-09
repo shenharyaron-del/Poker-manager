@@ -1439,7 +1439,7 @@ html.theme-light .ck-chips span.rb{color:#065f46;border-color:#059669;background
 .ck-stats{display:flex;justify-content:space-around;font-size:13.5px;color:var(--muted);margin:2px 0 6px;}
 .ck-stats b{display:block;font-size:19px;color:var(--gold);} html.theme-light .ck-stats b{color:#9a5f12;}
 .ck-prz{border:1px solid rgba(212,175,55,.45);border-radius:14px;padding:8px 10px;margin:4px 0 8px;}
-.ck-prz .h{font-size:13.5px;color:var(--muted);margin-bottom:4px;}
+.ck-prz .h{font-size:13.5px;color:var(--muted);margin-bottom:4px;white-space:nowrap;}
 .ck-prz .pl{display:flex;justify-content:space-around;align-items:flex-end;}
 .ck-prz .pl div{font-size:12.5px;color:var(--muted);} .ck-prz .pl b{display:block;font-size:17px;color:var(--text);}
 .ck-prz .pl .gap{font-size:18px;align-self:center;}
@@ -1474,10 +1474,12 @@ html.theme-light .ck-row button{background:linear-gradient(180deg,#fffaf0,#eadfc
 .ck-sticky{position:sticky;top:0;z-index:6;padding:2px 0 10px;margin:0 -16px;padding-inline:16px;background:rgba(10,46,34,.94);backdrop-filter:blur(4px);}
 html.theme-light .ck-sticky{background:rgba(246,238,224,.95);}
 html.theme-light.theme-blue .ck-sticky{background:rgba(214,233,242,.95);}
-.ck-pages{display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;margin:0 -16px;align-items:flex-start;transition:height .2s;}
+.ck-pages{display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;margin:0 -16px;align-items:flex-start;}
 .ck-pages::-webkit-scrollbar{display:none;}
 .ck-page{flex:0 0 100%;scroll-snap-align:start;box-sizing:border-box;padding:0 16px;min-width:0;}
-.ck-dots{display:flex;justify-content:center;gap:8px;margin-top:6px;}
+.ck-dots{display:flex;justify-content:center;gap:10px;margin-top:6px;}
+.ck-dots button{font-size:15.5px !important;padding:5px 18px !important;}
+.ck-acts.solo button{flex:0 1 55%;font-size:17px !important;padding:12px 8px !important;font-weight:700;}
 .ck-dots button{background:none;border:1px solid rgba(212,175,55,.4);border-radius:999px;padding:3px 12px;font:inherit;font-size:13px;color:var(--muted);cursor:pointer;}
 .ck-dots button.on{background:rgba(242,193,78,.2);color:var(--text);border-color:#f2c14e;font-weight:700;}
 .ck-blinds-wrap{position:relative;}
@@ -5998,7 +6000,7 @@ function renderTourClock(g, c, isAdmin){
     ["out", "שחקן יצא", 0],
   ].filter(Boolean);
   if (tourPanel && !actList.some(a => a[0] === tourPanel)) tourPanel = null;
-  const acts = !isAdmin ? "" : `<div class="ck-acts">${actList
+  const acts = !isAdmin ? "" : `<div class="ck-acts${actList.length === 1 ? " solo" : ""}">${actList
     .map(([id, label, n]) => `<button type="button" class="${tourPanel === id ? "on" : ""}" data-ck-panel="${id}">${n ? `<span class="bd">${n}</span>` : ""}${label}</button>`).join("")}</div>`;
   const total = tourEntryTotal(t), nn = v => Number(v || 0).toLocaleString("en-US");
   const panel = !isAdmin || !tourPanel ? "" : tourPanel === "qr"
@@ -6049,7 +6051,7 @@ function renderTourClock(g, c, isAdmin){
       <div class="ck-sticky">${card}
         <div class="ck-dots"><button type="button" class="${tourClockPage ? "" : "on"}" data-ck-page="0">שעון</button><button type="button" class="${tourClockPage ? "on" : ""}" data-ck-page="1">דירוג ומבנה</button></div></div>
       <div class="ck-pages" data-ck-pages>
-        <div class="ck-page">${admin}${chips ? `<div class="ck-chips">${chips}</div>` : ""}${acts}${panel || `${adminAlerts}${me}${stats}${tourPrizesHtml(t, approved.length, tourPot(g, t))}`}${tools}</div>
+        <div class="ck-page">${admin}${chips ? `<div class="ck-chips">${chips}</div>` : ""}${acts}${panel || `<div class="ck-lower">${adminAlerts}${me}${stats}${tourPrizesHtml(t, approved.length, tourPot(g, t))}</div>`}${tools}</div>
         <div class="ck-page">${meOut}${tourStandingsHtml(P, myPid) || `<p class="lb-note">הדירוג יופיע אחרי הספירה הראשונה או היציאה הראשונה.</p>`}${tourClockBlindsHtml(k)}${tourClockFull ? `<div style="text-align:right">${tourPayReadHtml(t, approved.length)}</div>` : ""}</div>
       </div>
     </div>`;
@@ -11630,7 +11632,21 @@ function attachHandlers(){
       if (tourClockPage && pg) pages.scrollLeft = pg.offsetLeft - pages.children[0].offsetLeft;
       // as tall as the page on screen (the other one must not leave empty space to scroll)
       const fitH = () => { const cur = pages.children[tourClockPage]; if (cur) pages.style.height = cur.scrollHeight + "px"; };
+      // the part under the buttons grows (up to 1.5x) to take the free height - no scroll;
+      // what's still left is spread as space between its parts
+      const root = app.querySelector("[data-tour-scroll]"), lower = pages.children[0] && pages.children[0].querySelector(".ck-lower");
+      if (root && lower && !tourClockPage) {
+        lower.style.zoom = 1; fitH();
+        let z = 1;
+        while (z < 1.5) { lower.style.zoom = z + 0.05; fitH(); if (root.scrollHeight > root.clientHeight) { lower.style.zoom = z; break; } z += 0.05; }
+      }
       fitH();
+      if (root && lower && !tourClockPage) {
+        const ckEl = root.querySelector(".ck"), free = root.clientHeight - (ckEl ? ckEl.offsetHeight : root.scrollHeight);
+        const kids = [...lower.children];
+        if (free > 8 && kids.length) kids.forEach(k2 => { k2.style.marginTop = Math.min(40, free / (kids.length + 1) / (parseFloat(lower.style.zoom) || 1)) + "px"; });
+        fitH();
+      }
       pages.addEventListener("scroll", () => {
         const idx = Math.round(Math.abs(pages.scrollLeft) / pages.clientWidth);
         if (idx !== tourClockPage) { tourClockPage = idx; fitH(); app.querySelectorAll("[data-ck-page]").forEach(b => b.classList.toggle("on", Number(b.dataset.ckPage) === idx)); }
@@ -11739,6 +11755,7 @@ function attachHandlers(){
   const tourLevelNow = () => { const g = getGame(tourGid), k = g && tourClockInfo(g, getCommunity(g.communityId)); return k ? k.curLevel.level : null; };
   app.querySelectorAll("[data-ra]").forEach(el => el.onclick = async () => {
     if (el.dataset.confirm && !(await showConfirm(el.dataset.confirm, {okLabel: "כן", cancelLabel: "ביטול"}))) return;
+    if (el.dataset.ra === "bust" && tourPanel === "out") tourPanel = null;   // done: back to the normal view
     tourAct(el, () => v2TourAction(tourGid, el.dataset.pid, el.dataset.ra, {level: tourLevelNow()}));
   });
   app.querySelectorAll("[data-me-out]").forEach(el => el.onclick = async () => {
