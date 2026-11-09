@@ -1439,6 +1439,31 @@ html.theme-light .ck-row button{background:rgba(255,255,255,.5);}
 .ck-row button:disabled{opacity:.45;}
 .ck-row button.main{background:linear-gradient(180deg,#fde68a,#f2c14e 45%,#c8922a);color:#2a1d05;border:none;font-size:17px;}
 .ck-row.two{grid-template-columns:1fr 1fr;}
+.ck .setup-frame{text-align:right;margin-bottom:12px;}
+.my-pos{font-size:16px;margin:0 0 10px;padding:8px;border-radius:12px;background:rgba(242,193,78,.1);}
+.my-pos b{color:var(--gold);font-size:20px;} html.theme-light .my-pos b{color:#9a5f12;} .my-pos small{color:var(--muted);}
+.reg-out{background:none;border:1px solid rgba(239,68,68,.55);color:#f87171;border-radius:999px;padding:6px 16px;font:inherit;font-weight:700;font-size:15px;cursor:pointer;}
+html.theme-light .reg-out{color:#b91c1c;}
+.cc-rows{display:flex;flex-direction:column;gap:6px;}
+.cc-row{display:flex;align-items:center;gap:10px;}
+.cc-row img,.cc-noimg{width:38px;height:38px;border-radius:50%;object-fit:cover;flex-shrink:0;}
+.cc-noimg{border:1px dashed var(--muted);}
+.cc-pt{width:64px;color:var(--muted);font-size:14px;direction:ltr;text-align:left;}
+.cc-row input{flex:1;min-width:0;}
+.cc-total{text-align:center;margin-top:8px;font-size:16px;} .cc-total b{color:var(--gold);font-size:20px;} html.theme-light .cc-total b{color:#9a5f12;}
+.cc-done{text-align:center;font-size:16px;} .cc-done b{color:var(--gold);}
+.cc-check{border-radius:14px;padding:10px;margin:0 0 12px;font-size:14px;border:1px solid rgba(212,175,55,.45);color:var(--muted);}
+.cc-check b{color:var(--text);}
+.cc-check .big{font-size:16px;font-weight:800;margin-top:4px;color:var(--text);}
+.cc-check .sm{font-size:13.5px;margin-top:3px;}
+.cc-check.ok{border-color:#3fb383;background:rgba(63,179,131,.1);} .cc-check.ok .big{color:#6ee7b7;} html.theme-light .cc-check.ok .big{color:#047857;}
+.cc-check.bad{border-color:#ef4444;background:rgba(239,68,68,.1);} .cc-check.bad .big{color:#f87171;} html.theme-light .cc-check.bad .big{color:#b91c1c;}
+.cc-check.warn{border-color:#e0a43a;background:rgba(224,164,58,.1);}
+.st-tbl td{padding:5px 4px;} .st-tbl td.nm{text-align:right;font-weight:700;}
+.st-tbl tr.me td{background:rgba(242,193,78,.14);}
+.st-tbl tr.out td{color:var(--muted);font-weight:500;}
+.st-tbl small{display:block;font-size:12px;color:var(--muted);}
+.reg-row.out .nm{color:var(--muted);}
 .gc-wait{color:#f3c26b;font-weight:700;margin-top:2px;} html.theme-light .gc-wait{color:#b45309;}
 /* a tournament night: the lobby and the registration screen */
 .tour-page{padding:10px 16px 28px;max-width:560px;margin:0 auto;}
@@ -2916,6 +2941,10 @@ async function v2TourRegister(gameId, playerId, name, approve){
 }
 async function v2TourClock(gameId, action, extra){
   await v2Fetch("POST", `/games/${gameId}/tournament/clock`, {action, ...(extra || {})});
+  return v2LoadGameFull(gameId);
+}
+async function v2TourAction(gameId, playerId, action, extra){
+  await v2Fetch("POST", `/games/${gameId}/registrations/${encodeURIComponent(playerId)}/action`, {action, ...(extra || {})});
   return v2LoadGameFull(gameId);
 }
 async function v2TourApprove(gameId, playerId){
@@ -5659,15 +5688,80 @@ function tourClockInfo(g, c){
 const fmtClock = ms => { const s2 = Math.max(0, Math.ceil(ms / 1000)), m = Math.floor(s2 / 60); return m >= 60 ? `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}:${String(s2 % 60).padStart(2, "0")}` : `${String(m).padStart(2, "0")}:${String(s2 % 60).padStart(2, "0")}`; };
 const fmtBlinds = r => `${r.sb.toLocaleString("en-US")} / ${r.bb.toLocaleString("en-US")}`;
 // Prizes for the player: 1st-3rd, then (with 5+ paid places) the one before the bubble and the bubble.
-function tourPrizesHtml(t, count){
+// The prize pot: entries' prize part + re-buys and add-ons (less the fee when they carry one).
+function tourPot(g, t){
+  const approved = (g.registrations || []).filter(r => r.status === "approved");
+  const entry = tourEntryTotal(t), fee = +t.fee || 0;
+  const rb = Math.max(0, Number(t.rebuyPrice ?? entry) - (t.rebuyFee ? fee : 0));
+  const ao = Math.max(0, Number(t.addOnPrice ?? entry) - (t.addOnFee ? fee : 0));
+  return approved.reduce((sum, r) => sum + (+t.prize || 0) + (r.rebuys || []).length * rb + (r.addOnAt ? ao : 0), 0);
+}
+function tourPrizesHtml(t, count, potIn){
   if (!count) return "";
-  const pot = count * (+t.prize || 0), places = Math.min(count, tourPlacesPaid(count, t.payoutPct));
+  const pot = potIn ?? count * (+t.prize || 0), places = Math.min(count, tourPlacesPaid(count, t.payoutPct));
   const am = tourPrizeShares(places).slice(0, count).map(x => Math.round(pot * x / 100));
   const medals = ["🥇", "🥈", "🥉"];
   let idx = am.map((_, i) => i);
   if (places > 5) idx = [0, 1, 2, null, places - 2, places - 1];
   const cell = i => i === null ? `<div class="gap">…</div>` : `<div class="${i === places - 1 && places > 3 ? "bb" : ""}"><b>₪${am[i].toLocaleString("en-US")}</b>${i < 3 && !(i === places - 1 && places > 3) ? `${medals[i]} מקום ${i + 1}` : i === places - 1 && places > 3 ? `🫧 באבל · ${i + 1}` : `מקום ${i + 1}`}</div>`;
   return `<div class="ck-prz"><div class="h">פרסים לפי ${count} רשומים · ${places} מקומות בפרס</div><div class="pl" dir="ltr">${idx.map(cell).join("")}</div></div>`;
+}
+// ----- players during the tournament: who's left, chip counts, standings -----
+const hhmm = ms => ms ? new Date(ms).toLocaleTimeString("he-IL", {hour: "2-digit", minute: "2-digit"}) : "";
+// The break we're in, as a key for this round of chip counts (null when not on a break),
+// and the level it closes.
+function tourBreakKey(g, k){
+  if (!k) return null;
+  if (k.cs.reason === "break") return "p" + g.tournamentState.pausedAt;
+  if (k.row.brk) return "b" + k.i;
+  return null;
+}
+function tourPlayers(g, c, k){
+  const t = Object.assign({}, TOUR_DEFAULTS, g.tournamentSettings || {});
+  const started = (g.tournamentState || {}).startedAt || 0;
+  const approved = (g.registrations || []).filter(r => r.status === "approved");
+  const alive = approved.filter(r => !r.bustedAt);
+  const bonus = Math.round(t.chips * (+t.early || 0) / 100);
+  // every chip that should be on the tables: stacks (+ early bonus for who was in at the start), re-buys, add-ons
+  const expected = approved.reduce((sum, r) => sum + t.chips + (r.approvedAt && r.approvedAt <= started ? bonus : 0)
+    + (r.rebuys || []).length * t.rebuyChips + (r.addOnAt ? t.addOnChips : 0), 0);
+  // the latest round of counts (the highest level counted at)
+  const counted = approved.filter(r => r.chipsKey);
+  const last = counted.reduce((best, r) => !best || (r.chipsLevel || 0) > (best.chipsLevel || 0) ? r : best, null);
+  const lastKey = last ? last.chipsKey : null, lastLevel = last ? last.chipsLevel : null;
+  const inRound = r => !!lastKey && r.chipsKey === lastKey;
+  // standings: who's still in by chips (counted this round first), then who went out - latest out first
+  const aliveSorted = alive.slice().sort((a, b) => (inRound(b) ? b.chips : -1) - (inRound(a) ? a.chips : -1));
+  const out = approved.filter(r => r.bustedAt).sort((a, b) => b.bustedAt - a.bustedAt);
+  const standings = aliveSorted.concat(out).map((r, i) => ({r, place: i + 1, counted: !r.bustedAt && inRound(r)}));
+  const key = tourBreakKey(g, k);
+  const reportedNow = key ? alive.filter(r => r.chipsKey === key) : [];
+  return {t, approved, alive, expected, lastKey, lastLevel, standings, key, reportedNow,
+    reportedSum: reportedNow.reduce((s2, r) => s2 + (+r.chips || 0), 0)};
+}
+// The chip count window during a break - the club's chips (their points value), or one total.
+function tourChipCountHtml(g, c, t, mine, key, level){
+  const cvs = (c && c.chipValues) || [], defaults = [25, 100, 500, 1000, 5000, 10000];
+  const pts = cvs.map((cv, i) => +((t.points || {})[cv.id] ?? defaults[i]) || 0);
+  const done = mine.chipsKey === key;
+  return `<fieldset class="leave-frame setup-frame cc-frame"><legend>🪙 ספירת ז'יטונים · סוף שלב ${level}</legend>
+    ${done && !tourCcEdit ? `<div class="cc-done">✓ דיווחת <b>${Number(mine.chips).toLocaleString("en-US")}</b> ז'יטונים <button type="button" class="lb-cancel" data-cc-edit>עדכן</button></div>`
+    : cvs.length ? `<div class="cc-rows">${cvs.map((cv, i) => `<label class="cc-row">${cv.image ? `<img src="${esc(cv.image)}" alt="">` : `<span class="cc-noimg"></span>`}<span class="cc-pt">${pts[i].toLocaleString("en-US")}</span><input type="number" inputmode="numeric" min="0" data-cc-n="${i}" data-cc-pt="${pts[i]}" placeholder="0"></label>`).join("")}</div>
+      <div class="cc-total">סה"כ <b data-cc-total>0</b></div>`
+    : `<div class="tf-in"><input type="number" inputmode="numeric" min="0" data-cc-sum placeholder="כמה ז'יטונים יש לך"></div>`}
+    ${done && !tourCcEdit ? "" : `<button type="button" class="btn btn-primary btn-block" data-cc-send style="margin-top:8px">שלח ספירה</button>`}
+  </fieldset>`;
+}
+let tourCcEdit = false;
+function tourStandingsHtml(P, myPid){
+  if (!P.lastKey && !P.approved.some(r => r.bustedAt)) return "";
+  const rows = P.standings.map(({r, place, counted}) => {
+    const extra = r.bustedAt ? `יצא ${hhmm(r.bustedAt)}${r.bustLevel ? ` · שלב ${r.bustLevel}` : ""}` : counted ? Number(r.chips).toLocaleString("en-US") : "—";
+    const rb = (r.rebuys || []).length ? ` · 🔁 ${(r.rebuys || []).map(hhmm).join(", ")}` : "";
+    return `<tr class="${r.playerId === myPid ? "me" : ""}${r.bustedAt ? " out" : ""}"><td>${place}</td><td class="nm">${esc(r.name || "")}</td><td class="ltr">${extra}<small>${rb}</small></td></tr>`;
+  }).join("");
+  return `<fieldset class="leave-frame setup-frame"><legend>🏅 דירוג${P.lastLevel ? ` · נכון לסוף שלב ${P.lastLevel}` : ""}</legend>
+    <table class="tour-tbl st-tbl"><tbody>${rows}</tbody></table></fieldset>`;
 }
 let tourClockFull = false;   // "📋 מבנה מלא" under the clock
 function tourSoundOn(){ try { return localStorage.getItem("tour-sound") !== "0"; } catch (e) { return true; } }
@@ -5677,6 +5771,40 @@ function renderTourClock(g, c, isAdmin){
   const myPid = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId], mine = myPid && regs.find(r => r.playerId === myPid);
   const lateOpen = k.rbLeft > 0;
   const onBreak = k.row.brk || k.cs.reason === "break";
+  const P = tourPlayers(g, c, k);
+  const level = k.curLevel.level;
+  const canRebuy = r => lateOpen && (!t.rebuys || (r.rebuys || []).length < t.rebuys);
+  // my own part: where I stand, the chip count on a break, re-buy / add-on, "I'm out"
+  let me = "";
+  if (mine && mine.status === "approved") {
+    const st = P.standings.find(x => x.r.playerId === myPid);
+    if (mine.bustedAt) {
+      me = `<div class="lb-state" style="border:1.5px solid rgba(239,68,68,.5);padding:10px"><div class="big" style="font-size:18px">יצאת מהטורניר · מקום ${st ? st.place : "—"}</div><div class="sm">${hhmm(mine.bustedAt)}${mine.bustLevel ? ` · שלב ${mine.bustLevel}` : ""}</div>
+        ${mine.pendingAction === "rebuy" ? `<div class="sm" style="color:#f3c26b;margin-top:4px">⏳ ריביי ממתין לאישור המנהל <button type="button" class="lb-cancel" data-ra="cancel_request" data-pid="${esc(myPid)}">ביטול</button></div>`
+          : canRebuy(mine) ? `<button type="button" class="btn btn-primary btn-block" data-ra="request_rebuy" data-pid="${esc(myPid)}" style="margin-top:8px">🔁 ריביי · ₪${Number(t.rebuyPrice ?? tourEntryTotal(t)).toLocaleString("en-US")}</button>` : ""}</div>`;
+    } else {
+      me = `${st && st.counted ? `<div class="my-pos">המקום שלך: <b>${st.place}</b> מתוך ${P.alive.length} · ${Number(mine.chips).toLocaleString("en-US")} ז'יטונים <small>(סוף שלב ${mine.chipsLevel})</small></div>` : ""}
+        ${P.key ? tourChipCountHtml(g, c, t, mine, P.key, level) : ""}
+        ${mine.pendingAction ? `<div class="lb-note" style="color:#f3c26b">⏳ ${mine.pendingAction === "addon" ? "Add-on" : "ריביי"} ממתין לאישור המנהל <button type="button" class="lb-cancel" data-ra="cancel_request" data-pid="${esc(myPid)}">ביטול</button></div>`
+          : k.row.brk && k.row.addOn && t.addOn && !mine.addOnAt ? `<button type="button" class="btn btn-primary btn-block" data-ra="request_addon" data-pid="${esc(myPid)}" style="margin-bottom:8px">Add-on · ₪${Number(t.addOnPrice ?? tourEntryTotal(t)).toLocaleString("en-US")}</button>` : ""}
+        <div style="text-align:center;margin:2px 0 10px"><button type="button" class="reg-out" data-me-out>🏳 יצאתי מהטורניר</button></div>`;
+    }
+  }
+  // admins: requests to approve, and the chip count check on a break
+  let adminAlerts = "";
+  if (isAdmin) {
+    const reqs = P.approved.filter(r => r.pendingAction);
+    if (reqs.length) adminAlerts += `<fieldset class="leave-frame setup-frame ad-pend"><legend>⏳ בקשות (${reqs.length})</legend>${reqs.map((r, i) => `<div class="reg-row">${tourAvatar(r.name, i)}<div class="nm">${esc(r.name || "")}<small>${r.pendingAction === "addon" ? "Add-on" : "ריביי"} · ₪${Number((r.pendingAction === "addon" ? t.addOnPrice : t.rebuyPrice) ?? tourEntryTotal(t)).toLocaleString("en-US")}</small></div><button type="button" class="reg-no" data-ra="decline" data-pid="${esc(r.playerId)}">✕</button><button type="button" class="reg-ok" data-ra="${r.pendingAction}" data-pid="${esc(r.playerId)}">✓ שולם</button></div>`).join("")}</fieldset>`;
+    if (P.key) {
+      const missing = P.alive.filter(r => r.chipsKey !== P.key);
+      const diff = P.reportedSum - P.expected;
+      adminAlerts += `<div class="cc-check ${!missing.length ? (diff ? "bad" : "ok") : diff === 0 ? "warn" : ""}">
+        <div>🪙 ספירה · סוף שלב ${level}: דיווחו <b>${P.reportedNow.length}</b> מתוך ${P.alive.length} · נספרו <b>${P.reportedSum.toLocaleString("en-US")}</b> מתוך ${P.expected.toLocaleString("en-US")}</div>
+        ${!missing.length ? (diff ? `<div class="big">⚠ הספירה לא מתאימה - הפרש ${diff > 0 ? "+" : ""}${diff.toLocaleString("en-US")}</div>` : `<div class="big">✓ הספירה מתאימה</div>`)
+          : diff === 0 ? `<div class="big">הסכום מתאים - ${missing.length === 1 ? "שחקן אחד לא דיווח" : `${missing.length} שחקנים לא דיווחו`} (${missing.map(r => esc(r.name)).join(", ")})</div><button type="button" class="btn btn-ghost btn-block" data-mark-rest style="margin-top:6px">סמן אותם כפרשו</button>`
+          : `<div class="sm">מחכים ל: ${missing.map(r => esc(r.name)).join(", ")}</div>`}</div>`;
+    }
+  }
   const stLabel = k.cs.paused ? (k.cs.reason === "break" ? "☕ הפסקה" : "⏸ מושהה") : onBreak ? "☕ הפסקה" : "▶ פעיל";
   const pct = k.len ? Math.min(100, Math.max(0, 100 - k.left / k.len * 100)) : 100;
   const card = k.cs.reason === "break"
@@ -5702,8 +5830,10 @@ function renderTourClock(g, c, isAdmin){
     <div class="ck-top"><span>🏆 <b>${esc(g.name || ilDate(g.date))}</b></span><span>${stLabel}</span></div>
     ${join}${card}
     <div class="ck-chips">${chips}</div>
-    <div class="ck-stats"><div><b>${approved.length}</b>רשומים</div><div><b>₪${(approved.length * (+t.prize || 0)).toLocaleString("en-US")}</b>קופה</div><div><b>${Math.floor(playedMin / 60)}:${String(playedMin % 60).padStart(2, "0")}</b>זמן משחק</div></div>
-    ${tourPrizesHtml(t, approved.length)}
+    ${adminAlerts}${me}
+    <div class="ck-stats"><div><b>${P.alive.length}/${approved.length}</b>נשארו</div><div><b>₪${tourPot(g, t).toLocaleString("en-US")}</b>קופה</div><div><b>${Math.floor(playedMin / 60)}:${String(playedMin % 60).padStart(2, "0")}</b>זמן משחק</div></div>
+    ${tourPrizesHtml(t, approved.length, tourPot(g, t))}
+    ${tourStandingsHtml(P, myPid)}
     ${admin}
     <div class="ck-tools"><button type="button" data-ck-sound>${tourSoundOn() ? "🔊 צליל" : "🔇 צליל כבוי"}</button><button type="button" data-ck-fs>⛶ מסך מלא</button><button type="button" data-ck-full>📋 ${tourClockFull ? "הסתר מבנה" : "מבנה מלא"}</button></div>
     ${tourClockFull ? `<div style="text-align:right;margin-top:10px">${tourBlindsReadHtml(t, c)}${tourPayReadHtml(t, approved.length)}</div>` : ""}
@@ -5762,7 +5892,7 @@ function renderTourGame(g, c){
       ${started ? `<div style="text-align:center;margin:0 0 10px;"><button type="button" class="reg-me" data-tour-view="clock">⏱ חזרה לשעון</button></div>`
         : `<button type="button" class="btn btn-primary btn-block" data-tour-start ${approved.length >= 2 ? "" : "disabled"} style="margin:0 0 6px;font-size:19px;">▶ התחל טורניר</button>
         ${approved.length >= 2 ? "" : `<div class="lb-note" style="margin-top:0">אפשר להתחיל כשיש לפחות 2 רשומים</div>`}`}
-      <div class="ad-sum"><div><b>${approved.length}</b>רשומים</div><div><b>${pending.length}</b>ממתינים</div><div><b>₪${n(approved.length * (+t.prize || 0))}</b>בקופה</div></div>
+      <div class="ad-sum"><div><b>${approved.length}</b>רשומים</div><div><b>${pending.length}</b>ממתינים</div><div><b>₪${n(tourPot(g, t))}</b>בקופה</div></div>
       ${tourPotNowHtml(t, approved.length)}
       ${pending.length ? `<fieldset class="leave-frame setup-frame ad-pend"><legend>⏳ ממתינים לאישור (${pending.length})</legend>
         ${pending.map((r, i) => `<div class="reg-row">${tourAvatar(r.name, i + 3)}<div class="nm">${esc(r.name || "")}${r.isNew ? `<span class="reg-new">חדש</span>` : ""}<small>${r.isNew ? "ערב ראשון במועדון · " : ""}${r.requestedAt ? `ביקש ב-${new Date(r.requestedAt).toLocaleTimeString("he-IL", {hour: "2-digit", minute: "2-digit"})}` : ""}</small></div>
@@ -5770,7 +5900,10 @@ function renderTourGame(g, c){
         <div class="lb-note">אישור = השחקן נרשם ושילם ₪${n(total)}</div>
       </fieldset>` : ""}
       <fieldset class="leave-frame setup-frame"><legend>✓ רשומים (${approved.length})</legend>
-        ${approved.length ? approved.map((r, i) => `<div class="reg-row">${tourAvatar(r.name, i)}<div class="nm">${esc(r.name || "")}${r.isNew ? `<span class="reg-new">חדש</span>` : ""}<small>שילם ₪${n(total)}</small></div><button type="button" class="reg-rm" data-reg-remove="${esc(r.playerId)}">הסר</button></div>`).join("")
+        ${approved.length ? approved.map((r, i) => `<div class="reg-row${r.bustedAt ? " out" : ""}">${tourAvatar(r.name, i)}<div class="nm">${esc(r.name || "")}${r.isNew ? `<span class="reg-new">חדש</span>` : ""}<small>${r.bustedAt ? `יצא ${hhmm(r.bustedAt)}${r.bustLevel ? ` · שלב ${r.bustLevel}` : ""}` : `שילם ₪${n(total)}`}${(r.rebuys || []).length ? ` · 🔁 ${(r.rebuys || []).map(hhmm).join(", ")}` : ""}${r.addOnAt ? ` · Add-on ${hhmm(r.addOnAt)}` : ""}</small></div>
+          ${started ? (r.bustedAt ? `<button type="button" class="reg-rm" data-ra="unbust" data-pid="${esc(r.playerId)}">החזר</button>${tourClockInfo(g, c).rbLeft > 0 ? `<button type="button" class="reg-rm" data-ra="rebuy" data-pid="${esc(r.playerId)}">ריביי</button>` : ""}`
+            : `<button type="button" class="reg-rm" data-ra="bust" data-pid="${esc(r.playerId)}" data-confirm="לסמן ש${esc(r.name || "")} יצא מהטורניר?">יצא</button>`)
+          : `<button type="button" class="reg-rm" data-reg-remove="${esc(r.playerId)}">הסר</button>`}</div>`).join("")
           : `<div class="lb-note">עוד אין רשומים - הזמינו שחקנים או רשמו אותם מהמועדון.</div>`}
       </fieldset>
       ${(() => {   // the admin registers themself (only while not registered yet)
@@ -11245,6 +11378,41 @@ function attachHandlers(){
       try { await v2UpdateGame(g.id, {tournamentSettings: ts}); closeModal(); } catch (e) { showAlert(saveFailedText(e)); sv.disabled = false; }
     };
   }
+  const tourLevelNow = () => { const g = getGame(tourGid), k = g && tourClockInfo(g, getCommunity(g.communityId)); return k ? k.curLevel.level : null; };
+  app.querySelectorAll("[data-ra]").forEach(el => el.onclick = async () => {
+    if (el.dataset.confirm && !(await showConfirm(el.dataset.confirm, {okLabel: "כן", cancelLabel: "ביטול"}))) return;
+    tourAct(el, () => v2TourAction(tourGid, el.dataset.pid, el.dataset.ra, {level: tourLevelNow()}));
+  });
+  app.querySelectorAll("[data-me-out]").forEach(el => el.onclick = async () => {
+    const g = getGame(tourGid), c = getCommunity(g.communityId), k = tourClockInfo(g, c);
+    const t = Object.assign({}, TOUR_DEFAULTS, g.tournamentSettings || {});
+    const pid = myIdentity.myPlayers[g.communityId], me = (g.registrations || []).find(r => r.playerId === pid);
+    const rebuyOk = k && k.rbLeft > 0 && (!t.rebuys || (me.rebuys || []).length < t.rebuys);
+    if (rebuyOk) {
+      const a = await showConfirm(`נגמרו לך הז'יטונים? אפשר לעשות ריביי ב-₪${Number(t.rebuyPrice ?? tourEntryTotal(t)).toLocaleString("en-US")} (המנהל יאשר), או לצאת מהטורניר.`, {okLabel: "🔁 ריביי", cancelLabel: "יצאתי"});
+      if (a === null) return;
+      return tourAct(el, () => v2TourAction(tourGid, pid, a ? "request_rebuy" : "bust", {level: k.curLevel.level}));
+    }
+    if (!(await showConfirm("לסמן שיצאת מהטורניר?", {okLabel: "יצאתי", cancelLabel: "ביטול"}))) return;
+    tourAct(el, () => v2TourAction(tourGid, pid, "bust", {level: k ? k.curLevel.level : null}));
+  });
+  // chip count: live total, send
+  const ccTotal = () => { let s2 = 0; app.querySelectorAll("[data-cc-n]").forEach(i => { s2 += (parseInt(i.value, 10) || 0) * Number(i.dataset.ccPt); }); return s2; };
+  app.querySelectorAll("[data-cc-n]").forEach(i => i.oninput = () => { const tEl = app.querySelector("[data-cc-total]"); if (tEl) tEl.textContent = ccTotal().toLocaleString("en-US"); });
+  app.querySelectorAll("[data-cc-edit]").forEach(el => el.onclick = () => { tourCcEdit = true; render(); });
+  app.querySelectorAll("[data-cc-send]").forEach(el => el.onclick = () => {
+    const g = getGame(tourGid), c = getCommunity(g.communityId), k = tourClockInfo(g, c), key = tourBreakKey(g, k);
+    const sumEl = app.querySelector("[data-cc-sum]");
+    const chips = sumEl ? (parseInt(sumEl.value, 10) || 0) : ccTotal();
+    tourCcEdit = false;
+    tourAct(el, () => v2TourAction(tourGid, myIdentity.myPlayers[g.communityId], "chips", {chips, key, level: k.curLevel.level}));
+  });
+  app.querySelectorAll("[data-mark-rest]").forEach(el => el.onclick = async () => {
+    const g = getGame(tourGid), c = getCommunity(g.communityId), k = tourClockInfo(g, c), P = tourPlayers(g, c, k);
+    const missing = P.alive.filter(r => r.chipsKey !== P.key);
+    if (!(await showConfirm(`לסמן כפרשו: ${missing.map(r => r.name).join(", ")}?`, {okLabel: "סמן", cancelLabel: "ביטול"}))) return;
+    tourAct(el, async () => { for (const r of missing) await v2TourAction(tourGid, r.playerId, "bust", {level: k.curLevel.level}); });
+  });
   app.querySelectorAll("[data-reg-add]").forEach(el => el.onclick = () => openModal({type: "tourRegPick", gameId: tourGid}));
   if (modal && modal.type === "tourRegPick") {
     app.querySelectorAll("[data-reg-pick]").forEach(el => el.onclick = () => {
