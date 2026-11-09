@@ -1644,7 +1644,8 @@ html.theme-light .reg-row.me{background:rgba(242,193,78,.25);}
 .ad-pend legend{color:#f3c26b !important;} html.theme-light .ad-pend legend{color:#b45309 !important;}
 .ad-sum{display:flex;justify-content:space-around;text-align:center;margin:2px 0 12px;font-size:14px;color:var(--muted);}
 .ad-sum b{display:block;font-size:20px;color:var(--gold);} html.theme-light .ad-sum b{color:#9a5f12;}
-.ad-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 14px;}
+.ad-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 8px;}
+.tour-start-btn{margin:0 0 14px;font-size:19px;font-weight:800;}
 .reg-pick{display:flex;align-items:center;gap:10px;width:100%;padding:8px 6px;background:none;border:none;border-bottom:1px solid rgba(212,175,55,.15);color:var(--text);font:inherit;font-size:16.5px;font-weight:700;text-align:right;cursor:pointer;}
 .reg-pick span:not(.reg-av){flex:1;} .reg-pick .reg-av{flex:0 0 34px;} .reg-pick b{color:var(--gold);font-size:20px;}
 .gc-tour-sub{font-size:14.5px;color:var(--muted);margin-top:3px;}
@@ -6199,8 +6200,6 @@ function renderTourGame(g, c){
   if (g.closed) return `<div class="tour-page">${head("")}<div class="lb-state"><div class="big">הטורניר הסתיים</div></div>${tourInfoHtml(t)}</div>`;
   if (isAdmin) {
     return `<div class="tour-page">${head("ניהול הרשמה")}
-      ${`<button type="button" class="btn btn-primary btn-block" data-tour-start ${approved.length >= 2 ? "" : "disabled"} style="margin:0 0 6px;font-size:19px;">▶ התחל טורניר</button>
-        ${approved.length >= 2 ? "" : `<div class="lb-note" style="margin-top:0">אפשר להתחיל כשיש לפחות 2 רשומים</div>`}`}
       <div class="ad-sum"><div><b>${approved.length}</b>רשומים</div><div><b>${pending.length}</b>ממתינים</div><div><b>₪${n(tourPot(g, t))}</b>בקופה</div></div>
       ${tourPotNowHtml(t, approved.length)}
       ${pending.length ? `<fieldset class="leave-frame setup-frame ad-pend"><legend>⏳ ממתינים לאישור (${pending.length})</legend>
@@ -6214,6 +6213,8 @@ function renderTourGame(g, c){
         return myPid && approved.some(r => r.playerId === myPid) ? "" : `<div style="text-align:center;margin:0 0 10px;"><button type="button" class="reg-me" data-reg-me>＋ רשום אותי</button></div>`;
       })()}
       <div class="ad-btns"><button type="button" class="btn btn-ghost" data-reg-add>＋ רישום שחקן</button><button type="button" class="btn btn-ghost" data-invite-game="${g.id}">📤 הזמנת שחקנים</button></div>
+      <button type="button" class="btn btn-ghost btn-block tour-start-btn" data-tour-start ${approved.length >= 2 ? "" : "disabled"}>▶ התחל טורניר</button>
+      ${approved.length >= 2 ? "" : `<div class="lb-note" style="margin-top:0">אפשר להתחיל כשיש לפחות 2 רשומים</div>`}
       ${tourRegListHtml(g, approved, r => `<button type="button" class="reg-rm" data-reg-remove="${esc(r.playerId)}">הסר</button>`)}
       ${tourBlindsReadHtml(t, c)}${tourPayReadHtml(t, approved.length)}
     </div>`;
