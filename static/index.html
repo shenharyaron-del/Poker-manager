@@ -1365,8 +1365,11 @@ html.theme-light .tr-clear{color:#9a5f12;} html.theme-light.theme-blue .tr-clear
 .tour-tabs{display:flex;gap:6px;}
 .tour-tabs button{flex:1;padding:9px 0 8px;border-radius:12px 12px 0 0;font:inherit;font-weight:800;font-size:16px;background:rgba(0,0,0,.22);color:var(--muted);border:1px solid rgba(212,175,55,.35);border-bottom:none;cursor:pointer;}
 html.theme-light .tour-tabs button{background:rgba(255,255,255,.4);}
-.tour-tabs button.on{background:linear-gradient(180deg,#9be7c4 0%,#3fb383 50%,#1f7a55 100%);color:#062a1b;border-color:#3fb383;}
-.tour-panel{border:1.5px solid #3fb383;border-radius:0 0 14px 14px;padding:12px 10px 2px;}
+/* each tab owns a color (like the cash tabs): ז'יטונים gold, מבנה טורניר blue; the panel takes the active one's */
+.tour-tabs button.tt-chips.on{background:linear-gradient(180deg,#fde9a8 0%,#e9c46a 45%,#c99a3a 100%);color:#2a1d05;border-color:#f2c14e;box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 -2px 12px rgba(251,191,36,.3);}
+.tour-tabs button.tt-struct.on{background:linear-gradient(180deg,#a9d4ff 0%,#4f97e8 50%,#2a62b8 100%);color:#061a33;border-color:#4f97e8;box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 -2px 12px rgba(79,151,232,.4);}
+.tour-panel{border:1.5px solid #4f97e8;border-radius:0 0 14px 14px;padding:12px 10px 2px;}
+.tour-panel.tp-chips{border-color:#f2c14e;}
 .tour-panel .setup-frame{margin-bottom:12px;}
 .tf{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;min-width:0;flex:1;}
 .tf>span{font-size:15px;font-weight:700;color:var(--text);}
@@ -5368,7 +5371,8 @@ function setupModeSwitchHtml(communityId, on){
 const TOUR_DEFAULTS = {tab: "struct", fee: 20, prize: 80, chips: 10000, early: 5, rebuys: 0, rebuyChips: 10000,
   rebuyLevels: 3, addOn: 0, addOnChips: 10000, addOnPrice: 100, addOnExtra: 5, level: 20, breakEvery: 70, breakLen: 10, speed: 2, ante: 1, payoutPct: 20, entries: 16, points: {}};
 // Blind speed (איטי / רגיל / מהיר): each level's small blind as a multiple of the first one.
-const TOUR_SPEEDS = {1: [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8], 2: [1, 1.2, 1.6, 2, 3, 4, 6, 8, 10], 3: [1, 2, 3, 4, 6, 8, 12, 16, 24]};
+// Slow <= normal <= fast at every level.
+const TOUR_SPEEDS = {1: [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6], 2: [1, 1.5, 2, 3, 4, 5, 6, 8, 10], 3: [1, 2, 3, 4, 6, 8, 12, 16, 24]};
 // "משך הפסקה": 1-5 minutes one by one, then 5 at a time up to 30 (the slider walks this list).
 const TOUR_BREAK_LENS = [0, 1, 2, 3, 4, 5, 10, 15, 20, 25, 30];   // 0 = no breaks
 // A "nice" chip amount: 1-2-2.5-3-4-5-6-8 × 10ⁿ.
@@ -9222,7 +9226,7 @@ function renderModal(m){
       <div class="tf-sl${off ? " off" : ""}"><div class="tf-sl-top"><span>${label}</span><b data-tour-sl-val="${id}">${list && v === 0 ? "ללא" : off ? "—" : tourSlText(v + (shift || 0), unit)}</b></div>
         <input type="range" ${list ? `min="0" max="${list.length - 1}" step="1" value="${Math.max(0, list.indexOf(v))}" data-list="${list.join(",")}"` : `min="${min}" max="${max}" step="5" value="${v}"`} data-tour-slider="${id}" data-unit="${unit}" data-shift="${shift || 0}">
         <div class="tf-sl-mm"><span>${list && list[0] === 0 ? "ללא" : (list ? list[0] : min) + (shift || 0)}</span><span>${(list ? list[list.length - 1] : max) + (shift || 0)}</span></div></div>`;
-    const tabs = `<div class="tour-tabs"><button type="button" class="${t.tab === "chips" ? "on" : ""}" data-tour-tab="chips">ז'יטונים</button><button type="button" class="${t.tab === "struct" ? "on" : ""}" data-tour-tab="struct">מבנה טורניר</button></div>`;
+    const tabs = `<div class="tour-tabs"><button type="button" class="tt-chips${t.tab === "chips" ? " on" : ""}" data-tour-tab="chips">ז'יטונים</button><button type="button" class="tt-struct${t.tab === "struct" ? " on" : ""}" data-tour-tab="struct">מבנה טורניר</button></div>`;
     let inner;
     if (t.tab === "chips") {
       const cvs = c.chipValues || [];
@@ -9290,7 +9294,7 @@ function renderModal(m){
     body = `
       ${setupModeSwitchHtml(m.communityId, "tour")}
       ${tabs}
-      <div class="tour-panel">${inner}</div>
+      <div class="tour-panel tp-${t.tab === "chips" ? "chips" : "struct"}">${inner}</div>
       <p class="tour-note" style="margin-top:10px;">בשלב זה מסך הטורניר לתצוגה בלבד - השינויים לא נשמרים.</p>
     `;
   } else if (m.type === "chipSetup") {
