@@ -1383,13 +1383,7 @@ html.theme-light .tour-tabs button{background:rgba(255,255,255,.4);}
 html.theme-light .tf-unit{color:#9a5f12;}
 .tf-pair{display:flex;align-items:flex-end;gap:8px;}
 .tf-plus{flex:0 0 auto;padding-bottom:20px;font-size:20px;font-weight:800;color:var(--muted);}
-.tour-pot{border:1px solid rgba(212,175,55,.45);border-radius:12px;padding:8px 12px;margin:10px 0;font-size:15px;}
-.tour-pot .r{display:flex;justify-content:space-between;align-items:center;padding:3px 0;gap:8px;}
-.tour-pot .q{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:14px;}
-.tour-pot .q .tf-in{width:62px;flex:0 0 auto;}
-.tour-pot .q .tf-in input{padding:4px;text-align:center;font-size:15px;}
-.tour-pot .tot{border-top:1.5px solid rgba(212,175,55,.5);margin-top:4px;padding-top:6px;font-weight:800;color:var(--gold);font-size:17px;}
-html.theme-light .tour-pot .tot{color:#9a5f12;}
+.tour-pay td:last-child{font-size:14px;}
 .tour-full-link{display:block;margin:8px auto 0;background:none;border:none;font:inherit;font-size:15px;font-weight:700;color:var(--gold);text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
 html.theme-light .tour-full-link{color:#9a5f12;}
 .tf-seg{display:flex;border:1px solid var(--gold);border-radius:10px;overflow:hidden;}
@@ -1419,12 +1413,8 @@ html.theme-light .tour-full-link{color:#9a5f12;}
 .ante-sw::after{content:"";position:absolute;top:2px;inset-inline-start:2px;width:10px;height:10px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.35);transition:inset-inline-start .15s;}
 .ante-tg.on .ante-sw{background:#f2c14e;}
 .ante-tg.on .ante-sw::after{inset-inline-start:14px;}
-/* end of re-buys: the text sits on a dashed line that breaks around it, like a frame's legend */
-.tour-tbl tr.rb-end td{border:none;padding:6px 0;}
-.tour-tbl tr:has(+ tr.rb-end) td{border-bottom:none;}
-.rb-line{display:flex;align-items:center;gap:8px;color:#e0a43a;font-weight:800;font-size:14px;}
-.rb-line::before,.rb-line::after{content:"";flex:1;border-top:1.5px dashed #e0a43a;}
-html.theme-light .rb-line{color:#9a5f12;} html.theme-light .rb-line::before,html.theme-light .rb-line::after{border-color:#c8922a;}
+/* end of re-buys: a quiet row, laid out like the break rows */
+.tour-tbl tr.rb-end td{color:var(--muted);font-weight:700;font-size:14px;}
 /* the small sliders: breaks strip (green, like the break rows) and over the table's columns (gold) */
 .tf-sl.mini{margin:0;}
 .tf-sl.mini .tf-sl-mm{display:none;}
@@ -5393,11 +5383,12 @@ function setupModeSwitchHtml(communityId, on){
 }
 // ---------- Tournament (club profile) - stage 1: the screen only, nothing saved ----------
 const TOUR_DEFAULTS = {tab: "struct", fee: 20, prize: 80, chips: 10000, early: 5, rebuys: 0, rebuyChips: 10000,
-  rebuyLevels: 3, addOn: 0, addOnChips: 10000, addOnPrice: null, addOnExtra: 5,
-  rebuyPrice: null, rebuyFee: 0, addOnFee: 0, estRebuys: null, estAddOns: null, fullTable: 0, level: 20, jump: 1, breakEvery: 70, breakLen: 10, speed: 2, ante: 1, payoutPct: 20, entries: 16, points: {}};
+  rebuyLevels: 4, addOn: 0, addOnChips: 10000, addOnPrice: null, addOnExtra: 5,
+  rebuyPrice: null, rebuyFee: 0, addOnFee: 0, estRebuys: null, estAddOns: null, fullTable: 0, level: 15, jump: 1, breakEvery: 70, breakLen: 10, speed: 2, ante: 1, payoutPct: 20, entries: 16, points: {}};
 // Blind speed presets: a level's length and how many rungs of the blind ladder each level
 // climbs. Moving either slider by hand makes it "מותאם אישית" (4).
-const TOUR_PRESETS = {1: {level: 30, jump: 1}, 2: {level: 20, jump: 1}, 3: {level: 12, jump: 2}};
+// A home tournament of ~16 players runs about 6 / 4.5 / 3 hours.
+const TOUR_PRESETS = {1: {level: 20, jump: 1}, 2: {level: 15, jump: 1}, 3: {level: 10, jump: 1}};
 const TOUR_LEVEL_LENS = [5, 6, 8, 10, 12, 15, 20, 25, 30, 40, 45, 60];
 function tourSpeedOf(level, jump){
   const k = Object.keys(TOUR_PRESETS).find(k => TOUR_PRESETS[k].level === level && TOUR_PRESETS[k].jump === jump);
@@ -5410,21 +5401,21 @@ const TOUR_LADDER_25 = [25, 50, 75, 100, 150, 200, 300, 400, 500, 600, 800, 1000
 // "משך הפסקה": 1-5 minutes one by one, then 5 at a time up to 30 (the slider walks this list).
 const TOUR_BREAK_LENS = [0, 1, 2, 3, 4, 5, 10, 15, 20, 25, 30];   // 0 = no breaks
 // The blind levels for a starting stack: the first small blind is the ladder's first rung at
-// or over stack/400 (200 big blinds deep), each level `jump` rungs up; a big-blind ante (the
+// or over stack/200 (100 big blinds deep, the usual home-game start), each level `jump` rungs up; a big-blind ante (the
 // big blind's player pays one big blind for the table) from level 3. Breaks: every `breakEvery` minutes (play + break - a round number,
 // e.g. 60), the break taking that cycle's last minutes - with a 2-minute break, play 0-58,
 // break 58-60, play again from 60 (the level before the break is that much shorter).
 function tourBlindLevels(t){
   const small = t.small > 0 ? t.small : 25;
   const ladder = TOUR_LADDER_25.map(v => v / 25 * small);
-  const start = Math.max(0, ladder.findIndex(v => v >= (t.chips || 0) / 400));
+  const start = Math.max(0, ladder.findIndex(v => v >= (t.chips || 0) / 200));
   const jump = Math.max(1, t.jump || 1);
-  // How many levels: until the big blind reaches 1/20 of all the chips in play (by then the
-  // tournament is about over) - 6 to 30 levels; 9 when the chips in play aren't given.
+  // How many levels: until the big blind reaches 1/40 of all the chips in play (heads-up with
+  // ~20 big blinds each - by then the tournament is about over) - 6 to 30 levels; 9 when the chips in play aren't given.
   let n = 9;
   if (t.totalChips > 0) {
     n = 1;
-    while (n < 30 && ladder[Math.min(ladder.length - 1, start + (n - 1) * jump)] * 2 * 20 < t.totalChips) n++;
+    while (n < 30 && ladder[Math.min(ladder.length - 1, start + (n - 1) * jump)] * 2 * 40 < t.totalChips) n++;
     n = Math.max(6, n);
   }
   const cycle = Math.max(t.level, t.breakEvery), brk = Math.min(t.breakLen, cycle - 1);
@@ -5455,11 +5446,10 @@ function tourBlindLevels(t){
 // A slider's shown value: "N <unit>" ("שלב אחד" for a single level).
 function tourSlText(v, unit){ return unit === "שלבים" && v === 1 ? "שלב אחד" : unit === "מדרגות" && v === 1 ? "מדרגה אחת" : `${v} ${unit}`; }
 function tourPlacesPaid(entries, pct){ return Math.max(2, Math.round(entries * pct / 100)); }
-function tourPrizeShares(places){
-  const w = Array.from({length: places}, (_, i) => Math.pow(0.75, i));
-  const sum = w.reduce((a, b) => a + b, 0);
-  return w.map(x => x / sum * 100);
-}
+// The usual payout split (% of the pot) by number of paid places.
+const TOUR_PAYOUTS = {2: [65, 35], 3: [50, 30, 20], 4: [45, 25, 18, 12], 5: [40, 23, 16, 12, 9], 6: [38, 22, 15, 11, 8, 6],
+  7: [35, 21, 14, 10, 8, 7, 5], 8: [33, 20, 14, 10, 8, 6, 5, 4], 9: [31, 19, 13, 10, 8, 6, 5, 4, 4], 10: [30, 18, 12, 9, 7, 6, 5, 5, 4, 4]};
+function tourPrizeShares(places){ return TOUR_PAYOUTS[Math.min(10, Math.max(2, places))]; }
 function setupTabsHtml(communityId, activeTab){
   const c = getCommunity(communityId);
   // Same tab-over-panel look as the player screen's history/feed tabs and the
@@ -9283,18 +9273,12 @@ function renderModal(m){
       const total = (+t.fee || 0) + (+t.prize || 0);
       const rebuyPrice = t.rebuyPrice ?? total, addOnPrice = t.addOnPrice ?? total;
       const estRebuys = t.estRebuys ?? Math.round(t.entries / 2), estAddOns = t.estAddOns ?? Math.round(t.entries * 0.75);
-      const rebuyToPot = Math.max(0, rebuyPrice - (t.rebuyFee ? (+t.fee || 0) : 0));
-      const addOnToPot = Math.max(0, addOnPrice - (t.addOnFee ? (+t.fee || 0) : 0));
-      const pot = t.entries * (+t.prize || 0) + estRebuys * rebuyToPot + (t.addOn ? estAddOns * addOnToPot : 0);
       const totalChips = t.entries * t.chips * (1 + (+t.early || 0) / 100) + estRebuys * t.rebuyChips + (t.addOn ? estAddOns * t.addOnChips : 0);
       const levels = tourBlindLevels(Object.assign({}, t, {small: isFinite(small) ? small : 25, totalChips}));
       // the table shows 4 levels; "טבלה מלאה" opens all of them
       const cut = levels.findIndex(r => !r.brk && r.level === 5);
       const shown = t.fullTable || cut < 0 ? levels : levels.slice(0, cut);
       const nLevels = levels.filter(r => !r.brk).length, hours = Math.round(levels[levels.length - 1].to / 30) / 2;
-      const fmt = v => "₪" + Math.round(v).toLocaleString("en-US");
-      const places = tourPlacesPaid(t.entries, t.payoutPct);
-      const shares = tourPrizeShares(places);
       // entries 1..40 grouped by how many places they pay
       const groups = [];
       for (let e = 1; e <= 40; e++) { const pl = tourPlacesPaid(e, t.payoutPct); const g = groups[groups.length - 1]; if (g && g.pl === pl) g.to = e; else groups.push({pl, from: e, to: e}); }
@@ -9332,25 +9316,17 @@ function renderModal(m){
             ${shown.map(r => (r.brk
               ? `<tr class="brk"><td>☕</td><td class="ltr">${r.from + 1}–${r.to}</td><td colspan="${cols - 2}">${r.addOn ? "הפסקה + Add-on" : "הפסקה"}</td></tr>`
               : `<tr><td>${r.level}</td><td class="ltr">${r.from ? r.from + 1 : 0}–${r.to}</td><td class="ltr">${r.sb.toLocaleString("en-US")}/${r.bb.toLocaleString("en-US")}</td><td class="ltr${r.ante ? "" : " off"}">${r.ante ? r.ante.toLocaleString("en-US") : "–"}</td></tr>`)
-              + (r === rbRow ? `<tr class="rb-end"><td colspan="${cols}"><div class="rb-line"><span>🔁 סוף זמן ריביי · דקה ${r.to}</span></div></td></tr>` : "")).join("")}
+              + (r === rbRow ? `<tr class="rb-end"><td>🔁</td><td class="ltr">${r.to}</td><td colspan="${cols - 2}">סוף זמן ריביי</td></tr>` : "")).join("")}
           </tbody></table>
           ${cut >= 0 ? `<button type="button" class="tour-full-link" data-tour-full>${t.fullTable ? "הסתר ▴" : `טבלה מלאה - ${nLevels} שלבים · כ-${hours} שעות ▾`}</button>` : ""}
           <p class="tour-note">סולם בליינדים מקובל, בכפולות של הז'יטון הקטן · אנטה = בליינד גדול (Big Blind Ante) משלב 3</p>
         </fieldset>
         <fieldset class="leave-frame setup-frame"><legend>חלוקת פרסים (Payout Structure)</legend>
           <div class="tf"><span>אחוז הזוכים</span>${seg("payoutPct", [[10, "10%"], [12, "12%"], [15, "15%"], [20, "20%"]], t.payoutPct)}</div>
-          <table class="tour-tbl"><thead><tr><th>משתתפים</th><th>מקומות בפרס</th></tr></thead><tbody>
-            ${groups.slice(0, 4).map(g => `<tr><td class="ltr">${g.from}–${g.to}</td><td>${g.pl}</td></tr>`).join("")}
+          <table class="tour-tbl tour-pay"><thead><tr><th>משתתפים</th><th>מקומות</th><th>חלוקה (%)</th></tr></thead><tbody>
+            ${groups.slice(0, 5).map(g => `<tr><td class="ltr">${g.from}–${g.to}</td><td>${g.pl}</td><td class="ltr">${tourPrizeShares(g.pl).join(" / ")}</td></tr>`).join("")}
           </tbody></table>
-          <div class="tour-pot">
-            <div class="r"><span class="q">${num("entries", t.entries)} כניסות × ${fmt(+t.prize || 0)}</span><b>${fmt(t.entries * (+t.prize || 0))}</b></div>
-            <div class="r"><span class="q">${num("estRebuys", estRebuys)} ריביי (משוער) × ${fmt(rebuyToPot)}</span><b>${fmt(estRebuys * rebuyToPot)}</b></div>
-            ${t.addOn ? `<div class="r"><span class="q">${num("estAddOns", estAddOns)} Add-on (משוער) × ${fmt(addOnToPot)}</span><b>${fmt(estAddOns * addOnToPot)}</b></div>` : ""}
-            <div class="r tot"><span>קופת פרסים</span><span>${fmt(pot)}</span></div>
-          </div>
-          <table class="tour-tbl"><thead><tr><th>מקום</th><th>מהקופה</th><th>סכום</th></tr></thead><tbody>
-            ${shares.map((sh, i) => `<tr><td>${["🥇", "🥈", "🥉"][i] || ""} ${i + 1}</td><td class="ltr">${sh.toFixed(1)}%</td><td class="ltr">${fmt(sh / 100 * pot)}</td></tr>`).join("")}
-          </tbody></table>
+          <p class="tour-note">מהקופה: כל הכניסות, הריביי וה-Add-on (בלי דמי הטיפול)</p>
         </fieldset>`;
     }
     body = `
