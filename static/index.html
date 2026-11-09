@@ -1357,6 +1357,59 @@ html.theme-light .tr-clear{color:#9a5f12;} html.theme-light.theme-blue .tr-clear
 .game-treasurer{font-size:13px;color:var(--muted);white-space:nowrap;}
 /* the treasurer picture in the ☰ menu, in an emoji's place */
 .menu-tr-ic{width:26px;height:26px;vertical-align:middle;margin:-6px 0 -4px;}
+
+/* ---------- club profile: cash | tournament, and the tournament screen ---------- */
+.tm-switch{display:flex;margin:0 0 12px;border:1.5px solid var(--frame-c,var(--gold));border-radius:14px;overflow:hidden;}
+.tm-switch button{flex:1;padding:9px 0;font:inherit;font-size:17px;font-weight:800;background:transparent;border:none;color:var(--text);cursor:pointer;}
+.tm-switch button.on{background:linear-gradient(180deg,#fde68a 0%,#f2c14e 45%,#c8922a 100%);color:#2a1d05;cursor:default;}
+.tour-tabs{display:flex;gap:6px;}
+.tour-tabs button{flex:1;padding:9px 0 8px;border-radius:12px 12px 0 0;font:inherit;font-weight:800;font-size:16px;background:rgba(0,0,0,.22);color:var(--muted);border:1px solid rgba(212,175,55,.35);border-bottom:none;cursor:pointer;}
+html.theme-light .tour-tabs button{background:rgba(255,255,255,.4);}
+.tour-tabs button.on{background:linear-gradient(180deg,#9be7c4 0%,#3fb383 50%,#1f7a55 100%);color:#062a1b;border-color:#3fb383;}
+.tour-panel{border:1.5px solid #3fb383;border-radius:0 0 14px 14px;padding:12px 10px 2px;}
+.tour-panel .setup-frame{margin-bottom:12px;}
+.tf{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;min-width:0;flex:1;}
+.tf>span{font-size:15px;font-weight:700;color:var(--text);}
+.tf-in{position:relative;}
+.tf-in input,.tf-sum{width:100%;box-sizing:border-box;padding:8px 12px 8px 34px;border-radius:10px;border:1px solid var(--gold);background:var(--input);color:var(--text);font:inherit;font-size:18px;text-align:right;}
+.tf-in input::-webkit-outer-spin-button,.tf-in input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+.tf-in input{-moz-appearance:textfield;}
+.tf-sum{display:block;border-style:dashed;}
+.tf-sum b{font-weight:800;}
+.tf-unit{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--gold);font-size:16px;pointer-events:none;}
+html.theme-light .tf-unit{color:#9a5f12;}
+.tf-pair{display:flex;align-items:flex-end;gap:8px;}
+.tf-plus{flex:0 0 auto;padding-bottom:20px;font-size:20px;font-weight:800;color:var(--muted);}
+.tf-inline{flex-direction:row;align-items:center;gap:8px;margin-top:10px;}
+.tf-inline .tf-in{width:84px;flex:0 0 auto;}
+.tf-inline .tf-in input{padding-left:12px;text-align:center;}
+.tf-seg{display:flex;border:1px solid var(--gold);border-radius:10px;overflow:hidden;}
+.tf-seg button{flex:1;padding:8px 2px;font:inherit;font-size:15px;font-weight:700;background:transparent;border:none;border-inline-start:1px solid rgba(212,175,55,.35);color:var(--text);cursor:pointer;white-space:nowrap;}
+.tf-seg button:first-child{border-inline-start:none;}
+.tf-seg button.on{background:linear-gradient(180deg,#fde68a 0%,#f2c14e 45%,#c8922a 100%);color:#2a1d05;}
+.tf-sl{margin-bottom:12px;}
+.tf-sl-top{display:flex;justify-content:space-between;align-items:baseline;}
+.tf-sl-top span{font-size:15px;font-weight:700;}
+.tf-sl-top b{color:var(--gold);font-size:15px;} html.theme-light .tf-sl-top b{color:#9a5f12;}
+.tf-sl input{width:100%;accent-color:#f2c14e;margin:6px 0 0;}
+.tf-sl-mm{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);}
+.tour-tbl{width:100%;border-collapse:collapse;font-size:15px;text-align:center;margin-top:4px;}
+.tour-tbl th{color:var(--muted);font-weight:700;padding:6px 2px;border-bottom:1px solid rgba(212,175,55,.35);}
+.tour-tbl td{padding:4px 2px;border-bottom:1px solid rgba(212,175,55,.15);}
+.tour-tbl td.ltr{direction:ltr;}
+.tour-tbl tr.brk td{color:#3fb383;font-weight:800;}
+/* (input[type=text] - the global input rule has the same weight and came later) */
+input[type=text].tf-cell{width:100%;max-width:104px;box-sizing:border-box;padding:3px 4px;border-radius:7px;border:1px solid rgba(212,175,55,.45);background:var(--input);color:var(--text);font:inherit;font-size:15px;text-align:center;direction:ltr;}
+.tour-note{font-size:13px;color:var(--muted);text-align:center;margin:6px 0 8px;}
+.tour-empty{font-size:15px;line-height:1.5;color:var(--muted);margin:0;}
+.tour-chip{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.tour-chip img,.tour-chip-noimg{width:42px;height:42px;border-radius:50%;flex-shrink:0;object-fit:cover;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4));}
+.tour-chip-noimg{border:1px dashed var(--muted);}
+.tour-chip .tf-in{flex:1;}
+.tour-chip .tf-in input{padding-left:44px;}
+html.theme-light.theme-blue :is(.tf-in input,.tf-sum,input.tf-cell,.tf-seg button:not(.on)){color:#0e2633;}
+.tf-pair .tf.tf-wide{flex:1.5;}
+.tf-seg button.long{flex:1.8;font-size:14px;}
 /* the one-time "install the app?" window */
 .install-offer{display:flex;align-items:center;gap:14px;margin:0 0 16px;text-align:right;}
 .install-offer img{border-radius:16px;flex-shrink:0;box-shadow:0 3px 8px rgba(0,0,0,.35);}
@@ -5294,6 +5347,45 @@ async function saveAllSetup(andClose){
 // Lets either setup modal jump straight to the other one - two "folders" of the same
 // community-setup flow, opened together from the home card's gear button or the
 // missing-setup warning banner.
+
+// "💵 קאש | 🏆 טורניר" over the club profile's tabs.
+function setupModeSwitchHtml(communityId, on){
+  return `<div class="tm-switch"><button type="button" class="${on === "cash" ? "on" : ""}" ${on === "cash" ? "" : `data-setup-mode="cash" data-setup-community="${communityId}"`}>💵 קאש</button><button type="button" class="${on === "tour" ? "on" : ""}" ${on === "tour" ? "" : `data-setup-mode="tour" data-setup-community="${communityId}"`}>🏆 טורניר</button></div>`;
+}
+// ---------- Tournament (club profile) - stage 1: the screen only, nothing saved ----------
+const TOUR_DEFAULTS = {tab: "struct", fee: 20, prize: 80, chips: 10000, early: 5, rebuys: 0, rebuyChips: 10000,
+  level: 20, breakEvery: 60, breakLen: 10, payoutPct: 20, entries: 16, points: {}, blindEdits: {}};
+// A "nice" chip amount: 1-2-2.5-3-4-5-6-8 × 10ⁿ.
+function niceChips(v){
+  if (!(v > 0)) return 0;
+  const p = Math.pow(10, Math.floor(Math.log10(v)));
+  const steps = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
+  const m = v / p;
+  return Math.round(steps.reduce((best, s) => Math.abs(s - m) < Math.abs(best - m) ? s : best, 1) * p);
+}
+// The blind levels for a starting stack: small blind from stack/400, rising; an ante of
+// ~12% of the big blind; a break after every `breakEvery` minutes of play (whole levels).
+function tourBlindLevels(t){
+  const sb0 = niceChips(t.chips / 400) || 25;
+  const mult = [1, 1.2, 1.6, 2, 3, 4, 6, 8, 10, 12, 16, 20];
+  const per = Math.max(1, Math.round(t.breakEvery / t.level));
+  const rows = []; let minute = 0, lvl = 0;
+  while (lvl < 9) {
+    const sb = niceChips(sb0 * mult[lvl]), bb = sb * 2;
+    rows.push({level: lvl + 1, from: minute, to: minute + t.level, sb, bb, ante: Math.max(1, Math.round(bb * 0.12))});
+    minute += t.level; lvl++;
+    if (lvl % per === 0 && lvl < 9) { rows.push({brk: true, from: minute, to: minute + t.breakLen}); minute += t.breakLen; }
+  }
+  return rows;
+}
+// Paid places for a number of entries at a payout share (at least 2), and each place's share
+// of the pot: weights falling by a quarter per place.
+function tourPlacesPaid(entries, pct){ return Math.max(2, Math.round(entries * pct / 100)); }
+function tourPrizeShares(places){
+  const w = Array.from({length: places}, (_, i) => Math.pow(0.75, i));
+  const sum = w.reduce((a, b) => a + b, 0);
+  return w.map(x => x / sum * 100);
+}
 function setupTabsHtml(communityId, activeTab){
   const c = getCommunity(communityId);
   // Same tab-over-panel look as the player screen's history/feed tabs and the
@@ -5303,7 +5395,9 @@ function setupTabsHtml(communityId, activeTab){
   // modal shell (renderModal) closes it after the body when it sees SETUP_PANEL_MARK.
   const TABS = [["chips", "ז'יטונים", 'chip'], ["payments", "תשלומים", 'payment'], ["buyins", "ריביי", 'coinsPlus'], ["perms", "הרשאות", 'shield']];
   const idx = TABS.findIndex(t => t[0] === activeTab);
-  return `
+  // Cash | Tournament, over the tabs: cash is the club profile as it was; tournament is its
+  // own screen (tourSetup) - for now a look, nothing saved.
+  return `${setupModeSwitchHtml(communityId, "cash")}
     <div class="mode-panel-wrap">
       <div class="mode-tabs">
         ${TABS.map(([key,label,ic]) => `<button class="mode-tab mode-tab-setup-${key}${activeTab===key?' active':''}" data-setup-tab="${key}" data-setup-community="${communityId}">${icon(ic)}<span>${label}</span></button>`).join("")}
@@ -9082,6 +9176,78 @@ function renderModal(m){
         ` : ""}
       `;
     }
+  } else if (m.type === "tourSetup") {
+    const c = getCommunity(m.communityId) || {chipValues: []};
+    const t = Object.assign({}, TOUR_DEFAULTS, m.tour || {});
+    title = `הגדרת פרופיל מועדון: ${esc(c.name || "")}`;
+    const money = (id, v) => `<div class="tf-in"><input type="number" inputmode="numeric" data-tour-num="${id}" value="${esc(String(v))}"><span class="tf-unit">₪</span></div>`;
+    const num = (id, v) => `<div class="tf-in"><input type="number" inputmode="numeric" data-tour-num="${id}" value="${esc(String(v))}"></div>`;
+    const seg = (id, opts, cur) => `<div class="tf-seg">${opts.map(([v, l, long]) => `<button type="button" class="${String(v) === String(cur) ? "on" : ""}${long ? " long" : ""}" data-tour-seg="${id}" data-v="${v}">${l}</button>`).join("")}</div>`;
+    const slider = (id, label, unit, min, max, v) => `
+      <div class="tf-sl"><div class="tf-sl-top"><span>${label}</span><b data-tour-sl-val="${id}">${v} ${unit}</b></div>
+        <input type="range" min="${min}" max="${max}" step="5" value="${v}" data-tour-slider="${id}" data-unit="${unit}">
+        <div class="tf-sl-mm"><span>${min}</span><span>${max}</span></div></div>`;
+    const tabs = `<div class="tour-tabs"><button type="button" class="${t.tab === "chips" ? "on" : ""}" data-tour-tab="chips">ז'יטונים</button><button type="button" class="${t.tab === "struct" ? "on" : ""}" data-tour-tab="struct">מבנה טורניר</button></div>`;
+    let inner;
+    if (t.tab === "chips") {
+      const cvs = c.chipValues || [];
+      const defaults = [25, 100, 500, 1000, 5000, 10000];
+      inner = cvs.length ? `
+        <fieldset class="leave-frame setup-frame"><legend>ערך כל ז'יטון בנקודות</legend>
+          ${cvs.map((cv, i) => `<div class="tour-chip">${cv.image ? `<img src="${esc(cv.image)}" alt="">` : `<span class="tour-chip-noimg"></span>`}
+            <div class="tf-in"><input type="number" inputmode="numeric" data-tour-point="${cv.id}" value="${esc(String(t.points[cv.id] ?? defaults[i] ?? ""))}"><span class="tf-unit">נק'</span></div></div>`).join("")}
+        </fieldset>`
+        : `<fieldset class="leave-frame setup-frame"><legend>ערך כל ז'יטון בנקודות</legend><p class="tour-empty">עוד לא הוגדרו ז'יטונים למועדון - צלמו אותם בקאש ← ז'יטונים, ואז קבעו כאן כמה נקודות שווה כל אחד.</p></fieldset>`;
+    } else {
+      const levels = tourBlindLevels(t);
+      const places = tourPlacesPaid(t.entries, t.payoutPct);
+      const shares = tourPrizeShares(places);
+      // entries 1..40 grouped by how many places they pay
+      const groups = [];
+      for (let e = 1; e <= 40; e++) { const pl = tourPlacesPaid(e, t.payoutPct); const g = groups[groups.length - 1]; if (g && g.pl === pl) g.to = e; else groups.push({pl, from: e, to: e}); }
+      const cell = (key, v) => `<input class="tf-cell" type="text" inputmode="numeric" data-tour-blind="${key}" value="${esc(String(t.blindEdits[key] ?? v))}">`;
+      inner = `
+        <fieldset class="leave-frame setup-frame"><legend>קניית כניסה ראשונית (Buy-in)</legend>
+          <div class="tf"><span>סכום כניסה כולל</span><div class="tf-in tf-sum"><b data-tour-total>${(+t.fee || 0) + (+t.prize || 0)}</b><span class="tf-unit">₪</span></div></div>
+          <div class="tf-pair"><div class="tf"><span>חלק לפרס</span>${money("prize", t.prize)}</div><span class="tf-plus">+</span><div class="tf"><span>דמי טיפול / עמלה</span>${money("fee", t.fee)}</div></div>
+        </fieldset>
+        <fieldset class="leave-frame setup-frame"><legend>ז'יטונים ראשוניים (Starting Chips)</legend>
+          <div class="tf"><span>כמות ז'יטונים בסיסית</span>${num("chips", t.chips)}</div>
+          <div class="tf"><span>בונוס הרשמה מוקדמת (Early Bird)</span>${seg("early", [[5, "+5%"], [10, "+10%"], [15, "+15%"], [20, "+20%"]], t.early)}</div>
+        </fieldset>
+        <fieldset class="leave-frame setup-frame"><legend>הגדרות ריביי (Re-buy)</legend>
+          <div class="tf-pair"><div class="tf tf-wide"><span>כמות ריביי מותרת</span>${seg("rebuys", [[0, "ללא הגבלה", true], [1, "1"], [2, "2"], [3, "3"]], t.rebuys)}</div><div class="tf"><span>ז'יטונים לריביי</span>${num("rebuyChips", t.rebuyChips)}</div></div>
+        </fieldset>
+        <fieldset class="leave-frame setup-frame"><legend>זמני משחק והפסקות</legend>
+          ${slider("level", "משך כל שלב בליינדים", "דקות", 5, 60, t.level)}
+          ${slider("breakEvery", "הפסקה כל", "דקות משחק", 30, 180, t.breakEvery)}
+          ${slider("breakLen", "משך הפסקה", "דקות", 5, 30, t.breakLen)}
+        </fieldset>
+        <fieldset class="leave-frame setup-frame"><legend>מבנה בליינדים</legend>
+          <table class="tour-tbl"><thead><tr><th>רמה</th><th>טווח זמן</th><th>בליינדים</th><th>אנטה</th></tr></thead><tbody>
+            ${levels.map(r => r.brk
+              ? `<tr class="brk"><td>☕</td><td class="ltr">${r.from + 1}–${r.to}</td><td colspan="2">הפסקה</td></tr>`
+              : `<tr><td>${r.level}</td><td class="ltr">${r.from ? r.from + 1 : 0}–${r.to}</td><td>${cell("b" + r.level, r.sb + "/" + r.bb)}</td><td>${cell("a" + r.level, r.ante)}</td></tr>`).join("")}
+          </tbody></table>
+          <p class="tour-note">נבנה אוטומטית לפי הז'יטונים והזמנים · אפשר לערוך כל ערך</p>
+        </fieldset>
+        <fieldset class="leave-frame setup-frame"><legend>חלוקת פרסים (Payout Structure)</legend>
+          <div class="tf"><span>אחוז הזוכים</span>${seg("payoutPct", [[10, "10%"], [12, "12%"], [15, "15%"], [20, "20%"]], t.payoutPct)}</div>
+          <table class="tour-tbl"><thead><tr><th>משתתפים</th><th>מקומות בפרס</th></tr></thead><tbody>
+            ${groups.slice(0, 4).map(g => `<tr><td class="ltr">${g.from}–${g.to}</td><td>${g.pl}</td></tr>`).join("")}
+          </tbody></table>
+          <div class="tf tf-inline"><span>חלוקה עבור</span>${num("entries", t.entries)}<span>משתתפים</span></div>
+          <table class="tour-tbl"><thead><tr><th>מקום</th><th>מהקופה</th><th>סכום</th></tr></thead><tbody>
+            ${shares.map((sh, i) => `<tr><td>${["🥇", "🥈", "🥉"][i] || ""} ${i + 1}</td><td class="ltr">${sh.toFixed(1)}%</td><td class="ltr">₪${Math.round(sh / 100 * t.entries * (+t.prize || 0))}</td></tr>`).join("")}
+          </tbody></table>
+        </fieldset>`;
+    }
+    body = `
+      ${setupModeSwitchHtml(m.communityId, "tour")}
+      ${tabs}
+      <div class="tour-panel">${inner}</div>
+      <p class="tour-note" style="margin-top:10px;">בשלב זה מסך הטורניר לתצוגה בלבד - השינויים לא נשמרים.</p>
+    `;
   } else if (m.type === "chipSetup") {
     const c = getCommunity(m.communityId);
     // standalone: opened from the end-of-night frame ("הגדר כאן") - just the chips, no club-
@@ -10140,7 +10306,7 @@ function renderModal(m){
   // below it never fit in the normal 480px/85vh modal without heavy scrolling, reported
   // live as not being able to see the whole photo and table at once - full-screen like
   // the setup flows gives it the same room they get.
-  const isSetupFlow = m.type === "chipSetup" || m.type === "payboxSettings" || m.type === "buyinSetup" || m.type === "permSetup"
+  const isSetupFlow = m.type === "chipSetup" || m.type === "tourSetup" || m.type === "payboxSettings" || m.type === "buyinSetup" || m.type === "permSetup"
     || (m.type === "seatChips" && (() => {
       const sc = getCommunity((getGame(m.gameId)||{}).communityId) || {};
       return (sc.chipValues||[]).length > 0;
@@ -10384,6 +10550,35 @@ function attachHandlers(){
   });
   const setupSaveBtn = app.querySelector("[data-setup-save]");
   if (setupSaveBtn) setupSaveBtn.onclick = () => saveAllSetup(false);
+  // Cash | Tournament (club profile). Tournament keeps the cash tabs' draft untouched.
+  app.querySelectorAll("[data-setup-mode]").forEach(el => el.onclick = () => {
+    const cid = el.dataset.setupCommunity;
+    if (el.dataset.setupMode === "tour") {
+      if (isSetupModal(modal)) captureSetupDraft();
+      modal = {type: "tourSetup", communityId: cid, tour: Object.assign({}, TOUR_DEFAULTS, (modal && modal.tour) || {})};
+      render();
+    } else openChipSetupModal(cid);
+  });
+  if (modal && modal.type === "tourSetup") {
+    const setTour = (patch) => { modal = Object.assign({}, modal, {tour: Object.assign({}, TOUR_DEFAULTS, modal.tour, patch)}); render(); };
+    app.querySelectorAll("[data-tour-tab]").forEach(el => el.onclick = () => setTour({tab: el.dataset.tourTab}));
+    app.querySelectorAll("[data-tour-seg]").forEach(el => el.onclick = () => setTour({[el.dataset.tourSeg]: Number(el.dataset.v)}));
+    app.querySelectorAll("[data-tour-num]").forEach(el => {
+      el.oninput = () => {   // the total follows as you type
+        const t = Object.assign({}, TOUR_DEFAULTS, modal.tour, {[el.dataset.tourNum]: el.value});
+        modal.tour = t;
+        const tot = app.querySelector("[data-tour-total]");
+        if (tot) tot.textContent = (parseFloat(t.fee) || 0) + (parseFloat(t.prize) || 0);
+      };
+      el.onchange = () => setTour({[el.dataset.tourNum]: Math.max(0, parseFloat(el.value) || 0)});
+    });
+    app.querySelectorAll("[data-tour-slider]").forEach(el => {
+      el.oninput = () => { const v = app.querySelector(`[data-tour-sl-val="${el.dataset.tourSlider}"]`); if (v) v.textContent = el.value + " " + el.dataset.unit; };
+      el.onchange = () => setTour({[el.dataset.tourSlider]: Number(el.value)});
+    });
+    app.querySelectorAll("[data-tour-point]").forEach(el => el.onchange = () => { modal.tour = Object.assign({}, modal.tour, {points: Object.assign({}, modal.tour.points, {[el.dataset.tourPoint]: el.value})}); });
+    app.querySelectorAll("[data-tour-blind]").forEach(el => el.onchange = () => { modal.tour = Object.assign({}, modal.tour, {blindEdits: Object.assign({}, modal.tour.blindEdits, {[el.dataset.tourBlind]: el.value})}); });
+  }
   app.querySelectorAll("[data-setup-tab]").forEach(el => el.onclick = () => {
     trySwitchSetupTab(el.dataset.setupTab, el.dataset.setupCommunity);
   });
