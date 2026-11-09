@@ -5891,8 +5891,22 @@ function tourPrizesHtml(t, count, potIn){
   const medals = ["🥇", "🥈", "🥉"];
   let idx = am.map((_, i) => i);
   if (places > 5) idx = [0, 1, 2, null, places - 2, places - 1];
-  const cell = i => i === null ? `<div class="gap">…</div>` : `<div class="${i === places - 1 && places > 3 ? "bb" : ""}"><b>₪${am[i].toLocaleString("en-US")}</b>${i < 3 && !(i === places - 1 && places > 3) ? `${medals[i]} מקום ${i + 1}` : i === places - 1 && places > 3 ? `🫧 באבל · ${i + 1}` : `מקום ${i + 1}`}</div>`;
+  // too wide for the screen: 3rd place goes first, then the one before the bubble (tourFitPrizes)
+  const drop = i => places > 5 && i === 2 ? ` data-prz-drop="1"` : places > 5 && i === places - 2 ? ` data-prz-drop="2"` : "";
+  const cell = i => i === null ? `<div class="gap">…</div>` : `<div class="${i === places - 1 && places > 3 ? "bb" : ""}"${drop(i)}><b>₪${am[i].toLocaleString("en-US")}</b>${i < 3 && !(i === places - 1 && places > 3) ? `${medals[i]} מקום ${i + 1}` : i === places - 1 && places > 3 ? `🫧 באבל · ${i + 1}` : `מקום ${i + 1}`}</div>`;
   return `<div class="ck-prz"><div class="h">פרסים לפי ${count} רשומים · ${places} מקומות בפרס</div><div class="pl" dir="ltr">${idx.map(cell).join("")}</div></div>`;
+}
+// A prize row wider than its box drops cells until it fits: 3rd place, then the place
+// before the bubble - leaving 1st, 2nd … the bubble.
+function tourFitPrizes(root){
+  (root || document).querySelectorAll(".ck-prz .pl").forEach(pl => {
+    const cells = [...pl.querySelectorAll("[data-prz-drop]")];
+    cells.forEach(c => c.style.display = "");
+    for (const lvl of ["1", "2"]) {
+      if (pl.scrollWidth <= pl.clientWidth + 1) break;
+      cells.filter(c => c.dataset.przDrop === lvl).forEach(c => c.style.display = "none");
+    }
+  });
 }
 // ----- players during the tournament: who's left, chip counts, standings -----
 const hhmm = ms => ms ? new Date(ms).toLocaleTimeString("he-IL", {hour: "2-digit", minute: "2-digit"}) : "";
@@ -11680,6 +11694,7 @@ function attachHandlers(){
   // the strip behind the sticky clock wears the page's own background (no dark band)
   { const st = app.querySelector(".ck-sticky");
     if (st) { const bs = getComputedStyle(document.body); st.style.backgroundImage = bs.backgroundImage; st.style.backgroundColor = bs.backgroundColor !== "rgba(0, 0, 0, 0)" ? bs.backgroundColor : ""; st.style.backgroundSize = bs.backgroundSize; st.style.backgroundAttachment = "fixed"; } }
+  tourFitPrizes(app);
   { const pages = app.querySelector("[data-ck-pages]");
     if (pages) {
       const pg = pages.children[tourClockPage];
