@@ -1508,7 +1508,9 @@ html.theme-light .reg-out{color:#b91c1c;}
 .reg-me{padding:6px 16px;border-radius:999px;border:1.5px solid #3fb383;background:rgba(63,179,131,.12);color:#6ee7b7;font:inherit;font-weight:700;font-size:15px;cursor:pointer;}
 html.theme-light .reg-me{color:#047857;}
 /* up to 4 players, then scroll */
-.reg-list.capped{max-height:212px;overflow-y:auto;}
+.reg-list.capped{max-height:212px;overflow-y:auto;position:relative;}
+.reg-row.me{background:rgba(242,193,78,.16);border-radius:10px;box-shadow:inset 3px 0 0 #f2c14e;}
+html.theme-light .reg-row.me{background:rgba(242,193,78,.25);}
 .reg-pick-list{max-height:212px;overflow-y:auto;}
 .reg-new{font-size:11.5px;font-weight:700;padding:1px 7px;border-radius:999px;background:#2563eb;color:#fff;margin-inline-start:6px;vertical-align:middle;}
 .reg-rm{background:none;border:none;color:var(--muted);font:inherit;font-size:14px;text-decoration:underline;cursor:pointer;}
@@ -5872,7 +5874,8 @@ function renderTourClock(g, c, isAdmin){
   </div>`;
 }
 let tourAdminView = null;
-let tourRegFull = false;   // the registered list opened in full   // the admin's "👥 הרשמה" from the clock
+let tourRegFull = false;   // the registered list opened in full
+let tourRegListScroll = null;   // where the registered list was scrolled to (null: at my own row)   // the admin's "👥 הרשמה" from the clock
 // One tick a second while a running clock is on screen: only the numbers change; a new level
 // (or break) re-renders and beeps. The screen is kept awake meanwhile.
 let tourTickTimer = null, tourTickRow = null, tourWakeLock = null;
@@ -5941,7 +5944,7 @@ function renderTourGame(g, c){
       <div class="ad-btns"><button type="button" class="btn btn-ghost" data-reg-add>＋ רישום שחקן</button><button type="button" class="btn btn-ghost" data-invite-game="${g.id}">📤 הזמנת שחקנים</button></div>
       ${!approved.length ? "" : `<fieldset class="leave-frame setup-frame"><legend>✓ רשומים (${approved.length})</legend>
         <div class="reg-list${approved.length > 4 && !tourRegFull ? " capped" : ""}">
-        ${approved.length ? approved.map((r, i) => `<div class="reg-row${r.bustedAt ? " out" : ""}">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}${r.isNew ? `<span class="reg-new">חדש</span>` : ""}<small>${r.bustedAt ? `יצא ${hhmm(r.bustedAt)}${r.bustLevel ? ` · שלב ${r.bustLevel}` : ""}` : `שילם ₪${n(total)} · ${n(t.chips + (!g.tournamentState || !g.tournamentState.startedAt || (r.approvedAt && r.approvedAt <= g.tournamentState.startedAt) ? Math.round(t.chips * (+t.early || 0) / 100) : 0))} ז'יטונים`}${(r.rebuys || []).length ? ` · 🔁 ${(r.rebuys || []).map(hhmm).join(", ")}` : ""}${r.addOnAt ? ` · Add-on ${hhmm(r.addOnAt)}` : ""}</small></div>
+        ${approved.length ? approved.map((r, i) => `<div class="reg-row${r.bustedAt ? " out" : ""}${r.playerId === (myIdentity.myPlayers || {})[g.communityId] ? " me" : ""}">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}${r.isNew ? `<span class="reg-new">חדש</span>` : ""}<small>${r.bustedAt ? `יצא ${hhmm(r.bustedAt)}${r.bustLevel ? ` · שלב ${r.bustLevel}` : ""}` : `שילם ₪${n(total)} · ${n(t.chips + (!g.tournamentState || !g.tournamentState.startedAt || (r.approvedAt && r.approvedAt <= g.tournamentState.startedAt) ? Math.round(t.chips * (+t.early || 0) / 100) : 0))} ז'יטונים`}${(r.rebuys || []).length ? ` · 🔁 ${(r.rebuys || []).map(hhmm).join(", ")}` : ""}${r.addOnAt ? ` · Add-on ${hhmm(r.addOnAt)}` : ""}</small></div>
           ${started ? (() => {
             // the admin records a re-buy (while open) / the add-on (on the add-on break) - asked for or not
             const kk = tourClockInfo(g, c);
@@ -11397,6 +11400,14 @@ function attachHandlers(){
     render();
   };
   app.querySelectorAll("[data-lobby-pay]").forEach(el => el.onclick = () => { const n = Number(el.dataset.lobbyPay); tourLobbyFull.payOpen = tourLobbyFull.payOpen === n ? 0 : n; render(); });
+  // the registered list starts at my own row (marked) - and stays wherever it's scrolled to
+  { const list = app.querySelector(".reg-list.capped");
+    if (list) {
+      const meRow = list.querySelector(".reg-row.me");
+      if (tourRegListScroll && tourRegListScroll.gid === nav.gameId) list.scrollTop = tourRegListScroll.top;
+      else if (meRow) list.scrollTop = Math.max(0, meRow.offsetTop - 4);   // the list is positioned: offsetTop is within it
+      list.addEventListener("scroll", () => { tourRegListScroll = {gid: nav.gameId, top: list.scrollTop}; }, {passive: true});
+    } }
   app.querySelectorAll("[data-reg-full]").forEach(el => el.onclick = () => { tourRegFull = !tourRegFull; render(); });
   app.querySelectorAll("[data-lobby-full]").forEach(el => el.onclick = () => { tourLobbyFull[el.dataset.lobbyFull] = !tourLobbyFull[el.dataset.lobbyFull]; render(); });
   app.querySelectorAll("[data-tour-register]").forEach(el => el.onclick = () => tourAct(el, async () => {
