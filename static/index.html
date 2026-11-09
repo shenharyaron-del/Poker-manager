@@ -1418,9 +1418,12 @@ html.theme-light .tour-full-link{color:#9a5f12;}
 .tf-sl.mini .tf-sl-top b{color:var(--gold);} html.theme-light .tf-sl.mini .tf-sl-top b{color:#9a5f12;}
 .tour-brk-strip{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:12px;margin:2px 0 10px;padding:8px 10px 6px;border:1px dashed rgba(212,175,55,.45);border-radius:10px;}
 .tf-cup{font-style:normal;}
+.tf-sl.mini.ante .tf-sl-top{justify-content:center;}   /* just the value - "אנטה" is the column header under it */
+.tf-sl.mini.ante .tf-sl-top span{display:none;}
+.tour-tbl tr.tour-ctl th:last-child{padding-inline:0;}
 /* narrow phones: room for "הפסקה אחרי שעתיים ו-50 דק'" on one line */
 @media (max-width:400px){.tf-cup{display:none;} .tf-sl.mini .tf-sl-top span,.tf-sl.mini .tf-sl-top b{font-size:12px;} .tf-sl.mini .tf-sl-top{gap:4px;} .tour-brk-strip{padding:8px 8px 6px;gap:10px;}}
-.tour-tbl tr.tour-ctl th{border-bottom:none;padding:2px 4px 2px;vertical-align:bottom;font-weight:inherit;}
+.tour-tbl tr.tour-ctl th{border-bottom:none;padding:2px 3px 2px;vertical-align:bottom;font-weight:inherit;}
 .tour-cust-note{margin:-4px 0 8px;}
 
 .tour-note{font-size:13px;color:var(--muted);text-align:center;margin:6px 0 8px;}
@@ -5441,8 +5444,8 @@ function tourBlindLevels(t){
 // Play minutes from an hour on read as hours: "שעה ו-15 דק' משחק", "שעתיים".
 function tourSlText(v, unit){
   if (unit === "שלבים" && v === 1) return "שלב אחד";
-  if (unit === "מדרגות" && v === 1) return "מדרגה אחת";
-  if (unit === "ante") return {0.25: "¼", 0.5: "½", 1: "מלא"}[v] || "ללא";   // a share of the small blind
+  if (unit === "מדרגות" && v === 1) return "1 מדרגה";
+  if (unit === "ante") return {0.25: "¼ שמאל", 0.5: "½ שמאל", 1: "שמאל"}[v] || "ללא";   // a share of the small blind (the left number)
   if (unit === "דק' משחק") {   // "הפסקה אחרי" reads on: "... אחרי שעה ו-15 דק'"
     if (v < 60) return `${v} דק'`;
     const h = Math.floor(v / 60), m = v % 60, hs = h === 1 ? "שעה" : h === 2 ? "שעתיים" : `${h} שעות`;
@@ -9314,7 +9317,7 @@ function renderModal(m){
           ${t.speed === 4 ? `<p class="tour-note tour-cust-note">נבחר כי הזזת סליידר · "רגיל" מחזיר לברירת המחדל</p>` : ""}
           <div class="tour-brk-strip">${slider("breakEvery", `<i class="tf-cup">☕ </i>הפסקה אחרי`, "דק' משחק", 30, 180, t.breakEvery, null, -t.breakLen, !t.breakLen, "mini")}${slider("breakLen", "למשך", "דק'", 0, 30, t.breakLen, TOUR_BREAK_LENS, 0, false, "mini")}</div>
           <table class="tour-tbl"><thead>
-            <tr class="tour-ctl"><th></th><th>${slider("level", "אורך שלב", "דק'", 5, 60, t.level, TOUR_LEVEL_LENS, 0, false, "mini gold")}</th><th>${slider("jump", "קפיצה", "מדרגות", 1, 3, t.jump, [1, 2, 3], 0, false, "mini gold")}</th><th>${slider("ante", "אנטה", "ante", 0, 1, t.ante, [0, 0.25, 0.5, 1], 0, false, "mini gold")}</th></tr>
+            <tr class="tour-ctl"><th></th><th>${slider("level", "אורך שלב", "דק'", 5, 60, t.level, TOUR_LEVEL_LENS, 0, false, "mini gold")}</th><th>${slider("jump", "קפיצה", "מדרגות", 1, 3, t.jump, [1, 2, 3], 0, false, "mini gold")}</th><th>${slider("ante", "", "ante", 0, 1, t.ante, [0, 0.25, 0.5, 1], 0, false, "mini gold ante")}</th></tr>
             <tr><th>רמה</th><th>טווח זמן</th><th>בליינדים</th><th>אנטה</th></tr></thead><tbody>
             ${shown.map(r => (r.brk
               ? `<tr class="brk"><td>☕</td><td class="ltr">${r.from + 1}–${r.to}</td><td colspan="${cols - 2}">${r.addOn ? "הפסקה + Add-on" : "הפסקה"}</td></tr>`
