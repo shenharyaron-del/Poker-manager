@@ -5763,7 +5763,9 @@ function tourBlindsReadHtml(t, c){
   const levels = tourBlindLevels(Object.assign({}, t, {small: tourSmallChip(c, t),
     totalChips: t.entries * t.chips * (1 + (+t.early || 0) / 100) + Math.round(t.entries / 2) * t.rebuyChips + (t.addOn ? Math.round(t.entries * 0.75) * t.addOnChips : 0)}));
   const cut = levels.length > 4 ? 4 : -1;
-  const shown = levels;
+  // up to 15 levels shown (the plan itself runs longer - the clock uses it if it gets there)
+  const lv15 = levels.findIndex(r => !r.brk && r.level === 15);
+  const shown = lv15 >= 0 ? levels.slice(0, lv15 + 1) : levels;
   const nLevels = levels.filter(r => !r.brk).length, hours = Math.round((levels.estTo || levels[levels.length - 1].to) / 30) / 2;
   const speed = {1: "איטי", 2: "רגיל", 3: "מהיר"}[t.speed] || "מותאם אישית";
   return `<fieldset class="leave-frame setup-frame"><legend>מבנה בליינדים</legend>
@@ -5780,7 +5782,7 @@ function tourPayReadHtml(t, count){
   const groups = [];
   for (let e = 1; e <= 200; e++) { const pl = tourPlacesPaid(e, t.payoutPct); const g = groups[groups.length - 1]; if (g && g.pl === pl) g.to = e; else groups.push({pl, from: e, to: e}); }
   const cur = count ? groups.find(g => count >= g.from && count <= g.to) : null;
-  const shown = groups;
+  const shown = groups.slice(0, 20);   // up to 20 rows shown
   const pot = (count || 0) * (+t.prize || 0);
   const amountsRow = g => {
     const places = Math.min(count, g.pl), medals = ["🥇", "🥈", "🥉"];
