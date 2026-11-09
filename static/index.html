@@ -1490,7 +1490,6 @@ html.theme-light .ck-blinds-wrap thead th{background:#f6eee0;}
 html.theme-light.theme-blue .ck-blinds-wrap thead th{background:#3f7d9c;color:#e3f1f7;}
 .ck-blinds-wrap tr.cur td{background:rgba(242,193,78,.22);font-weight:800;}
 .ck-blinds-wrap tr.cur td:first-child{box-shadow:inset -3px 0 0 #f2c14e;}
-.cc-mode{display:flex;margin:0 0 10px;} .cc-mode button{flex:1;font-size:14px;}
 .cc-find-list{max-height:212px;overflow-y:auto;margin-top:6px;}
 .cc-find-list .reg-pick small{color:var(--muted);font-size:13px;font-weight:500;}
 .cc-for-h{text-align:right;margin:0 0 8px;font-size:15px;color:var(--muted);} .cc-for-h b{color:var(--text);font-size:17px;}
@@ -1506,7 +1505,6 @@ html.theme-light .reg-out{color:#b91c1c;}
 .cc-pt{width:64px;color:var(--muted);font-size:14px;direction:ltr;text-align:left;}
 .cc-row input{flex:1;min-width:0;}
 .cc-frame .lv-type-x{direction:ltr;}
-.cc-total{text-align:center;margin-top:8px;font-size:16px;} .cc-total b{color:var(--gold);font-size:20px;} html.theme-light .cc-total b{color:#9a5f12;}
 .cc-done{text-align:center;font-size:16px;} .cc-done b{color:var(--gold);}
 .cc-check{border-radius:14px;padding:10px;margin:0 0 12px;font-size:16px;border:1px solid rgba(212,175,55,.45);color:var(--text);}
 .cc-check .cc-h{font-size:17px;font-weight:800;color:var(--gold);margin-bottom:4px;} html.theme-light .cc-check .cc-h{color:#9a5f12;}
@@ -1543,7 +1541,7 @@ html.theme-light.theme-blue .cc-check{color:#fff;}
 html.theme-light .info-i{border-color:#047857;color:#047857;}
 /* ---- tournament screens on the blue theme: the page is mid-blue, so highlights go light
    (the light themes' dark-brown / dark-green read poorly on it) ---- */
-html.theme-light.theme-blue :is(.ck-stats b,.lb-count b,.ad-sum b,.pot-now-h b,.cc-total b,.my-pos b,.tour-full-link,.ck-lvl,.cc-done b){color:#ffe39a;}
+html.theme-light.theme-blue :is(.ck-stats b,.lb-count b,.ad-sum b,.pot-now-h b,.my-pos b,.tour-full-link,.ck-lvl,.cc-done b){color:#ffe39a;}
 html.theme-light.theme-blue :is(.tour-tbl tr.brk td,.ck-brk .ck-lvl){color:#c6f7dd;}
 html.theme-light.theme-blue :is(.tbl-scroll.capped thead th,.ck-blinds-wrap thead th){background:#3f7d9c;color:#e3f1f7;}
 html.theme-light.theme-blue .tour-tbl th{color:#e3f1f7;}
@@ -1564,11 +1562,8 @@ html.theme-light.theme-sand :is(.ck-dots button.on,.ck-acts button.on){backgroun
 html.theme-light.theme-sand :is(.ck-blinds-wrap tr.cur td,.st-tbl tr.me td,.tour-pay tr.pay-cur td){background:rgba(200,146,42,.42);}
 html.theme-light.theme-sand .reg-row.me{background:rgba(200,146,42,.38);box-shadow:inset 3px 0 0 #9a5f12;}
 /* ---- the chip count: the mode switch and the count boxes readable on every theme ---- */
-.cc-mode button:not(.on){background:rgba(255,255,255,.1);color:var(--text);}
 .cc-frame .lv-types input[type=number],.cc-frame .tf-in input{background:rgba(255,255,255,.12);color:var(--text);}
-html.theme-light .cc-mode button:not(.on){background:rgba(255,255,255,.7);color:#3a2a10;}
 html.theme-light .cc-frame .lv-types input[type=number],html.theme-light .cc-frame .tf-in input{background:#fffaf0;color:#1c1917;}
-html.theme-light.theme-blue .cc-mode button:not(.on){background:rgba(14,38,51,.35);color:#fff;}
 html.theme-light.theme-blue .cc-frame .lv-types input[type=number],html.theme-light.theme-blue .cc-frame .tf-in input{background:#f2f8fb;color:#0e2633;}
 /* the clock card on blue: a deep blue card so the light text on it reads */
 html.theme-light.theme-blue .ck-card{background:linear-gradient(180deg,rgba(22,63,88,.82),rgba(14,45,66,.88));--text:#fff;--muted:#d4e8f2;color:#fff;}
@@ -5955,22 +5950,22 @@ function tourPlayers(g, c, k){
 // The chip count window during a break - the club's chips (their points value), or one total.
 // Entering a chip count: by the club's chips (a count under each, like cash) or by typing
 // the total. box: whose count it is (a player id) - the inputs and the send button sit in it.
-let tourCcMode = "count";
 // key / level: the break the count belongs to - taken when the window opens, so a count sent
 // just after the break ended (or the admin pressed המשך) still lands on that break.
 function tourCcWidget(c, t, box, initial, key, level){
+  // like the cash leave form: the amount on top, and under it "or count by type" - the
+  // club's chips with a count under each; the counts fill the amount above
   const cvs = (c && c.chipValues) || [], defaults = [25, 100, 500, 1000, 5000, 10000];
   const pts = cvs.map((cv, i) => +((t.points || {})[cv.id] ?? defaults[i]) || 0);
-  const mode = cvs.length ? tourCcMode : "sum";
+  const many = cvs.length >= 5;
   return `<div data-cc-box="${esc(box)}" data-cc-key="${esc(key || "")}" data-cc-level="${level || ""}">
-    ${cvs.length ? `<div class="gender-seg cc-mode" role="group"><button type="button" class="${mode === "count" ? "on" : ""}" data-cc-mode="count">ספירה לפי ז'יטונים</button><button type="button" class="${mode === "sum" ? "on" : ""}" data-cc-mode="sum">הקלדת סכום</button></div>` : ""}
-    ${mode === "count" ? `<div class="lv-types${cvs.length >= 5 ? " many" : ""}" style="grid-template-columns:repeat(${cvs.length},1fr);">
+    <div class="tf-in"><input type="number" inputmode="numeric" min="0" data-cc-sum placeholder="כמה ז'יטונים" value="${initial != null ? esc(String(initial)) : ""}" onfocus="this.select()"></div>
+    ${cvs.length ? `<div class="lv-types-sep">או ספרו לפי סוג</div>
+      <div class="lv-types${many ? " many" : ""}" style="grid-template-columns:repeat(${cvs.length},1fr);">
         ${cvs.map((cv, i) => cv.image ? `<img src="${esc(cv.image)}" alt="" draggable="false">` : `<span class="lv-type-noimg">${pts[i]}</span>`).join("")}
         ${cvs.map((cv, i) => `<input type="number" inputmode="numeric" min="0" placeholder="0" data-cc-n="${i}" data-cc-pt="${pts[i]}" onfocus="this.select()">`).join("")}
-        ${cvs.map((cv, i) => `<div class="lv-type-x" dir="ltr" data-cc-x="${i}">${cvs.length >= 5 ? `×${pts[i].toLocaleString("en-US")}<br>0` : `×${pts[i].toLocaleString("en-US")} = 0`}</div>`).join("")}
-      </div>
-      <div class="cc-total">סה"כ <b data-cc-total>0</b> ז'יטונים</div>`
-    : `<div class="tf-in"><input type="number" inputmode="numeric" min="0" data-cc-sum placeholder="כמה ז'יטונים" value="${initial != null ? esc(String(initial)) : ""}" onfocus="this.select()"></div>`}
+        ${cvs.map((cv, i) => `<div class="lv-type-x" dir="ltr" data-cc-x="${i}">${many ? `×${pts[i].toLocaleString("en-US")}<br>0` : `×${pts[i].toLocaleString("en-US")} = 0`}</div>`).join("")}
+      </div>` : ""}
     <button type="button" class="btn btn-primary btn-block" data-cc-send="${esc(box)}" style="margin-top:8px">שלח ספירה</button>
   </div>`;
 }
@@ -11857,16 +11852,15 @@ function attachHandlers(){
   // chip count: live total per box, mode, send (my own count, or the admin's for a player)
   const ccTotal = box => { let s2 = 0; box.querySelectorAll("[data-cc-n]").forEach(i => { s2 += (parseInt(i.value, 10) || 0) * Number(i.dataset.ccPt); }); return s2; };
   app.querySelectorAll("[data-cc-n]").forEach(i => i.oninput = () => {
-    const box = i.closest("[data-cc-box]"), tEl = box.querySelector("[data-cc-total]"); if (tEl) tEl.textContent = ccTotal(box).toLocaleString("en-US");
+    const box = i.closest("[data-cc-box]"), sEl = box.querySelector("[data-cc-sum]"); if (sEl) sEl.value = ccTotal(box) || "";
     const x = box.querySelector(`[data-cc-x="${i.dataset.ccN}"]`), pt = Number(i.dataset.ccPt), tot = ((parseInt(i.value, 10) || 0) * pt).toLocaleString("en-US");
     if (x) x.innerHTML = x.innerHTML.includes("<br>") ? `×${pt.toLocaleString("en-US")}<br>${tot}` : `×${pt.toLocaleString("en-US")} = ${tot}`;
   });
-  app.querySelectorAll("[data-cc-mode]").forEach(el => el.onclick = () => { tourCcMode = el.dataset.ccMode; render(); });
   app.querySelectorAll("[data-cc-edit]").forEach(el => el.onclick = () => { tourCcEdit = true; render(); });
   app.querySelectorAll("[data-cc-send]").forEach(el => el.onclick = () => {
     const box = el.closest("[data-cc-box]"), pid = el.dataset.ccSend;
     const sumEl = box.querySelector("[data-cc-sum]");
-    const chips = sumEl ? parseInt(sumEl.value, 10) : ccTotal(box);
+    const chips = parseInt(sumEl && sumEl.value, 10);
     if (!(chips >= 0)) { showAlert("הזינו כמות ז'יטונים"); return; }
     const g = getGame(tourGid), c = getCommunity(g.communityId), k = tourClockInfo(g, c);
     const key = box.dataset.ccKey || tourBreakKey(g, k), level = Number(box.dataset.ccLevel) || k.curLevel.level;
