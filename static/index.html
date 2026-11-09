@@ -1384,6 +1384,11 @@ html.theme-light .tf-unit{color:#9a5f12;}
 .tf-pair{display:flex;align-items:flex-end;gap:8px;}
 .tf-plus{flex:0 0 auto;padding-bottom:20px;font-size:20px;font-weight:800;color:var(--muted);}
 .tour-pay td:last-child{font-size:14px;}
+.tour-pay tr.pay-more{cursor:pointer;}
+.tour-pay tr.pay-more td:last-child{text-decoration:underline dotted;text-underline-offset:3px;}
+.tour-pay tr.pay-detail td{white-space:normal;font-size:13px;color:var(--muted);text-align:right;padding:4px 6px 8px;line-height:1.7;}
+.tour-pay tr.pay-detail span{display:inline-block;margin-inline-end:10px;white-space:nowrap;}
+.tour-pay tr.pay-detail b{color:var(--text);font-weight:700;}
 .tf-sub{display:block;font-size:13px;font-weight:400;color:var(--muted);}
 .tour-full-link{display:block;margin:8px auto 0;background:none;border:none;font:inherit;font-size:15px;font-weight:700;color:var(--gold);text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
 html.theme-light .tour-full-link{color:#9a5f12;}
@@ -5381,7 +5386,7 @@ function setupModeSwitchHtml(communityId, on){
 // ---------- Tournament (club profile) - stage 1: the screen only, nothing saved ----------
 const TOUR_DEFAULTS = {tab: "struct", fee: 20, prize: 80, chips: 10000, early: 5, rebuys: 0, rebuyChips: 10000,
   rebuyLevels: 4, addOn: 0, addOnChips: 10000, addOnPrice: null, addOnExtra: 5,
-  rebuyPrice: null, rebuyFee: 0, addOnFee: 0, estRebuys: null, estAddOns: null, fullTable: 0, level: 15, jump: 1, breakEvery: 70, breakLen: 10, speed: 2, ante: 0.25, payoutPct: 20, entries: 16, points: {}};
+  rebuyPrice: null, rebuyFee: 0, addOnFee: 0, estRebuys: null, estAddOns: null, fullTable: 0, payFull: 0, payOpen: 0, level: 15, jump: 1, breakEvery: 70, breakLen: 10, speed: 2, ante: 0.25, payoutPct: 20, entries: 16, points: {}};
 // Blind speed presets: a level's length and how many rungs of the blind ladder each level
 // climbs. Moving either slider by hand makes it "מותאם אישית" (4).
 // A home tournament of ~16 players runs about 6 / 4.5 / 3 hours.
@@ -5457,7 +5462,27 @@ function tourPlacesPaid(entries, pct){ return Math.max(2, Math.round(entries * p
 // The usual payout split (% of the pot) by number of paid places.
 const TOUR_PAYOUTS = {2: [65, 35], 3: [50, 30, 20], 4: [45, 25, 18, 12], 5: [40, 23, 16, 12, 9], 6: [38, 22, 15, 11, 8, 6],
   7: [35, 21, 14, 10, 8, 7, 5], 8: [33, 20, 14, 10, 8, 6, 5, 4], 9: [31, 19, 13, 10, 8, 6, 5, 4, 4], 10: [30, 18, 12, 9, 7, 6, 5, 5, 4, 4]};
-function tourPrizeShares(places){ return TOUR_PAYOUTS[Math.min(10, Math.max(2, places))]; }
+// More than 10 places (big fields, up to 200 entries at 20% = 40 places): places 1-9 each
+// their own share, then bands that split equally (10-12, 13-15 ... 3 at a time up to 21, then
+// 5 at a time), shares falling as 1/(place + 0.3); one decimal, adding up to exactly 100
+// (largest remainders, so more places never gives 1st place more).
+function tourPrizeBands(places){
+  places = Math.max(2, places);
+  if (places <= 10) return TOUR_PAYOUTS[places].map((pct, i) => ({from: i + 1, to: i + 1, pct}));
+  const bands = [];
+  for (let i = 1; i <= places; ) { const size = i <= 9 ? 1 : i <= 21 ? 3 : 5, to = Math.min(places, i + size - 1); bands.push({from: i, to}); i = to + 1; }
+  const w = i => 1 / Math.pow(i + 0.3, 1);
+  bands.forEach(b => { let sum = 0; for (let i = b.from; i <= b.to; i++) sum += w(i); b.w = sum / (b.to - b.from + 1); });
+  const total = bands.reduce((a, b) => a + b.w * (b.to - b.from + 1), 0);
+  // in tenths of a percent: floor each band, then hand out the 1000 - used tenths by largest remainder
+  bands.forEach(b => { const x = b.w / total * 1000; b.u = Math.floor(x); b.r = x - b.u; b.n = b.to - b.from + 1; });
+  let left = 1000 - bands.reduce((a, b) => a + b.u * b.n, 0);
+  [...bands].sort((a, b) => b.r - a.r).forEach(b => { if (left >= b.n) { b.u++; left -= b.n; } });
+  for (const b of bands) { if (!left) break; if (b.n <= left) { b.u++; left -= b.n; } }
+  return bands.map(b => ({from: b.from, to: b.to, pct: b.u / 10}));
+}
+// Every place's share, in order.
+function tourPrizeShares(places){ return tourPrizeBands(places).flatMap(b => Array(b.to - b.from + 1).fill(b.pct)); }
 function setupTabsHtml(communityId, activeTab){
   const c = getCommunity(communityId);
   // Same tab-over-panel look as the player screen's history/feed tabs and the
@@ -9289,7 +9314,7 @@ function renderModal(m){
       const nLevels = levels.filter(r => !r.brk).length, hours = Math.round(levels[levels.length - 1].to / 30) / 2;
       // entries 1..40 grouped by how many places they pay
       const groups = [];
-      for (let e = 1; e <= 40; e++) { const pl = tourPlacesPaid(e, t.payoutPct); const g = groups[groups.length - 1]; if (g && g.pl === pl) g.to = e; else groups.push({pl, from: e, to: e}); }
+      for (let e = 1; e <= 200; e++) { const pl = tourPlacesPaid(e, t.payoutPct); const g = groups[groups.length - 1]; if (g && g.pl === pl) g.to = e; else groups.push({pl, from: e, to: e}); }
       const cols = 4;
       // ante on/off: a small switch in the ante column's header
       inner = `
@@ -9329,8 +9354,14 @@ function renderModal(m){
         <fieldset class="leave-frame setup-frame"><legend>חלוקת פרסים (Payout Structure)</legend>
           <div class="tf"><span>אחוז הזוכים</span>${seg("payoutPct", [[10, "10%"], [12, "12%"], [15, "15%"], [20, "20%"]], t.payoutPct)}</div>
           <table class="tour-tbl tour-pay"><thead><tr><th>משתתפים</th><th>מקומות</th><th>חלוקה (%)</th></tr></thead><tbody>
-            ${groups.slice(0, 5).map(g => `<tr><td class="ltr">${g.from}–${g.to}</td><td>${g.pl}</td><td class="ltr">${tourPrizeShares(g.pl).join(" / ")}</td></tr>`).join("")}
+            ${(t.payFull ? groups : groups.slice(0, 5)).map(g => {
+              // up to 6 places the whole split; more: the top 3 and "…", tap the row for all of it
+              const sh = tourPrizeShares(g.pl), long = g.pl > 6, open = long && t.payOpen === g.pl;
+              const row = `<tr${long ? ` class="pay-more${open ? " open" : ""}" data-tour-pay="${g.pl}"` : ""}><td class="ltr">${g.from}–${g.to}</td><td>${g.pl}</td><td class="ltr">${long ? sh.slice(0, 3).join(" / ") + " …" : sh.join(" / ")}</td></tr>`;
+              return row + (open ? `<tr class="pay-detail"><td colspan="3">${tourPrizeBands(g.pl).map(b => `<span dir="ltr">${b.from === b.to ? b.from : `${b.from}–${b.to}`}: <b>${b.pct}%</b></span>`).join("")}</td></tr>` : "");
+            }).join("")}
           </tbody></table>
+          ${groups.length > 5 ? `<button type="button" class="tour-full-link" data-tour-payfull>${t.payFull ? "הסתר ▴" : "טבלה מלאה - עד 200 משתתפים ▾"}</button>` : ""}
 
         </fieldset>`;
     }
@@ -10656,6 +10687,8 @@ function attachHandlers(){
     const setTour = (patch) => updateModal({tour: Object.assign({}, TOUR_DEFAULTS, modal.tour, patch)});
     app.querySelectorAll("[data-tour-tab]").forEach(el => el.onclick = () => setTour({tab: el.dataset.tourTab}));
     app.querySelectorAll("[data-tour-full]").forEach(el => el.onclick = () => setTour({fullTable: modal.tour.fullTable ? 0 : 1}));
+    app.querySelectorAll("[data-tour-payfull]").forEach(el => el.onclick = () => setTour({payFull: modal.tour.payFull ? 0 : 1}));
+    app.querySelectorAll("[data-tour-pay]").forEach(el => el.onclick = () => { const n = Number(el.dataset.tourPay); setTour({payOpen: modal.tour.payOpen === n ? 0 : n}); });
     app.querySelectorAll("[data-tour-seg]").forEach(el => el.onclick = () => {
       const key = el.dataset.tourSeg, v = Number(el.dataset.v);
       // a speed preset sets the level length and the jump (מותאם אישית keeps them)
