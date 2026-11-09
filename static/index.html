@@ -5887,13 +5887,23 @@ function tourPot(g, t){
 function tourPrizesHtml(t, count, potIn){
   if (!count) return "";
   const pot = potIn ?? count * (+t.prize || 0), places = Math.min(count, tourPlacesPaid(count, t.payoutPct));
-  const am = tourPrizeShares(places).slice(0, count).map(x => Math.round(pot * x / 100));
+  const sh = tourPrizeShares(places).slice(0, count), am = sh.map(x => Math.round(pot * x / 100));
   const medals = ["🥇", "🥈", "🥉"];
+  // the bubble: the last paid places, as one band when they all get the same (36–40)
+  let bb = places > 3 ? places - 1 : -1;
+  if (places > 5) while (bb > 3 && sh[bb - 1] === sh[places - 1]) bb--;
   let idx = am.map((_, i) => i);
-  if (places > 5) idx = [0, 1, 2, null, places - 2, places - 1];
+  if (places > 5) {
+    // 1st-3rd … the last place that still gets more than the bubble, then the bubble band
+    const prev = bb - 1;
+    idx = [0, 1, 2].filter(i => i < bb);
+    if (prev > 2) { if (prev > 3) idx.push(null); idx.push(prev); }
+    idx.push(bb);
+  }
+  const bbLabel = bb === places - 1 ? `${places}` : `${bb + 1}–${places}`;
   // too wide for the screen: 3rd place goes first, then the one before the bubble (tourFitPrizes)
-  const drop = i => places > 5 && i === 2 ? ` data-prz-drop="1"` : places > 5 && i === places - 2 ? ` data-prz-drop="2"` : "";
-  const cell = i => i === null ? `<div class="gap">…</div>` : `<div class="${i === places - 1 && places > 3 ? "bb" : ""}"${drop(i)}><b>₪${am[i].toLocaleString("en-US")}</b>${i < 3 && !(i === places - 1 && places > 3) ? `${medals[i]} מקום ${i + 1}` : i === places - 1 && places > 3 ? `🫧 באבל · ${i + 1}` : `מקום ${i + 1}`}</div>`;
+  const drop = i => places > 5 && i === 2 && bb > 3 ? ` data-prz-drop="1"` : places > 5 && i === bb - 1 && i > 2 ? ` data-prz-drop="2"` : "";
+  const cell = i => i === null ? `<div class="gap">…</div>` : `<div class="${i === bb ? "bb" : ""}"${drop(i)}><b>₪${am[i].toLocaleString("en-US")}</b>${i === bb ? `🫧 באבל · <span dir="ltr">${bbLabel}</span>` : i < 3 ? `${medals[i]} מקום ${i + 1}` : `מקום ${i + 1}`}</div>`;
   return `<div class="ck-prz"><div class="h">פרסים לפי ${count} רשומים · ${places} מקומות בפרס</div><div class="pl" dir="ltr">${idx.map(cell).join("")}</div></div>`;
 }
 // A prize row wider than its box drops cells until it fits: 3rd place, then the place
