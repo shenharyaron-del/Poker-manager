@@ -1413,8 +1413,10 @@ html.theme-light .ck-card{background:radial-gradient(120% 90% at 50% 0%,rgba(242
 .ck-next b{display:block;font-size:18px;color:var(--text);direction:ltr;}
 .ck-na{display:block;font-size:13.5px;color:var(--muted);margin-top:1px;}
 .ck-chips{display:flex;justify-content:center;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0;}
-.ck-acts{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:2px 0 8px;}
+.ck-acts{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin:2px 0 8px;}
+.pn-sub{font-size:13px;color:var(--muted);margin:6px 0 2px;}
 .ck-acts button{position:relative;padding:9px 2px;background:rgba(0,0,0,.12);border:1px solid rgba(212,175,55,.75);border-radius:12px;color:var(--text);font:inherit;font-size:14px;font-weight:600;cursor:pointer;}
+.ck-acts button{font-size:13px !important;line-height:1.15;padding:7px 2px !important;}
 html.theme-light .ck-acts button{background:rgba(255,255,255,.45);border-color:#c8922a;}
 .ck-acts button.on{border-color:#f2c14e;color:var(--text);background:rgba(242,193,78,.12);}
 .ck-acts .bd{position:absolute;top:-7px;left:6px;min-width:18px;height:18px;line-height:18px;border-radius:9px;background:#f59e0b;color:#1c1917;font-size:12px;font-weight:800;padding:0 4px;}
@@ -5946,7 +5948,7 @@ function renderTourClock(g, c, isAdmin){
     ;
   // the admin's four quiet buttons: each opens its panel in place of what's below
   const reqs = P.approved.filter(r => r.pendingAction);
-  const acts = !isAdmin ? "" : `<div class="ck-acts">${[["qr", "QR", 0], ["add", "הוספת שחקן", 0], ["lobby", "לובי", pending.length], ["rebuy", "אישור ריביי", reqs.length]]
+  const acts = !isAdmin ? "" : `<div class="ck-acts">${[["qr", "QR", 0], ["add", "הוספת שחקן", 0], ["lobby", "לובי", pending.length], ["rebuy", "ריביי / Add-on", reqs.length], ["out", "שחקן יצא", 0]]
     .map(([id, label, n]) => `<button type="button" class="${tourPanel === id ? "on" : ""}" data-ck-panel="${id}">${n ? `<span class="bd">${n}</span>` : ""}${label}</button>`).join("")}</div>`;
   const total = tourEntryTotal(t), nn = v => Number(v || 0).toLocaleString("en-US");
   const panel = !isAdmin || !tourPanel ? "" : tourPanel === "qr"
@@ -5963,8 +5965,24 @@ function renderTourClock(g, c, isAdmin){
     : tourPanel === "lobby"
     ? `<div class="ck-panel"><div class="ck-panel-h">בלובי · ${pending.length ? `${pending.length} מחכים לאישור` : "אין ממתינים"}<button type="button" class="lb-cancel" data-ck-panel="">סגור</button></div>
         ${pending.map((r, i) => `<div class="reg-row">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}${r.isNew ? `<span class="reg-new">חדש</span>` : ""}<small>רישום מאוחר · ₪${nn(total)}</small></div><button type="button" class="reg-no" data-reg-decline="${esc(r.playerId)}">✕</button><button type="button" class="reg-ok" data-reg-approve="${esc(r.playerId)}">✓ אשר</button></div>`).join("")}</div>`
-    : `<div class="ck-panel"><div class="ck-panel-h">בקשות ריביי ו-Add-on · ${reqs.length || "אין"}<button type="button" class="lb-cancel" data-ck-panel="">סגור</button></div>
-        ${reqs.map((r, i) => `<div class="reg-row">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}<small>${r.pendingAction === "addon" ? "Add-on" : "ריביי"} · ₪${nn((r.pendingAction === "addon" ? t.addOnPrice : t.rebuyPrice) ?? total)}</small></div><button type="button" class="reg-no" data-ra="decline" data-pid="${esc(r.playerId)}">✕</button><button type="button" class="reg-ok" data-ra="${r.pendingAction}" data-pid="${esc(r.playerId)}">✓ שולם</button></div>`).join("")}</div>`;
+    : tourPanel === "out"
+    ? `<div class="ck-panel"><div class="ck-panel-h">שחקן שיצא מהטורניר<button type="button" class="lb-cancel" data-ck-panel="">סגור</button></div>
+        <div class="tf-in"><input type="text" data-find placeholder="חיפוש שחקן" autocomplete="off"></div>
+        <div class="cc-find-list" data-find-list>${P.alive.map((r, i) => `<div class="reg-row" data-name="${esc(String(r.name || "").toLowerCase())}">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}</div><button type="button" class="reg-out" data-ra="bust" data-pid="${esc(r.playerId)}" data-confirm="לסמן ש${esc(r.name || "")} יצא מהטורניר?">יצא</button></div>`).join("")}</div></div>`
+    : (() => {
+        // requests first, then any registered player - for whoever has no phone
+        const aoOpen = t.addOn && k.row.brk && k.row.addOn;
+        const rbOk = r => lateOpen && (!t.rebuys || (r.rebuys || []).length < t.rebuys);
+        const direct = P.approved.filter(r => rbOk(r) || (aoOpen && !r.addOnAt && !r.bustedAt));
+        return `<div class="ck-panel"><div class="ck-panel-h">ריביי ו-Add-on<button type="button" class="lb-cancel" data-ck-panel="">סגור</button></div>
+        ${reqs.length ? `<div class="pn-sub">בקשות (${reqs.length})</div>${reqs.map((r, i) => `<div class="reg-row">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}<small>${r.pendingAction === "addon" ? "Add-on" : "ריביי"} · ₪${nn((r.pendingAction === "addon" ? t.addOnPrice : t.rebuyPrice) ?? total)}</small></div><button type="button" class="reg-no" data-ra="decline" data-pid="${esc(r.playerId)}">✕</button><button type="button" class="reg-ok" data-ra="${r.pendingAction}" data-pid="${esc(r.playerId)}">✓ שולם</button></div>`).join("")}` : ""}
+        <div class="pn-sub">רישום לשחקן (גם בלי בקשה)</div>
+        ${direct.length ? `<div class="tf-in"><input type="text" data-find placeholder="חיפוש שחקן" autocomplete="off"></div>
+        <div class="cc-find-list" data-find-list>${direct.map((r, i) => `<div class="reg-row${r.bustedAt ? " out" : ""}" data-name="${esc(String(r.name || "").toLowerCase())}">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}<small>${r.bustedAt ? "יצא" : `${(r.rebuys || []).length} ריביי`}${r.addOnAt ? " · Add-on ✓" : ""}</small></div>
+          ${aoOpen && !r.addOnAt && !r.bustedAt ? `<button type="button" class="reg-ok" data-ra="addon" data-pid="${esc(r.playerId)}" data-confirm="לרשום Add-on ל${esc(r.name || "")} (שולם ₪${nn(t.addOnPrice ?? total)})?">Add-on</button>` : ""}
+          ${rbOk(r) ? `<button type="button" class="reg-ok" data-ra="rebuy" data-pid="${esc(r.playerId)}" data-confirm="לרשום ריביי ל${esc(r.name || "")} (שולם ₪${nn(t.rebuyPrice ?? total)})?">ריביי</button>` : ""}</div>`).join("")}</div>`
+          : `<p class="lb-note">${lateOpen ? "" : "זמן הריביי נגמר"}${t.addOn && !aoOpen ? `${lateOpen ? "" : " · "}Add-on נפתח בהפסקה שבסוף זמן הריביי` : ""}</p>`}</div>`;
+      })();
   const playedMin = Math.floor(k.cs.elapsed / 60000);
   const join = !isAdmin && lateOpen && !mine ? `<button type="button" class="btn btn-primary btn-block lb-req" data-tour-register style="margin:0 0 10px">רישום מאוחר · ₪${tourEntryTotal(t).toLocaleString("en-US")}</button>`
     : !isAdmin && mine && mine.status === "pending" ? `<div class="lb-state wait" style="padding:8px"><div class="big" style="font-size:17px">⏳ ממתין לאישור המנהל</div><button type="button" class="lb-cancel" data-tour-cancel>ביטול הבקשה</button></div>` : "";
@@ -11695,6 +11713,10 @@ function attachHandlers(){
   });
   app.querySelectorAll("[data-cc-admin-toggle]").forEach(el => el.onclick = () => { tourCcAdmin = !tourCcAdmin; tourCcFor = null; render(); });
   app.querySelectorAll("[data-cc-pick]").forEach(el => el.onclick = () => { tourCcFor = el.dataset.ccPick || null; render(); });
+  app.querySelectorAll("[data-find]").forEach(inp => inp.oninput = () => {
+    const w = inp.value.trim().toLowerCase(), list = inp.closest(".ck-panel").querySelector("[data-find-list]");
+    if (list) [...list.children].forEach(r => { r.style.display = !w || (r.dataset.name || "").includes(w) ? "" : "none"; });
+  });
   app.querySelectorAll("[data-cc-find]").forEach(inp => inp.oninput = () => {
     const w = inp.value.trim().toLowerCase();
     app.querySelectorAll(".cc-find-list [data-cc-pick]").forEach(b => { b.style.display = !w || b.dataset.name.includes(w) ? "" : "none"; });
