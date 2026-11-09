@@ -338,7 +338,9 @@ html.theme-light .round-cut-note button{color:#9a5f12;}
 .lv-type-sample{width:min(38px,100%);aspect-ratio:1;justify-self:center;border-radius:50%;
   background:radial-gradient(circle,var(--cc) 0 42%,transparent 43%),repeating-conic-gradient(var(--cc) 0 18deg,#f2eee4 18deg 36deg);box-shadow:0 1px 3px rgba(0,0,0,.4);}
 .lv-type-fake{height:28px;display:flex;align-items:center;justify-content:center;border-radius:9px;border:1px solid var(--gold);background:var(--input);color:var(--muted);font-size:17px;}
-.lv-types-lock{grid-column:1 / -1;justify-self:center;white-space:nowrap;padding:3px 12px;border-radius:999px;background:var(--card);border:1px solid var(--frame-c,var(--gold));font-size:14px;color:var(--text);box-shadow:0 2px 6px rgba(0,0,0,.35);}
+/* floats over the chips and the counts - half of each (chip 38px, gap 6px, count 28px) */
+.lv-types-locked{position:relative;}
+.lv-types-lock{position:absolute;z-index:2;left:50%;transform:translateX(-50%);top:19px;height:39px;box-sizing:border-box;display:flex;align-items:center;gap:4px;white-space:nowrap;padding:0 14px;border-radius:999px;background:var(--card);border:1px solid var(--frame-c,var(--gold));font-size:14px;color:var(--text);box-shadow:0 2px 6px rgba(0,0,0,.35);}
 html:not(.theme-light) .lv-types-lock{background:#0f3d2b;}
 .lv-types-lock button{background:none;border:none;padding:0;font:inherit;font-weight:800;color:var(--gold);text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
 html.theme-light .lv-types-lock button{color:#9a5f12;} html.theme-light.theme-blue .lv-types-lock button{color:#0e2633;}
