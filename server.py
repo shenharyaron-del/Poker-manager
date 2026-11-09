@@ -233,6 +233,11 @@ _INIT_STATEMENTS = (
     # The club profile's tournament settings (buy-in, chips, re-buys, blind structure,
     # payouts) - one JSON object the client owns; NULL = the client's defaults.
     "ALTER TABLE communities ADD COLUMN IF NOT EXISTS tournament_settings JSONB",
+    # A night is 'cash' (as always) or 'tournament'; a tournament carries its own copy of the
+    # club's tournament settings, taken when it's opened (and editable for that night only),
+    # so changing the club's profile later never rewrites a night already played.
+    "ALTER TABLE games ADD COLUMN IF NOT EXISTS game_type TEXT NOT NULL DEFAULT 'cash'",
+    "ALTER TABLE games ADD COLUMN IF NOT EXISTS tournament_settings JSONB",
     # Super Admin's own cheat-sheet of the 3rd-party services this app depends on (hosting,
     # DB, email, the Claude API, source control) - not app data at all, so it's gated by
     # _require_super_admin on every endpoint rather than living under any community/game.
@@ -1329,7 +1334,7 @@ def v2_list_all_game_summaries():
             visible = _visible_community_ids(cur, caller)
             cur.execute(
                 "SELECT id, community_id, name, date, created_by_name, closed, updated_at, created_by, created_at, "
-                + _TREASURER_NAME_SQL + " FROM games ORDER BY date DESC"
+                + _TREASURER_NAME_SQL + ", game_type, tournament_settings FROM games ORDER BY date DESC"
             )
             games = [_row_to_game_summary(r) for r in cur.fetchall()]
             if visible is not None:
@@ -1349,7 +1354,7 @@ def v2_list_games(community_id):
                 return jsonify({"error": "not found"}), 404
             cur.execute(
                 "SELECT id, community_id, name, date, created_by_name, closed, updated_at, created_by, created_at, "
-                + _TREASURER_NAME_SQL + " FROM games WHERE community_id = %s ORDER BY date DESC",
+                + _TREASURER_NAME_SQL + ", game_type, tournament_settings FROM games WHERE community_id = %s ORDER BY date DESC",
                 (community_id,),
             )
             games = [_row_to_game_summary(r) for r in cur.fetchall()]
@@ -1359,7 +1364,7 @@ def v2_list_games(community_id):
 
 _GAME_BASE_COLUMNS = (
     "SELECT id, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at, created_by, created_at, "
-    "treasurer_id FROM games"
+    "treasurer_id, game_type, tournament_settings FROM games"
 )
 
 
@@ -1377,12 +1382,14 @@ def _games_full(cur, base_rows):
     returns also bumps games.updated_at, even ones (buyins, cashouts, payments, events)
     that don't otherwise touch the games row at all."""
     games = {}
-    for gid, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at, created_by, created_at, treasurer_id in base_rows:
+    for (gid, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at, created_by, created_at,
+         treasurer_id, game_type, tournament_settings) in base_rows:
         games[gid] = {
             "id": gid, "communityId": community_id, "name": name,
             "date": date.isoformat() if date else None,
             "createdByName": created_by_name, "createdBy": _pub(created_by), "closed": closed,
             "treasurerId": treasurer_id,
+            "gameType": game_type or "cash", "tournamentSettings": tournament_settings,
             "updatedAt": updated_at.isoformat() if updated_at else None,
             "createdAt": created_at.isoformat() if created_at else None,
             "seats": seats, "liveChips": live_chips,
@@ -2258,6 +2265,8 @@ def _row_to_game_summary(row):
         "updatedAt": row[6].isoformat() if row[6] else None,
         "createdBy": _pub(row[7]) if len(row) > 7 else None,
         "createdAt": row[8].isoformat() if len(row) > 8 and row[8] else None,
+        "gameType": row[10] if len(row) > 10 else "cash",
+        "tournamentSettings": row[11] if len(row) > 11 else None,
     }
 
 
@@ -2272,6 +2281,19 @@ def v2_create_game():
     denied = _guard(community_id=community_id)
     if denied:
         return denied
+    # A tournament night: a club admin's to open, with its own copy of the settings.
+    game_type = body.get("gameType") or "cash"
+    tour_settings = body.get("tournamentSettings")
+    if game_type not in ("cash", "tournament"):
+        return jsonify({"error": "invalid gameType"}), 400
+    if game_type == "tournament":
+        denied = _guard(community_id=community_id, need="community_admin")
+        if denied:
+            return denied
+        if not isinstance(tour_settings, dict) or len(json.dumps(tour_settings)) > 20000:
+            return jsonify({"error": "tournamentSettings must be an object (up to 20KB)"}), 400
+    else:
+        tour_settings = None
     # Only an id this caller actually is (see _caller) - else this device's own id.
     caller = _caller()
     created_by = _own_id(caller, body.get("createdBy")) or caller["client_id"] or None
@@ -2281,10 +2303,12 @@ def v2_create_game():
             if creator_player_id:
                 seats[0] = creator_player_id
             cur.execute(
-                "INSERT INTO games (id, community_id, name, date, created_by_name, created_by, seats, live_chips) "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
+                "INSERT INTO games (id, community_id, name, date, created_by_name, created_by, seats, live_chips, "
+                "game_type, tournament_settings) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
                 (gid, community_id, name, date, created_by_name, created_by, Json(seats),
-                 Json({creator_player_id: 0} if creator_player_id else {})),
+                 Json({creator_player_id: 0} if creator_player_id else {}),
+                 game_type, Json(tour_settings) if tour_settings is not None else None),
             )
             if creator_player_id:
                 cur.execute(
@@ -2305,12 +2329,19 @@ def v2_update_game(game_id):
     # Closing / reopening the night happens automatically from any member's app (everyone
     # cashed out, or a lone player's closed table reopened), so that's for any member;
     # renaming the table is the table admin's.
-    denied = _guard(game_id=game_id, need="table_admin" if "name" in body else "member")
+    denied = _guard(game_id=game_id, need="table_admin" if ("name" in body or "tournamentSettings" in body) else "member")
     if denied:
         return denied
+    if "tournamentSettings" in body:
+        ts = body["tournamentSettings"]
+        if not isinstance(ts, dict) or len(json.dumps(ts)) > 20000:
+            return jsonify({"error": "tournamentSettings must be an object (up to 20KB)"}), 400
     fields, params = [], []
     if "name" in body:
         fields.append("name = %s"); params.append(body["name"])
+    if "tournamentSettings" in body:
+        # this night's own copy - only on a tournament night that's still open
+        fields.append("tournament_settings = %s"); params.append(Json(body["tournamentSettings"]))
     if "closed" in body:
         fields.append("closed = %s"); params.append(bool(body["closed"]))
     if not fields:
@@ -2320,7 +2351,9 @@ def v2_update_game(game_id):
         with conn.cursor() as cur:
             cur.execute(
                 f"UPDATE games SET {', '.join(fields)} "
-                "WHERE id = %s AND updated_at = %s::timestamptz RETURNING updated_at",
+                "WHERE id = %s AND updated_at = %s::timestamptz"
+                + (" AND game_type = 'tournament' AND NOT closed" if "tournamentSettings" in body else "")
+                + " RETURNING updated_at",
                 (*params, game_id, updated_at),
             )
             row = cur.fetchone()
