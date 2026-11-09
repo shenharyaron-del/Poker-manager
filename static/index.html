@@ -5925,6 +5925,7 @@ function tourCcWidget(c, t, box, initial, key, level){
 }
 function tourChipCountHtml(g, c, t, mine, key, level){
   const done = mine.chipsKey === key;
+  if (done && !tourCcEdit) return "";   // reported: the frame goes (the count shows in the standings)
   return `<fieldset class="leave-frame setup-frame cc-frame"><legend>ספירת ז'יטונים · סוף שלב ${level}</legend>
     ${done && !tourCcEdit ? `<div class="cc-done">✓ דיווחת <b>${Number(mine.chips).toLocaleString("en-US")}</b> ז'יטונים <button type="button" class="lb-cancel" data-cc-edit>עדכן</button></div>`
       : tourCcWidget(c, t, mine.playerId, done ? mine.chips : null, key, level)}
