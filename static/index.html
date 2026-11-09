@@ -1493,7 +1493,7 @@ html.theme-light .reg-out{color:#b91c1c;}
 .lb-names{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:2px 0 12px;}
 .lb-names span{font-size:13.5px;padding:3px 9px;border-radius:999px;border:1px solid rgba(212,175,55,.35);}
 .lb-names span.me{border-color:#3fb383;color:#6ee7b7;} html.theme-light .lb-names span.me{color:#047857;}
-.reg-av{width:34px;height:34px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#1a1a1a;flex-shrink:0;}
+.reg-av{width:34px;height:34px;border-radius:50%;object-fit:cover;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#1a1a1a;flex-shrink:0;}
 .reg-row{display:flex;align-items:center;gap:10px;padding:8px 2px;border-bottom:1px solid rgba(212,175,55,.15);}
 .reg-row:last-of-type{border-bottom:none;}
 .reg-row .nm{flex:1;font-size:16.5px;font-weight:700;min-width:0;}
@@ -5581,6 +5581,11 @@ function openTourSetupModal(communityId){
 function tourSetupDirty(){
   return !!modal && modal.type === "tourSetup" && JSON.stringify(tourSavedPart(Object.assign({}, TOUR_DEFAULTS, modal.tour))) !== modal.tourSaved;
 }
+// "עד 3 ריביי למשך 3 שלבים" / "ריביי ללא הגבלה למשך שלב אחד"
+function tourRebuyText(t){
+  const lv = t.rebuyLevels === 1 ? "שלב אחד" : `${t.rebuyLevels} שלבים`;
+  return t.rebuys ? `עד <b>${t.rebuys}</b> ${t.rebuys === 1 ? "ריביי" : "ריביי"} למשך ${lv}` : `ריביי <b>ללא הגבלה</b> למשך ${lv}`;
+}
 // The new-table window's short summary of a tournament's settings.
 function tourSummaryHtml(t){
   const total = (+t.fee || 0) + (+t.prize || 0), n = v => Number(v || 0).toLocaleString("en-US");
@@ -5588,7 +5593,7 @@ function tourSummaryHtml(t){
   const ante = {0.25: "¼ שמאל", 0.5: "½ שמאל", 1: "שמאל"}[t.ante] || "ללא";
   const addOnPrice = t.addOnPrice ?? total;
   return `<div class="l">כניסה <b>₪${n(total)}</b> (${n(t.prize)} לפרס + ${n(t.fee)}) · <b>${n(t.chips)}</b> ז'יטונים</div>
-    <div class="l">ריביי <b>${t.rebuys ? t.rebuys : "∞"}</b> ל-${tourSlText(t.rebuyLevels, "שלבים")}${t.addOn ? ` · <b>Add-on</b> ₪${n(addOnPrice)}` : ""}</div>
+    <div class="l">${tourRebuyText(t)}${t.addOn ? ` · <b>Add-on</b> ₪${n(addOnPrice)}` : ""}</div>
     <div class="l">קצב <b>${speed}</b> · ${t.level} דק' לשלב · ${t.breakLen ? `הפסקה אחרי ${tourSlText(Math.max(t.level, t.breakEvery) - t.breakLen, "דק' משחק")}` : "ללא הפסקות"}</div>
     <div class="l">אנטה ${ante} · <b>${t.payoutPct}%</b> זוכים</div>`;
 }
@@ -5607,7 +5612,7 @@ function tourInfoHtml(t){
   return `<fieldset class="leave-frame setup-frame"><legend>🏆 פרטי הטורניר</legend><div class="lb-info">
     <div>כניסה <b>₪${n(total)}</b></div>
     <div>ז'יטונים <b>${n(t.chips)}${bonus ? ` + ${n(bonus)}` : ""}</b>${bonus ? ` <span class="lb-sub">(בונוס הרשמה מוקדמת)</span>` : ""}</div>
-    <div>ריביי <b>${t.rebuys ? t.rebuys : "∞"}</b> ל-${tourSlText(t.rebuyLevels, "שלבים")} · ₪${n(t.rebuyPrice ?? total)}${t.rebuyFee ? "" : " " + allIn}</div>
+    <div>${tourRebuyText(t)} · ₪${n(t.rebuyPrice ?? total)}${t.rebuyFee ? "" : " " + allIn}</div>
     ${t.addOn ? `<div><b>Add-on</b> ₪${n(t.addOnPrice ?? total)}${t.addOnFee ? "" : " " + allIn}</div>` : ""}
   </div></fieldset>`;
 }
@@ -5653,7 +5658,12 @@ function tourPotNowHtml(t, count){
   return `<div class="pot-now"><div class="pot-now-h">קופת פרסים עד כה <b>₪${pot.toLocaleString("en-US")}</b></div>
     <div class="pot-now-sub">${places} מקומות בפרס · הסכומים בטבלת הפרסים</div></div>`;
 }
-function tourAvatar(name, i){
+// The player's own photo (their profile picture) when they have one, else their initials.
+function tourAvatar(name, i, pid, communityId){
+  const c = communityId && getCommunity(communityId);
+  const p = c && pid && (c.roster || []).find(x => x.id === pid);
+  const photo = p && getPlayerPhoto(p);
+  if (photo) return `<img class="reg-av" src="${esc(photo)}" alt="">`;
   const colors = ["#f2c14e", "#6ee7b7", "#93c5fd", "#fca5a5", "#d8b4fe", "#fdba74", "#a7f3d0", "#fde68a"];
   const ini = String(name || "?").trim().split(/\s+/).map(w => w[0]).join("").slice(0, 2);
   return `<span class="reg-av" style="background:${colors[i % colors.length]}">${esc(ini)}</span>`;
@@ -5806,7 +5816,7 @@ function renderTourClock(g, c, isAdmin){
   let adminAlerts = "";
   if (isAdmin) {
     const reqs = P.approved.filter(r => r.pendingAction);
-    if (reqs.length) adminAlerts += `<fieldset class="leave-frame setup-frame ad-pend"><legend>⏳ בקשות (${reqs.length})</legend>${reqs.map((r, i) => `<div class="reg-row">${tourAvatar(r.name, i)}<div class="nm">${esc(r.name || "")}<small>${r.pendingAction === "addon" ? "Add-on" : "ריביי"} · ₪${Number((r.pendingAction === "addon" ? t.addOnPrice : t.rebuyPrice) ?? tourEntryTotal(t)).toLocaleString("en-US")}</small></div><button type="button" class="reg-no" data-ra="decline" data-pid="${esc(r.playerId)}">✕</button><button type="button" class="reg-ok" data-ra="${r.pendingAction}" data-pid="${esc(r.playerId)}">✓ שולם</button></div>`).join("")}</fieldset>`;
+    if (reqs.length) adminAlerts += `<fieldset class="leave-frame setup-frame ad-pend"><legend>⏳ בקשות (${reqs.length})</legend>${reqs.map((r, i) => `<div class="reg-row">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}<small>${r.pendingAction === "addon" ? "Add-on" : "ריביי"} · ₪${Number((r.pendingAction === "addon" ? t.addOnPrice : t.rebuyPrice) ?? tourEntryTotal(t)).toLocaleString("en-US")}</small></div><button type="button" class="reg-no" data-ra="decline" data-pid="${esc(r.playerId)}">✕</button><button type="button" class="reg-ok" data-ra="${r.pendingAction}" data-pid="${esc(r.playerId)}">✓ שולם</button></div>`).join("")}</fieldset>`;
     if (P.key) {
       const missing = P.alive.filter(r => r.chipsKey !== P.key);
       const diff = P.reportedSum - P.expected;
@@ -5910,12 +5920,12 @@ function renderTourGame(g, c){
       <div class="ad-sum"><div><b>${approved.length}</b>רשומים</div><div><b>${pending.length}</b>ממתינים</div><div><b>₪${n(tourPot(g, t))}</b>בקופה</div></div>
       ${tourPotNowHtml(t, approved.length)}
       ${pending.length ? `<fieldset class="leave-frame setup-frame ad-pend"><legend>⏳ ממתינים לאישור (${pending.length})</legend>
-        ${pending.map((r, i) => `<div class="reg-row">${tourAvatar(r.name, i + 3)}<div class="nm">${esc(r.name || "")}${r.isNew ? `<span class="reg-new">חדש</span>` : ""}<small>${r.isNew ? "ערב ראשון במועדון · " : ""}${r.requestedAt ? `ביקש ב-${new Date(r.requestedAt).toLocaleTimeString("he-IL", {hour: "2-digit", minute: "2-digit"})}` : ""}</small></div>
+        ${pending.map((r, i) => `<div class="reg-row">${tourAvatar(r.name, i + 3, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}${r.isNew ? `<span class="reg-new">חדש</span>` : ""}<small>${r.isNew ? "ערב ראשון במועדון · " : ""}${r.requestedAt ? `ביקש ב-${new Date(r.requestedAt).toLocaleTimeString("he-IL", {hour: "2-digit", minute: "2-digit"})}` : ""}</small></div>
           <button type="button" class="reg-no" data-reg-decline="${esc(r.playerId)}" aria-label="דחה">✕</button><button type="button" class="reg-ok" data-reg-approve="${esc(r.playerId)}">✓ אשר</button></div>`).join("")}
         <div class="lb-note">אישור = השחקן נרשם ושילם ₪${n(total)}</div>
       </fieldset>` : ""}
       ${!approved.length ? "" : `<fieldset class="leave-frame setup-frame"><legend>✓ רשומים (${approved.length})</legend>
-        ${approved.length ? approved.map((r, i) => `<div class="reg-row${r.bustedAt ? " out" : ""}">${tourAvatar(r.name, i)}<div class="nm">${esc(r.name || "")}${r.isNew ? `<span class="reg-new">חדש</span>` : ""}<small>${r.bustedAt ? `יצא ${hhmm(r.bustedAt)}${r.bustLevel ? ` · שלב ${r.bustLevel}` : ""}` : `שילם ₪${n(total)}`}${(r.rebuys || []).length ? ` · 🔁 ${(r.rebuys || []).map(hhmm).join(", ")}` : ""}${r.addOnAt ? ` · Add-on ${hhmm(r.addOnAt)}` : ""}</small></div>
+        ${approved.length ? approved.map((r, i) => `<div class="reg-row${r.bustedAt ? " out" : ""}">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}${r.isNew ? `<span class="reg-new">חדש</span>` : ""}<small>${r.bustedAt ? `יצא ${hhmm(r.bustedAt)}${r.bustLevel ? ` · שלב ${r.bustLevel}` : ""}` : `שילם ₪${n(total)} · ${n(t.chips + (!g.tournamentState || !g.tournamentState.startedAt || (r.approvedAt && r.approvedAt <= g.tournamentState.startedAt) ? Math.round(t.chips * (+t.early || 0) / 100) : 0))} ז'יטונים`}${(r.rebuys || []).length ? ` · 🔁 ${(r.rebuys || []).map(hhmm).join(", ")}` : ""}${r.addOnAt ? ` · Add-on ${hhmm(r.addOnAt)}` : ""}</small></div>
           ${started ? (() => {
             // the admin records a re-buy (while open) / the add-on (on the add-on break) - asked for or not
             const kk = tourClockInfo(g, c);
@@ -5927,7 +5937,7 @@ function renderTourGame(g, c){
           : `<button type="button" class="reg-rm" data-reg-remove="${esc(r.playerId)}">הסר</button>`}</div>`).join("")
           : ""}
       </fieldset>`}
-      ${tourInfoHtml(t)}
+      ${(() => { const mp = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId]; return mp && approved.some(r => r.playerId === mp) ? "" : tourInfoHtml(t); })()}
       ${(() => {   // the admin registers themself (only while not registered yet)
         const myPid = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
         return myPid && approved.some(r => r.playerId === myPid) ? "" : `<div style="text-align:center;margin:0 0 10px;"><button type="button" class="reg-me" data-reg-me>＋ רשום אותי</button></div>`;
@@ -5948,7 +5958,7 @@ function renderTourGame(g, c){
     ${status}
     ${tourPotNowHtml(t, approved.length)}
     ${approved.length ? `<div class="lb-names">${approved.map(r => `<span class="${r.playerId === myPid ? "me" : ""}">${esc(r.playerId === myPid ? "אתה" : (r.name || ""))}</span>`).join("")}</div>` : ""}
-    ${tourInfoHtml(t)}${tourBlindsReadHtml(t, c)}${tourPayReadHtml(t, approved.length)}
+    ${mine && mine.status === "approved" ? "" : tourInfoHtml(t)}${tourBlindsReadHtml(t, c)}${tourPayReadHtml(t, approved.length)}
   </div>`;
 }
 // The tournament screen has three uses: the club's profile (default), a new table's settings
@@ -10308,7 +10318,7 @@ function renderModal(m){
     const roster = ((c && c.roster) || []).filter(p => !taken.has(p.id)).sort((a, b) => String(a.name).localeCompare(String(b.name), "he"));
     title = "רישום שחקנים מהמועדון";
     body = roster.length ? `<div class="lb-note" style="margin:-4px 0 8px;">לחיצה רושמת את השחקן - כמי ששילם את הכניסה.</div>
-      <div class="scroll-list">${roster.map((p, i) => `<button type="button" class="reg-pick" data-reg-pick="${esc(p.id)}">${tourAvatar(p.name, i)}<span>${esc(p.name)}</span><b>＋</b></button>`).join("")}</div>`
+      <div class="scroll-list">${roster.map((p, i) => `<button type="button" class="reg-pick" data-reg-pick="${esc(p.id)}">${tourAvatar(p.name, i, p.id, c && c.id)}<span>${esc(p.name)}</span><b>＋</b></button>`).join("")}</div>`
       : `<p class="lb-note">כל שחקני המועדון כבר רשומים.</p>`;
   } else if (m.type === "newGame") {
     const c = getCommunity(m.communityId);
