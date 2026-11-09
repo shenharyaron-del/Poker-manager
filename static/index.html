@@ -1522,6 +1522,10 @@ html.theme-light .reg-out{color:#b91c1c;}
 .lb-head .t2{font-size:19px;font-weight:800;} .lb-head .d{color:var(--muted);font-size:15px;margin-top:2px;}
 .lb-info{font-size:15.5px;line-height:1.85;} .lb-info b{font-weight:700;}
 .lb-sub{color:var(--muted);font-size:14px;}
+.info-i{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;border:1.5px solid #6ee7b7;background:none;color:#6ee7b7;font:italic 700 12px/1 Georgia,serif;padding:0;margin-inline-start:4px;vertical-align:super;cursor:pointer;}
+html.theme-light .info-i{border-color:#047857;color:#047857;}
+.info-tip{position:fixed;z-index:9999;max-width:260px;padding:8px 12px;border-radius:10px;background:#1c1917;color:#fde68a;font-size:14px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.4);transition:opacity .3s;}
+.info-tip.out{opacity:0;}
 .lb-all{font-size:12.5px;font-weight:700;padding:1px 8px;border-radius:999px;background:rgba(63,179,131,.18);color:#6ee7b7;white-space:nowrap;} html.theme-light .lb-all{color:#047857;}
 .lb-count{display:flex;justify-content:center;gap:18px;margin:6px 0 10px;font-size:16px;}
 .lb-count b{color:var(--gold);font-size:20px;} html.theme-light .lb-count b{color:#9a5f12;}
@@ -5658,7 +5662,8 @@ function tourEntryTotal(t){ return (+t.fee || 0) + (+t.prize || 0); }
 function tourInfoHtml(t){
   const n = v => Number(v || 0).toLocaleString("en-US"), total = tourEntryTotal(t);
   const bonus = Math.round(t.chips * (+t.early || 0) / 100);
-  const allIn = `<span class="lb-all">הסכום במלואו יועבר לפרסים</span>`;   // only when no fee is taken from it
+  // only when no fee is taken from it: a small ⓘ - tapping it shows the note for a few seconds
+  const allIn = `<button type="button" class="info-i" data-info-tip="הסכום במלואו יועבר לפרסים" aria-label="מידע">i</button>`;
   return `<fieldset class="leave-frame setup-frame"><legend>🏆 פרטי הטורניר</legend><div class="lb-info">
     <div>כניסה <b>₪${n(total)}</b></div>
     <div>ז'יטונים <b>${n(t.chips)}${bonus ? ` + ${n(bonus)}` : ""}</b>${bonus ? ` <span class="lb-sub">(בונוס הרשמה מוקדמת)</span>` : ""}</div>
@@ -5669,11 +5674,11 @@ function tourInfoHtml(t){
 function tourBlindsReadHtml(t, c){
   const levels = tourBlindLevels(Object.assign({}, t, {small: tourSmallChip(c, t),
     totalChips: t.entries * t.chips * (1 + (+t.early || 0) / 100) + Math.round(t.entries / 2) * t.rebuyChips + (t.addOn ? Math.round(t.entries * 0.75) * t.addOnChips : 0)}));
-  const cut = levels.findIndex(r => !r.brk && r.level === 5);
+  const cut = levels.length > 3 ? 3 : -1;
   const shown = tourLobbyFull.blinds || cut < 0 ? levels : levels.slice(0, cut);
   const nLevels = levels.filter(r => !r.brk).length, hours = Math.round((levels.estTo || levels[levels.length - 1].to) / 30) / 2;
   const speed = {1: "איטי", 2: "רגיל", 3: "מהיר"}[t.speed] || "מותאם אישית";
-  return `<fieldset class="leave-frame setup-frame"><legend>מבנה בליינדים · ${speed}</legend>
+  return `<fieldset class="leave-frame setup-frame"><legend>מבנה בליינדים</legend>
     <table class="tour-tbl"><thead><tr><th>רמה</th><th>טווח זמן</th><th>בליינדים</th><th>אנטה</th></tr></thead><tbody>
     ${shown.map(r => r.brk ? `<tr class="brk"><td>☕</td><td class="ltr">${r.from + 1}–${r.to}</td><td colspan="2">${r.addOn ? "הפסקה + Add-on" : "הפסקה"}</td></tr>`
       : `<tr><td>${r.level}</td><td class="ltr">${r.from ? r.from + 1 : 0}–${r.to}</td><td class="ltr">${r.sb.toLocaleString("en-US")}/${r.bb.toLocaleString("en-US")}</td><td class="ltr${r.ante ? "" : " off"}">${r.ante ? r.ante.toLocaleString("en-US") : "–"}</td></tr>`).join("")}
@@ -5956,7 +5961,7 @@ function renderTourClock(g, c, isAdmin){
   const admin = !isAdmin ? "" : `<div class="ck-admin">
       <div class="ck-row"><button type="button" data-ck="prev">⏮ שלב קודם</button>${k.cs.paused ? `<button type="button" class="main" data-ck="resume">▶ המשך</button>` : `<button type="button" class="main" data-ck="pause">⏸ השהה</button>`}<button type="button" data-ck="next">⏭ שלב הבא</button></div>
       <div class="ck-row"><button type="button" data-ck="minus">−1 דק'</button><button type="button" data-ck="break" ${k.cs.paused ? "disabled" : ""}>☕ הפסקה</button><button type="button" data-ck="plus">+1 דק'</button></div></div>`;
-  const tools = `<div class="ck-tools"><button type="button" data-ck-sound>${tourSoundOn() ? "🔊 צליל" : "🔇 צליל כבוי"}</button><button type="button" data-ck-fs>⛶ מסך מלא</button><button type="button" data-ck-full>📋 ${tourClockFull ? "הסתר מבנה" : "מבנה מלא"}</button></div>`;
+  const tools = `<div class="ck-tools"><button type="button" data-ck-sound>${tourSoundOn() ? "🔊 צליל" : "🔇 צליל כבוי"}</button><button type="button" data-ck-fs>⛶ מסך מלא</button></div>`;
   const stats = `<div class="ck-stats"><div><b>${P.alive.length}/${approved.length}</b>נשארו</div><div><b>₪${tourPot(g, t).toLocaleString("en-US")}</b>קופה</div><div><b>${Math.floor(playedMin / 60)}:${String(playedMin % 60).padStart(2, "0")}</b>זמן משחק</div></div>`;
   if (isAdmin) {
     // admins: the clock on top, and under it two pages - the controls and the night's
@@ -5981,7 +5986,7 @@ function renderTourClock(g, c, isAdmin){
     ${tourStandingsHtml(P, myPid)}
     ${tourClockBlindsHtml(k)}
     ${tourClockFull ? `<div style="text-align:right">${tourPayReadHtml(t, approved.length)}</div>` : ""}
-    <div class="ck-tools"><button type="button" data-ck-sound>${tourSoundOn() ? "🔊 צליל" : "🔇 צליל כבוי"}</button><button type="button" data-ck-fs>⛶ מסך מלא</button><button type="button" data-ck-full>📋 ${tourClockFull ? "הסתר מבנה" : "מבנה מלא"}</button></div>
+    <div class="ck-tools"><button type="button" data-ck-sound>${tourSoundOn() ? "🔊 צליל" : "🔇 צליל כבוי"}</button><button type="button" data-ck-fs>⛶ מסך מלא</button></div>
   </div>`;
 }
 // The blind structure under the clock: the current row marked, the table scrolled to it
@@ -11553,6 +11558,16 @@ function attachHandlers(){
       list.addEventListener("scroll", () => { tourRegListScroll = {gid: nav.gameId, top: list.scrollTop}; }, {passive: true});
     } }
   app.querySelectorAll("[data-reg-full]").forEach(el => el.onclick = () => { tourRegFull = !tourRegFull; render(); });
+  app.querySelectorAll("[data-info-tip]").forEach(el => el.onclick = (e) => {
+    e.stopPropagation();
+    document.querySelectorAll(".info-tip").forEach(x => x.remove());
+    const tip = document.createElement("div"); tip.className = "info-tip"; tip.textContent = el.dataset.infoTip;
+    document.body.appendChild(tip);
+    const r = el.getBoundingClientRect();
+    tip.style.top = (r.top - tip.offsetHeight - 8) + "px";
+    tip.style.left = Math.max(8, Math.min(window.innerWidth - tip.offsetWidth - 8, r.left + r.width / 2 - tip.offsetWidth / 2)) + "px";
+    setTimeout(() => { tip.classList.add("out"); setTimeout(() => tip.remove(), 300); }, 3000);
+  });
   app.querySelectorAll("[data-lobby-full]").forEach(el => el.onclick = () => { tourLobbyFull[el.dataset.lobbyFull] = !tourLobbyFull[el.dataset.lobbyFull]; render(); });
   app.querySelectorAll("[data-tour-register]").forEach(el => el.onclick = () => tourAct(el, async () => {
     const g = getGame(tourGid), c = getCommunity(g.communityId);
