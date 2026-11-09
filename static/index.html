@@ -1562,6 +1562,21 @@ html.theme-light.theme-sand .tour-tbl tr.brk td{color:#0f7a4f;}
 html.theme-light.theme-sand :is(.ck-dots button.on,.ck-acts button.on){background:#c8922a;color:#fff;border-color:#9a5f12;}
 html.theme-light.theme-sand :is(.ck-blinds-wrap tr.cur td,.st-tbl tr.me td,.tour-pay tr.pay-cur td){background:rgba(200,146,42,.42);}
 html.theme-light.theme-sand .reg-row.me{background:rgba(200,146,42,.38);box-shadow:inset 3px 0 0 #9a5f12;}
+/* ---- the chip count: the mode switch and the count boxes readable on every theme ---- */
+.cc-mode button:not(.on){background:rgba(255,255,255,.1);color:var(--text);}
+.cc-frame .lv-types input[type=number],.cc-frame .tf-in input{background:rgba(255,255,255,.12);color:var(--text);}
+html.theme-light .cc-mode button:not(.on){background:rgba(255,255,255,.7);color:#3a2a10;}
+html.theme-light .cc-frame .lv-types input[type=number],html.theme-light .cc-frame .tf-in input{background:#fffaf0;color:#1c1917;}
+html.theme-light.theme-blue .cc-mode button:not(.on){background:rgba(14,38,51,.35);color:#fff;}
+html.theme-light.theme-blue .cc-frame .lv-types input[type=number],html.theme-light.theme-blue .cc-frame .tf-in input{background:#f2f8fb;color:#0e2633;}
+/* the clock card on blue: a deep blue card so the light text on it reads */
+html.theme-light.theme-blue .ck-card{background:linear-gradient(180deg,rgba(22,63,88,.82),rgba(14,45,66,.88));--text:#fff;--muted:#d4e8f2;color:#fff;}
+html.theme-light.theme-blue .ck-card .ck-time{color:#fff;}
+html.theme-light.theme-blue .ck-card .ck-paused{color:#ffe39a;}
+html.theme-light.theme-blue .ck-brk .ck-card .ck-lvl{color:#a7f3d0;}
+/* the main clock button (השהה / המשך) gold on every theme */
+html.theme-light .ck-row button.main{background:linear-gradient(180deg,#fde68a,#f2c14e 45%,#c8922a);color:#2a1d05;border:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.6),inset 0 -2px 0 rgba(120,70,0,.4),0 3px 0 #8a5a12,0 4px 10px rgba(0,0,0,.25);}
+.cc-frame .lv-types input::placeholder,.cc-frame .tf-in input::placeholder{color:var(--text);opacity:.6;}
 .pend-note{color:#f3c26b;font-weight:700;} html.theme-light .pend-note{color:#9a3412;}
 .info-tip{position:fixed;z-index:9999;max-width:260px;padding:8px 12px;border-radius:10px;background:#1c1917;color:#fde68a;font-size:14px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.4);transition:opacity .3s;}
 .info-tip.out{opacity:0;}
