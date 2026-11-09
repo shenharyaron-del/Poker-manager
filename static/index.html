@@ -106,9 +106,10 @@ body.has-active-games #app{padding-bottom:calc(150px + env(safe-area-inset-botto
 .theme-toggle .tt-dot{width:22px;height:22px;border-radius:50%;border:1.5px solid rgba(255,255,255,.75);display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:0 1px 3px rgba(0,0,0,.35);}
 html.theme-light .theme-toggle{background:rgba(255,255,255,.6);color:var(--text);}
 .theme-opt{flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;padding:10px 6px 12px;border-radius:14px;border:2px solid var(--card-b);background:var(--card);color:var(--text);font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;}
-.night-closed-toggle{display:flex;align-items:center;gap:7px;cursor:pointer;color:var(--text);font-size:18px;font-weight:700;padding:6px 12px 6px 10px;border-radius:12px;border:1px solid rgba(212,175,55,.5);background:rgba(0,0,0,.2);}
+/* "ערב סגור": plain on the page, like "סיימתי את הערב" - no frame, no fill of its own */
+.night-closed-toggle{display:flex;align-items:center;gap:7px;cursor:pointer;color:var(--text);font-size:18px;font-weight:700;padding:6px 12px 6px 10px;border:none;background:transparent;}
 .night-closed-toggle input{width:22px;height:22px;accent-color:var(--gold);margin:0;}
-html.theme-light .night-closed-toggle{background:rgba(255,255,255,.55);}
+
 .theme-opt span{display:block;width:100%;height:64px;border-radius:10px;border:1px solid rgba(0,0,0,.2);}
 .theme-opt.on{border-color:var(--gold);box-shadow:0 0 0 2px rgba(212,175,55,.35);}
 .install-chip{position:absolute;left:12px;top:47px;background:rgba(212,175,55,.14);border:1px solid rgba(212,175,55,.55);color:var(--gold);font:inherit;font-size:10px;line-height:1.3;letter-spacing:0;padding:1px 8px;border-radius:12px;cursor:pointer;opacity:1;}
@@ -332,6 +333,15 @@ html.theme-light .round-cut-note button{color:#9a5f12;}
 .lv-types input::-webkit-outer-spin-button,.lv-types input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
 .lv-type-x{font-size:12px;line-height:1.2;color:var(--muted);text-align:center;margin-top:-2px;direction:ltr;white-space:nowrap;}
 .lv-types.many .lv-type-x{font-size:11px;white-space:normal;}
+/* no chips set up yet: a faded sample, and the way to set them up */
+.lv-types-locked > :not(.lv-types-lock){opacity:.5;pointer-events:none;}
+.lv-type-sample{width:min(38px,100%);aspect-ratio:1;justify-self:center;border-radius:50%;
+  background:radial-gradient(circle,var(--cc) 0 42%,transparent 43%),repeating-conic-gradient(var(--cc) 0 18deg,#f2eee4 18deg 36deg);box-shadow:0 1px 3px rgba(0,0,0,.4);}
+.lv-type-fake{height:28px;display:flex;align-items:center;justify-content:center;border-radius:9px;border:1px solid var(--gold);background:var(--input);color:var(--muted);font-size:17px;}
+.lv-types-lock{grid-column:1 / -1;justify-self:center;white-space:nowrap;padding:3px 12px;border-radius:999px;background:var(--card);border:1px solid var(--frame-c,var(--gold));font-size:14px;color:var(--text);box-shadow:0 2px 6px rgba(0,0,0,.35);}
+html:not(.theme-light) .lv-types-lock{background:#0f3d2b;}
+.lv-types-lock button{background:none;border:none;padding:0;font:inherit;font-weight:800;color:var(--gold);text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
+html.theme-light .lv-types-lock button{color:#9a5f12;} html.theme-light.theme-blue .lv-types-lock button{color:#0e2633;}
 /* numbers read left to right (a narrow RTL number box clipped "30" to "0") */
 .lv-types input{direction:ltr;}
 .lv-types.many input[type=number]{font-size:17px;padding:2px 0;}
@@ -1559,7 +1569,7 @@ html:not(.theme-light) .lux-page.pp-other .pp-ci.on .pp-ci-name,html:not(.theme-
 html:not(.theme-light) .lux-page.pp-other .pp-car-arrow{color:#0e8a66;}
 html:not(.theme-light) .lux-page.pp-other .pp-car-dots span{background:rgba(14,138,102,.3);}
 html:not(.theme-light) .lux-page.pp-other .pp-car-dots span.on{background:#0e8a66;}
-html:not(.theme-light) .lux-page.pp-other .night-closed-toggle{color:#3a1616;background:rgba(255,255,255,.55);}
+html:not(.theme-light) .lux-page.pp-other .night-closed-toggle{color:#3a1616;}
 /* Dark theme, acting for someone else: the end-of-night box on the blush page - a light
    amount field and pot panel instead of the dark green ones. */
 html:not(.theme-light) .lux-page.pp-other{--input:#fff8f6;}
@@ -5154,7 +5164,10 @@ async function saveSetupChips(communityId, chips){
   if (USE_RELATIONAL_API) {
     const c = getCommunity(communityId);
     try {
-      const ok = await v2SetChipValues(communityId, values.length ? values : (c.chipValues || []), validRatio ? ratio : c.chipRatio);
+      // an emptied list ("איפוס כל הז'יטונים") really empties it; otherwise a list with no valid
+      // values keeps the saved chips
+      const list = values.length || !chips.points.length ? values : (c.chipValues || []);
+      const ok = await v2SetChipValues(communityId, list, validRatio ? ratio : c.chipRatio);
       if (!ok) { showAlert("לא הצלחנו לשמור בגלל התנגשות עם שמירה אחרת - נסו את הפעולה שוב."); return false; }
     } catch(e) { showAlert(setupSaveErrorText(e, "chips")); return false; }
   } else {
@@ -5261,6 +5274,11 @@ async function saveAllSetup(andClose){
     if (!ok) { render(); return; }
     d.dirty.delete(tab);
     delete d[tab];
+  }
+  if (modal && modal.standalone) {   // "הגדר כאן" from the game: back to it
+    modal = null; setupDraft = null; render();
+    showAlert("הז'יטונים נשמרו ✓");
+    return;
   }
   if (andClose) {
     closeModal();
@@ -7510,7 +7528,20 @@ function renderPlayerScreen(gameId){
         // under each and "×value = ₪" under that; the sum goes straight into the amount above.
         // 3-6 types share the row; with 5-6 the small line breaks in two.
         const cvs = (c.chipValues || []).filter(cv => parseFloat(cv.value) > 0);
-        if (!cvs.length) return "";
+        // No chips set up for the club yet: the same row as a faded, untouchable sample (what
+        // it'll look like), with "צריך להגדיר ז'יטונים · הגדר כאן" between the chips and the
+        // counts - anyone may set them up (a page of its own, like the club profile's tab).
+        if (!cvs.length) {
+          const sample = [["#1f6b4f", "12", "×0.5 = ₪6"], ["#e9e4d6", "30", "×1 = ₪30"], ["#c0392b", "8", "×5 = ₪40"], ["#222", "3", "×10 = ₪30"]];
+          return `
+          <div class="lv-types-sep">או ספרו לפי סוג</div>
+          <div class="lv-types lv-types-locked" style="grid-template-columns:repeat(4,1fr);">
+            ${sample.map(([col]) => `<span class="lv-type-sample" style="--cc:${col}"></span>`).join("")}
+            <div class="lv-types-lock">🔒 צריך להגדיר ז'יטונים · <button type="button" data-define-chips="${c.id}">הגדר כאן</button></div>
+            ${sample.map(([, n]) => `<span class="lv-type-fake">${n}</span>`).join("")}
+            ${sample.map(([, , x]) => `<div class="lv-type-x">${x}</div>`).join("")}
+          </div>`;
+        }
         const counts = leaveTypeCounts[pickKey] || {};
         const many = cvs.length >= 5;
         const line = cv => { const n = parseFloat(counts[cv.id]) || 0, v = parseFloat(cv.value); const t = Math.round(n * v * 100) / 100;
@@ -9051,7 +9082,10 @@ function renderModal(m){
     }
   } else if (m.type === "chipSetup") {
     const c = getCommunity(m.communityId);
-    title = `הגדרת פרופיל מועדון: ${esc((getCommunity(m.communityId) || {}).name || "")}`;
+    // standalone: opened from the end-of-night frame ("הגדר כאן") - just the chips, no club-
+    // profile tabs or explanations (they know why they're here); saving returns to the game.
+    const sa = !!m.standalone;
+    title = sa ? "הגדרת ז'יטונים" : `הגדרת פרופיל מועדון: ${esc((getCommunity(m.communityId) || {}).name || "")}`;
     const editableList = m.points.length ? `
       <div class="section-title" style="padding:0;margin:0 0 6px;">ז'יטונים וערכם בש"ח</div>
       <div class="scroll-list" style="margin-bottom:14px;">
@@ -9085,23 +9119,25 @@ function renderModal(m){
     const shownRatio = draftRatio !== undefined ? draftRatio : (c.chipRatio || 1);
     if (!m.imageSrc) {
       body = `
-        ${setupTabsHtml(m.communityId, "chips")}
-        <p style="color:var(--muted);font-size:16px;margin:0 0 14px;">ערכי הז'יטונים ויחס ההמרה (אופציונלי) - כלי עזר לספירת הז'יטונים בסוף הערב.</p>
+        ${sa ? "" : setupTabsHtml(m.communityId, "chips")}
+        ${sa ? "" : `<p style="color:var(--muted);font-size:16px;margin:0 0 14px;">ערכי הז'יטונים ויחס ההמרה (אופציונלי) - כלי עזר לספירת הז'יטונים בסוף הערב.</p>`}
         <fieldset class="leave-frame setup-frame">
         <legend>יחס ז'יטונים</legend>
         <div class="field">
           <label>1 שקל עבור <input type="number" inputmode="decimal" id="chip-ratio-input" value="${esc(String(shownRatio))}" style="width:70px;display:inline-block;text-align:center;"> ז'יטונים</label>
         </div>
-        <p class="fit-same" style="color:var(--muted);font-size:16px;margin:-8px 0 0;"><span class="fit-line">משמש לספירת ז'יטונים כוללת בסיום ערב.</span><span class="fit-line">יחס של 1 ל-<span id="chip-ratio-example-x">${esc(String(shownRatio))}</span> אומר שעבור 50 ש"ח תקבל <span id="chip-ratio-example-y">${isNaN(parseFloat(shownRatio)) ? 'Y' : esc(String(Math.round(parseFloat(shownRatio) * 50 * 100) / 100))}</span> ז'יטונים.</span></p>
+        ${sa ? "" : `<p class="fit-same" style="color:var(--muted);font-size:16px;margin:-8px 0 0;"><span class="fit-line">משמש לספירת ז'יטונים כוללת בסיום ערב.</span><span class="fit-line">יחס של 1 ל-<span id="chip-ratio-example-x">${esc(String(shownRatio))}</span> אומר שעבור 50 ש"ח תקבל <span id="chip-ratio-example-y">${isNaN(parseFloat(shownRatio)) ? 'Y' : esc(String(Math.round(parseFloat(shownRatio) * 50 * 100) / 100))}</span> ז'יטונים.</span></p>`}
         </fieldset>
         <fieldset class="leave-frame setup-frame">
         <legend>הוספת ויזואליות של הז'יטונים</legend>
-        <p style="color:var(--muted);font-size:17px;margin-top:0;">צלמו תמונה עם כל הז'יטונים פרוסים בנפרד על משטח, ממבט על (מלמעלה).<br>באמצעות הגדרה זו נוכל לספור ז'יטונים בסיום ערב.</p>
+        ${sa ? "" : `<p style="color:var(--muted);font-size:17px;margin-top:0;">צלמו תמונה עם כל הז'יטונים פרוסים בנפרד על משטח, ממבט על (מלמעלה).<br>באמצעות הגדרה זו נוכל לספור ז'יטונים בסיום ערב.</p>`}
         ${editableList}
+        ${m.points.length && !m.roundCutUndo ? `<button type="button" class="btn btn-ghost btn-block" data-reset-chips style="margin-bottom:10px;">${icon('trash')} איפוס כל הז'יטונים</button>` : ""}
         ${m.roundCutUndo ? `<div class="round-cut-note">✂️ התמונות נחתכו לעיגול. בדקו אותן ולחצו "שמור שינויים" למטה - או <button type="button" data-round-cut-undo>ביטול</button>.</div>`
           : (m.points || []).some(pt => pt.image && squareChipImages[pt.image] !== false) ? `<button type="button" class="btn btn-ghost btn-block round-cut-btn" data-round-cut style="margin-bottom:10px;">✂️ חיתוך עגול לתמונות הקיימות</button>` : ""}
         ${pickButtons}
         </fieldset>
+        ${sa ? SETUP_FOOTER_HTML : ""}
       `;
     } else {
       const markers = (m.imageW && m.imageH) ? m.points.filter(pt => pt.x != null).map(pt => {
@@ -9117,8 +9153,8 @@ function renderModal(m){
           </div>`;
       }).join("") : "";
       body = `
-        ${setupTabsHtml(m.communityId, "chips")}
-        <p style="color:var(--muted);font-size:16px;margin:0 0 14px;">ערכי הז'יטונים ויחס ההמרה (אופציונלי) - כלי עזר לספירת הז'יטונים בסוף הערב.</p>
+        ${sa ? "" : setupTabsHtml(m.communityId, "chips")}
+        ${sa ? "" : `<p style="color:var(--muted);font-size:16px;margin:0 0 14px;">ערכי הז'יטונים ויחס ההמרה (אופציונלי) - כלי עזר לספירת הז'יטונים בסוף הערב.</p>`}
         <fieldset class="leave-frame setup-frame">
         <legend>הוספת ויזואליות של הז'יטונים</legend>
         <div style="width:100%;margin-bottom:10px;position:relative;">
@@ -9130,6 +9166,7 @@ function renderModal(m){
         ${editableList}
         <button class="btn btn-ghost btn-block" data-retake-photo>${icon('plus')} תמונה אחרת</button>
         </fieldset>
+        ${sa ? SETUP_FOOTER_HTML : ""}
       `;
     }
   } else if (m.type === "newCommunity") {
@@ -10917,6 +10954,13 @@ function attachHandlers(){
     const resultEl = el.closest(".lv-calc").querySelector("#lv-chips-result");
     if (resultEl) resultEl.textContent = "₪" + (amount || 0);
   });
+  // "הגדר כאן": the club's chips on a page of their own (the club profile's chips tab, without
+  // the tabs and explanations); saving comes back here.
+  app.querySelectorAll("[data-define-chips]").forEach(el => el.onclick = () => {
+    const cid = el.dataset.defineChips;
+    setupDraft = null; ensureSetupDraft(cid);
+    openModal({type: "chipSetup", communityId: cid, imageSrc: null, points: [], standalone: true});
+  });
   // Count by chip type: every change recomputes the sum into "סכום הז'יטונים שנשארו".
   app.querySelectorAll("[data-lv-type]").forEach(el => el.oninput = () => {
     const key = nav.gameId + ":" + viewedPid();
@@ -12251,6 +12295,12 @@ function attachHandlers(){
         updateModal({points, roundCutUndo: before});
       };
     }
+    // "איפוס כל הז'יטונים": empties the list (saved with "שמור שינויים", like any edit)
+    const resetChips = app.querySelector("[data-reset-chips]");
+    if (resetChips) resetChips.onclick = async () => {
+      if (!(await showConfirm("למחוק את כל הז'יטונים מהרשימה? אחרי \"שמור שינויים\" הם יימחקו מהמועדון, ואפשר יהיה להגדיר אותם מחדש."))) return;
+      updateModal({points: [], roundCutUndo: null});
+    };
     const roundCutUndo = app.querySelector("[data-round-cut-undo]");
     if (roundCutUndo) roundCutUndo.onclick = () => updateModal({points: modal.roundCutUndo, roundCutUndo: null});
     const cameraInput = app.querySelector("#chip-camera-input");
