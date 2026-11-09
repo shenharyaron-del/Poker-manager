@@ -1507,8 +1507,14 @@ html.theme-light .reg-out{color:#b91c1c;}
 .cc-frame .lv-type-x{direction:ltr;}
 .cc-total{text-align:center;margin-top:8px;font-size:16px;} .cc-total b{color:var(--gold);font-size:20px;} html.theme-light .cc-total b{color:#9a5f12;}
 .cc-done{text-align:center;font-size:16px;} .cc-done b{color:var(--gold);}
-.cc-check{border-radius:14px;padding:10px;margin:0 0 12px;font-size:14px;border:1px solid rgba(212,175,55,.45);color:var(--muted);}
-.cc-check b{color:var(--text);}
+.cc-check{border-radius:14px;padding:10px;margin:0 0 12px;font-size:16px;border:1px solid rgba(212,175,55,.45);color:var(--text);}
+.cc-check .cc-h{font-size:17px;font-weight:800;color:var(--gold);margin-bottom:4px;} html.theme-light .cc-check .cc-h{color:#9a5f12;}
+.cc-check .cc-line{display:flex;flex-wrap:wrap;justify-content:center;gap:2px 16px;font-weight:700;}
+.cc-check .cc-line span{white-space:nowrap;}
+.cc-check b{color:var(--gold);font-weight:800;} html.theme-light .cc-check b{color:#9a5f12;}
+html.theme-light.theme-blue :is(.cc-check b,.cc-check .cc-h){color:#ffe39a;}
+html.theme-light.theme-blue .cc-check{color:#fff;}
+.cc-check .lb-cancel{font-size:15px;color:var(--text);}
 .cc-check .big{font-size:16px;font-weight:800;margin-top:4px;color:var(--text);}
 .cc-check .sm{font-size:13.5px;margin-top:3px;}
 .cc-check.ok{border-color:#3fb383;background:rgba(63,179,131,.1);} .cc-check.ok .big{color:#6ee7b7;} html.theme-light .cc-check.ok .big{color:#047857;}
@@ -5904,7 +5910,7 @@ function tourCcWidget(c, t, box, initial, key, level){
 }
 function tourChipCountHtml(g, c, t, mine, key, level){
   const done = mine.chipsKey === key;
-  return `<fieldset class="leave-frame setup-frame cc-frame"><legend>🪙 ספירת ז'יטונים · סוף שלב ${level}</legend>
+  return `<fieldset class="leave-frame setup-frame cc-frame"><legend>ספירת ז'יטונים · סוף שלב ${level}</legend>
     ${done && !tourCcEdit ? `<div class="cc-done">✓ דיווחת <b>${Number(mine.chips).toLocaleString("en-US")}</b> ז'יטונים <button type="button" class="lb-cancel" data-cc-edit>עדכן</button></div>`
       : tourCcWidget(c, t, mine.playerId, done ? mine.chips : null, key, level)}
   </fieldset>`;
@@ -5958,11 +5964,12 @@ function renderTourClock(g, c, isAdmin){
       const missing = P.alive.filter(r => r.chipsKey !== P.key);
       const diff = P.reportedSum - P.expected;
       adminAlerts += `<div class="cc-check ${!missing.length ? (diff ? "bad" : "ok") : diff === 0 ? "warn" : ""}">
-        <div>🪙 ספירה · סוף שלב ${level}: דיווחו <b>${P.reportedNow.length}</b> מתוך ${P.alive.length} · נספרו <b>${P.reportedSum.toLocaleString("en-US")}</b> מתוך ${P.expected.toLocaleString("en-US")}</div>
+        <div class="cc-h">ספירה · סוף שלב ${level}</div>
+        <div class="cc-line"><span>דיווחו <b>${P.reportedNow.length}</b> מתוך <b>${P.alive.length}</b></span><span>נספרו <b>${P.reportedSum.toLocaleString("en-US")}</b> מתוך <b>${P.expected.toLocaleString("en-US")}</b></span></div>
         ${!missing.length ? (diff ? `<div class="big">⚠ הספירה לא מתאימה - הפרש ${diff > 0 ? "+" : ""}${diff.toLocaleString("en-US")}</div>` : `<div class="big">✓ הספירה מתאימה</div>`)
           : diff === 0 ? `<div class="big">הסכום מתאים - ${missing.length === 1 ? "שחקן אחד לא דיווח" : `${missing.length} שחקנים לא דיווחו`} (${missing.map(r => esc(r.name)).join(", ")})</div><button type="button" class="btn btn-ghost btn-block" data-mark-rest style="margin-top:6px">סמן אותם כפרשו</button>`
-          : `<div class="sm">מחכים ל: ${missing.map(r => esc(r.name)).join(", ")}</div>`}
-        <button type="button" class="lb-cancel" data-cc-admin-toggle style="margin-top:6px">${tourCcAdmin ? "סגור ▴" : "✎ הזנת ספירה לשחקן (מי שאין לו טלפון) ▾"}</button>
+          : ""}
+        <button type="button" class="lb-cancel" data-cc-admin-toggle style="margin-top:6px">${tourCcAdmin ? "סגור ▴" : "הזנת ספירה לשחקן (מי שאין לו טלפון) ▾"}</button>
         ${!tourCcAdmin ? "" : (() => {
           const sel = tourCcFor && P.alive.find(r => r.playerId === tourCcFor);
           if (sel) return `<div class="cc-admin"><div class="cc-for-h"><b>${esc(sel.name || "")}</b>${sel.chipsKey === P.key ? ` · דווח ${Number(sel.chips).toLocaleString("en-US")}` : ""} <button type="button" class="lb-cancel" data-cc-pick="">שחקן אחר</button></div>${tourCcWidget(c, t, sel.playerId, sel.chipsKey === P.key ? sel.chips : null, P.key, level)}</div>`;
