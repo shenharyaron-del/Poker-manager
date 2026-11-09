@@ -238,6 +238,10 @@ _INIT_STATEMENTS = (
     # so changing the club's profile later never rewrites a night already played.
     "ALTER TABLE games ADD COLUMN IF NOT EXISTS game_type TEXT NOT NULL DEFAULT 'cash'",
     "ALTER TABLE games ADD COLUMN IF NOT EXISTS tournament_settings JSONB",
+    # The blind clock of a started tournament: {startedAt, pausedAt, pausedTotal, offset,
+    # pauseReason} in server ms - every phone works the level and time left out of these
+    # and the blind structure, so nothing ticks on the server.
+    "ALTER TABLE games ADD COLUMN IF NOT EXISTS tournament_state JSONB",
     # Who asked to play a tournament night, and who the table's admin let in. 'approved'
     # means registered and paid the entry - that buy-in is a buyins row (id 'reg:<game>:<player>').
     "CREATE TABLE IF NOT EXISTS tournament_registrations ("
@@ -1375,7 +1379,7 @@ def v2_list_games(community_id):
 
 _GAME_BASE_COLUMNS = (
     "SELECT id, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at, created_by, created_at, "
-    "treasurer_id, game_type, tournament_settings FROM games"
+    "treasurer_id, game_type, tournament_settings, tournament_state FROM games"
 )
 
 
@@ -1394,13 +1398,14 @@ def _games_full(cur, base_rows):
     that don't otherwise touch the games row at all."""
     games = {}
     for (gid, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at, created_by, created_at,
-         treasurer_id, game_type, tournament_settings) in base_rows:
+         treasurer_id, game_type, tournament_settings, tournament_state) in base_rows:
         games[gid] = {
             "id": gid, "communityId": community_id, "name": name,
             "date": date.isoformat() if date else None,
             "createdByName": created_by_name, "createdBy": _pub(created_by), "closed": closed,
             "treasurerId": treasurer_id,
             "gameType": game_type or "cash", "tournamentSettings": tournament_settings,
+            "tournamentState": tournament_state, "serverNow": int(time.time() * 1000),
             "updatedAt": updated_at.isoformat() if updated_at else None,
             "createdAt": created_at.isoformat() if created_at else None,
             "seats": seats, "liveChips": live_chips,
@@ -2283,6 +2288,7 @@ _TREASURER_NAME_SQL = (
 _REG_COUNTS_SQL = (
     ", (SELECT count(*) FROM tournament_registrations r WHERE r.game_id = games.id AND r.status = 'pending')"
     ", (SELECT count(*) FROM tournament_registrations r WHERE r.game_id = games.id AND r.status = 'approved')"
+    ", tournament_state"
 )
 
 
@@ -2299,6 +2305,7 @@ def _row_to_game_summary(row):
         "tournamentSettings": row[11] if len(row) > 11 else None,
         "regPending": row[12] if len(row) > 12 else 0,
         "regApproved": row[13] if len(row) > 13 else 0,
+        "tournamentState": row[14] if len(row) > 14 else None,
     }
 
 
@@ -2854,6 +2861,61 @@ def v2_register_tournament(game_id):
             cur.execute("UPDATE games SET updated_at = now() WHERE id = %s", (game_id,))
         conn.commit()
     return jsonify({"ok": True}), 201
+
+
+@app.route("/api/v2/games/<game_id>/tournament/clock", methods=["POST"])
+def v2_tournament_clock(game_id):
+    # The table's admins run the clock: start, pause (or a break now), resume, and move it
+    # by deltaMs (±1 minute, next / previous level). Times are the server's own.
+    denied = _guard(game_id=game_id, need="table_admin")
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    action = body.get("action")
+    now = int(time.time() * 1000)
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT game_type, closed, tournament_state FROM games WHERE id = %s FOR UPDATE", (game_id,))
+            row = cur.fetchone()
+            if not row:
+                conn.rollback()
+                return jsonify({"error": "game not found"}), 404
+            game_type, closed, st = row
+            if game_type != "tournament" or closed:
+                conn.rollback()
+                return jsonify({"error": "not an open tournament"}), 400
+            st = dict(st or {})
+            if action == "start":
+                if st.get("startedAt"):
+                    conn.rollback()
+                    return jsonify({"error": "already started"}), 409
+                st = {"startedAt": now, "pausedAt": None, "pausedTotal": 0, "offset": 0, "pauseReason": None}
+            elif not st.get("startedAt"):
+                conn.rollback()
+                return jsonify({"error": "not started"}), 400
+            elif action == "pause":
+                if not st.get("pausedAt"):
+                    st["pausedAt"] = now
+                st["pauseReason"] = "break" if body.get("reason") == "break" else None
+            elif action == "resume":
+                if st.get("pausedAt"):
+                    st["pausedTotal"] = int(st.get("pausedTotal") or 0) + now - int(st["pausedAt"])
+                st["pausedAt"], st["pauseReason"] = None, None
+            elif action == "adjust":
+                try:
+                    delta = int(body.get("deltaMs"))
+                except (TypeError, ValueError):
+                    conn.rollback()
+                    return jsonify({"error": "deltaMs required"}), 400
+                end = int(st["pausedAt"]) if st.get("pausedAt") else now
+                elapsed = end - int(st["startedAt"]) - int(st.get("pausedTotal") or 0) + int(st.get("offset") or 0)
+                st["offset"] = int(st.get("offset") or 0) + max(delta, -elapsed)   # never before the start
+            else:
+                conn.rollback()
+                return jsonify({"error": "invalid action"}), 400
+            cur.execute("UPDATE games SET tournament_state = %s, updated_at = now() WHERE id = %s", (Json(st), game_id))
+        conn.commit()
+    return jsonify({"ok": True, "state": st, "serverNow": now})
 
 
 @app.route("/api/v2/games/<game_id>/registrations/<player_id>/approve", methods=["POST"])
