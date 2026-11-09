@@ -242,6 +242,15 @@ _INIT_STATEMENTS = (
     # pauseReason} in server ms - every phone works the level and time left out of these
     # and the blind structure, so nothing ticks on the server.
     "ALTER TABLE games ADD COLUMN IF NOT EXISTS tournament_state JSONB",
+    # During the tournament: when a player went out (and in which level), their last chip
+    # count (and at which break - chips_key), and a re-buy / add-on they asked for (pending).
+    # Re-buys and add-ons themselves are buyins rows ('rb:<game>:<player>:<ms>', 'ao:<game>:<player>').
+    "ALTER TABLE tournament_registrations ADD COLUMN IF NOT EXISTS busted_at TIMESTAMPTZ",
+    "ALTER TABLE tournament_registrations ADD COLUMN IF NOT EXISTS bust_level INT",
+    "ALTER TABLE tournament_registrations ADD COLUMN IF NOT EXISTS chips NUMERIC",
+    "ALTER TABLE tournament_registrations ADD COLUMN IF NOT EXISTS chips_key TEXT",
+    "ALTER TABLE tournament_registrations ADD COLUMN IF NOT EXISTS chips_level INT",
+    "ALTER TABLE tournament_registrations ADD COLUMN IF NOT EXISTS pending_action TEXT",
     # Who asked to play a tournament night, and who the table's admin let in. 'approved'
     # means registered and paid the entry - that buy-in is a buyins row (id 'reg:<game>:<player>').
     "CREATE TABLE IF NOT EXISTS tournament_registrations ("
@@ -1449,15 +1458,27 @@ def _games_full(cur, base_rows):
         "SELECT r.game_id, r.player_id, r.name, r.status, r.requested_at, r.approved_at, NOT EXISTS ("
         "  SELECT 1 FROM game_players gp JOIN games g2 ON g2.id = gp.game_id"
         "  WHERE gp.player_id = r.player_id AND gp.game_id <> r.game_id AND g2.community_id = g.community_id"
-        ") FROM tournament_registrations r JOIN games g ON g.id = r.game_id "
+        "), r.busted_at, r.bust_level, r.chips, r.chips_key, r.chips_level, r.pending_action "
+        "FROM tournament_registrations r JOIN games g ON g.id = r.game_id "
         "WHERE r.game_id = ANY(%s) ORDER BY r.requested_at",
         (ids,),
     )
-    for gid, pid, pname, status, requested_at, approved_at, is_new in cur.fetchall():
-        games[gid]["registrations"].append({
+    for (gid, pid, pname, status, requested_at, approved_at, is_new,
+         busted_at, bust_level, chips, chips_key, chips_level, pending_action) in cur.fetchall():
+        reg = {
             "playerId": pid, "name": pname, "status": status, "isNew": bool(is_new),
             "requestedAt": _ms(requested_at), "approvedAt": _ms(approved_at),
-        })
+            "bustedAt": _ms(busted_at), "bustLevel": bust_level,
+            "chips": _num(chips) if chips is not None else None, "chipsKey": chips_key, "chipsLevel": chips_level,
+            "pendingAction": pending_action, "rebuys": [], "addOnAt": None,
+        }
+        # re-buys and the add-on, from the night's buyins
+        for b in games[gid]["buyins"]:
+            if b["playerId"] == pid and str(b["id"]).startswith(f"rb:{gid}:"):
+                reg["rebuys"].append(b["ts"])
+            if b["id"] == f"ao:{gid}:{pid}":
+                reg["addOnAt"] = b["ts"]
+        games[gid]["registrations"].append(reg)
     return list(games.values())
 
 
@@ -2918,6 +2939,73 @@ def v2_tournament_clock(game_id):
     return jsonify({"ok": True, "state": st, "serverNow": now})
 
 
+@app.route("/api/v2/games/<game_id>/registrations/<player_id>/action", methods=["POST"])
+def v2_registration_action(game_id, player_id):
+    # During the tournament. The player themself (or the table's admin): bust (went out),
+    # chips (their count at a break), request_rebuy / request_addon, cancel_request.
+    # The table's admin only: unbust, rebuy / addon (paid - recorded as a buy-in; a re-buy
+    # also brings a busted player back), decline (a pending request).
+    body = request.get_json(silent=True) or {}
+    action = body.get("action")
+    own_ok = action in ("bust", "chips", "request_rebuy", "request_addon", "cancel_request")
+    denied = _guard(game_id=game_id, need="table_admin", players=[player_id] if own_ok else None)
+    if denied:
+        return denied
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT game_type, closed, tournament_settings FROM games WHERE id = %s", (game_id,))
+            g = cur.fetchone()
+            if not g or g[0] != "tournament" or g[1]:
+                conn.rollback()
+                return jsonify({"error": "not an open tournament"}), 400
+            ts = g[2] or {}
+            cur.execute("SELECT status, busted_at FROM tournament_registrations WHERE game_id = %s AND player_id = %s FOR UPDATE",
+                        (game_id, player_id))
+            reg = cur.fetchone()
+            if not reg or reg[0] != "approved":
+                conn.rollback()
+                return jsonify({"error": "not a registered player"}), 404
+            entry = float(ts.get("fee") or 0) + float(ts.get("prize") or 0)
+            level = body.get("level") if isinstance(body.get("level"), int) else None
+            if action == "bust":
+                cur.execute("UPDATE tournament_registrations SET busted_at = COALESCE(busted_at, now()), bust_level = %s, "
+                            "pending_action = NULL WHERE game_id = %s AND player_id = %s", (level, game_id, player_id))
+            elif action == "unbust":
+                cur.execute("UPDATE tournament_registrations SET busted_at = NULL, bust_level = NULL "
+                            "WHERE game_id = %s AND player_id = %s", (game_id, player_id))
+            elif action == "chips":
+                chips, key = body.get("chips"), str(body.get("key") or "")[:40]
+                if not _valid_amount(chips, allow_zero=True) or not key:
+                    conn.rollback()
+                    return jsonify({"error": "chips and key required"}), 400
+                cur.execute("UPDATE tournament_registrations SET chips = %s, chips_key = %s, chips_level = %s "
+                            "WHERE game_id = %s AND player_id = %s", (chips, key, level, game_id, player_id))
+            elif action in ("request_rebuy", "request_addon"):
+                cur.execute("UPDATE tournament_registrations SET pending_action = %s WHERE game_id = %s AND player_id = %s",
+                            (action.split("_")[1], game_id, player_id))
+            elif action in ("cancel_request", "decline"):
+                cur.execute("UPDATE tournament_registrations SET pending_action = NULL WHERE game_id = %s AND player_id = %s",
+                            (game_id, player_id))
+            elif action == "rebuy":
+                price = float(ts.get("rebuyPrice") if ts.get("rebuyPrice") is not None else entry)
+                cur.execute("INSERT INTO buyins (id, game_id, player_id, amount, ts) VALUES (%s,%s,%s,%s,now())",
+                            (f"rb:{game_id}:{player_id}:{int(time.time() * 1000)}", game_id, player_id, price))
+                cur.execute("UPDATE tournament_registrations SET busted_at = NULL, bust_level = NULL, pending_action = NULL "
+                            "WHERE game_id = %s AND player_id = %s", (game_id, player_id))
+            elif action == "addon":
+                price = float(ts.get("addOnPrice") if ts.get("addOnPrice") is not None else entry)
+                cur.execute("INSERT INTO buyins (id, game_id, player_id, amount, ts) VALUES (%s,%s,%s,%s,now()) "
+                            "ON CONFLICT (id) DO NOTHING", (f"ao:{game_id}:{player_id}", game_id, player_id, price))
+                cur.execute("UPDATE tournament_registrations SET pending_action = NULL WHERE game_id = %s AND player_id = %s",
+                            (game_id, player_id))
+            else:
+                conn.rollback()
+                return jsonify({"error": "invalid action"}), 400
+            cur.execute("UPDATE games SET updated_at = now() WHERE id = %s", (game_id,))
+        conn.commit()
+    return jsonify({"ok": True})
+
+
 @app.route("/api/v2/games/<game_id>/registrations/<player_id>/approve", methods=["POST"])
 def v2_approve_registration(game_id, player_id):
     denied = _guard(game_id=game_id, need="table_admin")
@@ -2958,7 +3046,8 @@ def v2_remove_registration(game_id, player_id):
         with conn.cursor() as cur:
             cur.execute("DELETE FROM tournament_registrations WHERE game_id = %s AND player_id = %s", (game_id, player_id))
             if row[0] == "approved":
-                cur.execute("DELETE FROM buyins WHERE id = %s", (f"reg:{game_id}:{player_id}",))
+                cur.execute("DELETE FROM buyins WHERE game_id = %s AND player_id = %s AND (id = %s OR id LIKE %s OR id = %s)",
+                            (game_id, player_id, f"reg:{game_id}:{player_id}", f"rb:{game_id}:{player_id}:%", f"ao:{game_id}:{player_id}"))
                 cur.execute(
                     "DELETE FROM game_players gp WHERE gp.game_id = %s AND gp.player_id = %s "
                     "AND NOT EXISTS (SELECT 1 FROM buyins b WHERE b.game_id = gp.game_id AND b.player_id = gp.player_id)",
