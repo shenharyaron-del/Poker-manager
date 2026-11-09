@@ -1402,7 +1402,14 @@ html.theme-light .tf-unit{color:#9a5f12;}
 .tour-tbl td.ltr{direction:ltr;}
 .tour-tbl tr.brk td{color:#3fb383;font-weight:800;}
 .tour-tbl td{white-space:nowrap;}
-.tour-tbl:not(.no-ante) :is(th,td):nth-child(4){width:56px;}
+.tour-tbl :is(th,td):nth-child(4){width:56px;}
+.tour-tbl td.off{color:var(--muted);}
+.tour-tbl th.ante-th{padding-top:2px;}
+.ante-tg{display:inline-flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;padding:0;font:inherit;font-weight:700;color:var(--muted);cursor:pointer;}
+.ante-sw{position:relative;width:26px;height:14px;border-radius:7px;background:rgba(127,127,127,.45);transition:background .15s;}
+.ante-sw::after{content:"";position:absolute;top:2px;inset-inline-start:2px;width:10px;height:10px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.35);transition:inset-inline-start .15s;}
+.ante-tg.on .ante-sw{background:#f2c14e;}
+.ante-tg.on .ante-sw::after{inset-inline-start:14px;}
 .tour-tbl tr.rb-end td{color:#e0a43a;font-weight:800;font-size:14px;border-top:1.5px dashed #e0a43a;border-bottom:1.5px dashed #e0a43a;}
 html.theme-light .tour-tbl tr.rb-end td{color:#9a5f12;border-color:#c8922a;}
 .tour-note{font-size:13px;color:var(--muted);text-align:center;margin:6px 0 8px;}
@@ -5359,7 +5366,7 @@ function setupModeSwitchHtml(communityId, on){
 }
 // ---------- Tournament (club profile) - stage 1: the screen only, nothing saved ----------
 const TOUR_DEFAULTS = {tab: "struct", fee: 20, prize: 80, chips: 10000, early: 5, rebuys: 0, rebuyChips: 10000,
-  rebuyLevels: 3, addOn: 0, addOnChips: 10000, addOnPrice: 100, level: 20, breakEvery: 70, breakLen: 10, speed: 2, ante: 1, payoutPct: 20, entries: 16, points: {}};
+  rebuyLevels: 3, addOn: 0, addOnChips: 10000, addOnPrice: 100, addOnExtra: 5, level: 20, breakEvery: 70, breakLen: 10, speed: 2, ante: 1, payoutPct: 20, entries: 16, points: {}};
 // Blind speed (איטי / רגיל / מהיר): each level's small blind as a multiple of the first one.
 const TOUR_SPEEDS = {1: [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8], 2: [1, 1.2, 1.6, 2, 3, 4, 6, 8, 10], 3: [1, 2, 3, 4, 6, 8, 12, 16, 24]};
 // "משך הפסקה": 1-5 minutes one by one, then 5 at a time up to 30 (the slider walks this list).
@@ -5390,7 +5397,15 @@ function tourBlindLevels(t){
     if (breakNow) end = nextBreak;
     rows.push({level: lvl + 1, from: minute, to: end, sb, bb, ante: t.ante ? Math.max(1, Math.round(bb * 0.12)) : 0});
     minute = end; lvl++;
-    if (breakNow && lvl < 9) { rows.push({brk: true, from: minute, to: minute + brk}); minute += brk; nextBreak = minute + cycle - brk; }
+    // With an add-on there is always a break when the re-buy period ends: the regular one if
+    // it falls there, made longer by addOnExtra - otherwise one is added (10 minutes when
+    // breaks are off), and the regular breaks count again from after it.
+    const addOnNow = !!t.addOn && lvl === t.rebuyLevels;
+    if ((breakNow && lvl < 9) || addOnNow) {
+      const len = addOnNow ? (brk || 10) + (+t.addOnExtra || 0) : brk;
+      rows.push({brk: true, addOn: addOnNow, from: minute, to: minute + len}); minute += len;
+      nextBreak = brk > 0 ? minute + cycle - brk : Infinity;
+    }
   }
   return rows;
 }
@@ -9227,10 +9242,9 @@ function renderModal(m){
       for (let e = 1; e <= 40; e++) { const pl = tourPlacesPaid(e, t.payoutPct); const g = groups[groups.length - 1]; if (g && g.pl === pl) g.to = e; else groups.push({pl, from: e, to: e}); }
       // re-buys are open until the end of level `rebuyLevels` - that minute is marked in the table
       const rbRow = levels.find(r => !r.brk && r.level === t.rebuyLevels);
-      // the add-on is bought in the break right after the re-buy period (or at its end, if no break follows)
-      const rbNext = levels[levels.indexOf(rbRow) + 1];
-      const addOnBreak = t.addOn && rbNext && rbNext.brk ? rbNext : null;
-      const cols = t.ante ? 4 : 3;
+      const cols = 4;
+      // ante on/off: a small switch in the ante column's header
+      const anteTh = `<th class="ante-th"><button type="button" class="ante-tg${t.ante ? " on" : ""}" data-tour-seg="ante" data-v="${t.ante ? 0 : 1}" aria-pressed="${t.ante ? "true" : "false"}"><span class="ante-sw"></span>אנטה</button></th>`;
       inner = `
         <fieldset class="leave-frame setup-frame"><legend>קניית כניסה ראשונית (Buy-in)</legend>
           <div class="tf"><span>סכום כניסה כולל</span>${money("total", (+t.fee || 0) + (+t.prize || 0))}</div>
@@ -9245,7 +9259,8 @@ function renderModal(m){
           ${slider("rebuyLevels", "ריביי מותר במשך", "שלבים", 1, 9, t.rebuyLevels, [1, 2, 3, 4, 5, 6, 7, 8, 9])}
           <div class="tf"><span>Add-on בסוף זמן הריביי</span>${seg("addOn", [[0, "ללא"], [1, "יש Add-on"]], t.addOn)}</div>
           ${t.addOn ? `<div class="tf-pair"><div class="tf"><span>מחיר Add-on</span>${money("addOnPrice", t.addOnPrice)}</div><div class="tf"><span>ז'יטונים ל-Add-on</span>${num("addOnChips", t.addOnChips)}</div></div>
-          <p class="tour-note">קנייה אחת לשחקן, בהפסקה שבסוף זמן הריביי - גם למי שלא נגמרו לו הז'יטונים.</p>` : ""}
+          <div class="tf"><span>הארכת ההפסקה ל-Add-on</span>${seg("addOnExtra", [[0, "ללא"], [5, "+5 דק'"], [10, "+10 דק'"], [15, "+15 דק'"]], t.addOnExtra)}</div>
+          <p class="tour-note">קנייה אחת לשחקן, בהפסקה שבסוף זמן הריביי - גם למי שלא נגמרו לו הז'יטונים. אם אין שם הפסקה, היא נוספת אוטומטית.</p>` : ""}
         </fieldset>
         <fieldset class="leave-frame setup-frame"><legend>זמני משחק והפסקות</legend>
           ${slider("level", "משך כל שלב בליינדים", "דקות", 5, 60, t.level)}
@@ -9253,12 +9268,11 @@ function renderModal(m){
         </fieldset>
         <fieldset class="leave-frame setup-frame"><legend>מבנה בליינדים</legend>
           <div class="tf"><span>קצב עליית הבליינדים</span>${seg("speed", [[1, "איטי"], [2, "רגיל"], [3, "מהיר"]], t.speed)}</div>
-          <div class="tf"><span>אנטה</span>${seg("ante", [[0, "ללא"], [1, "עם אנטה"]], t.ante)}</div>
-          <table class="tour-tbl${t.ante ? "" : " no-ante"}"><thead><tr><th>רמה</th><th>טווח זמן</th><th>בליינדים</th>${t.ante ? "<th>אנטה</th>" : ""}</tr></thead><tbody>
+          <table class="tour-tbl"><thead><tr><th>רמה</th><th>טווח זמן</th><th>בליינדים</th>${anteTh}</tr></thead><tbody>
             ${levels.map(r => (r.brk
-              ? `<tr class="brk"><td>☕</td><td class="ltr">${r.from + 1}–${r.to}</td><td colspan="${cols - 2}">${r === addOnBreak ? "הפסקה + Add-on" : "הפסקה"}</td></tr>`
-              : `<tr><td>${r.level}</td><td class="ltr">${r.from ? r.from + 1 : 0}–${r.to}</td><td class="ltr">${r.sb.toLocaleString("en-US")}/${r.bb.toLocaleString("en-US")}</td>${t.ante ? `<td class="ltr">${r.ante.toLocaleString("en-US")}</td>` : ""}</tr>`)
-              + (r === rbRow ? `<tr class="rb-end"><td colspan="${cols}">🔁 סוף זמן ריביי · דקה ${r.to}${t.addOn && !addOnBreak ? " · Add-on" : ""}</td></tr>` : "")).join("")}
+              ? `<tr class="brk"><td>☕</td><td class="ltr">${r.from + 1}–${r.to}</td><td colspan="${cols - 2}">${r.addOn ? "הפסקה + Add-on" : "הפסקה"}</td></tr>`
+              : `<tr><td>${r.level}</td><td class="ltr">${r.from ? r.from + 1 : 0}–${r.to}</td><td class="ltr">${r.sb.toLocaleString("en-US")}/${r.bb.toLocaleString("en-US")}</td><td class="ltr${t.ante ? "" : " off"}">${t.ante ? r.ante.toLocaleString("en-US") : "–"}</td></tr>`)
+              + (r === rbRow ? `<tr class="rb-end"><td colspan="${cols}">🔁 סוף זמן ריביי · דקה ${r.to}</td></tr>` : "")).join("")}
           </tbody></table>
           <p class="tour-note">נבנה אוטומטית לפי הז'יטונים, הקצב והזמנים</p>
         </fieldset>
