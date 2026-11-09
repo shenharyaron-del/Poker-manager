@@ -5027,12 +5027,13 @@ async function takeSeatAt(g, idx){
   } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
 }
 function shouldAskWatchOrJoin(g){
-  if (!g || g.closed || watchOnlyGameIds.has(g.id) || isSeatedInGame(g) || !canSelfSeat(g)) return false;
+  // a tournament has no seats to take - it opens straight into its lobby / registration / clock
+  if (!g || g.gameType === "tournament" || g.closed || watchOnlyGameIds.has(g.id) || isSeatedInGame(g) || !canSelfSeat(g)) return false;
   return isSuperAdmin();
 }
 function autoSeatSelf(gameId){
   const g = getGame(gameId);
-  if (!g || g.closed || watchOnlyGameIds.has(gameId)) return;
+  if (!g || g.gameType === "tournament" || g.closed || watchOnlyGameIds.has(gameId)) return;
   const c = getCommunity(g.communityId);
   if (!c) return;
   const playerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
