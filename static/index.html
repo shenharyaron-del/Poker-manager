@@ -6020,7 +6020,7 @@ function renderTourClock(g, c, isAdmin){
     lateOpen && ["add", "הוספת שחקן", 0],
     (lateOpen || pending.length) && ["lobby", "לובי", pending.length],
     (lateOpen || aoNow || reqs.length) && ["rebuy", lateOpen && t.addOn ? "ריביי / Add-on" : lateOpen ? "ריביי" : "Add-on", reqs.length],
-    ["out", "שחקן יצא", 0],
+    ["out", "הזן שחקן שיצא", 0],
   ].filter(Boolean);
   if (tourPanel && !actList.some(a => a[0] === tourPanel)) tourPanel = null;
   const acts = !isAdmin ? "" : `<div class="ck-acts${actList.length === 1 ? " solo" : ""}">${actList
