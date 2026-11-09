@@ -1515,7 +1515,7 @@ html.theme-light .reg-me{color:#047857;}
 .ad-sum b{display:block;font-size:20px;color:var(--gold);} html.theme-light .ad-sum b{color:#9a5f12;}
 .ad-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 14px;}
 .reg-pick{display:flex;align-items:center;gap:10px;width:100%;padding:8px 6px;background:none;border:none;border-bottom:1px solid rgba(212,175,55,.15);color:var(--text);font:inherit;font-size:16.5px;font-weight:700;text-align:right;cursor:pointer;}
-.reg-pick span{flex:1;} .reg-pick b{color:var(--gold);font-size:20px;}
+.reg-pick span:not(.reg-av){flex:1;} .reg-pick .reg-av{flex:0 0 34px;} .reg-pick b{color:var(--gold);font-size:20px;}
 .gc-tour-sub{font-size:14.5px;color:var(--muted);margin-top:3px;}
 .gc-tour-sub b{color:var(--text);font-weight:700;}
 .tour-pay tr.pay-more{cursor:pointer;}
@@ -5942,7 +5942,7 @@ function renderTourGame(g, c){
         const myPid = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
         return myPid && approved.some(r => r.playerId === myPid) ? "" : `<div style="text-align:center;margin:0 0 10px;"><button type="button" class="reg-me" data-reg-me>＋ רשום אותי</button></div>`;
       })()}
-      <div class="ad-btns"><button type="button" class="btn btn-ghost" data-reg-add>＋ רשום מהמועדון</button><button type="button" class="btn btn-ghost" data-invite-game="${g.id}">📤 הזמנת שחקנים</button></div>
+      <div class="ad-btns"><button type="button" class="btn btn-ghost" data-reg-add>＋ רישום שחקן</button><button type="button" class="btn btn-ghost" data-invite-game="${g.id}">📤 הזמנת שחקנים</button></div>
       ${tourBlindsReadHtml(t, c)}${tourPayReadHtml(t, approved.length)}
     </div>`;
   }
@@ -10316,10 +10316,22 @@ function renderModal(m){
     const g = getGame(m.gameId), c = g && getCommunity(g.communityId);
     const taken = new Set(((g && g.registrations) || []).filter(r => r.status === "approved").map(r => r.playerId));
     const roster = ((c && c.roster) || []).filter(p => !taken.has(p.id)).sort((a, b) => String(a.name).localeCompare(String(b.name), "he"));
-    title = "רישום שחקנים מהמועדון";
-    body = roster.length ? `<div class="lb-note" style="margin:-4px 0 8px;">לחיצה רושמת את השחקן - כמי ששילם את הכניסה.</div>
-      <div class="scroll-list">${roster.map((p, i) => `<button type="button" class="reg-pick" data-reg-pick="${esc(p.id)}">${tourAvatar(p.name, i, p.id, c && c.id)}<span>${esc(p.name)}</span><b>＋</b></button>`).join("")}</div>`
-      : `<p class="lb-note">כל שחקני המועדון כבר רשומים.</p>`;
+    // Like seating a player at a cash table: type the name - the club's players narrow down
+    // as you type; pick one, or add a new one to the club. Registered = paid.
+    title = "רישום שחקן";
+    body = `
+      <div class="name-pair" style="margin-bottom:8px;">
+        <input type="text" id="tr-first" placeholder="שם פרטי" autocomplete="off">
+        <input type="text" id="tr-last" placeholder="שם משפחה" autocomplete="off">
+      </div>
+      <div style="display:flex;gap:8px;align-items:stretch;margin-bottom:8px;">
+        <div class="gender-seg" role="group" aria-label="מין"><button type="button" class="on" data-tr-gender="male" title="זכר">ז</button><button type="button" data-tr-gender="female" title="נקבה">נ</button></div>
+        <button class="btn btn-primary" data-tr-add style="flex:1;" disabled>${icon('plus')} הוסף למועדון ורשום</button>
+      </div>
+      <p class="lb-note" style="text-align:right;margin:0 0 8px;">רישום = השחקן שילם את הכניסה. שחקן חדש נכנס גם לרשימת השחקנים של המועדון.</p>
+      <div class="section-title" style="padding:0;margin:6px 0 6px;" data-tr-list-title>${roster.length ? "שחקני המועדון" : "כל שחקני המועדון כבר רשומים"}</div>
+      <div class="scroll-list" data-tr-list>${roster.map((p, i) => `<button type="button" class="reg-pick" data-reg-pick="${esc(p.id)}" data-name="${esc(String(p.name || "").toLowerCase())}">${tourAvatar(p.name, i, p.id, c && c.id)}<span>${esc(p.name)}</span><b>＋</b></button>`).join("")}</div>
+      <p class="lb-note" data-tr-none style="display:none;">אין שחקן כזה במועדון - "הוסף למועדון ורשום" יוסיף אותו.</p>`;
   } else if (m.type === "newGame") {
     const c = getCommunity(m.communityId);
     // Cash or tournament - the tournament option is the club admins' (a player never sees it).
@@ -11479,6 +11491,29 @@ function attachHandlers(){
       const g = getGame(modal.gameId), c = getCommunity(g.communityId), p = c.roster.find(x => x.id === el.dataset.regPick);
       tourAct(el, () => v2TourRegister(g.id, p.id, p.name, true));
     });
+    // typing narrows the club's list (first / last name, anywhere in the name)
+    const first = document.getElementById("tr-first"), last = document.getElementById("tr-last"), addBtn = app.querySelector("[data-tr-add]");
+    const filter = () => {
+      const words = [first.value, last.value].map(v => v.trim().toLowerCase()).filter(Boolean);
+      let shown = 0;
+      app.querySelectorAll("[data-tr-list] [data-reg-pick]").forEach(b => { const ok = words.every(w => b.dataset.name.includes(w)); b.style.display = ok ? "" : "none"; if (ok) shown++; });
+      const none = app.querySelector("[data-tr-none]"); if (none) none.style.display = words.length && !shown ? "" : "none";
+      if (addBtn) addBtn.disabled = !first.value.trim();
+    };
+    if (first) { first.oninput = filter; last.oninput = filter; setTimeout(() => first.focus(), 50); }
+    app.querySelectorAll("[data-tr-gender]").forEach(el => el.onclick = () => app.querySelectorAll("[data-tr-gender]").forEach(b => b.classList.toggle("on", b === el)));
+    if (addBtn) addBtn.onclick = () => {
+      const name = [first.value.trim(), last.value.trim()].filter(Boolean).join(" ");
+      if (!name) return;
+      const g = getGame(modal.gameId), c = getCommunity(g.communityId);
+      const same = c.roster.find(p => String(p.name).trim() === name);
+      const gender = (app.querySelector("[data-tr-gender].on") || {}).dataset ? app.querySelector("[data-tr-gender].on").dataset.trGender : "male";
+      tourAct(addBtn, async () => {
+        let pid = same && same.id;   // the same name already in the club: that player
+        if (!pid) { pid = uid(); await v2AddRosterPlayer(c.id, pid, name, gender); }
+        await v2TourRegister(g.id, pid, name, true);
+      });
+    };
   }
   app.querySelectorAll("[data-open-game-tour]").forEach(el => el.onclick = (e) => {
     e.stopPropagation();
