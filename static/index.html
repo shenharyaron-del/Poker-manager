@@ -1616,6 +1616,8 @@ html.theme-light.theme-blue .ck-blinds-wrap tr.cur td{background:rgba(255,227,15
 .reg-row:last-of-type{border-bottom:none;}
 .reg-row .nm{flex:1;font-size:16.5px;font-weight:700;min-width:0;}
 .reg-row .nm small{display:block;font-weight:500;font-size:13px;color:var(--muted);}
+.reg-av-edit{position:relative;background:none;border:none;padding:0;cursor:pointer;flex-shrink:0;line-height:0;}
+.reg-av-pen{position:absolute;bottom:-3px;left:-3px;width:17px;height:17px;border-radius:50%;background:#f2c14e;color:#2a1d05;font-size:11px;line-height:17px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.4);}
 .reg-row .nm-l{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding-inline-end:6px;}
 .reg-row .nm-chips{font-size:14px;font-weight:600;color:var(--muted);white-space:nowrap;}
 .reg-ok{padding:7px 12px;border-radius:10px;border:none;background:linear-gradient(180deg,#5fe0a8,#2fa877);color:#062a1b;font:inherit;font-weight:800;font-size:15px;cursor:pointer;}
@@ -6128,17 +6130,20 @@ function tourClockBlindsHtml(k){
 let tourClockPage = 0;
 let tourPanel = null;   // the admin's open panel under the clock: qr / add / lobby / rebuy   // the admin's page under the clock (0 / 1)
 // A registered player's line (before the start): the name (חדש) and their entry chips.
-function tourRegNameHtml(g, t, r){
+function tourRegNameHtml(g, t, r, showNew){
   const st = g.tournamentState && g.tournamentState.startedAt;
   const chips = t.chips + (!st || (r.approvedAt && r.approvedAt <= st) ? Math.round(t.chips * (+t.early || 0) / 100) : 0);
-  return `<div class="nm"><div class="nm-l"><span>${esc(r.name || "")}${r.isNew ? `<span class="reg-new">חדש</span>` : ""}</span><span class="nm-chips">${chips.toLocaleString("en-US")} ז'יטונים</span></div></div>`;
+  return `<div class="nm"><div class="nm-l"><span>${esc(r.name || "")}${showNew && r.isNew ? `<span class="reg-new">חדש</span>` : ""}</span><span class="nm-chips">${chips.toLocaleString("en-US")} ז'יטונים</span></div></div>`;
 }
 // The registered list (4 rows, scroll, "רשימה מלאה"); actions only on the admin's screen.
 function tourRegListHtml(g, approved, rowTail){
   const t = Object.assign({}, TOUR_DEFAULTS, g.tournamentSettings || {}), me = tourMyPid(g);
   return !approved.length ? "" : `<fieldset class="leave-frame setup-frame"><legend>✓ רשומים (${approved.length})</legend>
     <div class="reg-list${approved.length > 4 && !tourRegFull ? " capped" : ""}">
-    ${approved.map((r, i) => `<div class="reg-row${r.bustedAt ? " out" : ""}${r.playerId === me ? " me" : ""}">${tourAvatar(r.name, i, r.playerId, g.communityId)}${tourRegNameHtml(g, t, r)}${rowTail ? rowTail(r) : ""}</div>`).join("")}
+    ${approved.map((r, i) => `<div class="reg-row${r.bustedAt ? " out" : ""}${r.playerId === me ? " me" : ""}">${r.playerId === me
+        // my own picture: tap to change it (the profile window, with the avatar picker)
+        ? `<button type="button" class="reg-av-edit" data-tour-avatar title="החלפת תמונה">${tourAvatar(r.name, i, r.playerId, g.communityId)}<span class="reg-av-pen">✎</span></button>`
+        : tourAvatar(r.name, i, r.playerId, g.communityId)}${tourRegNameHtml(g, t, r, !!rowTail)}${rowTail ? rowTail(r) : ""}</div>`).join("")}
     </div>
     ${approved.length > 4 ? `<button type="button" class="tour-full-link" data-reg-full>${tourRegFull ? "הסתר ▴" : `רשימה מלאה (${approved.length}) ▾`}</button>` : ""}
   </fieldset>`;
@@ -11636,6 +11641,8 @@ function attachHandlers(){
   } catch(e) { logSync("swipe handler setup failed: " + e); }
 
   app.querySelectorAll("[data-edit-identity-name]").forEach(el => el.onclick = () => openModal({type:"identityName", forced:false}));
+  // my own picture in a tournament's player list: straight to picking a new one
+  app.querySelectorAll("[data-tour-avatar]").forEach(el => el.onclick = () => openModal({type: "photoSource"}));
   app.querySelectorAll("[data-open-admin-settings]").forEach(el => el.onclick = async () => {
     if (!authSettings.requireVerifyBeforeAdminSettings) { openModal({type:"adminSettings"}); return; }
     // A fresh code every time, regardless of how this device is currently logged in
