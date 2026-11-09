@@ -5981,7 +5981,18 @@ function renderTourClock(g, c, isAdmin){
     ;
   // the admin's four quiet buttons: each opens its panel in place of what's below
   const reqs = P.approved.filter(r => r.pendingAction);
-  const acts = !isAdmin ? "" : `<div class="ck-acts">${[["qr", "QR", 0], ["add", "הוספת שחקן", 0], ["lobby", "לובי", pending.length], ["rebuy", "ריביי / Add-on", reqs.length], ["out", "שחקן יצא", 0]]
+  // once re-buys / late registration are over, their buttons go (the lobby stays while
+  // someone still waits; ריביי / Add-on while the add-on break is on or a request waits)
+  const aoNow = t.addOn && k.row.brk && k.row.addOn;
+  const actList = [
+    lateOpen && ["qr", "QR", 0],
+    lateOpen && ["add", "הוספת שחקן", 0],
+    (lateOpen || pending.length) && ["lobby", "לובי", pending.length],
+    (lateOpen || aoNow || reqs.length) && ["rebuy", lateOpen && t.addOn ? "ריביי / Add-on" : lateOpen ? "ריביי" : "Add-on", reqs.length],
+    ["out", "שחקן יצא", 0],
+  ].filter(Boolean);
+  if (tourPanel && !actList.some(a => a[0] === tourPanel)) tourPanel = null;
+  const acts = !isAdmin ? "" : `<div class="ck-acts" style="grid-template-columns:repeat(${actList.length},1fr)">${actList
     .map(([id, label, n]) => `<button type="button" class="${tourPanel === id ? "on" : ""}" data-ck-panel="${id}">${n ? `<span class="bd">${n}</span>` : ""}${label}</button>`).join("")}</div>`;
   const total = tourEntryTotal(t), nn = v => Number(v || 0).toLocaleString("en-US");
   const panel = !isAdmin || !tourPanel ? "" : tourPanel === "qr"
