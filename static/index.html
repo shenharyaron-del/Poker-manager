@@ -1556,6 +1556,11 @@ html.theme-light .info-i{border-color:#047857;color:#047857;}
 html.theme-light .reg-me{color:#047857;}
 /* up to 4 players, then scroll */
 .reg-list.capped{max-height:212px;overflow-y:auto;position:relative;}
+/* the read-only tables: 4 rows, then an inner scroll - like the registered list */
+.tbl-scroll.capped{max-height:212px;overflow-y:auto;position:relative;}
+.tbl-scroll.capped thead th{position:sticky;top:0;z-index:1;background:#0f3f2e;}
+html.theme-light .tbl-scroll.capped thead th{background:#f6eee0;}
+html.theme-light.theme-blue .tbl-scroll.capped thead th{background:#d6e9f2;}
 .reg-row.me{background:rgba(242,193,78,.16);border-radius:10px;box-shadow:inset 3px 0 0 #f2c14e;}
 html.theme-light .reg-row.me{background:rgba(242,193,78,.25);}
 .reg-pick-list{max-height:212px;overflow-y:auto;}
@@ -5652,7 +5657,8 @@ function tourSummaryHtml(t){
     <div class="l">אנטה ${ante} · <b>${t.payoutPct}%</b> זוכים</div>`;
 }
 // ---------- a tournament night: the player's lobby and the admin's registration screen ----------
-let tourLobbyFull = {blinds: false, pay: false, payOpen: 0};   // the read-only tables' "טבלה מלאה"
+let tourLobbyFull = {blinds: false, pay: false, payOpen: 0};
+const tourInnerScroll = {};   // the tables' inner scroll positions, kept across re-renders   // the read-only tables' "טבלה מלאה"
 function tourSmallChip(c, t){
   const chipDefaults = [25, 100, 500, 1000, 5000, 10000];
   const small = Math.min(...((c && c.chipValues) || []).map((cv, i) => +((t.points || {})[cv.id] ?? chipDefaults[i]) || Infinity), Infinity);
@@ -5674,15 +5680,16 @@ function tourInfoHtml(t){
 function tourBlindsReadHtml(t, c){
   const levels = tourBlindLevels(Object.assign({}, t, {small: tourSmallChip(c, t),
     totalChips: t.entries * t.chips * (1 + (+t.early || 0) / 100) + Math.round(t.entries / 2) * t.rebuyChips + (t.addOn ? Math.round(t.entries * 0.75) * t.addOnChips : 0)}));
-  const cut = levels.length > 3 ? 3 : -1;
-  const shown = tourLobbyFull.blinds || cut < 0 ? levels : levels.slice(0, cut);
+  const cut = levels.length > 4 ? 4 : -1;
+  const shown = levels;
   const nLevels = levels.filter(r => !r.brk).length, hours = Math.round((levels.estTo || levels[levels.length - 1].to) / 30) / 2;
   const speed = {1: "איטי", 2: "רגיל", 3: "מהיר"}[t.speed] || "מותאם אישית";
   return `<fieldset class="leave-frame setup-frame"><legend>מבנה בליינדים</legend>
+    <div class="tbl-scroll${tourLobbyFull.blinds ? "" : " capped"}" data-keep-scroll="blinds">
     <table class="tour-tbl"><thead><tr><th>רמה</th><th>טווח זמן</th><th>בליינדים</th><th>אנטה</th></tr></thead><tbody>
     ${shown.map(r => r.brk ? `<tr class="brk"><td>☕</td><td class="ltr">${r.from + 1}–${r.to}</td><td colspan="2">${r.addOn ? "הפסקה + Add-on" : "הפסקה"}</td></tr>`
       : `<tr><td>${r.level}</td><td class="ltr">${r.from ? r.from + 1 : 0}–${r.to}</td><td class="ltr">${r.sb.toLocaleString("en-US")}/${r.bb.toLocaleString("en-US")}</td><td class="ltr${r.ante ? "" : " off"}">${r.ante ? r.ante.toLocaleString("en-US") : "–"}</td></tr>`).join("")}
-    </tbody></table>
+    </tbody></table></div>
     ${cut >= 0 ? `<button type="button" class="tour-full-link" data-lobby-full="blinds">${tourLobbyFull.blinds ? "הסתר ▴" : `טבלה מלאה · סיום משוער כ-${hours} שעות ▾`}</button>` : ""}
   </fieldset>`;
 }
@@ -5691,14 +5698,14 @@ function tourPayReadHtml(t, count){
   const groups = [];
   for (let e = 1; e <= 200; e++) { const pl = tourPlacesPaid(e, t.payoutPct); const g = groups[groups.length - 1]; if (g && g.pl === pl) g.to = e; else groups.push({pl, from: e, to: e}); }
   const cur = count ? groups.find(g => count >= g.from && count <= g.to) : null;
-  let shown = tourLobbyFull.pay ? groups : groups.slice(0, 3);
-  if (cur && !shown.includes(cur)) shown = shown.concat([cur]);
+  const shown = groups;
   const pot = (count || 0) * (+t.prize || 0);
   const amountsRow = g => {
     const places = Math.min(count, g.pl), medals = ["🥇", "🥈", "🥉"];
     return `<tr class="pay-detail pay-now"><td colspan="3" dir="ltr">${tourPrizeShares(places).slice(0, count).map((x, i) => `<span>${medals[i] || (i + 1) + "."} <b>₪${Math.round(pot * x / 100).toLocaleString("en-US")}</b></span>`).join("")}</td></tr>`;
   };
   return `<fieldset class="leave-frame setup-frame"><legend>חלוקת פרסים · ${t.payoutPct}% זוכים</legend>
+    <div class="tbl-scroll${tourLobbyFull.pay ? "" : " capped"}" data-keep-scroll="pay">
     <table class="tour-tbl tour-pay"><thead><tr><th>משתתפים</th><th>מקומות</th><th>חלוקה (%)</th></tr></thead><tbody>
     ${shown.map(g => {
       const sh = tourPrizeShares(g.pl), long = g.pl > 6, open = long && tourLobbyFull.payOpen === g.pl;
@@ -5706,7 +5713,7 @@ function tourPayReadHtml(t, count){
       const detail = open ? `<tr class="pay-detail"><td colspan="3" dir="ltr">${tourPrizeBands(g.pl).map(b => `<span>${b.from === b.to ? b.from : `${b.from}–${b.to}`}: <b>${b.pct}%</b></span>`).join("")}</td></tr>` : "";
       return `<tr class="${g === cur ? "pay-cur" : ""}${long ? " pay-more" + (open ? " open" : "") : ""}"${long ? ` data-lobby-pay="${g.pl}"` : ""}><td class="ltr">${g.from}–${g.to}</td><td>${g.pl}</td><td class="ltr">${long ? sh.slice(0, 3).join(" / ") + " …" : sh.join(" / ")}</td></tr>` + detail + (g === cur ? amountsRow(g) : "");
     }).join("")}
-    </tbody></table>
+    </tbody></table></div>
     <button type="button" class="tour-full-link" data-lobby-full="pay">${tourLobbyFull.pay ? "הסתר ▴" : "טבלה מלאה ▾"}</button>
   </fieldset>`;
 }
@@ -11558,6 +11565,11 @@ function attachHandlers(){
       list.addEventListener("scroll", () => { tourRegListScroll = {gid: nav.gameId, top: list.scrollTop}; }, {passive: true});
     } }
   app.querySelectorAll("[data-reg-full]").forEach(el => el.onclick = () => { tourRegFull = !tourRegFull; render(); });
+  app.querySelectorAll("[data-keep-scroll]").forEach(el => {
+    const key = (nav.gameId || "") + ":" + el.dataset.keepScroll;
+    if (tourInnerScroll[key]) el.scrollTop = tourInnerScroll[key];
+    el.addEventListener("scroll", () => { tourInnerScroll[key] = el.scrollTop; }, {passive: true});
+  });
   app.querySelectorAll("[data-info-tip]").forEach(el => el.onclick = (e) => {
     e.stopPropagation();
     document.querySelectorAll(".info-tip").forEach(x => x.remove());
