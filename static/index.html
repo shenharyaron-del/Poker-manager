@@ -1429,8 +1429,9 @@ html.theme-light .tour-full-link{color:#9a5f12;}
 .tour-brk-strip{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:14px;margin:2px 0 10px;padding:8px 10px 6px;border:1px dashed rgba(63,179,131,.6);border-radius:10px;}
 .tour-tbl tr.tour-ctl th{border-bottom:none;padding:2px 4px 2px;vertical-align:bottom;font-weight:inherit;}
 .tour-cust-note{margin:-4px 0 8px;}
-/* narrow phones: the two break sliders one under the other (long "שעתיים ו-50 דק' משחק") */
-@media (max-width:400px){.tour-brk-strip{grid-template-columns:1fr;gap:8px;}}
+/* a long value ("שעתיים ו-50 דק' משחק") drops under its label; the sliders stay level */
+.tf-sl.mini .tf-sl-top{flex-wrap:wrap;row-gap:0;}
+.tour-brk-strip{align-items:end;}
 html.theme-light.theme-blue .tf-sl.mini:not(.gold) .tf-sl-top b{color:#0b5a3a;}
 .tour-note{font-size:13px;color:var(--muted);text-align:center;margin:6px 0 8px;}
 .tour-empty{font-size:15px;line-height:1.5;color:var(--muted);margin:0;}
@@ -9311,11 +9312,11 @@ function renderModal(m){
         <fieldset class="leave-frame setup-frame"><legend>הגדרות ריביי (Re-buy)</legend>
           <div class="tf-pair"><div class="tf"><span>כמות ריביי מותרת</span>${seg("rebuys", [[1, "1"], [2, "2"], [3, "3"], [0, "∞"]], t.rebuys)}</div><div class="tf"><span>ז'יטונים לריביי</span>${num("rebuyChips", t.rebuyChips)}</div></div>
           <div class="tf"><span>מחיר ריביי</span>${money("rebuyPrice", rebuyPrice)}</div>
-          <div class="tf"><span>דמי טיפול על ריביי</span>${seg("rebuyFee", [[0, "ללא - הכל לפרס", true], [1, "כמו בכניסה"]], t.rebuyFee)}</div>
+          <div class="tf"><span>דמי טיפול על ריביי</span>${seg("rebuyFee", [[0, "הכל לפרס"], [1, "כמו בכניסה"]], t.rebuyFee)}</div>
           ${slider("rebuyLevels", "ריביי מותר במשך", "שלבים", 1, 9, t.rebuyLevels, [1, 2, 3, 4, 5, 6, 7, 8, 9])}
           <div class="tf"><span>Add-on בסוף זמן הריביי</span>${seg("addOn", [[0, "ללא"], [1, "יש Add-on"]], t.addOn)}</div>
           ${t.addOn ? `<div class="tf-pair"><div class="tf"><span>מחיר Add-on</span>${money("addOnPrice", addOnPrice)}</div><div class="tf"><span>ז'יטונים ל-Add-on</span>${num("addOnChips", t.addOnChips)}</div></div>
-          <div class="tf"><span>דמי טיפול על Add-on</span>${seg("addOnFee", [[0, "ללא - הכל לפרס", true], [1, "כמו בכניסה"]], t.addOnFee)}</div>
+          <div class="tf"><span>דמי טיפול על Add-on</span>${seg("addOnFee", [[0, "הכל לפרס"], [1, "כמו בכניסה"]], t.addOnFee)}</div>
           <div class="tf"><span>הארכת ההפסקה ל-Add-on</span>${seg("addOnExtra", [[0, "ללא"], [5, "+5 דק'"], [10, "+10 דק'"], [15, "+15 דק'"]], t.addOnExtra)}</div>
           <p class="tour-note">קנייה אחת לשחקן, בהפסקה שבסוף זמן הריביי - גם למי שלא נגמרו לו הז'יטונים. אם אין שם הפסקה, היא נוספת אוטומטית.</p>` : ""}
         </fieldset>
