@@ -6034,7 +6034,7 @@ function renderTourClock(g, c, isAdmin){
         <div class="ck-next"><div>שלב הבא<b>${k.nextLevel ? fmtBlinds(k.nextLevel) : "—"}</b>${k.nextLevel ? `<span class="ck-na">${k.nextLevel.ante ? `אנטה <strong>${k.nextLevel.ante.toLocaleString("en-US")}</strong>` : "ללא אנטה"}</span>` : ""}</div>
           <div>הפסקה בעוד<b data-ck-brk dir="rtl" style="direction:rtl">${k.breakIn != null ? Math.max(1, Math.ceil(k.breakIn / 60000)) + " דק'" : "—"}</b></div></div></div>`;
   // "סוף זמן ריביי ורישום" shows for 10 seconds after the window closes, then goes
-  const chips = lateOpen ? `<span class="rb">🔁 ריביי ורישום מאוחר עוד <b data-ck-rb>${Math.max(1, Math.ceil(k.rbLeft / 60000))}</b> דק'</span>`
+  const chips = lateOpen ? `<span class="rb">ריביי ורישום מאוחר ייסגרו עוד <b data-ck-rb>${Math.max(1, Math.ceil(k.rbLeft / 60000))}</b> דק'</span>`
     : k.rbLeft > -10000 ? `<span data-ck-rbend>סוף זמן ריביי ורישום</span>` : "";
   // the admin's four quiet buttons: each opens its panel in place of what's below
   const reqs = P.approved.filter(r => r.pendingAction);
