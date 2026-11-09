@@ -1458,6 +1458,10 @@ html.theme-light .reg-out{color:#b91c1c;}
 .cc-check .sm{font-size:13.5px;margin-top:3px;}
 .cc-check.ok{border-color:#3fb383;background:rgba(63,179,131,.1);} .cc-check.ok .big{color:#6ee7b7;} html.theme-light .cc-check.ok .big{color:#047857;}
 .cc-check.bad{border-color:#ef4444;background:rgba(239,68,68,.1);} .cc-check.bad .big{color:#f87171;} html.theme-light .cc-check.bad .big{color:#b91c1c;}
+.cc-admin{margin-top:8px;display:flex;flex-direction:column;gap:6px;}
+.cc-admin-row{display:flex;align-items:center;gap:8px;}
+.cc-admin-row .nm{flex:1;min-width:0;text-align:right;font-weight:700;color:var(--text);font-size:15px;}
+.cc-admin-row input{width:110px;flex:0 0 auto;}
 .cc-check.warn{border-color:#e0a43a;background:rgba(224,164,58,.1);}
 .st-tbl td{padding:5px 4px;} .st-tbl td.nm{text-align:right;font-weight:700;}
 .st-tbl tr.me td{background:rgba(242,193,78,.14);}
@@ -5753,6 +5757,7 @@ function tourChipCountHtml(g, c, t, mine, key, level){
   </fieldset>`;
 }
 let tourCcEdit = false;
+let tourCcAdmin = false;   // the admin's "enter a player's count" list
 function tourStandingsHtml(P, myPid){
   if (!P.lastKey && !P.approved.some(r => r.bustedAt)) return "";
   const rows = P.standings.map(({r, place, counted}) => {
@@ -5802,7 +5807,9 @@ function renderTourClock(g, c, isAdmin){
         <div>🪙 ספירה · סוף שלב ${level}: דיווחו <b>${P.reportedNow.length}</b> מתוך ${P.alive.length} · נספרו <b>${P.reportedSum.toLocaleString("en-US")}</b> מתוך ${P.expected.toLocaleString("en-US")}</div>
         ${!missing.length ? (diff ? `<div class="big">⚠ הספירה לא מתאימה - הפרש ${diff > 0 ? "+" : ""}${diff.toLocaleString("en-US")}</div>` : `<div class="big">✓ הספירה מתאימה</div>`)
           : diff === 0 ? `<div class="big">הסכום מתאים - ${missing.length === 1 ? "שחקן אחד לא דיווח" : `${missing.length} שחקנים לא דיווחו`} (${missing.map(r => esc(r.name)).join(", ")})</div><button type="button" class="btn btn-ghost btn-block" data-mark-rest style="margin-top:6px">סמן אותם כפרשו</button>`
-          : `<div class="sm">מחכים ל: ${missing.map(r => esc(r.name)).join(", ")}</div>`}</div>`;
+          : `<div class="sm">מחכים ל: ${missing.map(r => esc(r.name)).join(", ")}</div>`}
+        <button type="button" class="lb-cancel" data-cc-admin-toggle style="margin-top:6px">${tourCcAdmin ? "סגור ▴" : "✎ הזנת ספירה לשחקן (מי שאין לו טלפון) ▾"}</button>
+        ${tourCcAdmin ? `<div class="cc-admin">${P.alive.map(r => `<div class="cc-admin-row"><span class="nm">${esc(r.name || "")}${r.chipsKey === P.key ? " ✓" : ""}</span><input type="number" inputmode="numeric" min="0" data-cc-for="${esc(r.playerId)}" value="${r.chipsKey === P.key ? esc(String(r.chips)) : ""}" placeholder="ז'יטונים"><button type="button" class="reg-ok" data-cc-for-save="${esc(r.playerId)}">שמור</button></div>`).join("")}</div>` : ""}</div>`;
     }
   }
   const stLabel = k.cs.paused ? (k.cs.reason === "break" ? "☕ הפסקה" : "⏸ מושהה") : onBreak ? "☕ הפסקה" : "▶ פעיל";
@@ -11406,6 +11413,14 @@ function attachHandlers(){
     const chips = sumEl ? (parseInt(sumEl.value, 10) || 0) : ccTotal();
     tourCcEdit = false;
     tourAct(el, () => v2TourAction(tourGid, myIdentity.myPlayers[g.communityId], "chips", {chips, key, level: k.curLevel.level}));
+  });
+  app.querySelectorAll("[data-cc-admin-toggle]").forEach(el => el.onclick = () => { tourCcAdmin = !tourCcAdmin; render(); });
+  app.querySelectorAll("[data-cc-for-save]").forEach(el => el.onclick = () => {
+    const pid = el.dataset.ccForSave, inp = [...app.querySelectorAll("[data-cc-for]")].find(i => i.dataset.ccFor === pid);
+    const chips = parseInt(inp && inp.value, 10);
+    if (!(chips >= 0)) { showAlert("הזינו כמות ז'יטונים"); return; }
+    const g = getGame(tourGid), c = getCommunity(g.communityId), k = tourClockInfo(g, c);
+    tourAct(el, () => v2TourAction(tourGid, pid, "chips", {chips, key: tourBreakKey(g, k), level: k.curLevel.level}));
   });
   app.querySelectorAll("[data-mark-rest]").forEach(el => el.onclick = async () => {
     const g = getGame(tourGid), c = getCommunity(g.communityId), k = tourClockInfo(g, c), P = tourPlayers(g, c, k);
