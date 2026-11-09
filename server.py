@@ -2988,8 +2988,12 @@ def v2_registration_action(game_id, player_id):
                             (game_id, player_id))
             elif action == "rebuy":
                 price = float(ts.get("rebuyPrice") if ts.get("rebuyPrice") is not None else entry)
-                cur.execute("INSERT INTO buyins (id, game_id, player_id, amount, ts) VALUES (%s,%s,%s,%s,now())",
-                            (f"rb:{game_id}:{player_id}:{int(time.time() * 1000)}", game_id, player_id, price))
+                # the client's opId makes a retried request the same re-buy (no double charge)
+                op = body.get("opId")
+                suffix = op if _valid_id(op) else str(int(time.time() * 1000))
+                cur.execute("INSERT INTO buyins (id, game_id, player_id, amount, ts) VALUES (%s,%s,%s,%s,now()) "
+                            "ON CONFLICT (id) DO NOTHING",
+                            (f"rb:{game_id}:{player_id}:{suffix}", game_id, player_id, price))
                 cur.execute("UPDATE tournament_registrations SET busted_at = NULL, bust_level = NULL, pending_action = NULL "
                             "WHERE game_id = %s AND player_id = %s", (game_id, player_id))
             elif action == "addon":
