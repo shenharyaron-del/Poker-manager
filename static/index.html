@@ -5606,7 +5606,8 @@ function tourSpeedOf(level, jump){
 // The usual small-blind ladder (25/50, 50/100, 75/150, 100/200, 150/300 ...) for a smallest
 // chip of 25 - scaled to the club's smallest chip, so every blind can be paid in chips.
 const TOUR_LADDER_25 = [25, 50, 75, 100, 150, 200, 300, 400, 500, 600, 800, 1000, 1200, 1500, 2000, 2500, 3000, 4000, 5000,
-  6000, 8000, 10000, 12000, 15000, 20000, 25000, 30000, 40000, 50000, 60000, 80000, 100000, 120000, 150000, 200000, 250000, 300000, 400000, 500000];
+  6000, 8000, 10000, 12000, 15000, 20000, 25000, 30000, 40000, 50000, 60000, 80000, 100000, 120000, 150000, 200000, 250000, 300000, 400000, 500000,
+  600000, 800000, 1000000, 1200000, 1500000, 2000000, 2500000, 3000000, 4000000, 5000000, 6000000, 8000000, 10000000];
 // Saving: everything in TOUR_DEFAULTS except the screen's own view state.
 const TOUR_VIEW_KEYS = ["tab", "fullTable", "payFull", "payOpen"];
 function tourSavedPart(t){
@@ -5666,14 +5667,14 @@ function tourBlindsReadHtml(t, c){
     totalChips: t.entries * t.chips * (1 + (+t.early || 0) / 100) + Math.round(t.entries / 2) * t.rebuyChips + (t.addOn ? Math.round(t.entries * 0.75) * t.addOnChips : 0)}));
   const cut = levels.findIndex(r => !r.brk && r.level === 5);
   const shown = tourLobbyFull.blinds || cut < 0 ? levels : levels.slice(0, cut);
-  const nLevels = levels.filter(r => !r.brk).length, hours = Math.round(levels[levels.length - 1].to / 30) / 2;
+  const nLevels = levels.filter(r => !r.brk).length, hours = Math.round((levels.estTo || levels[levels.length - 1].to) / 30) / 2;
   const speed = {1: "איטי", 2: "רגיל", 3: "מהיר"}[t.speed] || "מותאם אישית";
   return `<fieldset class="leave-frame setup-frame"><legend>מבנה בליינדים · ${speed}</legend>
     <table class="tour-tbl"><thead><tr><th>רמה</th><th>טווח זמן</th><th>בליינדים</th><th>אנטה</th></tr></thead><tbody>
     ${shown.map(r => r.brk ? `<tr class="brk"><td>☕</td><td class="ltr">${r.from + 1}–${r.to}</td><td colspan="2">${r.addOn ? "הפסקה + Add-on" : "הפסקה"}</td></tr>`
       : `<tr><td>${r.level}</td><td class="ltr">${r.from ? r.from + 1 : 0}–${r.to}</td><td class="ltr">${r.sb.toLocaleString("en-US")}/${r.bb.toLocaleString("en-US")}</td><td class="ltr${r.ante ? "" : " off"}">${r.ante ? r.ante.toLocaleString("en-US") : "–"}</td></tr>`).join("")}
     </tbody></table>
-    ${cut >= 0 ? `<button type="button" class="tour-full-link" data-lobby-full="blinds">${tourLobbyFull.blinds ? "הסתר ▴" : `טבלה מלאה - ${nLevels} שלבים · כ-${hours} שעות ▾`}</button>` : ""}
+    ${cut >= 0 ? `<button type="button" class="tour-full-link" data-lobby-full="blinds">${tourLobbyFull.blinds ? "הסתר ▴" : `טבלה מלאה · סיום משוער כ-${hours} שעות ▾`}</button>` : ""}
   </fieldset>`;
 }
 // count: players registered so far - their row is marked, with each place's amount under it.
@@ -5717,6 +5718,19 @@ function tourAvatar(name, i, pid, communityId){
   const colors = ["#f2c14e", "#6ee7b7", "#93c5fd", "#fca5a5", "#d8b4fe", "#fdba74", "#a7f3d0", "#fde68a"];
   const ini = String(name || "?").trim().split(/\s+/).map(w => w[0]).join("").slice(0, 2);
   return `<span class="reg-av" style="background:${colors[i % colors.length]}">${esc(ini)}</span>`;
+}
+// My player in a tournament night: the one this device is linked to in the club - or, when
+// I was registered under another club row (the admin picked it), the registration whose
+// row is linked to me, or carries my name.
+function tourMyPid(g){
+  const c = getCommunity(g.communityId), regs = g.registrations || [];
+  const linked = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+  if (linked && regs.some(r => r.playerId === linked)) return linked;
+  const row = r => ((c && c.roster) || []).find(p => p.id === r.playerId);
+  const byClient = regs.find(r => { const p = row(r); return p && p.clientId && p.clientId === myIdentity.id; });
+  if (byClient) return byClient.playerId;
+  const byName = myIdentity.name && regs.find(r => sameName(r.name, myIdentity.name));
+  return byName ? byName.playerId : linked;
 }
 // ----- the blind clock -----
 // Play time so far (ms), from the shared state (server times) - paused time left out.
@@ -5851,7 +5865,7 @@ function tourSoundOn(){ try { return localStorage.getItem("tour-sound") !== "0";
 function renderTourClock(g, c, isAdmin){
   const k = tourClockInfo(g, c), t = k.t;
   const regs = g.registrations || [], approved = regs.filter(r => r.status === "approved"), pending = regs.filter(r => r.status === "pending");
-  const myPid = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId], mine = myPid && regs.find(r => r.playerId === myPid);
+  const myPid = tourMyPid(g), mine = myPid && regs.find(r => r.playerId === myPid);
   const lateOpen = k.rbLeft > 0;
   const onBreak = k.row.brk || k.cs.reason === "break";
   const P = tourPlayers(g, c, k);
@@ -6041,15 +6055,15 @@ function renderTourGame(g, c){
           <button type="button" class="reg-no" data-reg-decline="${esc(r.playerId)}" aria-label="דחה">✕</button><button type="button" class="reg-ok" data-reg-approve="${esc(r.playerId)}">✓ אשר</button></div>`).join("")}
         <div class="lb-note">אישור = השחקן נרשם ושילם ₪${n(total)}</div>
       </fieldset>` : ""}
-      ${(() => { const mp = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId]; return mp && approved.some(r => r.playerId === mp) ? "" : tourInfoHtml(t); })()}
+      ${(() => { const mp = tourMyPid(g); return mp && approved.some(r => r.playerId === mp) ? "" : tourInfoHtml(t); })()}
       ${(() => {   // the admin registers themself (only while not registered yet)
-        const myPid = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+        const myPid = tourMyPid(g);
         return myPid && approved.some(r => r.playerId === myPid) ? "" : `<div style="text-align:center;margin:0 0 10px;"><button type="button" class="reg-me" data-reg-me>＋ רשום אותי</button></div>`;
       })()}
       <div class="ad-btns"><button type="button" class="btn btn-ghost" data-reg-add>＋ רישום שחקן</button><button type="button" class="btn btn-ghost" data-invite-game="${g.id}">📤 הזמנת שחקנים</button></div>
       ${!approved.length ? "" : `<fieldset class="leave-frame setup-frame"><legend>✓ רשומים (${approved.length})</legend>
         <div class="reg-list${approved.length > 4 && !tourRegFull ? " capped" : ""}">
-        ${approved.length ? approved.map((r, i) => `<div class="reg-row${r.bustedAt ? " out" : ""}${r.playerId === (myIdentity.myPlayers || {})[g.communityId] ? " me" : ""}">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}${r.isNew ? `<span class="reg-new">חדש</span>` : ""}<small>${r.bustedAt ? `יצא ${hhmm(r.bustedAt)}${r.bustLevel ? ` · שלב ${r.bustLevel}` : ""}` : `שילם ₪${n(total)} · ${n(t.chips + (!g.tournamentState || !g.tournamentState.startedAt || (r.approvedAt && r.approvedAt <= g.tournamentState.startedAt) ? Math.round(t.chips * (+t.early || 0) / 100) : 0))} ז'יטונים`}${(r.rebuys || []).length ? ` · 🔁 ${(r.rebuys || []).map(hhmm).join(", ")}` : ""}${r.addOnAt ? ` · Add-on ${hhmm(r.addOnAt)}` : ""}</small></div>
+        ${approved.length ? approved.map((r, i) => `<div class="reg-row${r.bustedAt ? " out" : ""}${r.playerId === tourMyPid(g) ? " me" : ""}">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}${r.isNew ? `<span class="reg-new">חדש</span>` : ""}<small>${r.bustedAt ? `יצא ${hhmm(r.bustedAt)}${r.bustLevel ? ` · שלב ${r.bustLevel}` : ""}` : `שילם ₪${n(total)} · ${n(t.chips + (!g.tournamentState || !g.tournamentState.startedAt || (r.approvedAt && r.approvedAt <= g.tournamentState.startedAt) ? Math.round(t.chips * (+t.early || 0) / 100) : 0))} ז'יטונים`}${(r.rebuys || []).length ? ` · 🔁 ${(r.rebuys || []).map(hhmm).join(", ")}` : ""}${r.addOnAt ? ` · Add-on ${hhmm(r.addOnAt)}` : ""}</small></div>
           ${started ? (() => {
             // the admin records a re-buy (while open) / the add-on (on the add-on break) - asked for or not
             const kk = tourClockInfo(g, c);
@@ -6066,7 +6080,7 @@ function renderTourGame(g, c){
       ${tourBlindsReadHtml(t, c)}${tourPayReadHtml(t, approved.length)}
     </div>`;
   }
-  const myPid = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+  const myPid = tourMyPid(g);
   const mine = myPid && regs.find(r => r.playerId === myPid);
   const status = !mine
     ? `<button type="button" class="btn btn-primary btn-block lb-req" data-tour-register>בקשת הרשמה · ₪${n(total)}</button><div class="lb-note">המנהל יאשר את ההרשמה אחרי התשלום</div>`
@@ -6138,12 +6152,15 @@ function tourBlindLevels(t){
   const jump = Math.max(1, t.jump || 1);
   // How many levels: until the big blind reaches 1/40 of all the chips in play (heads-up with
   // ~20 big blinds each - by then the tournament is about over) - 6 to 30 levels; 9 when the chips in play aren't given.
-  let n = 9;
+  // The likely end (the big blind at 1/40 of the chips in play) is only an estimate - the
+  // table always runs well past it (at least 25 levels, and 10 beyond the estimate).
+  let est = 9;
   if (t.totalChips > 0) {
-    n = 1;
-    while (n < 30 && ladder[Math.min(ladder.length - 1, start + (n - 1) * jump)] * 2 * 40 < t.totalChips) n++;
-    n = Math.max(6, n);
+    est = 1;
+    while (est < 40 && ladder[Math.min(ladder.length - 1, start + (est - 1) * jump)] * 2 * 40 < t.totalChips) est++;
+    est = Math.max(6, est);
   }
+  const n = Math.max(25, est + 10);
   const cycle = Math.max(t.level, t.breakEvery), brk = Math.min(t.breakLen, cycle - 1);
   const rows = []; let minute = 0, lvl = 0, nextBreak = brk > 0 ? cycle - brk : Infinity;   // no breaks: never
   while (lvl < n) {
@@ -6165,6 +6182,9 @@ function tourBlindLevels(t){
       nextBreak = brk > 0 ? minute + cycle - brk : Infinity;
     }
   }
+  const estRow = rows.find(r => !r.brk && r.level === est);
+  rows.estTo = estRow ? estRow.to : rows[rows.length - 1].to;
+  rows.estLevels = est;
   return rows;
 }
 // Paid places for a number of entries at a payout share (at least 2), and each place's share
@@ -7260,7 +7280,7 @@ function render(){
   const myPid = g => myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
   // A tournament night: mine while I'm registered (or asked) and still in; open to me while
   // registration (or late registration) is open.
-  const myReg = g => { const pid = myPid(g); return pid && (g.registrations || []).find(r => r.playerId === pid); };
+  const myReg = g => { const pid = tourMyPid(g); return pid && (g.registrations || []).find(r => r.playerId === pid); };
   const tourRegOpen = g => { const k = tourClockInfo(g, getCommunity(g.communityId)); return !k || k.rbLeft > 0; };
   const activeGames = nav.screen === "table" ? [] : (state.games || []).filter(g => {
     const pid = myPid(g);
@@ -10086,7 +10106,7 @@ function renderModal(m){
       // the table shows 4 levels; "טבלה מלאה" opens all of them
       const cut = levels.findIndex(r => !r.brk && r.level === 5);
       const shown = t.fullTable || cut < 0 ? levels : levels.slice(0, cut);
-      const nLevels = levels.filter(r => !r.brk).length, hours = Math.round(levels[levels.length - 1].to / 30) / 2;
+      const nLevels = levels.filter(r => !r.brk).length, hours = Math.round((levels.estTo || levels[levels.length - 1].to) / 30) / 2;
       // entries 1..40 grouped by how many places they pay
       const groups = [];
       for (let e = 1; e <= 200; e++) { const pl = tourPlacesPaid(e, t.payoutPct); const g = groups[groups.length - 1]; if (g && g.pl === pl) g.to = e; else groups.push({pl, from: e, to: e}); }
@@ -10124,7 +10144,7 @@ function renderModal(m){
               : `<tr><td>${r.level}</td><td class="ltr">${r.from ? r.from + 1 : 0}–${r.to}</td><td class="ltr">${r.sb.toLocaleString("en-US")}/${r.bb.toLocaleString("en-US")}</td><td class="ltr${r.ante ? "" : " off"}">${r.ante ? r.ante.toLocaleString("en-US") : "–"}</td></tr>`)
               ).join("")}
           </tbody></table>
-          ${cut >= 0 ? `<button type="button" class="tour-full-link" data-tour-full>${t.fullTable ? "הסתר ▴" : `טבלה מלאה - ${nLevels} שלבים · כ-${hours} שעות ▾`}</button>` : ""}
+          ${cut >= 0 ? `<button type="button" class="tour-full-link" data-tour-full>${t.fullTable ? "הסתר ▴" : `טבלה מלאה · סיום משוער כ-${hours} שעות ▾`}</button>` : ""}
         </fieldset>
         <fieldset class="leave-frame setup-frame"><legend>חלוקת פרסים (Payout Structure)</legend>
           <div class="tf"><span>אחוז הזוכים</span>${seg("payoutPct", [[10, "10%"], [12, "12%"], [15, "15%"], [20, "20%"]], t.payoutPct)}</div>
@@ -11542,7 +11562,7 @@ function attachHandlers(){
     }
     await v2TourRegister(tourGid, pid, myIdentity.name, false);
   }));
-  app.querySelectorAll("[data-tour-cancel]").forEach(el => el.onclick = () => tourAct(el, () => v2TourRemoveReg(tourGid, myIdentity.myPlayers[getGame(tourGid).communityId])));
+  app.querySelectorAll("[data-tour-cancel]").forEach(el => el.onclick = () => tourAct(el, () => v2TourRemoveReg(tourGid, tourMyPid(getGame(tourGid)))));
   app.querySelectorAll("[data-reg-approve]").forEach(el => el.onclick = () => tourAct(el, () => v2TourApprove(tourGid, el.dataset.regApprove)));
   app.querySelectorAll("[data-reg-decline]").forEach(el => el.onclick = () => tourAct(el, () => v2TourRemoveReg(tourGid, el.dataset.regDecline)));
   app.querySelectorAll("[data-reg-remove]").forEach(el => el.onclick = async () => {
@@ -11609,7 +11629,7 @@ function attachHandlers(){
   app.querySelectorAll("[data-me-out]").forEach(el => el.onclick = async () => {
     const g = getGame(tourGid), c = getCommunity(g.communityId), k = tourClockInfo(g, c);
     const t = Object.assign({}, TOUR_DEFAULTS, g.tournamentSettings || {});
-    const pid = myIdentity.myPlayers[g.communityId], me = (g.registrations || []).find(r => r.playerId === pid);
+    const pid = tourMyPid(g), me = (g.registrations || []).find(r => r.playerId === pid);
     const rebuyOk = k && k.rbLeft > 0 && (!t.rebuys || (me.rebuys || []).length < t.rebuys);
     if (rebuyOk) {
       const a = await showConfirm(`נגמרו לך הז'יטונים? אפשר לעשות ריביי ב-₪${Number(t.rebuyPrice ?? tourEntryTotal(t)).toLocaleString("en-US")} (המנהל יאשר), או לצאת מהטורניר.`, {okLabel: "🔁 ריביי", cancelLabel: "יצאתי"});
@@ -11635,7 +11655,7 @@ function attachHandlers(){
     if (!(chips >= 0)) { showAlert("הזינו כמות ז'יטונים"); return; }
     const g = getGame(tourGid), c = getCommunity(g.communityId), k = tourClockInfo(g, c);
     tourCcEdit = false;
-    if (pid !== (myIdentity.myPlayers || {})[g.communityId]) tourCcFor = null;   // the admin's entry: back to the search
+    if (pid !== tourMyPid(g)) tourCcFor = null;   // the admin's entry: back to the search
     tourAct(el, () => v2TourAction(tourGid, pid, "chips", {chips, key: tourBreakKey(g, k), level: k.curLevel.level}));
   });
   app.querySelectorAll("[data-cc-admin-toggle]").forEach(el => el.onclick = () => { tourCcAdmin = !tourCcAdmin; tourCcFor = null; render(); });
