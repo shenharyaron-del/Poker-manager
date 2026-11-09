@@ -1384,6 +1384,18 @@ html.theme-light .tf-unit{color:#9a5f12;}
 .tf-pair{display:flex;align-items:flex-end;gap:8px;}
 .tf-plus{flex:0 0 auto;padding-bottom:20px;font-size:20px;font-weight:800;color:var(--muted);}
 .tour-pay td:last-child{font-size:14px;}
+/* the new-table window's tournament summary, and a tournament night's card */
+.ng-tour{border:1px solid rgba(212,175,55,.5);border-radius:12px;padding:10px 12px;margin:4px 0 12px;font-size:15.5px;line-height:1.75;}
+.ng-tour .h{display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:800;color:var(--gold);margin-bottom:2px;}
+html.theme-light .ng-tour .h{color:#9a5f12;}
+.ng-tour .h small{font-weight:600;color:var(--muted);font-size:13px;white-space:nowrap;}
+.ng-tour .h small.ed{color:#e0a43a;} html.theme-light .ng-tour .h small.ed{color:#b45309;}
+.ng-tour .l b{font-weight:700;}
+.ng-tour-edit{display:block;width:100%;margin:8px 0 2px;padding:9px;border-radius:10px;border:1.5px dashed var(--gold);background:transparent;color:var(--gold);font:inherit;font-weight:700;font-size:16px;cursor:pointer;}
+html.theme-light .ng-tour-edit{color:#9a5f12;border-color:#c8922a;}
+.gc-trophy{margin-inline-end:4px;}
+.gc-tour-sub{font-size:14.5px;color:var(--muted);margin-top:3px;}
+.gc-tour-sub b{color:var(--text);font-weight:700;}
 .tour-pay tr.pay-more{cursor:pointer;}
 .tour-pay tr.pay-more td:last-child{text-decoration:underline dotted;text-underline-offset:3px;}
 .tour-pay tr.pay-detail td{white-space:normal;font-size:13px;color:var(--muted);text-align:left;padding:4px 6px 8px;line-height:1.7;}
@@ -2785,8 +2797,8 @@ async function ensureGameLoadedForView(gameId){
   return getGame(gameId);
 }
 
-async function v2CreateGame(id, communityId, name, date, createdByName, creatorPlayerId, creatorPlayerName, createdBy){
-  await v2Fetch("POST", "/games", {id, communityId, name, date, createdByName, createdBy, creatorPlayerId, creatorPlayerName});
+async function v2CreateGame(id, communityId, name, date, createdByName, creatorPlayerId, creatorPlayerName, createdBy, extra){
+  await v2Fetch("POST", "/games", {id, communityId, name, date, createdByName, createdBy, creatorPlayerId, creatorPlayerName, ...(extra || {})});
   return v2LoadGameFull(id);
 }
 
@@ -5421,8 +5433,36 @@ function openTourSetupModal(communityId){
 function tourSetupDirty(){
   return !!modal && modal.type === "tourSetup" && JSON.stringify(tourSavedPart(Object.assign({}, TOUR_DEFAULTS, modal.tour))) !== modal.tourSaved;
 }
+// The new-table window's short summary of a tournament's settings.
+function tourSummaryHtml(t){
+  const total = (+t.fee || 0) + (+t.prize || 0), n = v => Number(v || 0).toLocaleString("en-US");
+  const speed = {1: "איטי", 2: "רגיל", 3: "מהיר"}[t.speed] || "מותאם אישית";
+  const ante = {0.25: "¼ שמאל", 0.5: "½ שמאל", 1: "שמאל"}[t.ante] || "ללא";
+  const addOnPrice = t.addOnPrice ?? total;
+  return `<div class="l">כניסה <b>₪${n(total)}</b> (${n(t.prize)} לפרס + ${n(t.fee)}) · <b>${n(t.chips)}</b> ז'יטונים</div>
+    <div class="l">ריביי <b>${t.rebuys ? t.rebuys : "∞"}</b> ל-${tourSlText(t.rebuyLevels, "שלבים")}${t.addOn ? ` · <b>Add-on</b> ₪${n(addOnPrice)}` : ""}</div>
+    <div class="l">קצב <b>${speed}</b> · ${t.level} דק' לשלב · ${t.breakLen ? `הפסקה אחרי ${tourSlText(Math.max(t.level, t.breakEvery) - t.breakLen, "דק' משחק")}` : "ללא הפסקות"}</div>
+    <div class="l">אנטה ${ante} · <b>${t.payoutPct}%</b> זוכים</div>`;
+}
+// The tournament screen has three uses: the club's profile (default), a new table's settings
+// before it's opened (forNewGame - saving goes back to the new-table window) and an open
+// tournament night's own settings (gameId - saved on that night only).
 async function saveTourSettings(){
   const cid = modal.communityId, settings = tourSavedPart(Object.assign({}, TOUR_DEFAULTS, modal.tour));
+  if (modal.forNewGame) {
+    const back = Object.assign({}, modal.back, {tour: settings});
+    modal = back; render();
+    return true;
+  }
+  if (modal.gameId) {
+    const g = getGame(modal.gameId);
+    if (USE_RELATIONAL_API) {
+      try { if (!(await v2UpdateGame(modal.gameId, {tournamentSettings: settings}))) { showAlert("השמירה לא הצליחה - הערב כבר נסגר או השתנה. נסו שוב."); return false; } }
+      catch (e) { showAlert(setupSaveErrorText(e, "tour")); return false; }
+    } else if (g) { g.tournamentSettings = settings; saveState(); }
+    if (modal && modal.type === "tourSetup") { modal.tourSaved = JSON.stringify(settings); render(); }
+    return true;
+  }
   if (USE_RELATIONAL_API) {
     try { await v2UpdateCommunity(cid, {tournamentSettings: settings}); }
     catch (e) { showAlert(setupSaveErrorText(e, "tour")); return false; }
@@ -5438,7 +5478,11 @@ async function leaveTourSetup(then){
   if (tourSetupDirty()) {
     const shouldSave = await showConfirm("יש שינויים שלא נשמרו. לשמור?", {okLabel: "שמור", cancelLabel: "צא בלי לשמור", outside: null});
     if (shouldSave === null) return false;
-    if (shouldSave && !(await saveTourSettings())) return false;
+    if (shouldSave) {
+      const toNewGame = modal.forNewGame;   // saving already went back to the new-table window
+      if (!(await saveTourSettings())) return false;
+      if (toNewGame) return true;
+    }
   }
   then();
   return true;
@@ -7074,9 +7118,15 @@ function renderCommunity(communityId){
     // The table's creator, any club admin (the creator included) or a super admin - the
     // same table-admin rights the server checks on delete.
     const canDelete = isSuperAdmin() || isTableAdmin(g, c);
+    // A tournament night: 🏆 and a line of its own (the clock and its live state come later).
+    const isTour = g.gameType === "tournament";
+    const tt = isTour ? Object.assign({}, TOUR_DEFAULTS, g.tournamentSettings || {}) : null;
+    const tourSub = !isTour ? "" : g.closed
+      ? `${(g.players || []).length || seatedCount} משתתפים`
+      : `רישום פתוח · <b>${seatedCount}</b> נרשמו · ₪${((+tt.fee || 0) + (+tt.prize || 0)).toLocaleString("en-US")}`;
     const front = `
     <div class="card club-front ${g.closed?"":"card-open"}" data-open-game="${g.id}">
-      <div class="row flex1"><div class="flex1"><div class="name serif">${esc(g.name || ilDate(g.date))}</div>${g.name ? `<div style="font-size:15px;color:var(--muted);margin-top:2px;">${esc(ilDate(g.date))}</div>` : ""}${gameAlert ? `<div class="game-alert-line">${gameAlert.text}</div>` : ""}</div><div class="game-status-col">${gameStatusBadge(g)}${treasurerFirstName(g) ? `<div class="game-treasurer">גיזבר: <bdi>${esc(treasurerFirstName(g))}</bdi></div>` : ""}</div></div>
+      <div class="row flex1"><div class="flex1"><div class="name serif">${isTour ? `<span class="gc-trophy">🏆</span>` : ""}${esc(g.name || ilDate(g.date))}</div>${g.name ? `<div style="font-size:15px;color:var(--muted);margin-top:2px;">${esc(ilDate(g.date))}</div>` : ""}${isTour ? `<div class="gc-tour-sub">${tourSub}</div>` : ""}${gameAlert ? `<div class="game-alert-line">${gameAlert.text}</div>` : ""}</div><div class="game-status-col">${gameStatusBadge(g)}${treasurerFirstName(g) ? `<div class="game-treasurer">גיזבר: <bdi>${esc(treasurerFirstName(g))}</bdi></div>` : ""}</div></div>
       <div class="chev">${icon('chev')}</div>
     </div>`;
     if (!canInvite && !canDelete) return front.replace('class="card club-front ', 'class="card ');
@@ -9319,7 +9369,10 @@ function renderModal(m){
   } else if (m.type === "tourSetup") {
     const c = getCommunity(m.communityId) || {chipValues: []};
     const t = Object.assign({}, TOUR_DEFAULTS, m.tour || {});
-    title = `הגדרת פרופיל מועדון: ${esc(c.name || "")}`;
+    const tg = m.gameId ? getGame(m.gameId) : null;
+    title = m.gameId ? `הגדרות טורניר: ${esc(tg ? (tg.name || ilDate(tg.date)) : "")}`
+      : m.forNewGame ? `הגדרות טורניר לערב: ${esc((m.back && m.back.name) || defaultGameName(m.communityId))}`
+      : `הגדרת פרופיל מועדון: ${esc(c.name || "")}`;
     const money = (id, v) => `<div class="tf-in"><input type="number" inputmode="numeric" data-tour-num="${id}" value="${esc(String(v))}"><span class="tf-unit">₪</span></div>`;
     const num = (id, v) => `<div class="tf-in"><input type="number" inputmode="numeric" data-tour-num="${id}" value="${esc(String(v))}"></div>`;
     const seg = (id, opts, cur) => `<div class="tf-seg">${opts.map(([v, l, long]) => `<button type="button" class="${String(v) === String(cur) ? "on" : ""}${long ? " long" : ""}" data-tour-seg="${id}" data-v="${v}">${l}</button>`).join("")}</div>`;
@@ -9409,10 +9462,10 @@ function renderModal(m){
         </fieldset>`;
     }
     body = `
-      ${setupModeSwitchHtml(m.communityId, "tour")}
+      ${m.gameId || m.forNewGame ? "" : setupModeSwitchHtml(m.communityId, "tour")}
       ${tabs}
       <div class="tour-panel tp-${t.tab === "chips" ? "chips" : "struct"}">${inner}</div>
-      <div class="setup-footer" style="display:flex;flex-direction:column;gap:8px;margin-top:12px;"><button class="btn btn-primary btn-block" data-tour-save ${tourSetupDirty() ? "" : "disabled"}>${tourSetupDirty() ? "שמור שינויים" : "✓ נשמר"}</button></div>
+      <div class="setup-footer" style="display:flex;flex-direction:column;gap:8px;margin-top:12px;"><button class="btn btn-primary btn-block" data-tour-save ${tourSetupDirty() ? "" : "disabled"}>${!tourSetupDirty() ? (m.forNewGame ? "✓ ללא שינוי" : "✓ נשמר") : m.forNewGame ? "שמור לערב הזה" : "שמור שינויים"}</button></div>
     `;
   } else if (m.type === "chipSetup") {
     const c = getCommunity(m.communityId);
@@ -9698,11 +9751,26 @@ function renderModal(m){
     }
   } else if (m.type === "newGame") {
     const c = getCommunity(m.communityId);
+    // Cash or tournament - the tournament option is the club admins' (a player never sees it).
+    const canTour = !!c && (isCommunityAdmin(c) || isSuperAdmin());
+    const tourMode = canTour && m.mode === "tour";
+    const clubTour = c && c.tournamentSettings;
+    const t = Object.assign({}, TOUR_DEFAULTS, m.tour || clubTour || {});
+    const edited = !!m.tour && JSON.stringify(tourSavedPart(t)) !== JSON.stringify(tourSavedPart(Object.assign({}, TOUR_DEFAULTS, clubTour || {})));
     title = "שולחן חדש";
     body = `
-      <div class="field"><label>שם השולחן</label><input type="text" id="new-game-name" value="${esc(defaultGameName(m.communityId))}" placeholder="${esc(c ? c.name : "")}" onfocus="this.select()" autofocus></div>
-      <p style="color:var(--muted);font-size:16px;margin-top:-6px;">אחרי היצירה תוכלו להושיב שחקנים סביב השולחן.</p>
-      <button class="btn btn-primary btn-block" data-create-game>פתח שולחן</button>
+      <div class="field"><label>שם השולחן</label><input type="text" id="new-game-name" value="${esc(m.name ?? defaultGameName(m.communityId))}" placeholder="${esc(c ? c.name : "")}" onfocus="this.select()" autofocus></div>
+      ${canTour ? `<div class="tm-switch"><button type="button" class="${tourMode ? "" : "on"}" data-newgame-mode="cash">💵 קאש</button><button type="button" class="${tourMode ? "on" : ""}" data-newgame-mode="tour">🏆 טורניר</button></div>` : ""}
+      ${!tourMode ? `<p style="color:var(--muted);font-size:16px;margin-top:${canTour ? "-2px" : "-6px"};">אחרי היצירה תוכלו להושיב שחקנים סביב השולחן.</p>
+      <button class="btn btn-primary btn-block" data-create-game>פתח שולחן</button>`
+      : !clubTour ? `<p class="tour-empty" style="margin:0 0 12px;">עוד לא הוגדר טורניר למועדון - הגדירו אותו בפרופיל המועדון ← 🏆 טורניר.</p>
+      <button class="btn btn-primary btn-block" disabled>פתח טורניר</button>`
+      : `<div class="ng-tour">
+          <div class="h"><span>🏆 הגדרות הטורניר</span><small class="${edited ? "ed" : ""}">${edited ? "✎ שונה לערב הזה" : "מפרופיל המועדון"}</small></div>
+          ${tourSummaryHtml(t)}
+          <button type="button" class="ng-tour-edit" data-newgame-tour-edit>✎ ערוך לערב הזה</button>
+        </div>
+      <button class="btn btn-primary btn-block" data-create-game>פתח טורניר</button>`}
     `;
   } else if (m.type === "deleteGame") {
     const g = getGame(m.gameId);
@@ -9792,6 +9860,7 @@ function renderModal(m){
       ["הערב הזה", [
         canTakeTreasurerFromMenu && tile('data-treasurer-take', '<img class="menu-tr-ic" src="/static/treasurer.webp" alt="" draggable="false">', "אני גיזבר הערב"),
         canCloseNight && (g.closed ? tile('data-game-menu-go="reopen"', "🔓", "ביטול סגירת ערב") : tile('data-game-menu-go="close"', "🔒", "סגור משחק")),
+        g && club && g.gameType === "tournament" && !g.closed && (isTableAdmin(g, club) || isSuperAdmin()) && tile(`data-open-game-tour="${g.id}"`, "🏆", "הגדרות טורניר"),
       ]],
       ["המועדון", [
         club && tile('data-game-menu-go="club"', '<span class="menu-club">♣\uFE0E</span>', `המועדון ${esc(club.name)}`),
@@ -10706,6 +10775,14 @@ function attachHandlers(){
   app.querySelectorAll(".club-act").forEach(b => b.addEventListener("click", () => { openClubSwipeId = null; }));
   app.querySelectorAll("[data-delete-community]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type:"deleteCommunity", communityId: el.dataset.deleteCommunity}); });
   app.querySelectorAll("[data-duplicate-community]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type:"duplicateCommunity", communityId: el.dataset.duplicateCommunity}); });
+  app.querySelectorAll("[data-open-game-tour]").forEach(el => el.onclick = (e) => {
+    e.stopPropagation();
+    const g = getGame(el.dataset.openGameTour);
+    if (!g) return;
+    const t = Object.assign({}, TOUR_DEFAULTS, g.tournamentSettings || {});
+    modal = {type: "tourSetup", communityId: g.communityId, gameId: g.id, tour: t, tourSaved: JSON.stringify(tourSavedPart(t))};
+    render();
+  });
   app.querySelectorAll("[data-open-chip-setup]").forEach(el => el.onclick = (e) => {
     e.stopPropagation();
     openChipSetupModal(el.dataset.openChipSetup);
@@ -10732,7 +10809,8 @@ function attachHandlers(){
     app.querySelectorAll("[data-tour-full]").forEach(el => el.onclick = () => setTour({fullTable: modal.tour.fullTable ? 0 : 1}));
     app.querySelectorAll("[data-tour-save]").forEach(el => el.onclick = async () => {
       el.disabled = true; el.textContent = "שומר...";
-      if (await saveTourSettings()) showAlert("הגדרות הטורניר נשמרו");
+      const kind = modal.forNewGame ? "new" : modal.gameId ? "game" : "club";
+      if (await saveTourSettings()) { if (kind !== "new") showAlert(kind === "game" ? "הגדרות הטורניר לערב נשמרו" : "הגדרות הטורניר נשמרו"); }
       else render();
     });
     app.querySelectorAll("[data-tour-payfull]").forEach(el => el.onclick = () => setTour({payFull: modal.tour.payFull ? 0 : 1}));
@@ -12479,11 +12557,25 @@ function attachHandlers(){
   }
 
   if (modal && modal.type === "newGame") {
+    // keep the typed name across re-renders (switching cash / tournament, editing the settings)
+    const nameEl = document.getElementById("new-game-name");
+    if (nameEl) nameEl.oninput = () => { modal.name = nameEl.value; };
+    app.querySelectorAll("[data-newgame-mode]").forEach(el => el.onclick = () => { modal = Object.assign({}, modal, {mode: el.dataset.newgameMode, name: nameEl ? nameEl.value : modal.name}); render(); });
+    app.querySelectorAll("[data-newgame-tour-edit]").forEach(el => el.onclick = () => {
+      const c = getCommunity(modal.communityId);
+      const back = Object.assign({}, modal, {name: nameEl ? nameEl.value : modal.name});
+      const t = Object.assign({}, TOUR_DEFAULTS, back.tour || (c && c.tournamentSettings) || {});
+      modal = {type: "tourSetup", communityId: back.communityId, forNewGame: true, back, tour: t, tourSaved: JSON.stringify(tourSavedPart(t))};
+      render();
+    });
     const createBtn = app.querySelector("[data-create-game]");
     if (createBtn) createBtn.onclick = async () => {
       const c = getCommunity(modal.communityId);
       const nameInput = document.getElementById("new-game-name");
       const name = nameInput.value.trim();
+      // a tournament night takes its own copy of the settings (the club's, or as edited here)
+      const isTourGame = modal.mode === "tour" && (isCommunityAdmin(c) || isSuperAdmin()) && !!c.tournamentSettings;
+      const tourExtra = isTourGame ? {gameType: "tournament", tournamentSettings: tourSavedPart(Object.assign({}, TOUR_DEFAULTS, modal.tour || c.tournamentSettings))} : null;
       if (USE_RELATIONAL_API) {
         // A roster/link/create sequence of real network round trips - with no feedback
         // beforehand this read as the app just sitting there doing nothing, reported live
@@ -12504,7 +12596,7 @@ function attachHandlers(){
             await v2LinkRosterPlayer(c.id, creatorPlayer.id, myIdentity.id);
             // The creator isn't seated up front either - like everyone else they land on
             // the table and tap a free seat, which opens the entry-amount window.
-            await v2CreateGame(gid, c.id, name || null, modal.date, myIdentity.name, null, null, myIdentity.id);
+            await v2CreateGame(gid, c.id, name || null, modal.date, myIdentity.name, null, null, myIdentity.id, tourExtra);
             if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
             myIdentity.myPlayers[c.id] = creatorPlayer.id;
             saveIdentity();
@@ -12514,7 +12606,7 @@ function attachHandlers(){
             return;
           }
         } else {
-          try { await v2CreateGame(gid, c.id, name || null, modal.date, myIdentity.name, null, null, myIdentity.id); }
+          try { await v2CreateGame(gid, c.id, name || null, modal.date, myIdentity.name, null, null, myIdentity.id, tourExtra); }
           catch(e) {
             showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב.");
             createBtn.disabled = false; nameInput.disabled = false; createBtn.textContent = "פתח שולחן";
@@ -12529,7 +12621,7 @@ function attachHandlers(){
       }
       // The date is kept only for sort order, defaulting to today - there's no picker
       // for it, the table's identity is its name (or falls back to the community name).
-      const g = {id:uid(), communityId:c.id, date:modal.date, players: [], buyins:[], cashouts:{}, payboxPayments:[], playerPayments:[], seats:new Array(9).fill(null), liveChips:{}, closed:false, createdByName: myIdentity.name, createdBy: myIdentity.id};
+      const g = {id:uid(), communityId:c.id, date:modal.date, players: [], buyins:[], cashouts:{}, payboxPayments:[], playerPayments:[], seats:new Array(9).fill(null), liveChips:{}, closed:false, createdByName: myIdentity.name, createdBy: myIdentity.id, ...(tourExtra || {})};
       if (name) g.name = name;
       // Explicitly seat whoever's creating the table, by name - independent of whatever
       // this device's remembered-player link happens to be, so opening a new table
@@ -13711,8 +13803,9 @@ window.addEventListener("popstate", async () => {
     const dismissable = t !== "loginRequired" && !(t === "identityName" && modal.forced) && t !== "directPay" && t !== "entryBuyin";
     if (!dismissable) return;
     if (t === "tourSetup") {
+      const clubProfile = !modal.gameId && !modal.forNewGame;   // a night's / new table's settings: back to where it was
       await leaveTourSetup(closeModal);
-      if (!modal && nav.screen !== "home") go("home");
+      if (clubProfile && !modal && nav.screen !== "home") go("home");
       return;
     }
     if (t === "chipSetup" || t === "payboxSettings" || t === "buyinSetup" || t === "permSetup") {
