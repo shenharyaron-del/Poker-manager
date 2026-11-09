@@ -1446,7 +1446,7 @@ html.theme-light .ck-chips span.rb{color:#065f46;border-color:#059669;background
 .ck{padding-bottom:58px !important;}
 .ck-tools{position:fixed;left:0;right:0;bottom:0;z-index:7;display:flex;justify-content:center;gap:14px;padding:8px 0 calc(8px + env(safe-area-inset-bottom));background:rgba(10,46,34,.96);border-top:1px solid rgba(212,175,55,.3);}
 html.theme-light .ck-tools{background:rgba(246,238,224,.97);}
-html.theme-light.theme-blue .ck-tools{background:rgba(214,233,242,.97);}
+html.theme-light.theme-blue .ck-tools{background:rgba(52,104,134,.97);}
 .ck-tools button{background:none;border:none;color:var(--muted);font:inherit;font-size:13.5px;cursor:pointer;}
 .ck-brk .ck-card{border-color:#3fb383;box-shadow:0 0 22px rgba(63,179,131,.25);background:radial-gradient(120% 90% at 50% 0%,rgba(63,179,131,.16),rgba(0,0,0,.18));}
 .ck-brk .ck-lvl{color:#6ee7b7;} html.theme-light .ck-brk .ck-lvl{color:#047857;}
@@ -1482,7 +1482,7 @@ html.theme-light.theme-blue .ck-sticky{background:rgba(214,233,242,.95);}
 .ck-blinds-wrap.capped{max-height:182px;overflow-y:auto;}
 .ck-blinds-wrap thead th{position:sticky;top:0;z-index:1;background:#0f3f2e;}
 html.theme-light .ck-blinds-wrap thead th{background:#f6eee0;}
-html.theme-light.theme-blue .ck-blinds-wrap thead th{background:#d6e9f2;}
+html.theme-light.theme-blue .ck-blinds-wrap thead th{background:#3f7d9c;color:#e3f1f7;}
 .ck-blinds-wrap tr.cur td{background:rgba(242,193,78,.22);font-weight:800;}
 .ck-blinds-wrap tr.cur td:first-child{box-shadow:inset -3px 0 0 #f2c14e;}
 .cc-mode{display:flex;margin:0 0 10px;} .cc-mode button{flex:1;font-size:14px;}
@@ -1530,6 +1530,25 @@ html.theme-light .reg-out{color:#b91c1c;}
 .lb-sub{color:var(--muted);font-size:14px;}
 .info-i{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;border:1.5px solid #6ee7b7;background:none;color:#6ee7b7;font:italic 700 12px/1 Georgia,serif;padding:0;margin-inline-start:4px;vertical-align:super;cursor:pointer;}
 html.theme-light .info-i{border-color:#047857;color:#047857;}
+/* ---- tournament screens on the blue theme: the page is mid-blue, so highlights go light
+   (the light themes' dark-brown / dark-green read poorly on it) ---- */
+html.theme-light.theme-blue :is(.ck-stats b,.lb-count b,.ad-sum b,.pot-now-h b,.cc-total b,.my-pos b,.tour-full-link,.ck-lvl,.cc-done b){color:#ffe39a;}
+html.theme-light.theme-blue :is(.tour-tbl tr.brk td,.ck-brk .ck-lvl){color:#c6f7dd;}
+html.theme-light.theme-blue :is(.tbl-scroll.capped thead th,.ck-blinds-wrap thead th){background:#3f7d9c;color:#e3f1f7;}
+html.theme-light.theme-blue .tour-tbl th{color:#e3f1f7;}
+html.theme-light.theme-blue .ck-tools{background:rgba(52,104,134,.97);border-top-color:rgba(255,227,154,.45);}
+html.theme-light.theme-blue .ck-tools button{color:#f2f8fb;}
+html.theme-light.theme-blue :is(.lb-names span.me,.ck-chips span.rb,.lb-all){color:#0b3d2a;background:#c6f7dd;border-color:#86efac;}
+html.theme-light.theme-blue :is(.lb-state.ok){background:rgba(198,247,221,.9);color:#065f46;}
+html.theme-light.theme-blue .lb-state.ok .sm{color:#065f46;}
+html.theme-light.theme-blue :is(.reg-row.me,.st-tbl tr.me td,.ck-blinds-wrap tr.cur td,.tour-pay tr.pay-cur td){background:rgba(255,227,154,.28);}
+html.theme-light.theme-blue .pend-note{color:#ffe39a;}
+html.theme-light.theme-blue .reg-rm{color:#f2f8fb;}
+html.theme-light.theme-blue .reg-no{color:#b91c1c;background:#fff1f2;border-color:#fca5a5;}
+html.theme-light.theme-blue .reg-out{color:#b91c1c;background:#fff1f2;}
+html.theme-light.theme-blue .info-i{border-color:#c6f7dd;color:#c6f7dd;}
+/* sand: the break rows and the 'all to prizes' green a shade darker */
+html.theme-light.theme-sand .tour-tbl tr.brk td{color:#0f7a4f;}
 .pend-note{color:#f3c26b;font-weight:700;} html.theme-light .pend-note{color:#9a3412;}
 .info-tip{position:fixed;z-index:9999;max-width:260px;padding:8px 12px;border-radius:10px;background:#1c1917;color:#fde68a;font-size:14px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.4);transition:opacity .3s;}
 .info-tip.out{opacity:0;}
@@ -1568,7 +1587,7 @@ html.theme-light .reg-me{color:#047857;}
 .tbl-scroll.st-cap{max-height:156px;}
 .tbl-scroll.capped thead th{position:sticky;top:0;z-index:1;background:#0f3f2e;}
 html.theme-light .tbl-scroll.capped thead th{background:#f6eee0;}
-html.theme-light.theme-blue .tbl-scroll.capped thead th{background:#d6e9f2;}
+html.theme-light.theme-blue .tbl-scroll.capped thead th{background:#3f7d9c;color:#e3f1f7;}
 .reg-row.me{background:rgba(242,193,78,.16);border-radius:10px;box-shadow:inset 3px 0 0 #f2c14e;}
 html.theme-light .reg-row.me{background:rgba(242,193,78,.25);}
 .reg-pick-list{max-height:212px;overflow-y:auto;}
