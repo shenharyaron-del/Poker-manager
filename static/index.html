@@ -5952,7 +5952,7 @@ function tourPlayers(g, c, k){
 // the total. box: whose count it is (a player id) - the inputs and the send button sit in it.
 // key / level: the break the count belongs to - taken when the window opens, so a count sent
 // just after the break ended (or the admin pressed המשך) still lands on that break.
-function tourCcWidget(c, t, box, initial, key, level){
+function tourCcWidget(c, t, box, initial, key, level, isAdmin){
   // like the cash leave form: the amount on top, and under it "or count by type" - the
   // club's chips with a count under each; the counts fill the amount above
   const cvs = (c && c.chipValues) || [], defaults = [25, 100, 500, 1000, 5000, 10000];
@@ -5965,16 +5965,26 @@ function tourCcWidget(c, t, box, initial, key, level){
         ${cvs.map((cv, i) => cv.image ? `<img src="${esc(cv.image)}" alt="" draggable="false">` : `<span class="lv-type-noimg">${pts[i]}</span>`).join("")}
         ${cvs.map((cv, i) => `<input type="number" inputmode="numeric" min="0" placeholder="0" data-cc-n="${i}" data-cc-pt="${pts[i]}" onfocus="this.select()">`).join("")}
         ${cvs.map((cv, i) => `<div class="lv-type-x" dir="ltr" data-cc-x="${i}">${many ? `×${pts[i].toLocaleString("en-US")}<br>0` : `×${pts[i].toLocaleString("en-US")} = 0`}</div>`).join("")}
-      </div>` : ""}
+      </div>` : isAdmin && c ? (() => {
+        // no chips set up for the club: admins see the cash form's faded sample row with
+        // "צריך להגדיר ז'יטונים · הגדר כאן" (players just type the amount)
+        const sample = [["#1f6b4f", "12", "×25"], ["#e9e4d6", "30", "×100"], ["#c0392b", "8", "×500"], ["#222", "3", "×1,000"]];
+        return `<div class="lv-types-sep">או ספרו לפי סוג</div>
+        <div class="lv-types lv-types-locked" style="grid-template-columns:repeat(4,1fr);">
+          ${sample.map(([col]) => `<span class="lv-type-sample" style="--cc:${col}"></span>`).join("")}
+          <div class="lv-types-lock">🔒 צריך להגדיר ז'יטונים · <button type="button" data-define-chips="${esc(c.id)}">הגדר כאן</button></div>
+          ${sample.map(([, n]) => `<span class="lv-type-fake">${n}</span>`).join("")}
+          ${sample.map(([, , x]) => `<div class="lv-type-x" dir="ltr">${x}</div>`).join("")}
+        </div>`; })() : ""}
     <button type="button" class="btn btn-primary btn-block" data-cc-send="${esc(box)}" style="margin-top:8px">שלח ספירה</button>
   </div>`;
 }
-function tourChipCountHtml(g, c, t, mine, key, level){
+function tourChipCountHtml(g, c, t, mine, key, level, isAdmin){
   const done = mine.chipsKey === key;
   if (done && !tourCcEdit) return "";   // reported: the frame goes (the count shows in the standings)
   return `<fieldset class="leave-frame setup-frame cc-frame"><legend>ספירת ז'יטונים · סוף שלב ${level}</legend>
     ${done && !tourCcEdit ? `<div class="cc-done">✓ דיווחת <b>${Number(mine.chips).toLocaleString("en-US")}</b> ז'יטונים <button type="button" class="lb-cancel" data-cc-edit>עדכן</button></div>`
-      : tourCcWidget(c, t, mine.playerId, done ? mine.chips : null, key, level)}
+      : tourCcWidget(c, t, mine.playerId, done ? mine.chips : null, key, level, isAdmin)}
   </fieldset>`;
 }
 let tourCcEdit = false;
@@ -6011,7 +6021,7 @@ function renderTourClock(g, c, isAdmin){
           : canRebuy(mine) ? `<button type="button" class="btn btn-primary btn-block" data-ra="${isAdmin ? "rebuy" : "request_rebuy"}" data-pid="${esc(myPid)}" style="margin-top:8px">🔁 ריביי · ₪${Number(t.rebuyPrice ?? tourEntryTotal(t)).toLocaleString("en-US")}</button>` : ""}</div>`;
     } else {
       me = `
-        ${P.key ? tourChipCountHtml(g, c, t, mine, P.key, level) : ""}
+        ${P.key ? tourChipCountHtml(g, c, t, mine, P.key, level, isAdmin) : ""}
         ${mine.pendingAction ? `<div class="lb-note pend-note">⏳ ${mine.pendingAction === "addon" ? "Add-on" : "ריביי"} ממתין לאישור המנהל <button type="button" class="lb-cancel" data-ra="cancel_request" data-pid="${esc(myPid)}">ביטול</button></div>`
           : k.row.brk && k.row.addOn && t.addOn && !mine.addOnAt ? `<button type="button" class="btn btn-primary btn-block" data-ra="${isAdmin ? "addon" : "request_addon"}" data-pid="${esc(myPid)}" style="margin-bottom:8px">Add-on · ₪${Number(t.addOnPrice ?? tourEntryTotal(t)).toLocaleString("en-US")}</button>` : ""}
 `;
@@ -6034,7 +6044,7 @@ function renderTourClock(g, c, isAdmin){
         <button type="button" class="lb-cancel" data-cc-admin-toggle style="margin-top:6px">${tourCcAdmin ? "סגור" : "הזנת ספירה לשחקן"}</button>
         ${!tourCcAdmin ? "" : (() => {
           const sel = tourCcFor && P.alive.find(r => r.playerId === tourCcFor);
-          if (sel) return `<div class="cc-admin"><div class="cc-for-h"><b>${esc(sel.name || "")}</b>${sel.chipsKey === P.key ? ` · דווח ${Number(sel.chips).toLocaleString("en-US")}` : ""} <button type="button" class="lb-cancel" data-cc-pick="">שחקן אחר</button></div>${tourCcWidget(c, t, sel.playerId, sel.chipsKey === P.key ? sel.chips : null, P.key, level)}</div>`;
+          if (sel) return `<div class="cc-admin"><div class="cc-for-h"><b>${esc(sel.name || "")}</b>${sel.chipsKey === P.key ? ` · דווח ${Number(sel.chips).toLocaleString("en-US")}` : ""} <button type="button" class="lb-cancel" data-cc-pick="">שחקן אחר</button></div>${tourCcWidget(c, t, sel.playerId, sel.chipsKey === P.key ? sel.chips : null, P.key, level, true)}</div>`;
           return `<div class="cc-admin"><div class="tf-in"><input type="text" data-cc-find placeholder="חיפוש שחקן" autocomplete="off"></div>
             <div class="cc-find-list">${P.alive.map(r => `<button type="button" class="reg-pick" data-cc-pick="${esc(r.playerId)}" data-name="${esc(String(r.name || "").toLowerCase())}">${tourAvatar(r.name, 0, r.playerId, g.communityId)}<span>${esc(r.name || "")}</span><small>${r.chipsKey === P.key ? "✓ " + Number(r.chips).toLocaleString("en-US") : "לא דיווח"}</small></button>`).join("")}</div></div>`;
         })()}</div>`;
