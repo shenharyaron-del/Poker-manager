@@ -6170,8 +6170,10 @@ function tourStandingsHtml(P, myPid){
   if (!P.approved.length) return "";
   const rows = P.standings.map(({r, place, counted}) => {
     const extra = r.bustedAt ? `${P.fem && P.fem(r.playerId) ? "יצאה" : "יצא"} ${hhmm(r.bustedAt)}${r.bustLevel ? ` · שלב ${r.bustLevel}` : ""}` : counted ? Number(r.chips).toLocaleString("en-US") : "—";
-    const rb = "";   // re-buys aren't shown in the standings
-    return `<tr class="${r.playerId === myPid ? "me" : ""}${r.bustedAt ? " out" : ""}"><td>${place}</td><td class="nm">${esc(r.name || "")}</td><td class="ltr">${extra}<small>${rb}</small></td></tr>`;
+    // how many re-buys and whether the add-on was bought - under the name
+    const nRb = (r.rebuys || []).length;
+    const rb = [nRb ? (nRb === 1 ? "ריביי אחד" : `${nRb} ריביי`) : "", r.addOnAt ? "Add-on" : ""].filter(Boolean).join(" · ");
+    return `<tr class="${r.playerId === myPid ? "me" : ""}${r.bustedAt ? " out" : ""}"><td>${place}</td><td class="nm">${esc(r.name || "")}${rb ? `<small>${rb}</small>` : ""}</td><td class="ltr">${extra}</td></tr>`;
   }).join("");
   // a ranking only once there are chip counts - until then it's just who's playing
   return `<fieldset class="leave-frame setup-frame"><legend>${tourHasCounts(P) ? `🏅 דירוג${P.lastLevel ? ` · נכון לסוף שלב ${P.lastLevel}` : ""}` : "👥 שחקנים"}</legend>
