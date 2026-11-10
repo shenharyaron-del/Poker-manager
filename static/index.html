@@ -6902,9 +6902,9 @@ function netBadge(stat){
   if (count === 0) return `<span class="balance-line balance-neutral" style="margin-top:0;">עדיין לא שיחק</span>`;
   const cls = net>0.5?"balance-pos":(net<-0.5?"balance-neg":"balance-neutral");
   const gamesText = count === 1 ? "ממשחק אחד" : `מ-${count} משחקים`;
-  // "₪50" / "-₪100": no plus sign, ₪ and the minus on the number's left (an LTR run inside the RTL line)
+  // "₪50" / "₪-100": no plus sign, ₪ on the left and the minus between it and the number (an LTR run inside the RTL line)
   const n = Math.round(net);
-  return `<span class="balance-line ${cls}" style="margin-top:0;"><span dir="ltr" style="direction:ltr;unicode-bidi:isolate;display:inline-block">${n < 0 ? "-" : ""}₪${Math.abs(n)}</span> ${gamesText}</span>`;
+  return `<span class="balance-line ${cls}" style="margin-top:0;"><span dir="ltr" style="direction:ltr;unicode-bidi:isolate;display:inline-block">₪${n < 0 ? "-" : ""}${Math.abs(n)}</span> ${gamesText}</span>`;
 }
 
 // ---------- Settlement algorithm ----------
