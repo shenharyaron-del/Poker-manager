@@ -6292,9 +6292,10 @@ function renderTourClock(g, c, isAdmin){
     (lateOpen || pending.length) && ["lobby", "לובי", pending.length],
     (lateOpen || aoNow || reqs.length) && ["rebuy", lateOpen && t.addOn ? "ריביי / Add-on" : lateOpen ? "ריביי" : "Add-on", reqs.length],
     ["out", "הדחה", 0],
-    // ending / a deal only once few are left and re-buys are over: 4 or fewer - 5 when more
-    // than 20 started, 6 when more than 30
-    !lateOpen && !dealOn && P.alive.length <= (approved.length > 30 ? 6 : approved.length > 20 ? 5 : 4) && ["end", "סיום / דיל", 0],
+    // a deal once few are left and re-buys are over: 4 or fewer - 5 when more than 20
+    // started, 6 when more than 30. (There's no ending it early: it ends with a deal, or
+    // when one player is left.)
+    !lateOpen && !dealOn && P.alive.length > 1 && P.alive.length <= (approved.length > 30 ? 6 : approved.length > 20 ? 5 : 4) && ["deal", "🤝 דיל", 0],
   ].filter(Boolean);
   if (tourPanel && !actList.some(a => a[0] === tourPanel)) tourPanel = null;
   const acts = !isAdmin ? "" : `<div class="ck-acts${actList.length === 1 ? " solo" : ""}">${actList
@@ -6308,11 +6309,6 @@ function renderTourClock(g, c, isAdmin){
     : tourPanel === "lobby"
     ? `<div class="ck-panel"><div class="ck-panel-h">בלובי · ${pending.length ? `${pending.length} מחכים לאישור` : "אין ממתינים"}<button type="button" class="lb-cancel" data-ck-panel="">סגור</button></div>
         ${pending.map((r, i) => `<div class="reg-row">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}${r.isNew ? `<span class="reg-new">חדש</span>` : ""}<small>רישום מאוחר · ₪${nn(total)}</small></div><button type="button" class="reg-no" data-reg-decline="${esc(r.playerId)}">✕</button><button type="button" class="reg-ok" data-reg-approve="${esc(r.playerId)}">✓ אשר</button></div>`).join("")}</div>`
-    : tourPanel === "end"
-    ? `<div class="ck-panel"><div class="ck-panel-h">סיום הטורניר<button type="button" class="lb-cancel" data-ck-panel="">סגור</button></div>
-        <button type="button" class="btn btn-primary btn-block" data-tour-finish>🏁 סיים טורניר</button>
-        <button type="button" class="btn btn-ghost btn-block" data-tour-deal style="margin-top:8px">🤝 דיל - חלוקת הקופה בין ${P.alive.length} הנשארים</button>
-        <p class="lb-note" style="margin-top:6px">בדיל כל שחקן ממלא כמה ז'יטונים נשארו לו, ואז מוצגת הצעת חלוקה.</p></div>`
     : tourPanel === "out"
     ? `<div class="ck-panel"><div class="ck-panel-h">הדחת שחקן מהטורניר<button type="button" class="lb-cancel" data-ck-panel="">סגור</button></div>
         <div class="tf-in"><input type="text" data-find placeholder="חיפוש שחקן" autocomplete="off"></div>
@@ -12081,7 +12077,16 @@ function attachHandlers(){
   app.querySelectorAll("[data-ck-sound]").forEach(el => el.onclick = () => { try { localStorage.setItem("tour-sound", tourSoundOn() ? "0" : "1"); } catch (e) {} if (tourSoundOn()) tourBeep(); render(); });
   app.querySelectorAll("[data-ck-fs]").forEach(el => el.onclick = () => { const d = document; if (d.fullscreenElement) d.exitFullscreen(); else if (d.documentElement.requestFullscreen) d.documentElement.requestFullscreen().catch(() => {}); });
   app.querySelectorAll("[data-ck-full]").forEach(el => el.onclick = () => { tourClockFull = !tourClockFull; render(); });
-  app.querySelectorAll("[data-ck-panel]").forEach(el => el.onclick = () => { const v = el.dataset.ckPanel || null; tourPanel = tourPanel === v ? null : v; tourAddFocusKey = null; render(); });
+  app.querySelectorAll("[data-ck-panel]").forEach(el => el.onclick = async () => {
+    const v = el.dataset.ckPanel || null;
+    // "🤝 דיל" isn't a panel: it offers the deal (the clock stops while everyone enters their chips)
+    if (v === "deal") {
+      if (!(await showConfirm("להציע דיל? השעון ייעצר, כל שחקן ימלא כמה ז'יטונים נשארו לו, ואז תוצג הצעת חלוקה.", {okLabel: "הצע דיל", cancelLabel: "ביטול"}))) return;
+      tourPanel = null; tourDealMethod = "guarantee"; tourCcFor = null;
+      return tourAct(el, () => v2TourClock(tourGid, "deal"));
+    }
+    tourPanel = tourPanel === v ? null : v; tourAddFocusKey = null; render();
+  });
   app.querySelectorAll("[data-ck-changes]").forEach(el => el.onclick = () => openModal({type: "tourChanges", gameId: tourGid}));
   // ----- the end: finish (places + prizes), a deal, the winners -----
   app.querySelectorAll("[data-tour-finish]").forEach(el => el.onclick = () => { tourPanel = null; openModal({type: "tourFinish", gameId: tourGid}); });
