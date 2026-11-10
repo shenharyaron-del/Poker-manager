@@ -10529,7 +10529,6 @@ function renderModal(m){
       const cvs = c.chipValues || [];
       inner = cvs.length ? `
         <fieldset class="leave-frame setup-frame"><legend>ערך כל ז'יטון בנקודות</legend>
-          <p class="tour-note" style="margin:0 0 8px">ברירת המחדל לפי יחס הקאש של המועדון: ${esc(String(parseFloat(c.chipRatio) || 1))} ז'יטונים לשקל</p>
           ${cvs.map((cv, i) => `<div class="tour-chip">${cv.image ? `<img src="${esc(cv.image)}" alt="">` : `<span class="tour-chip-noimg"></span>`}
             <div class="tf-in"><input type="number" inputmode="numeric" data-tour-point="${cv.id}" value="${esc(String(tourChipPoints(t, cv, i, c) || ""))}"><span class="tf-unit">נק'</span></div>${parseFloat(cv.value) > 0 ? `<small class="tour-chip-cash">₪${esc(String(cv.value))} בקאש</small>` : ""}</div>`).join("")}
         </fieldset>`
