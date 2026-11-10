@@ -6018,6 +6018,9 @@ function tourBreakKey(g, k){
   if (k.row.brk) return "b" + k.i;
   return null;
 }
+// He / she: a player's own gender from the club (the roster's), and mine from my identity.
+function tourFem(g, pid){ return playerIsFemale(g, getCommunity(g.communityId), pid); }
+function myFem(){ return myIdentity.gender === "female"; }
 function tourPlayers(g, c, k){
   const t = Object.assign({}, TOUR_DEFAULTS, g.tournamentSettings || {});
   const started = (g.tournamentState || {}).startedAt || 0;
@@ -6038,7 +6041,7 @@ function tourPlayers(g, c, k){
   const standings = aliveSorted.concat(out).map((r, i) => ({r, place: i + 1, counted: !r.bustedAt && inRound(r)}));
   const key = tourBreakKey(g, k);
   const reportedNow = key ? alive.filter(r => r.chipsKey === key) : [];
-  return {t, approved, alive, expected, lastKey, lastLevel, standings, key, reportedNow,
+  return {t, approved, alive, expected, lastKey, lastLevel, standings, key, reportedNow, fem: pid => playerIsFemale(g, c, pid),
     reportedSum: reportedNow.reduce((s2, r) => s2 + (+r.chips || 0), 0)};
 }
 // The chip count window during a break - the club's chips (their points value), or one total.
@@ -6102,7 +6105,7 @@ let tourCcFor = null;      // ...and the player picked there
 function tourStandingsHtml(P, myPid){
   if (!P.approved.length) return "";
   const rows = P.standings.map(({r, place, counted}) => {
-    const extra = r.bustedAt ? `יצא ${hhmm(r.bustedAt)}${r.bustLevel ? ` · שלב ${r.bustLevel}` : ""}` : counted ? Number(r.chips).toLocaleString("en-US") : "—";
+    const extra = r.bustedAt ? `${P.fem && P.fem(r.playerId) ? "יצאה" : "יצא"} ${hhmm(r.bustedAt)}${r.bustLevel ? ` · שלב ${r.bustLevel}` : ""}` : counted ? Number(r.chips).toLocaleString("en-US") : "—";
     const rb = "";   // re-buys aren't shown in the standings
     return `<tr class="${r.playerId === myPid ? "me" : ""}${r.bustedAt ? " out" : ""}"><td>${place}</td><td class="nm">${esc(r.name || "")}</td><td class="ltr">${extra}<small>${rb}</small></td></tr>`;
   }).join("");
@@ -6155,7 +6158,7 @@ function renderTourClock(g, c, isAdmin){
           const sel = tourCcFor && P.alive.find(r => r.playerId === tourCcFor);
           if (sel) return `<div class="cc-admin"><div class="cc-for-h"><b>${esc(sel.name || "")}</b>${sel.chipsKey === P.key ? ` · דווח ${Number(sel.chips).toLocaleString("en-US")}` : ""} <button type="button" class="lb-cancel" data-cc-pick="">שחקן אחר</button></div>${tourCcWidget(c, t, sel.playerId, sel.chipsKey === P.key ? sel.chips : null, P.key, level, true)}</div>`;
           return `<div class="cc-admin"><div class="tf-in"><input type="text" data-cc-find placeholder="חיפוש שחקן" autocomplete="off"></div>
-            <div class="cc-find-list">${P.alive.filter(r => r.chipsKey !== P.key).map(r => `<button type="button" class="reg-pick" data-cc-pick="${esc(r.playerId)}" data-name="${esc(String(r.name || "").toLowerCase())}">${tourAvatar(r.name, 0, r.playerId, g.communityId)}<span>${esc(r.name || "")}</span><small>לא דיווח</small></button>`).join("") || `<p class="lb-note">כולם כבר דיווחו</p>`}</div></div>`;
+            <div class="cc-find-list">${P.alive.filter(r => r.chipsKey !== P.key).map(r => `<button type="button" class="reg-pick" data-cc-pick="${esc(r.playerId)}" data-name="${esc(String(r.name || "").toLowerCase())}">${tourAvatar(r.name, 0, r.playerId, g.communityId)}<span>${esc(r.name || "")}</span><small>${P.fem(r.playerId) ? "לא דיווחה" : "לא דיווח"}</small></button>`).join("") || `<p class="lb-note">כולם כבר דיווחו</p>`}</div></div>`;
         })()}</div>`;
     }
   }
@@ -6171,7 +6174,7 @@ function renderTourClock(g, c, isAdmin){
       const sel = isAdmin && tourCcFor && P.alive.find(r => r.playerId === tourCcFor);
       dealHtml = `<fieldset class="leave-frame setup-frame deal-frame"><legend>🤝 דיל · מילאו ${reported.length} מתוך ${P.alive.length}</legend>
         <div class="lb-note" style="margin:0 0 6px">כל שחקן ממלא כמה ז'יטונים נשארו לו. כשכולם ימלאו תופיע הצעת חלוקה.</div>
-        ${P.alive.map((r, i) => `<div class="reg-row">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}<small>${r.chipsKey === P.key ? `מילא ${nn2(r.chips)} ז'יטונים` : "עוד לא מילא"}</small></div>${r.chipsKey === P.key ? `<span class="deal-ok">✓</span>` : isAdmin ? `<button type="button" class="reg-pick-btn" data-cc-pick="${esc(r.playerId)}">מלא בשמו</button>` : ""}</div>`).join("")}
+        ${P.alive.map((r, i) => `<div class="reg-row">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}<small>${r.chipsKey === P.key ? `${P.fem(r.playerId) ? "מילאה" : "מילא"} ${nn2(r.chips)} ז'יטונים` : P.fem(r.playerId) ? "עוד לא מילאה" : "עוד לא מילא"}</small></div>${r.chipsKey === P.key ? `<span class="deal-ok">✓</span>` : isAdmin ? `<button type="button" class="reg-pick-btn" data-cc-pick="${esc(r.playerId)}">מלא בשמו</button>` : ""}</div>`).join("")}
         ${sel ? `<div class="cc-admin"><div class="cc-for-h"><b>${esc(sel.name || "")}</b> <button type="button" class="lb-cancel" data-cc-pick="">סגור</button></div>${tourCcWidget(c, t, sel.playerId, null, P.key, level, true)}</div>` : ""}
         ${cancel}</fieldset>`;
     } else {
@@ -6196,7 +6199,7 @@ function renderTourClock(g, c, isAdmin){
   }
   // one player left: the admin is offered to end it
   const endPrompt = isAdmin && !dealOn && approved.length >= 2 && P.alive.length <= 1
-    ? `<div class="lb-state ok" style="padding:12px"><div class="big" style="font-size:19px">🏆 ${P.alive.length ? `נשאר שחקן אחד - ${esc(P.alive[0].name || "")}` : "כל השחקנים יצאו"}</div><button type="button" class="btn btn-primary btn-block" data-tour-finish style="margin-top:8px">סיים טורניר</button></div>` : "";
+    ? `<div class="lb-state ok" style="padding:12px"><div class="big" style="font-size:19px">🏆 ${P.alive.length ? `${P.fem(P.alive[0].playerId) ? "נשארה שחקנית אחת" : "נשאר שחקן אחד"} - ${esc(P.alive[0].name || "")}` : "כל השחקנים יצאו"}</div><button type="button" class="btn btn-primary btn-block" data-tour-finish style="margin-top:8px">סיים טורניר</button></div>` : "";
   const stLabel = k.cs.paused ? (k.cs.reason === "break" ? "☕ הפסקה" : "⏸ מושהה") : onBreak ? "☕ הפסקה" : "▶ פעיל";
   const pct = k.len ? Math.min(100, Math.max(0, 100 - k.left / k.len * 100)) : 100;
   const card = k.cs.reason === "break"
@@ -6254,7 +6257,7 @@ function renderTourClock(g, c, isAdmin){
     : tourPanel === "out"
     ? `<div class="ck-panel"><div class="ck-panel-h">שחקן שיצא מהטורניר<button type="button" class="lb-cancel" data-ck-panel="">סגור</button></div>
         <div class="tf-in"><input type="text" data-find placeholder="חיפוש שחקן" autocomplete="off"></div>
-        <div class="cc-find-list" data-find-list>${P.alive.filter(r => !(P.key && r.chipsKey === P.key)).map((r, i) => `<div class="reg-row" data-name="${esc(String(r.name || "").toLowerCase())}">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}</div><button type="button" class="reg-out" data-ra="bust" data-pid="${esc(r.playerId)}" data-confirm="לסמן ש${esc(r.name || "")} יצא מהטורניר?">יצא</button></div>`).join("")}</div></div>`
+        <div class="cc-find-list" data-find-list>${P.alive.filter(r => !(P.key && r.chipsKey === P.key)).map((r, i) => `<div class="reg-row" data-name="${esc(String(r.name || "").toLowerCase())}">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}</div><button type="button" class="reg-out" data-ra="bust" data-pid="${esc(r.playerId)}" data-confirm="לסמן ש${esc(r.name || "")} ${P.fem(r.playerId) ? "יצאה" : "יצא"} מהטורניר?">${P.fem(r.playerId) ? "יצאה" : "יצא"}</button></div>`).join("")}</div></div>`
     : (() => {
         // requests first, then any registered player - for whoever has no phone
         const aoOpen = t.addOn && k.row.brk && k.row.addOn;
@@ -6264,14 +6267,14 @@ function renderTourClock(g, c, isAdmin){
         ${reqs.length ? `<div class="pn-sub">בקשות (${reqs.length})</div>${reqs.map((r, i) => `<div class="reg-row">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}<small>${r.pendingAction === "addon" ? "Add-on" : "ריביי"} · ₪${nn((r.pendingAction === "addon" ? t.addOnPrice : t.rebuyPrice) ?? total)}</small></div><button type="button" class="reg-no" data-ra="decline" data-pid="${esc(r.playerId)}">✕</button><button type="button" class="reg-ok" data-ra="${r.pendingAction}" data-pid="${esc(r.playerId)}">✓ שולם</button></div>`).join("")}` : ""}
         <div class="pn-sub">רישום לשחקן (גם בלי בקשה)</div>
         ${direct.length ? `<div class="tf-in"><input type="text" data-find placeholder="חיפוש שחקן" autocomplete="off"></div>
-        <div class="cc-find-list" data-find-list>${direct.map((r, i) => `<div class="reg-row${r.bustedAt ? " out" : ""}" data-name="${esc(String(r.name || "").toLowerCase())}">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}<small>${r.bustedAt ? "יצא" : `${(r.rebuys || []).length} ריביי`}${r.addOnAt ? " · Add-on ✓" : ""}</small></div>
+        <div class="cc-find-list" data-find-list>${direct.map((r, i) => `<div class="reg-row${r.bustedAt ? " out" : ""}" data-name="${esc(String(r.name || "").toLowerCase())}">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}<small>${r.bustedAt ? (P.fem(r.playerId) ? "יצאה" : "יצא") : `${(r.rebuys || []).length} ריביי`}${r.addOnAt ? " · Add-on ✓" : ""}</small></div>
           ${aoOpen && !r.addOnAt && !r.bustedAt ? `<button type="button" class="reg-ok" data-ra="addon" data-pid="${esc(r.playerId)}" data-confirm="לרשום Add-on ל${esc(r.name || "")} (שולם ₪${nn(t.addOnPrice ?? total)})?">Add-on</button>` : ""}
           ${rbOk(r) ? `<button type="button" class="reg-ok" data-ra="rebuy" data-pid="${esc(r.playerId)}" data-confirm="לרשום ריביי ל${esc(r.name || "")} (שולם ₪${nn(t.rebuyPrice ?? total)})?">ריביי</button>` : ""}</div>`).join("")}</div>`
           : `<p class="lb-note">${lateOpen ? "" : "זמן הריביי נגמר"}${t.addOn && !aoOpen ? `${lateOpen ? "" : " · "}Add-on נפתח בהפסקה שבסוף זמן הריביי` : ""}</p>`}</div>`;
       })();
   const playedMin = Math.floor(k.cs.elapsed / 60000);
   const join = !isAdmin && lateOpen && !mine ? `<button type="button" class="btn btn-primary btn-block lb-req" data-tour-register style="margin:0 0 10px">רישום מאוחר · ₪${tourEntryTotal(t).toLocaleString("en-US")}</button>`
-    : !isAdmin && mine && mine.status === "pending" ? `<div class="lb-state wait" style="padding:8px"><div class="big" style="font-size:17px">⏳ ממתין לאישור המנהל</div><button type="button" class="lb-cancel" data-tour-cancel>ביטול הבקשה</button></div>` : "";
+    : !isAdmin && mine && mine.status === "pending" ? `<div class="lb-state wait" style="padding:8px"><div class="big" style="font-size:17px">⏳ ${myFem() ? "ממתינה" : "ממתין"} לאישור המנהל</div><button type="button" class="lb-cancel" data-tour-cancel>ביטול הבקשה</button></div>` : "";
   // the clock's controls in one row (the changes are in the menu; registration on the re-buy line)
   const admin = !isAdmin ? "" : `<div class="ck-admin">
       <div class="ck-row"><button type="button" data-ck="prev">⏮ שלב קודם</button>${k.cs.paused ? `<button type="button" class="main" data-ck="resume">▶ המשך</button>` : `<button type="button" data-ck="pause">⏸ השהה</button>`}<button type="button" data-ck="next">⏭ שלב הבא</button></div>
@@ -6399,7 +6402,7 @@ function tourWinnersHtml(g, c, t, isAdmin){
     <fieldset class="leave-frame setup-frame"><legend>זוכים</legend>
       ${paid.map((p2, i) => `<div class="en-row paid"><span class="pl">${medals[i] || i + 1}</span>${tourAvatar(p2.name, i, p2.playerId, g.communityId)}<div class="nm">${esc(p2.name || "")}</div><span class="amt">₪${nn2(p2.prize)}</span></div>`).join("")}
     </fieldset>
-    ${isAdmin && fee > 0 ? `<div class="wn-fee">דמי טיפול ₪${nn2(fee)} נשארו אצל המנהל · רק אתה רואה את זה</div>` : ""}
+    ${isAdmin && fee > 0 ? `<div class="wn-fee">דמי טיפול ₪${nn2(fee)} נשארו אצל המנהל · רק ${myFem() ? "את רואה" : "אתה רואה"} את זה</div>` : ""}
     <button type="button" class="btn btn-ghost btn-block wn-share" data-tour-share>📤 שתף תוצאות בוואטסאפ</button>
   </div>`;
 }
@@ -6420,7 +6423,7 @@ function renderTourGame(g, c){
       <div class="ad-sum"><div><b>${approved.length}</b>רשומים</div><div><b>${pending.length}</b>ממתינים</div><div><b>₪${n(tourPot(g, t))}</b>בקופה</div></div>
       ${tourPotNowHtml(t, approved.length)}
       ${pending.length ? `<fieldset class="leave-frame setup-frame ad-pend"><legend>⏳ ממתינים לאישור (${pending.length})</legend>
-        ${pending.map((r, i) => `<div class="reg-row">${tourAvatar(r.name, i + 3, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}${r.isNew ? `<span class="reg-new">חדש</span>` : ""}<small>${r.isNew ? "ערב ראשון במועדון · " : ""}${r.requestedAt ? `ביקש ב-${new Date(r.requestedAt).toLocaleTimeString("he-IL", {hour: "2-digit", minute: "2-digit"})}` : ""}</small></div>
+        ${pending.map((r, i) => `<div class="reg-row">${tourAvatar(r.name, i + 3, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}${r.isNew ? `<span class="reg-new">חדש</span>` : ""}<small>${r.isNew ? "ערב ראשון במועדון · " : ""}${r.requestedAt ? `${tourFem(g, r.playerId) ? "ביקשה" : "ביקש"} ב-${new Date(r.requestedAt).toLocaleTimeString("he-IL", {hour: "2-digit", minute: "2-digit"})}` : ""}</small></div>
           <button type="button" class="reg-no" data-reg-decline="${esc(r.playerId)}" aria-label="דחה">✕</button><button type="button" class="reg-ok" data-reg-approve="${esc(r.playerId)}">✓ אשר</button></div>`).join("")}
         <div class="lb-note">אישור = השחקן נרשם ושילם ₪${n(total)}</div>
       </fieldset>` : ""}
@@ -6441,8 +6444,8 @@ function renderTourGame(g, c){
   const status = !mine
     ? `<button type="button" class="btn btn-primary btn-block lb-req" data-tour-register>בקשת הרשמה · ₪${n(total)}</button><div class="lb-note">המנהל יאשר את ההרשמה אחרי התשלום</div>`
     : mine.status === "pending"
-      ? `<div class="lb-state wait"><div class="big">⏳ ממתין לאישור המנהל</div><div class="sm">שלמו ₪${n(total)} למנהל - הוא יאשר אתכם</div><button type="button" class="lb-cancel" data-tour-cancel>ביטול הבקשה</button></div>`
-      : `<div class="lb-state ok"><div class="big">✓ אתה רשום!</div><div class="sm">שולם ₪${n(total)} · מחכים שהמנהל יתחיל את הטורניר</div></div>`;
+      ? `<div class="lb-state wait"><div class="big">⏳ ${myFem() ? "ממתינה" : "ממתין"} לאישור המנהל</div><div class="sm">שלמו ₪${n(total)} למנהל - הוא יאשר אתכם</div><button type="button" class="lb-cancel" data-tour-cancel>ביטול הבקשה</button></div>`
+      : `<div class="lb-state ok"><div class="big">✓ ${myFem() ? "את רשומה" : "אתה רשום"}!</div><div class="sm">שולם ₪${n(total)} · מחכים שהמנהל יתחיל את הטורניר</div></div>`;
   return `<div class="tour-page">${head("")}
     <div class="lb-count"><span>נרשמו <b>${approved.length}</b></span><span>ממתינים <b>${pending.length}</b></span></div>
     ${status}
@@ -7677,7 +7680,7 @@ function render(){
           const n = regs ? regs.filter(x => x.status === "approved").length : (g.regApproved || 0);
           const k = tourClockInfo(g, getCommunity(g.communityId));
           const where = !k ? "רישום פתוח" : (k.cs.reason === "break" || k.row.brk) ? "הפסקה" : `שלב ${k.row.level} · ${fmtBlinds(k.row)}`;
-          const mineText = r ? (r.status === "pending" ? "ממתין לאישור" : (myIdentity.gender === "female" ? "את רשומה" : "אתה רשום")) : "";
+          const mineText = r ? (r.status === "pending" ? (myFem() ? "ממתינה לאישור" : "ממתין לאישור") : (myIdentity.gender === "female" ? "את רשומה" : "אתה רשום")) : "";
           return `<button type="button" class="btn btn-primary btn-block agb-game" data-open-game="${g.id}"><span class="agb-label"><span class="agb-name"><span class="agb-tour">🏆 טורניר</span>${esc(g.name || ilDate(g.date))}</span><span class="agb-club">${esc(cname)} · ${n} נרשמו · ${where}${mineText ? ` · ${mineText}` : ""}</span></span>${icon('chev')}</button>`;
         }
         // Still playing - whoever already left doesn't count.
@@ -10824,7 +10827,7 @@ function renderModal(m){
       <p class="lb-note" style="margin:0 0 10px">המקומות לפי סדר היציאה. אפשר להזיז שחקן עם החצים (למשל כששניים יצאו באותה יד).</p>
       <fieldset class="leave-frame setup-frame"><legend>מקומות</legend>
         ${order.map((id, i) => { const r = byId[id];
-          return `${i === prizes.length ? `<div class="en-cut">מחוץ לכסף</div>` : ""}<div class="en-row${i < prizes.length ? " paid" : ""}"><span class="pl">${medals[i] || i + 1}</span>${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}<small>${r.bustedAt ? `יצא ${hhmm(r.bustedAt)}${r.bustLevel ? ` · שלב ${r.bustLevel}` : ""}` : "עדיין במשחק"}</small></div>${i < prizes.length ? `<span class="amt">₪${nn2(prizes[i])}</span>` : ""}<div class="en-mv"><button type="button" data-fin-move="${i}" data-dir="-1" ${i ? "" : "disabled"}>▲</button><button type="button" data-fin-move="${i}" data-dir="1" ${i < order.length - 1 ? "" : "disabled"}>▼</button></div></div>`; }).join("")}
+          return `${i === prizes.length ? `<div class="en-cut">מחוץ לכסף</div>` : ""}<div class="en-row${i < prizes.length ? " paid" : ""}"><span class="pl">${medals[i] || i + 1}</span>${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}<small>${r.bustedAt ? `${P.fem(r.playerId) ? "יצאה" : "יצא"} ${hhmm(r.bustedAt)}${r.bustLevel ? ` · שלב ${r.bustLevel}` : ""}` : "עדיין במשחק"}</small></div>${i < prizes.length ? `<span class="amt">₪${nn2(prizes[i])}</span>` : ""}<div class="en-mv"><button type="button" data-fin-move="${i}" data-dir="-1" ${i ? "" : "disabled"}>▲</button><button type="button" data-fin-move="${i}" data-dir="1" ${i < order.length - 1 ? "" : "disabled"}>▼</button></div></div>`; }).join("")}
       </fieldset>
       <button class="btn btn-primary btn-block" data-fin-confirm style="margin-top:12px;font-size:18px">אשר וסיים טורניר</button>
       ${P.alive.length > 1 ? `<button type="button" class="lb-cancel" data-tour-deal style="display:block;margin:10px auto 0">דיל - חלוקה אחרת של הכסף</button>` : ""}`;
