@@ -3514,7 +3514,10 @@ async function tickAutoRefresh(){
 function connectLiveSync(){
   try {
     const es = new EventSource("/api/events");
-    es.onmessage = () => { doRefreshNow("sse"); };
+    // a short random wait first: every open phone gets the same message at the same
+    // moment, and refetching all at once (200 at a tournament) swamps the server
+    let sseTimer = null;
+    es.onmessage = () => { if (!sseTimer) sseTimer = setTimeout(() => { sseTimer = null; doRefreshNow("sse"); }, 200 + Math.random() * 1300); };
   } catch(e) { /* SSE unsupported/blocked - periodic polling still covers us */ }
 }
 document.addEventListener("visibilitychange", () => {
