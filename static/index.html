@@ -1623,6 +1623,25 @@ html.theme-light.theme-blue .ck-blinds-wrap tr.cur td{background:rgba(255,227,15
 .reg-av-pen{position:absolute;bottom:-3px;left:-3px;width:17px;height:17px;border-radius:50%;background:#f2c14e;color:#2a1d05;font-size:11px;line-height:17px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.4);}
 .reg-row .nm-l{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding-inline-end:6px;}
 .reg-row .nm-chips{font-size:14px;font-weight:600;color:var(--muted);white-space:nowrap;}
+/* registering a player: search, rows with "＋ רשום", a new player, the last one registered */
+.rp-search{position:relative;margin:2px 0 6px;}
+.rp-search input{width:100%;box-sizing:border-box;padding:12px 44px 12px 14px;font-size:18px;border-radius:14px;}
+.rp-search .ic{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:18px;opacity:.6;pointer-events:none;}
+.rp-hint{font-size:14px;color:var(--muted);margin:0 2px 8px;}
+.rp-sec{font-size:14px;font-weight:800;color:var(--gold);margin:10px 2px 2px;} html.theme-light .rp-sec{color:#9a5f12;}
+.rp-row{display:flex;align-items:center;gap:10px;padding:8px 2px;border-bottom:1px solid rgba(212,175,55,.15);}
+.rp-row .nm{flex:0 0 50%;min-width:0;font-size:17px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;} .rp-row .nm small{display:block;font-weight:500;font-size:13px;color:var(--muted);}
+.rp-row mark{background:rgba(242,193,78,.45);color:inherit;border-radius:3px;padding:0 1px;}
+.rp-go{margin-inline-start:6px;padding:6px 14px;border-radius:999px;border:1.5px solid var(--gold);background:transparent;color:var(--gold);font:inherit;font-weight:800;font-size:15px;white-space:nowrap;cursor:pointer;}
+html.theme-light .rp-go{border-color:#9a5f12;color:#9a5f12;}
+.rp-new{border:1.5px dashed var(--gold);border-radius:14px;padding:10px 12px;margin:8px 0 4px;background:rgba(242,193,78,.1);}
+html.theme-light .rp-new{border-color:#9a5f12;}
+.rp-new .t{font-size:16.5px;font-weight:800;} .rp-new .t b{color:var(--gold);} html.theme-light .rp-new .t b{color:#9a5f12;}
+.rp-new .r{display:flex;gap:8px;margin-top:8px;align-items:center;} .rp-new .r .gender-seg{flex:0 0 auto;}
+.rp-new.soft{background:transparent;padding:7px 12px;} .rp-new.soft .t{font-size:15px;font-weight:600;color:var(--muted);}
+.rp-toast{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:12px;background:rgba(63,179,131,.14);border:1.5px solid #3fb383;color:#6ee7b7;font-weight:800;font-size:15.5px;margin:0 0 8px;}
+html.theme-light .rp-toast{color:#047857;}
+.rp-toast button{margin-inline-start:auto;background:none;border:none;color:inherit;text-decoration:underline;font:inherit;font-size:14px;font-weight:600;cursor:pointer;}
 /* the tournament's end: places, a deal, the winners */
 .en-head{text-align:center;margin:0 0 8px;} .en-head .d{color:var(--muted);font-size:15px;}
 .en-row{display:flex;align-items:center;gap:9px;padding:7px 2px;border-bottom:1px solid rgba(212,175,55,.15);}
@@ -6104,6 +6123,48 @@ let tourCcEdit = false;
 let tourDealMethod = "guarantee";   // the deal proposal shown: "guarantee" (default) or "icm"
 let tourCcAdmin = false;   // the admin's "enter a player's count" list
 let tourCcFor = null;      // ...and the player picked there
+// Registering a player (the lobby's window and the clock's panel): one search field over the
+// club's players - who played lately first, then everyone - with "＋ רשום" by each name; a
+// name the club doesn't have yet offers "הוסף ורשום" (with ז / נ) right there; after a
+// registration a line says so, with "ביטול".
+let tourRegLast = null;   // {pid, name, gameId, at} - the last one registered here
+function tourLastPlayed(c){
+  const last = {};
+  gamesForCommunity(c.id).forEach(g => {
+    const ts = g.date ? Date.parse(g.date) : 0; if (!ts) return;
+    const ids = new Set([...(g.players || []).map(pl => pl.id), ...(g.buyins || []).map(b => b.playerId)]);
+    ids.forEach(id => { if (!last[id] || last[id] < ts) last[id] = ts; });
+  });
+  return last;
+}
+function tourAgoText(ts){
+  const d = Math.floor((Date.now() - ts) / 86400000);
+  return d <= 0 ? "היום" : d === 1 ? "אתמול" : d < 7 ? `לפני ${d} ימים` : d < 14 ? "לפני שבוע" : d < 30 ? `לפני ${Math.round(d / 7)} שבועות` : d < 60 ? "לפני חודש" : `לפני ${Math.round(d / 30)} חודשים`;
+}
+function tourRegPickerHtml(g, c, t){
+  const taken = new Set((g.registrations || []).filter(r => r.status === "approved").map(r => r.playerId));
+  const roster = ((c && c.roster) || []).filter(p2 => !taken.has(p2.id)).sort((a, b) => String(a.name).localeCompare(String(b.name), "he"));
+  const last = tourLastPlayed(c), monthAgo = Date.now() - 60 * 86400000;
+  const recent = roster.filter(p2 => last[p2.id] && last[p2.id] >= monthAgo).sort((a, b) => last[b.id] - last[a.id]).slice(0, 5);
+  const recentIds = new Set(recent.map(p2 => p2.id));
+  const total = tourEntryTotal(t), nn2 = v => Number(v || 0).toLocaleString("en-US");
+  const row = (p2, i, sub) => `<div class="rp-row" data-rp-row data-name="${esc(String(p2.name || "").toLowerCase())}">${tourAvatar(p2.name, i, p2.id, c && c.id)}<div class="nm"><span data-rp-nm>${esc(p2.name)}</span>${sub ? `<small>${sub}</small>` : ""}</div><button type="button" class="rp-go" data-reg-pick="${esc(p2.id)}">＋ רשום</button></div>`;
+  const played = p2 => `${p2.gender === "female" ? "שיחקה" : "שיחק"} ${tourAgoText(last[p2.id])}`;
+  const lastOk = tourRegLast && tourRegLast.gameId === g.id && Date.now() - tourRegLast.at < 15000 && taken.has(tourRegLast.pid);
+  return `<div class="rp">
+    ${lastOk ? `<div class="rp-toast">✓ ${esc(tourRegLast.name)} ${tourRegLast.fem ? "נרשמה" : "נרשם"} · ₪${nn2(total)}<button type="button" data-reg-undo="${esc(tourRegLast.pid)}">ביטול</button></div>` : ""}
+    <div class="rp-search"><span class="ic">🔍</span><input type="text" data-rp-q placeholder="חיפוש שחקן או שם חדש" autocomplete="off"></div>
+    <div class="rp-hint" data-rp-hint>כתבו שם - נחפש במועדון. לא נמצא? אפשר להוסיף שחקן חדש. כל רישום = שילם ₪${nn2(total)}.</div>
+    <div class="rp-new" data-rp-new style="display:none"><div class="t">אין במועדון שחקן בשם <b data-rp-newname></b></div>
+      <div class="r"><div class="gender-seg" role="group" aria-label="מין"><button type="button" class="on" data-tr-gender="male" title="זכר">ז</button><button type="button" data-tr-gender="female" title="נקבה">נ</button></div><button type="button" class="btn btn-primary" data-tr-add style="flex:1">＋ הוסף ורשום · ₪${nn2(total)}</button></div></div>
+    <div class="rp-new soft" data-rp-soft style="display:none"><div class="t">לא ברשימה? <button type="button" class="lb-cancel" data-rp-addsoft>הוסף את "<span data-rp-softname></span>" כשחקן חדש</button></div></div>
+    <div class="rp-sec" data-rp-sec="found" style="display:none"></div>
+    <div class="rp-sec" data-rp-sec="maybe" style="display:none">אולי התכוונת ל…</div>
+    ${recent.length ? `<div class="rp-sec" data-rp-sec="recent">שיחקו לאחרונה</div>${recent.map((p2, i) => row(p2, i, played(p2))).join("")}` : ""}
+    <div class="rp-sec" data-rp-sec="all">${roster.length ? (recent.length ? "כל שחקני המועדון" : "שחקני המועדון") : "כל שחקני המועדון כבר רשומים"}</div>
+    ${roster.filter(p2 => !recentIds.has(p2.id)).map((p2, i) => row(p2, i + recent.length)).join("")}
+  </div>`;
+}
 function tourStandingsHtml(P, myPid){
   if (!P.approved.length) return "";
   const rows = P.standings.map(({r, place, counted}) => {
@@ -6241,13 +6302,7 @@ function renderTourClock(g, c, isAdmin){
     ? `<div class="ck-panel"><div class="ck-panel-h">סרקו כדי להירשם ל${esc(g.name || ilDate(g.date))}<button type="button" class="lb-cancel" data-ck-panel="">סגור</button></div>
         <div class="ck-qr"><img src="/api/qr?text=${encodeURIComponent(gameInviteUrl(g, c))}" alt="QR"></div></div>`
     : tourPanel === "add"
-    ? (() => { const taken = new Set(approved.map(r => r.playerId));
-        const roster = ((c && c.roster) || []).filter(p2 => !taken.has(p2.id)).sort((a, b) => String(a.name).localeCompare(String(b.name), "he"));
-        return `<div class="ck-panel"><div class="ck-panel-h">הוספת שחקן · שולם ₪${nn(total)}<button type="button" class="lb-cancel" data-ck-panel="">סגור</button></div>
-          <div class="name-pair" style="margin-bottom:6px;"><input type="text" id="tr-first" placeholder="שם פרטי" autocomplete="off"><input type="text" id="tr-last" placeholder="שם משפחה" autocomplete="off"></div>
-          <div style="display:flex;gap:8px;margin-bottom:6px;"><div class="gender-seg" role="group"><button type="button" class="on" data-tr-gender="male">ז</button><button type="button" data-tr-gender="female">נ</button></div><button class="btn btn-primary" data-tr-add style="flex:1;" disabled>הוסף למועדון ורשום</button></div>
-          <div class="scroll-list reg-pick-list" data-tr-list>${roster.map((p2, i) => `<button type="button" class="reg-pick" data-reg-pick="${esc(p2.id)}" data-name="${esc(String(p2.name || "").toLowerCase())}">${tourAvatar(p2.name, i, p2.id, c && c.id)}<span>${esc(p2.name)}</span><b>＋</b></button>`).join("")}</div>
-          <p class="lb-note" data-tr-none style="display:none;">אין שחקן כזה במועדון - "הוסף למועדון ורשום" יוסיף אותו.</p></div>`; })()
+    ? `<div class="ck-panel"><div class="ck-panel-h">רישום שחקן<button type="button" class="lb-cancel" data-ck-panel="">סגור</button></div>${tourRegPickerHtml(g, c, t)}</div>`
     : tourPanel === "lobby"
     ? `<div class="ck-panel"><div class="ck-panel-h">בלובי · ${pending.length ? `${pending.length} מחכים לאישור` : "אין ממתינים"}<button type="button" class="lb-cancel" data-ck-panel="">סגור</button></div>
         ${pending.map((r, i) => `<div class="reg-row">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}${r.isNew ? `<span class="reg-new">חדש</span>` : ""}<small>רישום מאוחר · ₪${nn(total)}</small></div><button type="button" class="reg-no" data-reg-decline="${esc(r.playerId)}">✕</button><button type="button" class="reg-ok" data-reg-approve="${esc(r.playerId)}">✓ אשר</button></div>`).join("")}</div>`
@@ -10843,26 +10898,10 @@ function renderModal(m){
         <input type="range" min="1" max="12" step="1" value="${v}" data-tc-rebuy><div class="tf-sl-mm"><span>1</span><span>12</span></div></div>
       <button class="btn btn-primary btn-block" data-tc-save style="margin-top:10px">שמור</button>`;
   } else if (m.type === "tourRegPick") {
-    // The admin registers club players straight away (registered + paid).
+    // The admin registers club players straight away (registered + paid) - see tourRegPickerHtml.
     const g = getGame(m.gameId), c = g && getCommunity(g.communityId);
-    const taken = new Set(((g && g.registrations) || []).filter(r => r.status === "approved").map(r => r.playerId));
-    const roster = ((c && c.roster) || []).filter(p => !taken.has(p.id)).sort((a, b) => String(a.name).localeCompare(String(b.name), "he"));
-    // Like seating a player at a cash table: type the name - the club's players narrow down
-    // as you type; pick one, or add a new one to the club. Registered = paid.
     title = "רישום שחקן";
-    body = `
-      <div class="name-pair" style="margin-bottom:8px;">
-        <input type="text" id="tr-first" placeholder="שם פרטי" autocomplete="off">
-        <input type="text" id="tr-last" placeholder="שם משפחה" autocomplete="off">
-      </div>
-      <div style="display:flex;gap:8px;align-items:stretch;margin-bottom:8px;">
-        <div class="gender-seg" role="group" aria-label="מין"><button type="button" class="on" data-tr-gender="male" title="זכר">ז</button><button type="button" data-tr-gender="female" title="נקבה">נ</button></div>
-        <button class="btn btn-primary" data-tr-add style="flex:1;" disabled>${icon('plus')} הוסף למועדון ורשום</button>
-      </div>
-      <p class="lb-note" style="text-align:right;margin:0 0 8px;">רישום = השחקן שילם את הכניסה. שחקן חדש נכנס גם לרשימת השחקנים של המועדון.</p>
-      <div class="section-title" style="padding:0;margin:6px 0 6px;" data-tr-list-title>${roster.length ? "שחקני המועדון" : "כל שחקני המועדון כבר רשומים"}</div>
-      <div class="scroll-list reg-pick-list" data-tr-list>${roster.map((p, i) => `<button type="button" class="reg-pick" data-reg-pick="${esc(p.id)}" data-name="${esc(String(p.name || "").toLowerCase())}">${tourAvatar(p.name, i, p.id, c && c.id)}<span>${esc(p.name)}</span><b>＋</b></button>`).join("")}</div>
-      <p class="lb-note" data-tr-none style="display:none;">אין שחקן כזה במועדון - "הוסף למועדון ורשום" יוסיף אותו.</p>`;
+    body = g ? tourRegPickerHtml(g, c, Object.assign({}, TOUR_DEFAULTS, g.tournamentSettings || {})) : "";
   } else if (m.type === "newGame") {
     const c = getCommunity(m.communityId);
     // Cash or tournament - the tournament option is the club admins' (a player never sees it).
@@ -12163,36 +12202,72 @@ function attachHandlers(){
   app.querySelectorAll("[data-reg-add]").forEach(el => el.onclick = () => openModal({type: "tourRegPick", gameId: tourGid, openedAt: Date.now()}));
   if ((modal && modal.type === "tourRegPick") || (!modal && tourPanel === "add" && tourGid)) {
     const regGid = modal ? modal.gameId : tourGid;
-    app.querySelectorAll("[data-reg-pick]").forEach(el => el.onclick = () => {
-      const g = getGame(regGid), c = getCommunity(g.communityId), p = c.roster.find(x => x.id === el.dataset.regPick);
-      tourAct(el, () => v2TourRegister(g.id, p.id, p.name, true));
-    });
-    // typing narrows the club's list (first / last name, anywhere in the name)
-    const first = document.getElementById("tr-first"), last = document.getElementById("tr-last"), addBtn = app.querySelector("[data-tr-add]");
-    const filter = () => {
-      const words = [first.value, last.value].map(v => v.trim().toLowerCase()).filter(Boolean);
-      let shown = 0;
-      app.querySelectorAll("[data-tr-list] [data-reg-pick]").forEach(b => { const ok = words.every(w => b.dataset.name.includes(w)); b.style.display = ok ? "" : "none"; if (ok) shown++; });
-      const none = app.querySelector("[data-tr-none]"); if (none) none.style.display = words.length && !shown ? "" : "none";
-      if (addBtn) addBtn.disabled = !first.value.trim();
-    };
-    // the keyboard comes up only when the window / panel has just been opened - not on every
-    // redraw (a clock button, a refresh), which used to pull the focus back to the name field
-    const openKey = modal ? "modal:" + regGid + ":" + (modal.openedAt || "") : "panel:" + regGid;
-    if (first) { first.oninput = filter; last.oninput = filter; if (tourAddFocusKey !== openKey) { tourAddFocusKey = openKey; setTimeout(() => first.focus(), 50); } }
-    app.querySelectorAll("[data-tr-gender]").forEach(el => el.onclick = () => app.querySelectorAll("[data-tr-gender]").forEach(b => b.classList.toggle("on", b === el)));
-    if (addBtn) addBtn.onclick = () => {
-      const name = [first.value.trim(), last.value.trim()].filter(Boolean).join(" ");
-      if (!name) return;
+    const box = app.querySelector(".rp");
+    const register = async (btn, pid, name, create) => {
       const g = getGame(regGid), c = getCommunity(g.communityId);
-      const same = c.roster.find(p => String(p.name).trim() === name);
-      const gender = (app.querySelector("[data-tr-gender].on") || {}).dataset ? app.querySelector("[data-tr-gender].on").dataset.trGender : "male";
-      tourAct(addBtn, async () => {
-        let pid = same && same.id;   // the same name already in the club: that player
-        if (!pid) { pid = uid(); await v2AddRosterPlayer(c.id, pid, name, gender); }
+      const gender = create ? ((box.querySelector("[data-tr-gender].on") || {}).dataset || {}).trGender || "male" : null;
+      await tourAct(btn, async () => {
+        if (create) { pid = uid(); await v2AddRosterPlayer(c.id, pid, name, gender); }
         await v2TourRegister(g.id, pid, name, true);
+        const rp = (getCommunity(g.communityId).roster || []).find(x => x.id === pid);
+        tourRegLast = {pid, name, gameId: g.id, at: Date.now(), fem: (rp && rp.gender === "female") || gender === "female"};
       });
+      setTimeout(() => { if (tourRegLast && Date.now() - tourRegLast.at >= 15000) render(); }, 15200);
     };
+    if (box) {
+      const q = box.querySelector("[data-rp-q]");
+      const rows = [...box.querySelectorAll("[data-rp-row]")];
+      const sec = k => box.querySelector(`[data-rp-sec="${k}"]`);
+      const show = (el, on) => { if (el) el.style.display = on ? "" : "none"; };
+      const filter = () => {
+        const raw = q.value.trim().replace(/\s+/g, " "), v = raw.toLowerCase();
+        const words = v.split(" ").filter(Boolean);
+        rows.forEach(r => { const nm = r.querySelector("[data-rp-nm]"); nm.textContent = nm.textContent; });   // drop old marks
+        if (!words.length) {
+          rows.forEach(r => show(r, true));
+          show(sec("recent"), true); show(sec("all"), true); show(sec("found"), false); show(sec("maybe"), false);
+          show(box.querySelector("[data-rp-hint]"), true); show(box.querySelector("[data-rp-new]"), false); show(box.querySelector("[data-rp-soft]"), false);
+          return;
+        }
+        const has = (r, w) => r.dataset.name.includes(w);
+        const found = rows.filter(r => words.every(w => has(r, w)));
+        const exact = rows.some(r => r.dataset.name === v);
+        const maybe = found.length ? [] : rows.filter(r => words.some(w => w.length >= 2 && has(r, w)));
+        rows.forEach(r => show(r, found.includes(r) || maybe.includes(r)));
+        // mark what was typed in the names shown
+        [...found, ...maybe].forEach(r => { const nm = r.querySelector("[data-rp-nm]"), txt = nm.textContent, low = txt.toLowerCase();
+          const w = words.find(w2 => low.includes(w2)); if (!w) return; const at = low.indexOf(w);
+          nm.innerHTML = esc(txt.slice(0, at)) + "<mark>" + esc(txt.slice(at, at + w.length)) + "</mark>" + esc(txt.slice(at + w.length)); });
+        show(sec("recent"), false); show(sec("all"), false); show(box.querySelector("[data-rp-hint]"), false);
+        const fs = sec("found"); fs.textContent = `נמצאו במועדון (${found.length})`; show(fs, found.length);
+        show(sec("maybe"), maybe.length);
+        // a new player: offered outright when nothing matches (or two words and no exact name),
+        // as a small link while what's typed still matches someone
+        const strong = !exact && raw.length >= 2 && (!found.length || words.length >= 2);
+        show(box.querySelector("[data-rp-new]"), strong); box.querySelector("[data-rp-newname]").textContent = raw;
+        show(box.querySelector("[data-rp-soft]"), !strong && !exact && raw.length >= 2); box.querySelector("[data-rp-softname]").textContent = raw;
+      };
+      q.oninput = filter;
+      // the keyboard comes up only when the window / panel has just been opened
+      const openKey = modal ? "modal:" + regGid + ":" + (modal.openedAt || "") : "panel:" + regGid;
+      if (tourAddFocusKey !== openKey) { tourAddFocusKey = openKey; setTimeout(() => q.focus(), 50); }
+      box.querySelectorAll("[data-tr-gender]").forEach(el => el.onclick = () => box.querySelectorAll("[data-tr-gender]").forEach(b2 => b2.classList.toggle("on", b2 === el)));
+      box.querySelectorAll("[data-reg-pick]").forEach(el => el.onclick = () => {
+        const g = getGame(regGid), c = getCommunity(g.communityId), p2 = c.roster.find(x => x.id === el.dataset.regPick);
+        if (p2) register(el, p2.id, p2.name, false);
+      });
+      const addNew = (btn) => {
+        const name = q.value.trim().replace(/\s+/g, " ");
+        if (!name) return;
+        const c = getCommunity(getGame(regGid).communityId);
+        const same = c.roster.find(p2 => String(p2.name).trim() === name);
+        register(btn, same ? same.id : null, name, !same);
+      };
+      const addBtn = box.querySelector("[data-tr-add]"); if (addBtn) addBtn.onclick = () => addNew(addBtn);
+      const soft = box.querySelector("[data-rp-addsoft]"); if (soft) soft.onclick = () => { show(box.querySelector("[data-rp-new]"), true); show(box.querySelector("[data-rp-soft]"), false); box.querySelector("[data-rp-newname]").textContent = q.value.trim(); };
+      const undo = box.querySelector("[data-reg-undo]");
+      if (undo) undo.onclick = () => { const pid = undo.dataset.regUndo; tourRegLast = null; tourAct(undo, () => v2TourRemoveReg(regGid, pid)); };
+    }
   }
   app.querySelectorAll("[data-tour-changes-menu]").forEach(el => el.onclick = () => { modal = {type: "tourChanges", gameId: el.dataset.tourChangesMenu}; render(); });
   app.querySelectorAll("[data-open-game-tour]").forEach(el => el.onclick = (e) => {
