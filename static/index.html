@@ -6094,6 +6094,7 @@ document.addEventListener("click", e => {
   if (ck && ck.dataset.ck === tourTapGuardKey) return;
   e.stopPropagation(); e.preventDefault();
 }, true);
+let tourAddFocusKey = null;   // which "הוספת שחקן" opening already got the keyboard
 let tourCcEdit = false;
 let tourDealMethod = "guarantee";   // the deal proposal shown: "guarantee" (default) or "icm"
 let tourCcAdmin = false;   // the admin's "enter a player's count" list
@@ -12032,7 +12033,7 @@ function attachHandlers(){
   app.querySelectorAll("[data-ck-sound]").forEach(el => el.onclick = () => { try { localStorage.setItem("tour-sound", tourSoundOn() ? "0" : "1"); } catch (e) {} if (tourSoundOn()) tourBeep(); render(); });
   app.querySelectorAll("[data-ck-fs]").forEach(el => el.onclick = () => { const d = document; if (d.fullscreenElement) d.exitFullscreen(); else if (d.documentElement.requestFullscreen) d.documentElement.requestFullscreen().catch(() => {}); });
   app.querySelectorAll("[data-ck-full]").forEach(el => el.onclick = () => { tourClockFull = !tourClockFull; render(); });
-  app.querySelectorAll("[data-ck-panel]").forEach(el => el.onclick = () => { const v = el.dataset.ckPanel || null; tourPanel = tourPanel === v ? null : v; render(); });
+  app.querySelectorAll("[data-ck-panel]").forEach(el => el.onclick = () => { const v = el.dataset.ckPanel || null; tourPanel = tourPanel === v ? null : v; tourAddFocusKey = null; render(); });
   app.querySelectorAll("[data-ck-changes]").forEach(el => el.onclick = () => openModal({type: "tourChanges", gameId: tourGid}));
   // ----- the end: finish (places + prizes), a deal, the winners -----
   app.querySelectorAll("[data-tour-finish]").forEach(el => el.onclick = () => { tourPanel = null; openModal({type: "tourFinish", gameId: tourGid}); });
@@ -12152,7 +12153,7 @@ function attachHandlers(){
     if (!(await showConfirm(`לסמן כפרשו: ${missing.map(r => r.name).join(", ")}?`, {okLabel: "סמן", cancelLabel: "ביטול"}))) return;
     tourAct(el, async () => { for (const r of missing) await v2TourAction(tourGid, r.playerId, "bust", {level: k.curLevel.level}); });
   });
-  app.querySelectorAll("[data-reg-add]").forEach(el => el.onclick = () => openModal({type: "tourRegPick", gameId: tourGid}));
+  app.querySelectorAll("[data-reg-add]").forEach(el => el.onclick = () => openModal({type: "tourRegPick", gameId: tourGid, openedAt: Date.now()}));
   if ((modal && modal.type === "tourRegPick") || (!modal && tourPanel === "add" && tourGid)) {
     const regGid = modal ? modal.gameId : tourGid;
     app.querySelectorAll("[data-reg-pick]").forEach(el => el.onclick = () => {
@@ -12168,7 +12169,10 @@ function attachHandlers(){
       const none = app.querySelector("[data-tr-none]"); if (none) none.style.display = words.length && !shown ? "" : "none";
       if (addBtn) addBtn.disabled = !first.value.trim();
     };
-    if (first) { first.oninput = filter; last.oninput = filter; setTimeout(() => first.focus(), 50); }
+    // the keyboard comes up only when the window / panel has just been opened - not on every
+    // redraw (a clock button, a refresh), which used to pull the focus back to the name field
+    const openKey = modal ? "modal:" + regGid + ":" + (modal.openedAt || "") : "panel:" + regGid;
+    if (first) { first.oninput = filter; last.oninput = filter; if (tourAddFocusKey !== openKey) { tourAddFocusKey = openKey; setTimeout(() => first.focus(), 50); } }
     app.querySelectorAll("[data-tr-gender]").forEach(el => el.onclick = () => app.querySelectorAll("[data-tr-gender]").forEach(b => b.classList.toggle("on", b === el)));
     if (addBtn) addBtn.onclick = () => {
       const name = [first.value.trim(), last.value.trim()].filter(Boolean).join(" ");
