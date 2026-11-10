@@ -81,7 +81,7 @@ _subscribers = []
 _subscribers_lock = threading.Lock()
 
 
-def _broadcast_state_changed():
+def _send_changed():
     with _subscribers_lock:
         subs = list(_subscribers)
     for q in subs:
@@ -89,6 +89,45 @@ def _broadcast_state_changed():
             q.put_nowait("changed")
         except queue.Full:
             pass
+
+
+# At most one "changed" per _BROADCAST_GAP seconds: the first save goes out right away, the
+# ones right after it are folded into a single trailing one. Every message makes every open
+# phone refetch, so a burst (200 players registering, or all sending their break chip count
+# within seconds) used to become one refetch per phone per save - a storm that starved the
+# server. The trailing send means the last save is never left unannounced.
+_BROADCAST_GAP = 1.0
+_broadcast_lock = threading.Lock()
+_broadcast_last = 0.0
+_broadcast_pending = False
+
+
+def _broadcast_state_changed():
+    global _broadcast_last, _broadcast_pending
+    with _broadcast_lock:
+        now = time.time()
+        if _broadcast_pending:
+            return
+        wait = _BROADCAST_GAP - (now - _broadcast_last)
+        if wait <= 0:
+            _broadcast_last = now
+            send_now = True
+        else:
+            _broadcast_pending = True
+            send_now = False
+    if send_now:
+        _send_changed()
+        return
+
+    def trailing():
+        global _broadcast_last, _broadcast_pending
+        with _broadcast_lock:
+            _broadcast_last = time.time()
+            _broadcast_pending = False
+        _send_changed()
+    timer = threading.Timer(wait, trailing)
+    timer.daemon = True
+    timer.start()
 
 
 _INIT_STATEMENTS = (
@@ -4643,7 +4682,11 @@ if __name__ == "__main__":
                     "bind": f"0.0.0.0:{port}",
                     "workers": 1,
                     "worker_class": "gthread",
-                    "threads": int(os.environ.get("WEB_THREADS", "200")),
+                    # Every open phone holds one thread for its /api/events stream
+                    # and needs more for its requests - 200 were all taken by the streams
+                    # alone at a 200-player tournament, and every request then waited for a
+                    # stream to end (up to _SSE_MAX_SECONDS). An idle thread costs little.
+                    "threads": int(os.environ.get("WEB_THREADS", "800")),
                     # The worker's own heartbeat, not a per-request limit - SSE streams
                     # stay open far longer than this, which gthread allows.
                     "timeout": 120,
