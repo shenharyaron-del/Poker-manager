@@ -2664,7 +2664,7 @@ async function saveState(baseHash){
       try { const body = await res.json(); if (body && body.hash) lastStateHash = body.hash; } catch(e) { /* fine - next save just re-syncs if needed */ }
       return "ok";
     }
-    catch(e){ logSync("save: POST FAILED " + e); console.error("save failed", e); showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return "error"; }
+    catch(e){ logSync("save: POST FAILED " + e); console.error("save failed", e); showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); return "error"; }
   };
   saveInFlight = (saveInFlight || Promise.resolve()).then(run);
   return saveInFlight;
@@ -4790,7 +4790,7 @@ async function performBuyin(gameId, playerId, amount, opts){
     }
     ok = true;
   } catch(e) {
-    showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב.");
+    showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב.");
   }
 
   clearPendingBuyinBanner();
@@ -5130,7 +5130,7 @@ async function takeSeatAt(g, idx){
     if (twin) {
       const row = c.roster.find(r => r.id === twin.id);
       if (mine0 || (row && !rosterRowIsClaimable(row))) {
-        showAlert(`כבר יושב בשולחן שחקן בשם ${twin.name}. אם זה אתה - בקשו ממי שהוסיף אותו להסיר אותו מהשולחן, ואז שבו.`);
+        showAlert(`כבר יושב בשולחן שחקן בשם ${twin.name}. ${g2("אם זה אתה", "אם זו את")} - בקשו ממי שהוסיף אותו להסיר אותו מהשולחן, ואז שבו.`);
         return;
       }
       if (!row) await v2AddRosterPlayer(c.id, twin.id, twin.name, twin.gender);
@@ -5165,7 +5165,7 @@ async function takeSeatAt(g, idx){
     tableSubView = firstAtTable ? "table" : "player";
     if (firstAtTable) setTableView("table");
     render();
-  } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+  } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); }
 }
 function shouldAskWatchOrJoin(g){
   // a tournament has no seats to take - it opens straight into its lobby / registration / clock
@@ -5330,7 +5330,7 @@ async function checkMyJoinRequest(){
       if (!myIdentity.myPlayers) myIdentity.myPlayers = {};
       myIdentity.myPlayers[jw.communityId] = np.id;
       await saveIdentity();
-    } catch(e) { showAlert("ההצטרפות נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+    } catch(e) { showAlert("ההצטרפות נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); return; }
     if (modal && modal.type === "joinWait") modal = null;
     if (jw.gameId && getGame(jw.gameId)) go("table", {gameId: jw.gameId, communityId: jw.communityId});
     else go("community", {communityId: jw.communityId});
@@ -5390,7 +5390,7 @@ async function autoJoinViaInvite(gameId){
         await v2LinkRosterPlayer(g.communityId, p.id, myIdentity.id);
       }
       // Not seated here - they pick a free seat on the table themselves.
-    } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+    } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); }
     render();
     return;
   }
@@ -5442,7 +5442,7 @@ async function autoJoinViaCommunityInvite(communityId){
       } else if (!p.clientId) {
         await v2LinkRosterPlayer(communityId, p.id, myIdentity.id);
       }
-    } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+    } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); }
     render();
     return;
   }
@@ -5571,14 +5571,14 @@ function saveFailedText(e){
   if (e && e.status >= 500) return `השרת לא הצליח לשמור כרגע (${e.status}) - כנראה מתעדכן לגרסה חדשה. נסו שוב בעוד דקה.`;
   if (e && e.status) return `שמירה נכשלה: ${e.message} (${e.status})`;
   if (e && /timed out/.test(e.message || "")) return "השרת לא ענה בזמן - אולי מתעדכן לגרסה חדשה. נסו שוב בעוד דקה.";
-  return "שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב.";
+  return "שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב.";
 }
 function setupSaveErrorText(e, tab){
   const where = {chips: "הז'יטונים", payments: "התשלומים", buyins: "הריביי", tour: "הגדרות הטורניר"}[tab] || "";
   try { logSync(`setup save (${tab}) failed: ${e && e.status ? e.status + " " : ""}${e && e.message}`); } catch(_) {}
   if (e && e.status) return `שמירת ${where} נכשלה: ${e.message} (${e.status})`;
   if (e && /timed out/.test(e.message || "")) return `שמירת ${where} נכשלה - השרת לא ענה בזמן. נסו שוב בעוד רגע.`;
-  return `שמירת ${where} נכשלה - בדוק את החיבור לאינטרנט ונסה שוב.`;
+  return `שמירת ${where} נכשלה - בדקו את החיבור לאינטרנט ונסו שוב.`;
 }
 async function saveSetupChips(communityId, chips){
   const values = [];
@@ -5595,7 +5595,7 @@ async function saveSetupChips(communityId, chips){
     await Promise.all(values.map(async (v) => {
       if (v.image && v.image.startsWith("data:")) v.image = await uploadPhoto(v.image);
     }));
-  } catch(e) { showAlert("העלאת תמונות הז'יטונים נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return false; }
+  } catch(e) { showAlert("העלאת תמונות הז'יטונים נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); return false; }
   if (USE_RELATIONAL_API) {
     const c = getCommunity(communityId);
     try {
@@ -5705,7 +5705,7 @@ async function saveAllSetup(andClose){
     if (!d.dirty.has(tab) || !d[tab]) { d.dirty.delete(tab); continue; }
     let ok = false;
     try { ok = await run(); }
-    catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+    catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); }
     if (!ok) { render(); return; }
     d.dirty.delete(tab);
     delete d[tab];
@@ -6021,6 +6021,8 @@ function tourBreakKey(g, k){
 // He / she: a player's own gender from the club (the roster's), and mine from my identity.
 function tourFem(g, pid){ return playerIsFemale(g, getCommunity(g.communityId), pid); }
 function myFem(){ return myIdentity.gender === "female"; }
+// a word to me in my gender: g2("אתה בטוח", "את בטוחה")
+function g2(m, f){ return myFem() ? f : m; }
 function tourPlayers(g, c, k){
   const t = Object.assign({}, TOUR_DEFAULTS, g.tournamentSettings || {});
   const started = (g.tournamentState || {}).startedAt || 0;
@@ -6073,7 +6075,7 @@ function tourCcWidget(c, t, box, initial, key, level, isAdmin){
           ${sample.map(([, n]) => `<span class="lv-type-fake">${n}</span>`).join("")}
           ${sample.map(([, , x]) => `<div class="lv-type-x" dir="ltr">${x}</div>`).join("")}
         </div>`; })() : ""}
-    <button type="button" class="btn btn-primary btn-block" data-cc-send="${esc(box)}" style="margin-top:8px">שלח ספירה</button>
+    <button type="button" class="btn btn-primary btn-block" data-cc-send="${esc(box)}" style="margin-top:8px">${g2("שלח ספירה", "שלחי ספירה")}</button>
   </div>`;
 }
 function tourChipCountHtml(g, c, t, mine, key, level, isAdmin){
@@ -6226,7 +6228,7 @@ function renderTourClock(g, c, isAdmin){
     lateOpen && ["add", "הוספת שחקן", 0],
     (lateOpen || pending.length) && ["lobby", "לובי", pending.length],
     (lateOpen || aoNow || reqs.length) && ["rebuy", lateOpen && t.addOn ? "ריביי / Add-on" : lateOpen ? "ריביי" : "Add-on", reqs.length],
-    ["out", "הזן שחקן שיצא", 0],
+    ["out", g2("הזן שחקן שיצא", "הזיני שחקן שיצא"), 0],
     // ending / a deal only once few are left and re-buys are over: 4 or fewer - 5 when more
     // than 20 started, 6 when more than 30
     !lateOpen && !dealOn && P.alive.length <= (approved.length > 30 ? 6 : approved.length > 20 ? 5 : 4) && ["end", "סיום / דיל", 0],
@@ -6909,7 +6911,7 @@ function openFilePicker(communityId, playerId, useCamera){
     processSelfieFile(file, async (dataUrl) => {
       let photo;
       try { photo = await uploadPhoto(dataUrl); }
-      catch(e) { showAlert("העלאת התמונה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+      catch(e) { showAlert("העלאת התמונה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); return; }
       // Re-syncs this handful of fields immediately before writing one of them - see
       // syncLegacyOnlyFields's own comment on the lost-update race this closes.
       await syncLegacyOnlyFields();
@@ -7161,7 +7163,7 @@ function computeExitHighlights(c, g, playerId){
     const rank = sums.findIndex(x=>x.pid2===playerId) + 1;
     if (sums.length >= 3 && rank >= 1 && rank <= 3) {
       const place = rank===1 ? "ראשון" : rank===2 ? "שני" : "שלישי";
-      candidates.push({pri:3, text:`ב-${N} המשחקים האחרונים אתה במקום ה${place} במועדון`});
+      candidates.push({pri:3, text:`ב-${N} המשחקים האחרונים ${g2("אתה", "את")} במקום ה${place} במועדון`});
     }
     const myRecentSum = Math.round(sum(last(N)) * 100) / 100;
     if (myRecentSum > 0.005) candidates.push({pri:4, text:`ב-${N} המשחקים האחרונים הרווחת ₪${Math.round(myRecentSum)}`});
@@ -8977,7 +8979,7 @@ function renderPlayerScreen(gameId){
     };
     if (viewingOther && me) {
       // framed with "הקש לחזור אליך" on its border, so it's clear how to get back
-      return `<fieldset class="leave-frame pp-me-frame" data-pp-back-me><legend>הקש לחזור אליך</legend><button type="button" class="pp-me-card" dir="rtl" title="חזרה למסך שלי">${meAv(myPlayerId)}<span class="pp-me-txt"><span class="pp-me-name"><bdi>${esc(me.name)}</bdi></span>${mineOut ? "" : `<span class="pp-total" data-player-total>₪${myTotal}</span>`}</span></button></fieldset>`;
+      return `<fieldset class="leave-frame pp-me-frame" data-pp-back-me><legend>${g2("הקש לחזור אליך", "הקישי לחזור אלייך")}</legend><button type="button" class="pp-me-card" dir="rtl" title="חזרה למסך שלי">${meAv(myPlayerId)}<span class="pp-me-txt"><span class="pp-me-name"><bdi>${esc(me.name)}</bdi></span>${mineOut ? "" : `<span class="pp-total" data-player-total>₪${myTotal}</span>`}</span></button></fieldset>`;
     }
     return `<div class="pp-me-card" dir="rtl">${meAv(pid)}<span class="pp-me-txt"><span class="pp-me-name"${font ? ` style="font-size:${Math.min(font + 3, 23)}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut && !selfReturn ? ' · יצא' : ''}</span>${cashedOut ? (selfReturn ? `<button type="button" class="pp-self-return" data-self-return="${pid}">${RETURN_ICON}<span class="ret-txt">חזור למשחק</span></button>` : "") : `<span class="pp-total" data-player-total>₪${buyinTotal}</span>`}</span></div>`;
   })();
@@ -8993,7 +8995,7 @@ function renderPlayerScreen(gameId){
     return playersCarouselHtml("player:" + g.id, g, c, tableSeatOrder(g, othersTonight, myPlayerId), {
       onId: pid, attr: canActForOthers(g) ? "data-pp-view" : "data-pp-noview",
       // The table's admins (and tonight's treasurer) act for someone else - for them the frame says so.
-      legend: canActForOthers(g) && (isAdminView || iAmTreasurer(g)) ? "בחר שחקן כדי לפעול בשמו" : "",
+      legend: canActForOthers(g) && (isAdminView || iAmTreasurer(g)) ? g2("בחר שחקן כדי לפעול בשמו", "בחרי שחקן כדי לפעול בשמו") : "",
       under: id => !(id in (g.cashouts || {})) ? `<span class="pp-ci-amt">₪${Math.round((totals[id] || 0) * 100) / 100}</span>`
         : (gameTreasurer(g) ? iAmTreasurer(g) : isAdminView) ? `<span class="pp-ci-return" role="button" data-admin-return-to-game="${id}">${RETURN_ICON}<span class="ret-txt">החזר</span></span>`
         : `<span class="pp-ci-out">יצא</span>`,
@@ -9125,7 +9127,7 @@ function renderGameResultsScreen(gameId){
       <div class="card" data-player-night="${r.id}" data-game-id="${g.id}" style="cursor:pointer;${isMe ? 'border:1.5px solid var(--gold);' : ''}">
         <div class="flex1" style="display:flex;align-items:center;gap:6px;min-width:0;">
           ${crownHtml}
-          <span style="font-weight:700;font-size:24px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.name)}${isMe ? ' <span style="color:var(--muted);font-weight:400;font-size:21px;">(את/ה)</span>' : ''}</span>
+          <span style="font-weight:700;font-size:24px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.name)}${isMe ? ' <span style="color:var(--muted);font-weight:400;font-size:21px;">(' + g2("אתה", "את") + ')</span>' : ''}</span>
         </div>
         <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
           <span style="font-weight:800;font-size:21px;color:${profitColor(r.profit)};">₪${Math.abs(r.profit)}</span>
@@ -9945,7 +9947,7 @@ function renderModal(m){
         <button type="submit" class="btn btn-primary btn-block" data-name-login style="font-size:19px;">${invitedGame ? "כניסה לשולחן" : invitedClub ? "כניסה למועדון" : "כניסה"}</button>
       </form>
       <div class="login-alt"><button type="button" data-login-mode="email">כניסה עם אימייל</button></div>
-      ${termsLinkHtml("בשימוש באפליקציה אתה מסכים ל")}
+      ${termsLinkHtml(g2("בשימוש באפליקציה אתה מסכים ל", "בשימוש באפליקציה את מסכימה ל"))}
     ` : m.loginStep === "deviceChoice" ? `
       <p style="color:var(--muted);font-size:17px;margin-bottom:14px;">הכתובת <span dir="ltr">${esc(m.loginEmail)}</span> כבר רשומה במערכת עם מכשיר מחובר. האם להתחבר ממכשיר זה?</p>
       <button class="btn btn-primary btn-block" style="margin-bottom:8px;" data-device-choice="replace">המשך</button>
@@ -9976,14 +9978,14 @@ function renderModal(m){
         ${emailForm("btn-ghost", "המשך עם אימייל")}
       </fieldset>
       <div class="login-alt"><button type="button" data-login-mode="name">חזרה - כניסה עם שם בלבד</button></div>
-      ${termsLinkHtml("בהרשמה ובשימוש באפליקציה אתה מסכים ל")}
+      ${termsLinkHtml(g2("בהרשמה ובשימוש באפליקציה אתה מסכים ל", "בהרשמה ובשימוש באפליקציה את מסכימה ל"))}
     ` : `
       <p style="color:var(--muted);font-size:17px;margin-bottom:12px;">${authSettings.requireVerifyExistingEmail
         ? "כדי להשתמש באפליקציה, התחברו עם האימייל שלכם - משתמשים חדשים ייכנסו ישר, ולחשבון קיים נשלח קוד בן 6 ספרות."
         : "כדי להשתמש באפליקציה, התחברו עם האימייל שלכם."}</p>
       ${emailForm("btn-primary", authSettings.requireVerifyExistingEmail ? `${icon('share')} שלח קוד כניסה` : "כנס ל-Poker Manager")}
       <div class="login-alt"><button type="button" data-login-mode="name">חזרה - כניסה עם שם בלבד</button></div>
-      ${termsLinkHtml("בהרשמה ובשימוש באפליקציה אתה מסכים ל")}
+      ${termsLinkHtml(g2("בהרשמה ובשימוש באפליקציה אתה מסכים ל", "בהרשמה ובשימוש באפליקציה את מסכימה ל"))}
     `;
   } else if (m.type === "addEmail") {
     title = "הוספת אימייל כגיבוי";
@@ -10244,7 +10246,7 @@ function renderModal(m){
               <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
                 <button class="btn btn-ghost" data-toggle-seen-tour="${esc(r.email)}" title="${r.seenGameTour ? "ראה את ההדרכה - לחיצה תציג לו אותה שוב" : "עוד לא ראה את ההדרכה"}" style="padding:6px 8px;font-size:11px;white-space:nowrap;${r.seenGameTour ? "" : "color:var(--gold);border-color:var(--gold);"}">${r.seenGameTour ? "✓ הדרכה" : "הדרכה"}</button>
                 ${r.email === myIdentity.email
-                  ? `<span class="btn btn-ghost" style="padding:6px 10px;font-size:15px;white-space:nowrap;opacity:.6;cursor:default;">${r.role==="superAdmin"?"Super Admin":"User"} (אתה)</span>`
+                  ? `<span class="btn btn-ghost" style="padding:6px 10px;font-size:15px;white-space:nowrap;opacity:.6;cursor:default;">${r.role==="superAdmin"?"Super Admin":"User"} (${g2("אתה", "את")})</span>`
                   : `<button class="btn btn-ghost" data-toggle-role="${esc(r.email)}" style="padding:6px 10px;font-size:15px;white-space:nowrap;">${r.role==="superAdmin"?"Super Admin":"User"}</button>`}
                 ${r.email !== myIdentity.email ? `<button class="icon-btn danger" data-delete-global-player="${esc(r.email)}" title="מחק משתמש">${icon('trash')}</button>` : ""}
               </div>
@@ -10694,7 +10696,7 @@ function renderModal(m){
     // an old device id that no longer matches my account.
     const creatorHtml = isSuperAdmin() ? `
       <div class="roster-row" style="margin-bottom:12px;">
-        <span style="font-size:17px;">פתח את המועדון: <b>${esc(c.createdByName || "לא ידוע")}</b>${isClubCreator(c) ? " (אתה)" : ""}</span>
+        <span style="font-size:17px;">פתח את המועדון: <b>${esc(c.createdByName || "לא ידוע")}</b>${isClubCreator(c) ? ` (${g2("אתה", "את")})` : ""}</span>
         ${isClubCreator(c) ? "" : `<button class="btn btn-ghost btn-sm" data-claim-club-creator="${c.id}">חבר אליי</button>`}
       </div>` : "";
     body = `
@@ -10921,7 +10923,7 @@ function renderModal(m){
     const g = getGame(m.gameId);
     title = esc(g ? (g.name || ilDate(g.date)) : "משחק");
     body = `
-      <p style="margin-top:0;line-height:1.6;">את/ה לא יושב/ת בשולחן הזה. איך להיכנס?</p>
+      <p style="margin-top:0;line-height:1.6;">${g2("אתה לא יושב", "את לא יושבת")} בשולחן הזה. איך להיכנס?</p>
       <button class="btn btn-primary btn-block" style="margin-bottom:10px;" data-watch-or-join="join">הצטרפות לשולחן</button>
       <button class="btn btn-ghost btn-block" data-watch-or-join="watch">צפייה בלבד</button>
     `;
@@ -11026,9 +11028,9 @@ function renderModal(m){
       <p style="font-size:17px;line-height:1.6;margin:0 0 12px;">${rejected
         ? `הבקשה להיכנס בתור <b>${esc(jw.name || "")}</b>${jw.decidedByName ? ` נדחתה ע"י ${esc(jw.decidedByName)}` : " נדחתה"}.`
         : jw.firstNameOnly
-        ? `במועדון <b>${esc(club)}</b> כבר יש <b>${esc(jw.name || "")}</b>, שמחובר לטלפון אחר.<br>ביקשנו ממי שיושב בשולחן לאשר אם זה אתה. אם לא - תיכנס כשחקן חדש בשם <b>${esc(myIdentity.name || "")}</b>.`
-        : `השם <b>${esc(jw.name || "")}</b> כבר קיים במועדון <b>${esc(club)}</b>.<br>ביקשנו ממי שיושב בשולחן לאשר שזה אתה. אם אף אחד לא יושב עכשיו - הבקשה תחכה עד שמישהו ייכנס.`}</p>
-      ${rejected ? `<button class="btn btn-primary btn-block" data-join-retry style="margin-bottom:14px;">נסה שוב</button>` : `<div class="join-wait-dots"><span></span><span></span><span></span></div>`}
+        ? `במועדון <b>${esc(club)}</b> כבר יש <b>${esc(jw.name || "")}</b>, שמחובר לטלפון אחר.<br>ביקשנו ממי שיושב בשולחן לאשר אם ${g2("זה אתה", "זו את")}. אם לא - תיכנס כשחקן חדש בשם <b>${esc(myIdentity.name || "")}</b>.`
+        : `השם <b>${esc(jw.name || "")}</b> כבר קיים במועדון <b>${esc(club)}</b>.<br>ביקשנו ממי שיושב בשולחן לאשר ש${g2("זה אתה", "זו את")}. אם אף אחד לא יושב עכשיו - הבקשה תחכה עד שמישהו ייכנס.`}</p>
+      ${rejected ? `<button class="btn btn-primary btn-block" data-join-retry style="margin-bottom:14px;">${g2("נסה שוב", "נסי שוב")}</button>` : `<div class="join-wait-dots"><span></span><span></span><span></span></div>`}
       <div class="section-title" style="padding:0;margin:4px 0 6px;">או כניסה בשם אחר</div>
       <div style="display:flex;gap:8px;">
         <input type="text" id="join-new-name" maxlength="40" placeholder="למשל ${esc((jw.name || "שם").split(" ")[0])} ש." style="flex:1;min-width:0;">
@@ -11118,7 +11120,7 @@ function renderModal(m){
     const selectedToPlayerId = m.toPlayerId || (otherPlayers[0] && otherPlayers[0].id);
     title = `${esc(fromP ? fromP.name : "")} מעביר כסף`;
     body = `
-      <p style="color:var(--muted);font-size:16px;margin-top:0;">בחרו למי את/ה מעביר את הכסף במזומן${isForSelf ? ', או פתחו ביט/פייבוקס לתשלום' : ''}.</p>
+      <p style="color:var(--muted);font-size:16px;margin-top:0;">בחרו למי ${g2("אתה מעביר", "את מעבירה")} את הכסף במזומן${isForSelf ? ', או פתחו ביט/פייבוקס לתשלום' : ''}.</p>
       <div class="field"><label>למי?</label>
         <div class="scroll-list" style="max-height:240px;">
           <div class="checkbox-row" data-select-direct-pay-to="__group__" style="cursor:pointer;">
@@ -12155,7 +12157,7 @@ function attachHandlers(){
   app.querySelectorAll("[data-mark-rest]").forEach(el => el.onclick = async () => {
     const g = getGame(tourGid), c = getCommunity(g.communityId), k = tourClockInfo(g, c), P = tourPlayers(g, c, k);
     const missing = P.alive.filter(r => r.chipsKey !== P.key);
-    if (!(await showConfirm(`לסמן כפרשו: ${missing.map(r => r.name).join(", ")}?`, {okLabel: "סמן", cancelLabel: "ביטול"}))) return;
+    if (!(await showConfirm(`לסמן כפרשו: ${missing.map(r => r.name).join(", ")}?`, {okLabel: g2("סמן", "סמני"), cancelLabel: "ביטול"}))) return;
     tourAct(el, async () => { for (const r of missing) await v2TourAction(tourGid, r.playerId, "bust", {level: k.curLevel.level}); });
   });
   app.querySelectorAll("[data-reg-add]").forEach(el => el.onclick = () => openModal({type: "tourRegPick", gameId: tourGid, openedAt: Date.now()}));
@@ -12373,14 +12375,14 @@ function attachHandlers(){
     const pid = c && myIdentity.myPlayers && myIdentity.myPlayers[c.id];
     if (!pid) return;
     if (state.games.some(g => g.communityId === c.id && !g.closed && (g.seats || []).includes(pid) && !(pid in (g.cashouts || {})))) {
-      showAlert("אתה עדיין יושב בשולחן פתוח במועדון - צריך קודם לצאת מהשולחן.");
+      showAlert(`${g2("אתה עדיין יושב", "את עדיין יושבת")} בשולחן פתוח במועדון - צריך קודם לצאת מהשולחן.`);
       return;
     }
     const ok = await showConfirm(`לצאת מהמועדון "${c.name}"? המועדון ייעלם ממסך הבית שלך. הערבים שכבר שיחקת נשארים בהיסטוריה.`, {okLabel: "יציאה מהמועדון", cancelLabel: "ביטול"});
     if (!ok) return;
     el.disabled = true;
     try { await v2RemoveRosterPlayer(c.id, pid); }
-    catch(e) { showAlert("היציאה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); el.disabled = false; return; }
+    catch(e) { showAlert("היציאה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); el.disabled = false; return; }
     delete myIdentity.myPlayers[c.id];
     await saveIdentity();
     if (!isSuperAdmin()) {
@@ -12487,7 +12489,7 @@ function attachHandlers(){
             });
           }
         }
-      } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); cancelEntryBtn.disabled = false; return; }
+      } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); cancelEntryBtn.disabled = false; return; }
       // Back on the table either way - its free seats are right there to pick another.
       if (playerId === mine) { tableSubView = "table"; setTableView("table"); }
       closeModal();
@@ -12527,7 +12529,7 @@ function attachHandlers(){
       const row = c && (c.roster || []).find(r => r.id === jw.playerId);
       if (!row) { setJoinWait(null); closeModal(); return; }
       retryBtn.disabled = true;
-      try { await requestJoinAs(c, row, jw.gameId); } catch(e) { retryBtn.disabled = false; showAlert("השליחה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+      try { await requestJoinAs(c, row, jw.gameId); } catch(e) { retryBtn.disabled = false; showAlert("השליחה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); }
     };
     const renameBtn = app.querySelector("[data-join-rename]");
     if (renameBtn) renameBtn.onclick = async () => {
@@ -12654,7 +12656,7 @@ function attachHandlers(){
         try {
           if (USE_RELATIONAL_API) await v2UpdateBuyinAmount(gameId, entry.id, total);
           else await mutateAndSave(() => { const b = getGame(gameId).buyins.find(x => x.id === entry.id); if (b) b.amount = total; });
-        } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+        } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); return; }
         render();
         showAlert(`הקנייה הראשונית עודכנה ל-₪${total}`);
         return;
@@ -12672,7 +12674,7 @@ function attachHandlers(){
         const whose = pid === mineId ? "שלך" : `של ${(g.players.find(pl => pl.id === pid) || {}).name || "השחקן"}`;
         const startLine = recentStart ? `המשחק התחיל לפני ${ago(startEv.ts)}. ` : "";
         asked = true;
-        const ok = await showConfirm(`${startLine}הקנייה האחרונה ${whose} הייתה לפני ${ago(lastTs)} (${fmtTime(lastTs)}). האם אתה בטוח שאתה רוצה להוסיף ריביי של ₪${amt}?`, {okLabel: "כן, הוסף ריביי", cancelLabel: "ביטול"});
+        const ok = await showConfirm(`${startLine}הקנייה האחרונה ${whose} הייתה לפני ${ago(lastTs)} (${fmtTime(lastTs)}). ${g2("האם אתה בטוח שאתה רוצה", "האם את בטוחה שאת רוצה")} להוסיף ריביי של ₪${amt}?`, {okLabel: "כן, הוסף ריביי", cancelLabel: "ביטול"});
         if (!ok) return;
       }
     }
@@ -12700,11 +12702,11 @@ function attachHandlers(){
     const g = getGame(nav.gameId); if (!g) return;
     if (modal && modal.type === "gameMenu") { modal = null; render(); }
     const mine = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
-    if (!(await showConfirm("להיות גיזבר הערב? רק אתה תבצע ריביי וביטול ריביי לכל השחקנים.\nכל שחקן יוכל לסיים את הערב בעצמו, או שאתה הגיזבר תסיים עבורו."))) return;
+    if (!(await showConfirm(g2("להיות גיזבר הערב? רק אתה תבצע ריביי", "להיות גיזברית הערב? רק את תבצעי ריביי") + " וביטול ריביי לכל השחקנים.\nכל שחקן יוכל לסיים את הערב בעצמו, או שאתה הגיזבר תסיים עבורו."))) return;
     el.disabled = true;
     try { await v2SetTreasurer(g.id, mine); }
     catch(e) {
-      showAlert(String(e && e.message || "").includes("already") ? "מישהו אחר כבר גיזבר הערב." : "שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב.");
+      showAlert(String(e && e.message || "").includes("already") ? "מישהו אחר כבר גיזבר הערב." : "שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב.");
       try { await reloadV2Data(); } catch(e2) {}
     }
     render();
@@ -12715,7 +12717,7 @@ function attachHandlers(){
     if (!(await showConfirm(iAmTreasurer(g) ? "לוותר על תפקיד גיזבר הערב? כל שחקן יוכל שוב לעשות ריביי בעצמו." : `להסיר את ${trName} מגיזברות הערב? כל שחקן יוכל שוב לעשות ריביי בעצמו.`))) return;
     el.disabled = true;
     try { await v2SetTreasurer(g.id, null); }
-    catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+    catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); }
     render();
   });
   app.querySelectorAll("[data-table-view]").forEach(el => el.onclick = () => { setTableView(el.dataset.tableView); render(); });
@@ -12818,7 +12820,7 @@ function attachHandlers(){
     // Fewer than 4 at the table is usually someone pressing it before everyone sat down.
     const seatedNow = ((getGame(gameId) || {}).seats || []).filter(Boolean).length;
     if (seatedNow < 4) {
-      if (!(await showConfirm(`האם אתה בטוח שברצונך להתחיל משחק עם ${seatedNow === 1 ? "שחקן אחד בלבד" : `${seatedNow} יושבים`}?`, {okLabel: "כן, התחל משחק", cancelLabel: "ביטול"}))) return;
+      if (!(await showConfirm(`${g2("האם אתה בטוח", "האם את בטוחה")} שברצונך להתחיל משחק עם ${seatedNow === 1 ? "שחקן אחד בלבד" : `${seatedNow} יושבים`}?`, {okLabel: "כן, התחל משחק", cancelLabel: "ביטול"}))) return;
     }
     el.disabled = true;
     showButtonLoading(el);
@@ -12832,7 +12834,7 @@ function attachHandlers(){
       } else {
         await mutateAndSave(() => { const g = getGame(gameId); if (!gameStartEvent(g)) logGameEvent(g, "game_started", undefined, myIdentity.name); });
       }
-    } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); el.disabled = false; render(); return; }
+    } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); el.disabled = false; render(); return; }
     render();
   });
   app.querySelectorAll("[data-rb-cancel-toggle]").forEach(el => el.onclick = () => { const k = nav.gameId + ":" + viewedPid(); rebuyCancelOpen[k] = !rebuyCancelOpen[k]; render(); });
@@ -12890,7 +12892,7 @@ function attachHandlers(){
       try {
         await v2SetCashout(gameId, pid, rounded, [], rounded);
         await v2MaybeAutoCloseNight(gameId);
-      } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); el.disabled = false; render(); return; }
+      } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); el.disabled = false; render(); return; }
     } else {
       await mutateAndSave(() => {
         const freshG = getGame(gameId);
@@ -12931,7 +12933,7 @@ function attachHandlers(){
       try {
         await v2SetCashout(gameId, pid, 0, [], 0);
         await v2MaybeAutoCloseNight(gameId);
-      } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); playerLeaveNoChipsBtn.disabled = false; return; }
+      } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); playerLeaveNoChipsBtn.disabled = false; return; }
     } else {
       await mutateAndSave(() => {
         const freshG = getGame(gameId);
@@ -12964,7 +12966,7 @@ function attachHandlers(){
         await v2UpdateLiveChips(nav.gameId, playerId, 0);
         if (g.closed) { await v2UpdateGame(nav.gameId, {closed: false}); v2AddGameEvent(nav.gameId, "night_reopened", null, myIdentity.name, undefined); } // a night with an active player again can't stay "closed"
         v2AddGameEvent(nav.gameId, "returned_to_table", playerId, myIdentity.name, undefined);
-      } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); el.disabled = false; return; }
+      } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); el.disabled = false; return; }
     } else {
       await mutateAndSave(() => {
         delete g.cashouts[playerId];
@@ -12990,7 +12992,7 @@ function attachHandlers(){
     const playerId = el.dataset.adminReturnToGame;
     const g = getGame(nav.gameId);
     const name = (g.players.find(p=>p.id===playerId)||{}).name || "השחקן";
-    if (!(await showConfirm(`האם אתה בטוח ש${name} חוזר לשולחן?`))) return;
+    if (!(await showConfirm(`${g2("האם אתה בטוח", "האם את בטוחה")} ש${name} ${playerIsFemale(g, getCommunity(g.communityId), playerId) ? "חוזרת" : "חוזר"} לשולחן?`))) return;
     await performReturnToGame(el, playerId);
   });
 
@@ -13013,7 +13015,7 @@ function attachHandlers(){
       } else {
         await mutateAndSave(() => { const gm = getGame(gameId); gm.closed = closing; logGameEvent(gm, closing ? "night_closed" : "night_reopened", null, myIdentity.name, undefined); });
       }
-    } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+    } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); return; }
     render();
   };
   app.querySelectorAll("[data-toggle-end-night]").forEach(el => el.onclick = async () => {
@@ -13024,7 +13026,7 @@ function attachHandlers(){
     if (USE_RELATIONAL_API) {
       const closing = !g.closed;
       try { await v2UpdateGame(gameId, {closed: closing}); }
-      catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); if (checkbox) checkbox.disabled = false; return; }
+      catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); if (checkbox) checkbox.disabled = false; return; }
       v2AddGameEvent(gameId, closing ? "night_closed" : "night_reopened", null, myIdentity.name, undefined);
     } else {
       await mutateAndSave(() => { const gm = getGame(gameId); gm.closed = !gm.closed; logGameEvent(gm, gm.closed ? "night_closed" : "night_reopened", null, myIdentity.name, undefined); });
@@ -13098,7 +13100,7 @@ function attachHandlers(){
         }
       } catch(e) {
         const serverSaid = e && e.status && e.status < 500;
-        showAlert(serverSaid ? "סידור הקופה נכשל: " + (e.message || "השרת דחה את השינוי") : "שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב.");
+        showAlert(serverSaid ? "סידור הקופה נכשל: " + (e.message || "השרת דחה את השינוי") : "שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב.");
         adminFixPotBtn.disabled = false; render(); return;
       }
     } else {
@@ -13249,7 +13251,7 @@ function attachHandlers(){
               .catch(() => {
                 const freshG = getGame(nav.gameId);
                 if (freshG) freshG.seats = prevSeats;
-                showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב.");
+                showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב.");
                 render();
               });
           } else {
@@ -13335,7 +13337,7 @@ function attachHandlers(){
         try {
           await v2ClearSeat(gameId, idx);
           v2AddGameEvent(gameId, "seat_removed", playerId, myIdentity.name, undefined);
-        } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); cancelWelcomeBtn.disabled = false; return; }
+        } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); cancelWelcomeBtn.disabled = false; return; }
       }
     } else {
       await mutateAndSave(() => {
@@ -13365,7 +13367,7 @@ function attachHandlers(){
       updateAccount({name});
       if (USE_RELATIONAL_API) {
         try { await v2RenamePlayerEverywhere(myIdentity.id, name); }
-        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+        catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); }
       } else {
         renamePlayerEverywhere(myIdentity.id, name);
         await saveState();
@@ -13406,7 +13408,7 @@ function attachHandlers(){
       saveIdentity();
       if (USE_RELATIONAL_API) {
         try { await v2SetGenderEverywhere(myIdentity.id, gender); }
-        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+        catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); return; }
       } else {
         setGenderEverywhere(myIdentity.id, gender);
         await saveState();
@@ -13929,7 +13931,7 @@ function attachHandlers(){
       el.disabled = true;
       if (USE_RELATIONAL_API) {
         try { await v2RemoveRosterPlayer(communityId, playerId); }
-        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); el.disabled = false; return; }
+        catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); el.disabled = false; return; }
       } else {
         await mutateAndSave(() => {
           const c = getCommunity(communityId);
@@ -13952,7 +13954,7 @@ function attachHandlers(){
       el.disabled = true;
       if (USE_RELATIONAL_API) {
         try { await v2SetRosterAdmin(communityId, playerId, next); }
-        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); el.disabled = false; return; }
+        catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); el.disabled = false; return; }
       } else {
         await mutateAndSave(() => {
           const p = getCommunity(communityId).roster.find(pl => pl.id === playerId);
@@ -14019,14 +14021,14 @@ function attachHandlers(){
             myIdentity.myPlayers[c.id] = creatorPlayer.id;
             saveIdentity();
           } catch(e) {
-            showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב.");
+            showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב.");
             createBtn.disabled = false; nameInput.disabled = false; createBtn.textContent = "פתח שולחן";
             return;
           }
         } else {
           try { await v2CreateGame(gid, c.id, name || null, modal.date, myIdentity.name, null, null, myIdentity.id, tourExtra); }
           catch(e) {
-            showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב.");
+            showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב.");
             createBtn.disabled = false; nameInput.disabled = false; createBtn.textContent = "פתח שולחן";
             return;
           }
@@ -14497,7 +14499,7 @@ function attachHandlers(){
       try {
         newAvatars = await Promise.all(pending.map(async ({pt, name, category}) =>
           ({id: uid(), name, category, image: await uploadPhoto(pt.image)})));
-      } catch(e) { showAlert("העלאת האווטרים נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); render(); return; }
+      } catch(e) { showAlert("העלאת האווטרים נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); render(); return; }
       // Re-syncs this handful of fields immediately before writing one of them - see
       // syncLegacyOnlyFields's own comment on the lost-update race this closes.
       await syncLegacyOnlyFields();
@@ -14522,7 +14524,7 @@ function attachHandlers(){
       if (USE_RELATIONAL_API) {
         try {
           await v2CreateCommunity(communityId, name, myIdentity.id, myIdentity.name, creatorPlayer.id, creatorPlayer.name);
-        } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+        } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); return; }
       } else {
         state.communities.push({ id: communityId, name, roster: [creatorPlayer], createdBy: myIdentity.id, createdByName: myIdentity.name });
         saveState();
@@ -14542,7 +14544,7 @@ function attachHandlers(){
       if (!name) { showAlert("צריך להזין שם למועדון."); return; }
       if (USE_RELATIONAL_API) {
         try { await v2DuplicateCommunity(modal.communityId, uid(), name); }
-        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+        catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); return; }
       } else {
         const src = getCommunity(modal.communityId);
         const roster = (src.roster||[]).map(p => ({...p, id: uid()}));
@@ -14563,7 +14565,7 @@ function attachHandlers(){
       if (USE_RELATIONAL_API) {
         try { await v2DeleteCommunity(modal.communityId); }
         catch(e) {
-          showAlert(e && e.status === 403 ? "רק מי שיצר את המועדון או Super Admin יכולים למחוק אותו." : "מחיקה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב.");
+          showAlert(e && e.status === 403 ? "רק מי שיצר את המועדון או Super Admin יכולים למחוק אותו." : "מחיקה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב.");
           return;
         }
       } else {
@@ -14586,7 +14588,7 @@ function attachHandlers(){
         confirmDel.disabled = true;
         showButtonLoading(confirmDel);
         try { await v2DeleteGame(modal.gameId); }
-        catch(e) { showAlert("מחיקה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmDel.disabled = false; render(); return; }
+        catch(e) { showAlert("מחיקה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); confirmDel.disabled = false; render(); return; }
       } else {
         state.games = state.games.filter(gm => gm.id !== modal.gameId);
         saveState();
@@ -14607,7 +14609,7 @@ function attachHandlers(){
           await v2DeleteBuyin(modal.gameId, buyinId);
           v2AddGameEvent(modal.gameId, "buyin_deleted", modal.playerId, myIdentity.name, deletedAmount);
         }
-        catch(e) { showAlert("מחיקה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+        catch(e) { showAlert("מחיקה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); }
       } else {
         await mutateAndSave(() => {
           const g = getGame(modal.gameId);
@@ -14662,7 +14664,7 @@ function attachHandlers(){
           if (toPlayerId === "__group__") await v2AddPayboxPayment(modal.gameId, uid(), modal.fromPlayerId, amt);
           else await v2AddPlayerPayment(modal.gameId, uid(), modal.fromPlayerId, toPlayerId, amt);
         }
-        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmDirectPay.disabled = false; return; }
+        catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); confirmDirectPay.disabled = false; return; }
       } else {
         await mutateAndSave(() => {
           const g = getGame(modal.gameId);
@@ -14687,7 +14689,7 @@ function attachHandlers(){
       showButtonLoading(endNightFromDirectPayBtn);
       if (USE_RELATIONAL_API) {
         try { await v2UpdateGame(modal.gameId, {closed: true}); }
-        catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); endNightFromDirectPayBtn.disabled = false; return; }
+        catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); endNightFromDirectPayBtn.disabled = false; return; }
         v2AddGameEvent(modal.gameId, "night_closed", null, myIdentity.name, undefined);
       } else {
         await mutateAndSave(() => { const gm = getGame(modal.gameId); gm.closed = true; logGameEvent(gm, "night_closed", null, myIdentity.name, undefined); });
@@ -14718,7 +14720,7 @@ function attachHandlers(){
           try {
             const ok = await v2ClaimSeat(modal.gameId, modal.seatIndex, p.id, p.name);
             if (!ok) showAlert("המושב הזה כבר תפוס - בחרו מושב אחר.");
-          } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+          } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); }
         }
         closeModal();
         return;
@@ -14779,7 +14781,7 @@ function attachHandlers(){
           if (permanent) await v2AddRosterPlayer(getGame(modal.gameId).communityId, playerId, name, gender);
           const ok = await v2ClaimSeat(modal.gameId, modal.seatIndex, playerId, name, gender);
           if (!ok) showAlert("המושב הזה כבר תפוס - בחרו מושב אחר.");
-        } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); }
+        } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); }
         closeModal();
         return;
       }
@@ -14810,7 +14812,7 @@ function attachHandlers(){
             await v2ClearSeat(modal.gameId, idx);
             v2AddGameEvent(modal.gameId, "seat_removed", modal.playerId, myIdentity.name, undefined);
           }
-          catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); confirmClear.disabled = false; return; }
+          catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); confirmClear.disabled = false; return; }
         }
         if (playerViewTarget === modal.playerId) playerViewTarget = null; // back to my own screen right away
         closeModal();
@@ -14843,7 +14845,7 @@ function attachHandlers(){
           const g = getGame(modal.gameId);
           if (g.closed) { await v2UpdateGame(modal.gameId, {closed: false}); v2AddGameEvent(modal.gameId, "night_reopened", null, myIdentity.name, undefined); }
           v2AddGameEvent(modal.gameId, "returned_to_table", modal.playerId, myIdentity.name, undefined);
-        } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); return; }
+        } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); return; }
         closeModal();
         return;
       }
@@ -15138,7 +15140,7 @@ function attachHandlers(){
         try {
           await v2SetCashout(gameId, playerId, chips, [], chips);
           await v2MaybeAutoCloseNight(gameId);
-        } catch(e) { showAlert("שמירה נכשלה - בדוק את החיבור לאינטרנט ונסה שוב."); quickEndBtn.disabled = false; return; }
+        } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); quickEndBtn.disabled = false; return; }
       } else {
         await mutateAndSave(() => {
           const g = getGame(gameId);
@@ -15311,7 +15313,7 @@ window.addEventListener("popstate", async () => {
       if (!v2Loaded) {
         document.getElementById("app").innerHTML =
           '<div style="padding:60px 20px;text-align:center;color:#f5f5f4;font-size:15px;line-height:1.6;">לא הצלחנו לטעון את הנתונים מהשרת.<br>בדקו את החיבור לאינטרנט ונסו שוב.<br><br>' +
-          '<button class="btn btn-primary" onclick="location.reload()">נסה שוב</button></div>';
+          '<button class="btn btn-primary" onclick="location.reload()">נסו שוב</button></div>';
         return;
       }
     }
