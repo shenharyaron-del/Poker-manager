@@ -1406,7 +1406,7 @@ html.theme-light .ng-tour-edit{color:#9a5f12;border-color:#c8922a;}
 .ck{padding:10px 16px 24px;max-width:560px;margin:0 auto;text-align:center;width:100%;min-width:0;box-sizing:border-box;}
 .ck-top{display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:14.5px;margin-bottom:8px;}
 .ck-top b{color:var(--text);font-size:17px;}
-.ck-card{border:2px solid var(--gold);border-radius:20px;padding:8px 12px 10px;background:radial-gradient(120% 90% at 50% 0%,rgba(242,193,78,.12),rgba(0,0,0,.18));box-shadow:0 0 22px rgba(242,193,78,.18);}
+.ck-card{display:flex;flex-direction:column;justify-content:center;box-sizing:border-box;border:2px solid var(--gold);border-radius:20px;padding:8px 12px 10px;background:radial-gradient(120% 90% at 50% 0%,rgba(242,193,78,.12),rgba(0,0,0,.18));box-shadow:0 0 22px rgba(242,193,78,.18);}
 html.theme-light .ck-card{background:radial-gradient(120% 90% at 50% 0%,rgba(242,193,78,.18),rgba(255,255,255,.35));}
 .ck-lvl{font-size:17px;font-weight:800;color:var(--gold);letter-spacing:.5px;} html.theme-light .ck-lvl{color:#9a5f12;}
 .ck-time{font-size:68px;font-weight:800;line-height:1;margin:4px 0 2px;font-variant-numeric:tabular-nums;direction:ltr;}
@@ -6081,6 +6081,19 @@ function tourChipCountHtml(g, c, t, mine, key, level, isAdmin){
       : tourCcWidget(c, t, mine.playerId, done ? mine.chips : null, key, level, isAdmin)}
   </fieldset>`;
 }
+// The clock card keeps the tallest height it has had, so the controls under it never jump
+// (a break's card is shorter than a level's, "השעון מושהה" adds a line) - a second tap on
+// "שלב הבא" used to land on whatever had moved under the finger ("הוספת שחקן").
+let tourCardH = 0, tourCardHFor = null;   // per table and screen width
+// ...and for a moment after a clock button, a tap anywhere else on the clock screen is
+// ignored (what's under the finger may have changed with the new level).
+let tourTapGuardUntil = 0, tourTapGuardKey = null;
+document.addEventListener("click", e => {
+  if (Date.now() >= tourTapGuardUntil || !e.target || !e.target.closest || !e.target.closest(".ck")) return;
+  const ck = e.target.closest("[data-ck]");
+  if (ck && ck.dataset.ck === tourTapGuardKey) return;
+  e.stopPropagation(); e.preventDefault();
+}, true);
 let tourCcEdit = false;
 let tourDealMethod = "guarantee";   // the deal proposal shown: "guarantee" (default) or "icm"
 let tourCcAdmin = false;   // the admin's "enter a player's count" list
@@ -11889,12 +11902,16 @@ function attachHandlers(){
     if (btn) { btn.disabled = true; }
     try { await fn(); } catch (e) { showAlert(saveFailedText(e)); }
     render();
+    if (tourTapGuardKey && Date.now() < tourTapGuardUntil) tourTapGuardUntil = Math.max(tourTapGuardUntil, Date.now() + 700);
   };
   app.querySelectorAll("[data-lobby-pay]").forEach(el => el.onclick = () => { const n = Number(el.dataset.lobbyPay); tourLobbyFull.payOpen = tourLobbyFull.payOpen === n ? 0 : n; render(); });
   // the blind table starts at the current level (past ones are gone): 4 rows, the rest scroll
   { const w = app.querySelector("[data-ck-blinds].capped");
     if (w) { const rows = [...w.querySelectorAll("tbody tr")].slice(0, 4), th = w.querySelector("thead");
       w.style.maxHeight = (th ? th.offsetHeight : 0) + rows.reduce((h, r) => h + r.offsetHeight, 0) + 1 + "px"; } }
+  { const cardEl = app.querySelector(".ck-sticky .ck-card");
+    if (cardEl) { if (tourCardHFor !== nav.gameId + ":" + innerWidth) { tourCardH = 0; tourCardHFor = nav.gameId + ":" + innerWidth; }
+      cardEl.style.minHeight = ""; tourCardH = Math.max(tourCardH, cardEl.offsetHeight); cardEl.style.minHeight = tourCardH + "px"; } }
   // the strip behind the sticky clock wears the page's own background (no dark band)
   { const st = app.querySelector(".ck-sticky");
     if (st) { const bs = getComputedStyle(document.body); st.style.backgroundImage = bs.backgroundImage; st.style.backgroundColor = bs.backgroundColor !== "rgba(0, 0, 0, 0)" ? bs.backgroundColor : ""; st.style.backgroundSize = bs.backgroundSize; st.style.backgroundAttachment = "fixed"; } }
@@ -11999,6 +12016,7 @@ function attachHandlers(){
   app.querySelectorAll("[data-ck]").forEach(el => el.onclick = () => {
     const g = getGame(tourGid), k = tourClockInfo(g, getCommunity(g.communityId));
     const a = el.dataset.ck;
+    tourTapGuardKey = a; tourTapGuardUntil = Date.now() + 1500;
     if (a === "pause") return tourAct(el, () => v2TourClock(tourGid, "pause"));
     if (a === "break") return tourAct(el, () => v2TourClock(tourGid, "pause", {reason: "break"}));
     if (a === "resume") return tourAct(el, () => v2TourClock(tourGid, "resume"));
