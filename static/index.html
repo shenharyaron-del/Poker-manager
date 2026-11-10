@@ -1755,8 +1755,6 @@ html.theme-light .tour-full-link{color:#9a5f12;}
 .tour-empty{font-size:15px;line-height:1.5;color:var(--muted);margin:0;}
 .tour-chip{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
 .tour-chip .tf-in{flex:1;min-width:0;} .tour-chip .tour-chip-cash{flex:0 0 76px;font-size:13px;color:var(--muted);white-space:nowrap;text-align:left;}
-.tour-mult{display:flex;align-items:center;gap:8px;margin:0 0 10px;font-size:15px;font-weight:700;}
-.tour-mult .tf-in{width:90px;flex:0 0 auto;} .tour-mult small{font-size:12.5px;font-weight:500;color:var(--muted);white-space:nowrap;}
 .tour-chip img,.tour-chip-noimg{width:42px;height:42px;border-radius:50%;flex-shrink:0;object-fit:cover;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4));}
 .tour-chip-noimg{border:1px dashed var(--muted);}
 .tour-chip .tf-in{flex:1;}
@@ -5763,7 +5761,7 @@ function setupModeSwitchHtml(communityId, on){
 // ---------- Tournament (club profile) - stage 1: the screen only, nothing saved ----------
 const TOUR_DEFAULTS = {tab: "struct", fee: 20, prize: 80, chips: 10000, early: 5, rebuys: 0, rebuyChips: 10000,
   rebuyLevels: 4, addOn: 0, addOnChips: 10000, addOnPrice: null, addOnExtra: 5,
-  rebuyPrice: null, rebuyFee: 0, addOnFee: 0, estRebuys: null, estAddOns: null, fullTable: 0, payFull: 0, payOpen: 0, pointsMult: 100, level: 15, jump: 1, breakEvery: 70, breakLen: 10, speed: 2, ante: 0.25, payoutPct: 20, entries: 16, points: {}};
+  rebuyPrice: null, rebuyFee: 0, addOnFee: 0, estRebuys: null, estAddOns: null, fullTable: 0, payFull: 0, payOpen: 0, level: 15, jump: 1, breakEvery: 70, breakLen: 10, speed: 2, ante: 0.25, payoutPct: 20, entries: 16, points: {}};
 // Blind speed presets: a level's length and how many rungs of the blind ladder each level
 // climbs. Moving either slider by hand makes it "מותאם אישית" (4).
 // Slow / normal: longer or shorter levels, one rung at a time; fast: the blinds climb two rungs.
@@ -5817,17 +5815,19 @@ function tourSummaryHtml(t){
 let tourLobbyFull = {blinds: false, pay: false, payOpen: 0};
 const tourInnerScroll = {};   // the tables' inner scroll positions, kept across re-renders   // the read-only tables' "טבלה מלאה"
 function tourSmallChip(c, t){
-  const small = Math.min(...((c && c.chipValues) || []).map((cv, i) => tourChipPoints(t, cv, i) || Infinity), Infinity);
+  const small = Math.min(...((c && c.chipValues) || []).map((cv, i) => tourChipPoints(t, cv, i, c) || Infinity), Infinity);
   return isFinite(small) ? small : 25;
 }
 function tourEntryTotal(t){ return (+t.fee || 0) + (+t.prize || 0); }
-// A chip's value in points: set by hand in the tournament profile, else its cash value (₪)
-// times the multiplier (×100: ₪0.5 → 50, ₪5 → 500); without a cash value, the old ladder.
-function tourChipPoints(t, cv, i){
+// A chip's value in points: set by hand in the tournament profile, else what it's worth in
+// chips at cash - its value (₪) times the club's ratio ("1 שקל עבור X ז'יטונים"); a chip
+// with no cash value keeps the old ladder.
+function tourChipPoints(t, cv, i, c){
   const set = (t.points || {})[cv.id];
   if (set !== undefined && set !== null && set !== "") return +set || 0;
-  const cash = parseFloat(cv.value), mult = +t.pointsMult || 100;
-  if (cash > 0) return Math.round(cash * mult);
+  const cash = parseFloat(cv.value), ratio = parseFloat(c && c.chipRatio) || 1;
+  const v = Math.round(cash * ratio * 100) / 100;
+  if (v > 0) return v;
   return [25, 100, 500, 1000, 5000, 10000][i] || 0;
 }
 function tourInfoHtml(t){
@@ -6089,7 +6089,7 @@ function tourCcWidget(c, t, box, initial, key, level, isAdmin){
   // like the cash leave form: the amount on top, and under it "or count by type" - the
   // club's chips with a count under each; the counts fill the amount above
   const cvs = (c && c.chipValues) || [];
-  const pts = cvs.map((cv, i) => tourChipPoints(t, cv, i));
+  const pts = cvs.map((cv, i) => tourChipPoints(t, cv, i, c));
   const many = cvs.length >= 5;
   return `<div data-cc-box="${esc(box)}" data-cc-key="${esc(key || "")}" data-cc-level="${level || ""}">
     <div class="tf-in"><input type="number" inputmode="numeric" min="0" data-cc-sum placeholder="כמה ז'יטונים" value="${initial != null ? esc(String(initial)) : ""}" onfocus="this.select()"></div>
@@ -10529,14 +10529,14 @@ function renderModal(m){
       const cvs = c.chipValues || [];
       inner = cvs.length ? `
         <fieldset class="leave-frame setup-frame"><legend>ערך כל ז'יטון בנקודות</legend>
-          <div class="tour-mult"><span>מכפיל</span><div class="tf-in"><input type="number" inputmode="numeric" min="1" data-tour-mult value="${esc(String(+t.pointsMult || 100))}"></div><small>ערך בקאש × מכפיל = נקודות</small></div>
+          <p class="tour-note" style="margin:0 0 8px">ברירת המחדל לפי יחס הקאש של המועדון: ${esc(String(parseFloat(c.chipRatio) || 1))} ז'יטונים לשקל</p>
           ${cvs.map((cv, i) => `<div class="tour-chip">${cv.image ? `<img src="${esc(cv.image)}" alt="">` : `<span class="tour-chip-noimg"></span>`}
-            <div class="tf-in"><input type="number" inputmode="numeric" data-tour-point="${cv.id}" value="${esc(String(tourChipPoints(t, cv, i) || ""))}"><span class="tf-unit">נק'</span></div>${parseFloat(cv.value) > 0 ? `<small class="tour-chip-cash">₪${esc(String(cv.value))} בקאש</small>` : ""}</div>`).join("")}
+            <div class="tf-in"><input type="number" inputmode="numeric" data-tour-point="${cv.id}" value="${esc(String(tourChipPoints(t, cv, i, c) || ""))}"><span class="tf-unit">נק'</span></div>${parseFloat(cv.value) > 0 ? `<small class="tour-chip-cash">₪${esc(String(cv.value))} בקאש</small>` : ""}</div>`).join("")}
         </fieldset>`
         : `<fieldset class="leave-frame setup-frame"><legend>ערך כל ז'יטון בנקודות</legend><p class="tour-empty">עוד לא הוגדרו ז'יטונים למועדון - צלמו אותם בקאש ← ז'יטונים, ואז קבעו כאן כמה נקודות שווה כל אחד.</p></fieldset>`;
     } else {
       // the club's smallest chip (its points value) - every blind is a multiple of it
-      const small = Math.min(...(c.chipValues || []).map((cv, i) => tourChipPoints(t, cv, i) || Infinity), Infinity);
+      const small = Math.min(...(c.chipValues || []).map((cv, i) => tourChipPoints(t, cv, i, c) || Infinity), Infinity);
       // prices (re-buy / add-on follow the buy-in until set) and the estimated prize pot
       const total = (+t.fee || 0) + (+t.prize || 0);
       const rebuyPrice = t.rebuyPrice ?? total, addOnPrice = t.addOnPrice ?? total;
@@ -12380,8 +12380,6 @@ function attachHandlers(){
     // a field's value is selected on focus - typing replaces it
     app.querySelectorAll(".tour-panel input[type=number]").forEach(el => el.addEventListener("focus", () => el.select()));
     app.querySelectorAll("[data-tour-point]").forEach(el => el.onchange = () => { modal.tour = Object.assign({}, modal.tour, {points: Object.assign({}, modal.tour.points, {[el.dataset.tourPoint]: el.value})}); });
-    // a new multiplier: every chip back to its cash value × the multiplier
-    app.querySelectorAll("[data-tour-mult]").forEach(el => el.onchange = () => { const v = Math.max(1, Math.round(+el.value || 100)); updateModal({tour: Object.assign({}, modal.tour, {pointsMult: v, points: {}})}); });
   }
   app.querySelectorAll("[data-setup-tab]").forEach(el => el.onclick = () => {
     trySwitchSetupTab(el.dataset.setupTab, el.dataset.setupCommunity);
