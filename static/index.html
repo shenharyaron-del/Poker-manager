@@ -6224,8 +6224,9 @@ function renderTourClock(g, c, isAdmin){
     (lateOpen || pending.length) && ["lobby", "לובי", pending.length],
     (lateOpen || aoNow || reqs.length) && ["rebuy", lateOpen && t.addOn ? "ריביי / Add-on" : lateOpen ? "ריביי" : "Add-on", reqs.length],
     ["out", "הזן שחקן שיצא", 0],
-    // ending / a deal only once few are left (4 or fewer) and re-buys are over
-    !lateOpen && !dealOn && P.alive.length < 5 && ["end", "סיום / דיל", 0],
+    // ending / a deal only once few are left and re-buys are over: 4 or fewer - 5 when more
+    // than 20 started, 6 when more than 30
+    !lateOpen && !dealOn && P.alive.length <= (approved.length > 30 ? 6 : approved.length > 20 ? 5 : 4) && ["end", "סיום / דיל", 0],
   ].filter(Boolean);
   if (tourPanel && !actList.some(a => a[0] === tourPanel)) tourPanel = null;
   const acts = !isAdmin ? "" : `<div class="ck-acts${actList.length === 1 ? " solo" : ""}">${actList
