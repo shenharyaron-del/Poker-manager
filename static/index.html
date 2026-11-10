@@ -3255,11 +3255,17 @@ async function v2SeatPlayerIfRoom(gameId, playerId, name){
 // noticeably longer than anyone else's. Callers still `await` it - it returns at once.
 const autoCloseRunning = new Set();
 function v2MaybeAutoCloseNight(gameId){
-  // Nothing to close while two or more at the table (as this phone sees it) still play -
-  // no request at all. (Another phone's last exit is then the one that closes it.)
+  // This phone's copy can be a moment behind - players finishing at about the same time
+  // each still saw the other one playing, and neither closed the night. So it asks the
+  // server (v2AutoCloseNightNow fetches fresh) whenever it's even close: up to two still
+  // seated as far as this phone knows. Each phone asks after its own exit was saved, so
+  // the last one out always sees everyone. (The table's redraw also retries - see
+  // attachHandlers.)
   const local = getGame(gameId);
   if (local) {
-    if (!nightShouldAutoClose(local) || local.closed) return Promise.resolve();
+    const seated = (local.seats || []).filter(Boolean), co = local.cashouts || {};
+    const left = seated.filter(pid => !(pid in co)).length;
+    if (local.closed || seated.length < 2 || !seated.some(pid => pid in co) || left > 2) return Promise.resolve();
   }
   if (autoCloseRunning.has(gameId)) return Promise.resolve();
   autoCloseRunning.add(gameId);
@@ -11746,6 +11752,12 @@ function attachHandlers(){
   // autoOpenedDirectPay's own comment. Deferred to a fresh tick (not called synchronously
   // from here) so it runs as its own top-level openModal()/render() cycle instead of
   // re-entering the render/attachHandlers pass that's still in progress right now.
+  // A night left open with one player or none still seated (a close that didn't go
+  // through): any phone on the table closes it now.
+  if (nav.screen === "table" && USE_RELATIONAL_API) {
+    const g = getGame(nav.gameId);
+    if (g && g.gameType !== "tournament" && !g.closed && nightShouldAutoClose(g)) v2MaybeAutoCloseNight(g.id);
+  }
   if (nav.screen === "table" && !modal) {
     const g = getGame(nav.gameId);
     const c = g && getCommunity(g.communityId);
