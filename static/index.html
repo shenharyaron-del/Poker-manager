@@ -662,6 +662,7 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .night-result .nr-note{font-size:17px;color:var(--muted);margin-bottom:8px;}
 .night-result .nr-still{font-size:19px;font-weight:700;color:var(--text);margin:10px 0 4px;}
 .night-result .nr-facts{display:flex;flex-direction:column;gap:8px;margin-top:16px;padding:10px 12px 12px;font-size:16px;font-weight:600;color:var(--text);text-align:center;}
+.night-result .nr-facts legend{text-align:right;}   /* the facts are centred, the frame title stays on the right like every frame */
 .menu-overlay{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.25);animation:menuShade .2s ease-out;}
 .menu-drop{position:fixed;width:min(260px,calc(100vw - 24px));background:var(--card);border:1px solid rgba(212,175,55,.6);border-radius:14px;padding:8px;box-shadow:0 12px 30px rgba(0,0,0,.5);transform-origin:top;animation:menuUnroll .28s cubic-bezier(.2,.8,.3,1);}
 @keyframes menuUnroll{from{clip-path:inset(0 0 100% 0 round 14px);transform:translateY(-6px);opacity:.4}to{clip-path:inset(0 0 0 0 round 14px);transform:none;opacity:1}}
@@ -1176,7 +1177,7 @@ fieldset.pp-car{min-width:0;margin-inline:0;}
    the panel, half on the page: two backgrounds behind one line of text. */
 .pp-car,html.theme-light .pp-car{background:transparent;}
 .pp-car.has-legend{padding-top:4px;}
-.pp-car-legend{padding:0 8px;margin:0;margin-inline-start:12px;margin-inline-end:auto;font-size:14px;font-weight:700;color:var(--gold);}
+.pp-car-legend{padding:0 8px;margin:0;margin-inline-start:-2px;margin-inline-end:auto;font-size:14px;font-weight:700;color:var(--gold);}
 html.theme-light .pp-car-legend{color:#9a5f12;}
 html.theme-light .pp-ci-amt,html.theme-light .pp-ci-out{color:#1f4f66;}
 html.theme-light.theme-sand .pp-ci-amt,html.theme-light.theme-sand .pp-ci-out{color:#6b4a2a;}
