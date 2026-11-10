@@ -290,6 +290,8 @@ _INIT_STATEMENTS = (
     # pauseReason} in server ms - every phone works the level and time left out of these
     # and the blind structure, so nothing ticks on the server.
     "ALTER TABLE games ADD COLUMN IF NOT EXISTS tournament_state JSONB",
+    # The final result of a tournament night (see v2_tournament_finish): places, prizes, deal.
+    "ALTER TABLE games ADD COLUMN IF NOT EXISTS tournament_results JSONB",
     # During the tournament: when a player went out (and in which level), their last chip
     # count (and at which break - chips_key), and a re-buy / add-on they asked for (pending).
     # Re-buys and add-ons themselves are buyins rows ('rb:<game>:<player>:<ms>', 'ao:<game>:<player>').
@@ -1436,7 +1438,7 @@ def v2_list_games(community_id):
 
 _GAME_BASE_COLUMNS = (
     "SELECT id, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at, created_by, created_at, "
-    "treasurer_id, game_type, tournament_settings, tournament_state FROM games"
+    "treasurer_id, game_type, tournament_settings, tournament_state, tournament_results FROM games"
 )
 
 
@@ -1455,14 +1457,15 @@ def _games_full(cur, base_rows):
     that don't otherwise touch the games row at all."""
     games = {}
     for (gid, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at, created_by, created_at,
-         treasurer_id, game_type, tournament_settings, tournament_state) in base_rows:
+         treasurer_id, game_type, tournament_settings, tournament_state, tournament_results) in base_rows:
         games[gid] = {
             "id": gid, "communityId": community_id, "name": name,
             "date": date.isoformat() if date else None,
             "createdByName": created_by_name, "createdBy": _pub(created_by), "closed": closed,
             "treasurerId": treasurer_id,
             "gameType": game_type or "cash", "tournamentSettings": tournament_settings,
-            "tournamentState": tournament_state, "serverNow": int(time.time() * 1000),
+            "tournamentState": tournament_state, "tournamentResults": tournament_results,
+            "serverNow": int(time.time() * 1000),
             "updatedAt": updated_at.isoformat() if updated_at else None,
             "createdAt": created_at.isoformat() if created_at else None,
             "seats": seats, "liveChips": live_chips,
@@ -2358,6 +2361,8 @@ _REG_COUNTS_SQL = (
     ", (SELECT count(*) FROM tournament_registrations r WHERE r.game_id = games.id AND r.status = 'pending')"
     ", (SELECT count(*) FROM tournament_registrations r WHERE r.game_id = games.id AND r.status = 'approved')"
     ", tournament_state"
+    # the result without its full places list - the card only shows the winner and the count
+    ", tournament_results - 'places'"
 )
 
 
@@ -2375,6 +2380,7 @@ def _row_to_game_summary(row):
         "regPending": row[12] if len(row) > 12 else 0,
         "regApproved": row[13] if len(row) > 13 else 0,
         "tournamentState": row[14] if len(row) > 14 else None,
+        "tournamentResults": row[15] if len(row) > 15 else None,
     }
 
 
@@ -2970,6 +2976,19 @@ def v2_tournament_clock(game_id):
                 if st.get("pausedAt"):
                     st["pausedTotal"] = int(st.get("pausedTotal") or 0) + now - int(st["pausedAt"])
                 st["pausedAt"], st["pauseReason"] = None, None
+            elif action == "deal":
+                # A deal is offered: the clock stops while the players left enter their chips
+                # (the "chips" action with key "d<at>"), and the proposal is on screen.
+                if not st.get("deal"):
+                    st["deal"] = {"at": now, "wasPaused": bool(st.get("pausedAt"))}
+                    if not st.get("pausedAt"):
+                        st["pausedAt"], st["pauseReason"] = now, "deal"
+            elif action == "deal_cancel":
+                # No agreement: back to playing - the clock runs again if the deal stopped it.
+                deal = st.pop("deal", None) or {}
+                if not deal.get("wasPaused") and st.get("pausedAt") and st.get("pauseReason") == "deal":
+                    st["pausedTotal"] = int(st.get("pausedTotal") or 0) + now - int(st["pausedAt"])
+                    st["pausedAt"], st["pauseReason"] = None, None
             elif action == "adjust":
                 try:
                     delta = int(body.get("deltaMs"))
@@ -2985,6 +3004,73 @@ def v2_tournament_clock(game_id):
             cur.execute("UPDATE games SET tournament_state = %s, updated_at = now() WHERE id = %s", (Json(st), game_id))
         conn.commit()
     return jsonify({"ok": True, "state": st, "serverNow": now})
+
+
+@app.route("/api/v2/games/<game_id>/tournament/finish", methods=["POST"])
+def v2_tournament_finish(game_id):
+    # The table's admin ends the tournament: every registered player's place and prize (the
+    # client works them out - the regular payout or an agreed deal, rounded to ₪5). Each
+    # player gets a cashout of their prize (0 for the rest), so the night's profit/loss per
+    # player comes out right everywhere, and the night is closed.
+    denied = _guard(game_id=game_id, need="table_admin")
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    places, deal = body.get("places"), body.get("deal")
+    if not isinstance(places, list) or not places:
+        return jsonify({"error": "places required"}), 400
+    if deal not in (None, "guarantee", "icm", "manual"):
+        return jsonify({"error": "invalid deal"}), 400
+    now = int(time.time() * 1000)
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT game_type, closed, tournament_state FROM games WHERE id = %s FOR UPDATE", (game_id,))
+            row = cur.fetchone()
+            if not row:
+                conn.rollback()
+                return jsonify({"error": "game not found"}), 404
+            game_type, closed, st = row
+            if game_type != "tournament" or closed:
+                conn.rollback()
+                return jsonify({"error": "not an open tournament"}), 400
+            cur.execute("SELECT player_id, name FROM tournament_registrations WHERE game_id = %s AND status = 'approved'", (game_id,))
+            regs = dict(cur.fetchall())
+            seen, out = set(), []
+            for i, pl in enumerate(places):
+                pid = (pl or {}).get("playerId")
+                prize = (pl or {}).get("prize", 0)
+                if pid not in regs or pid in seen or not _valid_amount(prize, allow_zero=True):
+                    conn.rollback()
+                    return jsonify({"error": "invalid places"}), 400
+                seen.add(pid)
+                out.append({"playerId": pid, "name": regs[pid], "place": i + 1, "prize": float(prize)})
+            if seen != set(regs):
+                conn.rollback()
+                return jsonify({"error": "every registered player needs a place"}), 400
+            cur.execute("SELECT COALESCE(sum(amount), 0) FROM buyins WHERE game_id = %s", (game_id,))
+            paid_in = float(cur.fetchone()[0] or 0)
+            total = sum(o["prize"] for o in out)
+            if total > paid_in + 0.5:
+                conn.rollback()
+                return jsonify({"error": "prizes exceed what was paid in"}), 400
+            for o in out:
+                cur.execute(
+                    "INSERT INTO cashouts (game_id, player_id, amount, ts) VALUES (%s,%s,%s,now()) "
+                    "ON CONFLICT (game_id, player_id) DO UPDATE SET amount = EXCLUDED.amount, ts = now()",
+                    (game_id, o["playerId"], o["prize"]),
+                )
+            winner = out[0]
+            results = {"finishedAt": now, "deal": deal, "pot": total, "paidIn": paid_in, "count": len(out),
+                       "winner": {"playerId": winner["playerId"], "name": winner["name"], "prize": winner["prize"]},
+                       "places": out}
+            st = dict(st or {})
+            st.pop("deal", None)
+            if st.get("startedAt") and not st.get("pausedAt"):
+                st["pausedAt"], st["pauseReason"] = now, "finished"
+            cur.execute("UPDATE games SET tournament_results = %s, tournament_state = %s, closed = true, updated_at = now() WHERE id = %s",
+                        (Json(results), Json(st), game_id))
+        conn.commit()
+    return jsonify({"ok": True})
 
 
 @app.route("/api/v2/games/<game_id>/registrations/<player_id>/action", methods=["POST"])
