@@ -3514,10 +3514,14 @@ async function tickAutoRefresh(){
 function connectLiveSync(){
   try {
     const es = new EventSource("/api/events");
-    // a short random wait first: every open phone gets the same message at the same
-    // moment, and refetching all at once (200 at a tournament) swamps the server
+    // "changed busy" (the server has many phones open): a short random wait first - every
+    // phone gets the same message at the same moment, and refetching all at once (200 at a
+    // tournament) swamps the server. Otherwise refetch right away.
     let sseTimer = null;
-    es.onmessage = () => { if (!sseTimer) sseTimer = setTimeout(() => { sseTimer = null; doRefreshNow("sse"); }, 200 + Math.random() * 1300); };
+    es.onmessage = e => {
+      if (!String(e.data || "").includes("busy")) { doRefreshNow("sse"); return; }
+      if (!sseTimer) sseTimer = setTimeout(() => { sseTimer = null; doRefreshNow("sse"); }, 200 + Math.random() * 1300);
+    };
   } catch(e) { /* SSE unsupported/blocked - periodic polling still covers us */ }
 }
 document.addEventListener("visibilitychange", () => {

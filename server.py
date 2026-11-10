@@ -81,12 +81,12 @@ _subscribers = []
 _subscribers_lock = threading.Lock()
 
 
-def _send_changed():
+def _send_changed(msg="changed"):
     with _subscribers_lock:
         subs = list(_subscribers)
     for q in subs:
         try:
-            q.put_nowait("changed")
+            q.put_nowait(msg)
         except queue.Full:
             pass
 
@@ -96,6 +96,10 @@ def _send_changed():
 # phone refetch, so a burst (200 players registering, or all sending their break chip count
 # within seconds) used to become one refetch per phone per save - a storm that starved the
 # server. The trailing send means the last save is never left unannounced.
+# Only under load: below _BUSY_SUBSCRIBERS open phones every save goes out at once, as
+# before; from there on the message says "busy", which also makes each phone wait a moment
+# at random before refetching (see index.html's EventSource handler).
+_BUSY_SUBSCRIBERS = int(os.environ.get("BUSY_SUBSCRIBERS", "40"))
 _BROADCAST_GAP = 1.0
 _broadcast_lock = threading.Lock()
 _broadcast_last = 0.0
@@ -104,6 +108,11 @@ _broadcast_pending = False
 
 def _broadcast_state_changed():
     global _broadcast_last, _broadcast_pending
+    with _subscribers_lock:
+        busy = len(_subscribers) >= _BUSY_SUBSCRIBERS
+    if not busy:
+        _send_changed()
+        return
     with _broadcast_lock:
         now = time.time()
         if _broadcast_pending:
@@ -116,7 +125,7 @@ def _broadcast_state_changed():
             _broadcast_pending = True
             send_now = False
     if send_now:
-        _send_changed()
+        _send_changed("changed busy")
         return
 
     def trailing():
@@ -124,7 +133,7 @@ def _broadcast_state_changed():
         with _broadcast_lock:
             _broadcast_last = time.time()
             _broadcast_pending = False
-        _send_changed()
+        _send_changed("changed busy")
     timer = threading.Timer(wait, trailing)
     timer.daemon = True
     timer.start()
