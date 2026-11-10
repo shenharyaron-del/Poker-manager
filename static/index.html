@@ -1534,6 +1534,10 @@ html.theme-light.theme-blue .cc-check{color:#fff;}
 .st-tbl tr.me td{background:rgba(242,193,78,.14);}
 .st-tbl tr.out td{color:var(--muted);font-weight:500;}
 .st-tbl small{display:block;font-size:12px;color:var(--muted);}
+.st-tag{display:inline-block;font:inherit;font-size:11.5px;font-weight:800;line-height:1.3;padding:1px 6px;border-radius:999px;border:1px solid rgba(110,231,183,.55);background:transparent;color:#6ee7b7;margin-inline-start:5px;vertical-align:middle;white-space:nowrap;cursor:pointer;}
+html.theme-light .st-tag{color:#047857;border-color:rgba(4,120,87,.5);}
+html.theme-light.theme-blue .st-tag{color:#c6f7dd;border-color:rgba(198,247,221,.6);}
+.st-tbl tr.out .st-tag{opacity:.75;}
 .reg-row.out .nm{color:var(--muted);}
 .gc-wait{color:#f3c26b;font-weight:700;margin-top:2px;} html.theme-light .gc-wait{color:#b45309;}
 /* a tournament night: the lobby and the registration screen */
@@ -1598,7 +1602,7 @@ html.theme-light.theme-blue .ck-blinds-wrap tr.cur td{background:rgba(255,227,15
 /* 'נגמרו לי הז'יטונים' / 'יצא': a light red button with dark red text on every theme */
 .reg-out{background:#fff1f2 !important;color:#b91c1c !important;border:1.5px solid #f87171 !important;}
 .pend-note{color:#f3c26b;font-weight:700;} html.theme-light .pend-note{color:#9a3412;}
-.info-tip{position:fixed;z-index:9999;max-width:260px;padding:8px 12px;border-radius:10px;background:#1c1917;color:#fde68a;font-size:14px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.4);transition:opacity .3s;}
+.info-tip{position:fixed;z-index:9999;max-width:260px;white-space:pre-line;padding:8px 12px;border-radius:10px;background:#1c1917;color:#fde68a;font-size:14px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.4);transition:opacity .3s;}
 .info-tip.out{opacity:0;}
 .lb-all{font-size:12.5px;font-weight:700;padding:1px 8px;border-radius:999px;background:rgba(63,179,131,.18);color:#6ee7b7;white-space:nowrap;} html.theme-light .lb-all{color:#047857;}
 .lb-count{display:flex;justify-content:center;gap:18px;margin:6px 0 10px;font-size:16px;}
@@ -6170,10 +6174,12 @@ function tourStandingsHtml(P, myPid){
   if (!P.approved.length) return "";
   const rows = P.standings.map(({r, place, counted}) => {
     const extra = r.bustedAt ? `${P.fem && P.fem(r.playerId) ? "יצאה" : "יצא"} ${hhmm(r.bustedAt)}${r.bustLevel ? ` · שלב ${r.bustLevel}` : ""}` : counted ? Number(r.chips).toLocaleString("en-US") : "—";
-    // how many re-buys and whether the add-on was bought - under the name
+    // re-buys and the add-on as small tags after the name - R2 / AO; a tap shows what they mean
     const nRb = (r.rebuys || []).length;
-    const rb = [nRb ? (nRb === 1 ? "ריביי אחד" : `${nRb} ריביי`) : "", r.addOnAt ? "Add-on" : ""].filter(Boolean).join(" · ");
-    return `<tr class="${r.playerId === myPid ? "me" : ""}${r.bustedAt ? " out" : ""}"><td>${place}</td><td class="nm">${esc(r.name || "")}${rb ? `<small>${rb}</small>` : ""}</td><td class="ltr">${extra}</td></tr>`;
+    const tip = "\u2066R2\u2069 - עשה 2 ריביי\n\u2066AO\u2069 - קנה Add-on";
+    const tag = s => `<button type="button" class="st-tag" data-info-tip="${esc(tip)}" data-tip-ms="5000">${s}</button>`;
+    const tags = (nRb ? tag("R" + nRb) : "") + (r.addOnAt ? tag("AO") : "");
+    return `<tr class="${r.playerId === myPid ? "me" : ""}${r.bustedAt ? " out" : ""}"><td>${place}</td><td class="nm">${esc(r.name || "")}${tags}</td><td class="ltr">${extra}</td></tr>`;
   }).join("");
   // a ranking only once there are chip counts - until then it's just who's playing
   return `<fieldset class="leave-frame setup-frame"><legend>${tourHasCounts(P) ? `🏅 דירוג${P.lastLevel ? ` · נכון לסוף שלב ${P.lastLevel}` : ""}` : "👥 שחקנים"}</legend>
