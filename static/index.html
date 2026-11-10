@@ -6179,7 +6179,7 @@ function tourStandingsHtml(P, myPid){
     // each tag explains itself: R → the re-buys, AO → the add-on
     const tag = (s, tip) => `<button type="button" class="st-tag" data-info-tip="${esc(tip)}" data-tip-ms="5000">${s}</button>`;
     const tags = (nRb ? tag("R" + nRb, nRb === 1 ? "ריביי אחד" : `${nRb} ריביי`) : "")
-      + (r.addOnAt ? tag("AO", "Add-ons") : "");
+      + (r.addOnAt ? tag("AO", `${P.fem && P.fem(r.playerId) ? "קנתה" : "קנה"} ADD-ON`) : "");
     return `<tr class="${r.playerId === myPid ? "me" : ""}${r.bustedAt ? " out" : ""}"><td>${place}</td><td class="nm">${esc(r.name || "")}${tags}</td><td class="ltr">${extra}</td></tr>`;
   }).join("");
   // a ranking only once there are chip counts - until then it's just who's playing
