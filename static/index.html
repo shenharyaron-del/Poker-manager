@@ -3255,12 +3255,11 @@ async function v2SeatPlayerIfRoom(gameId, playerId, name){
 // noticeably longer than anyone else's. Callers still `await` it - it returns at once.
 const autoCloseRunning = new Set();
 function v2MaybeAutoCloseNight(gameId){
-  // Nothing to close while someone at the table (as this phone sees it) is still playing -
+  // Nothing to close while two or more at the table (as this phone sees it) still play -
   // no request at all. (Another phone's last exit is then the one that closes it.)
   const local = getGame(gameId);
   if (local) {
-    const seatedNow = (local.seats || []).filter(Boolean);
-    if (seatedNow.length < 2 || !seatedNow.every(pid => pid in (local.cashouts || {})) || local.closed) return Promise.resolve();
+    if (!nightShouldAutoClose(local) || local.closed) return Promise.resolve();
   }
   if (autoCloseRunning.has(gameId)) return Promise.resolve();
   autoCloseRunning.add(gameId);
@@ -3277,11 +3276,8 @@ async function v2AutoCloseNightNow(gameId){
   // testing (a claim/clear right before this call made the very next v2UpdateGame below
   // silently no-op on a spurious 409, since it was still sending the old token).
   const g = await v2LoadGameFull(gameId);
-  const seated = (g.seats || []).filter(Boolean);
-  // Only a night that actually had a game (2+ players sat) closes on its own - a table its
-  // opener never sat at, or sat at alone and left, stays open waiting for players.
-  const shouldClose = seated.length >= 2 && seated.every(pid => pid in g.cashouts);
-  if (shouldClose && !g.closed) {
+  // (see nightShouldAutoClose)
+  if (nightShouldAutoClose(g) && !g.closed) {
     await v2UpdateGame(gameId, {closed: true});
     v2AddGameEvent(gameId, "night_closed", null, null, undefined);
   }
@@ -6931,12 +6927,17 @@ function getActiveBitEntry(c){
 function getGame(id){ return state.games.find(g => g.id === id); }
 // Closes the game the moment every seated player has cashed out - called after most
 // cashout-related actions, including ones on an already-closed game (a no-op then).
+// The night closes on its own once the second-to-last player has finished: one player
+// can't play alone, and a closed night takes whoever is still seated to their own end of
+// the night (and, balanced, everyone to the night's final screen). Only a night that
+// actually had a game (2+ players sat, someone finished) - a table its opener never sat at,
+// or sat at alone and left, stays open waiting for players.
+function nightShouldAutoClose(g){
+  const seated = (g.seats || []).filter(Boolean), co = g.cashouts || {};
+  return seated.length >= 2 && seated.some(pid => pid in co) && seated.filter(pid => !(pid in co)).length <= 1;
+}
 function maybeAutoCloseNight(g){
-  const seated = (g.seats || []).filter(Boolean);
-  // Only a night that actually had a game (2+ players sat) closes on its own - a table its
-  // opener never sat at, or sat at alone and left, stays open waiting for players.
-  const shouldClose = seated.length >= 2 && seated.every(pid => pid in g.cashouts);
-  if (shouldClose && !g.closed) { g.closed = true; logGameEvent(g, "night_closed", null, null, undefined); }
+  if (nightShouldAutoClose(g) && !g.closed) { g.closed = true; logGameEvent(g, "night_closed", null, null, undefined); }
 }
 // Home-screen club card: how many tables the club has, and how many are still open.
 function clubTablesLabel(cid){
