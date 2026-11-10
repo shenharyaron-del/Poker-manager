@@ -6165,6 +6165,7 @@ function tourRegPickerHtml(g, c, t){
     ${roster.filter(p2 => !recentIds.has(p2.id)).map((p2, i) => row(p2, i + recent.length)).join("")}
   </div>`;
 }
+function tourHasCounts(P){ return !!P.lastLevel || P.standings.some(s => s.counted); }
 function tourStandingsHtml(P, myPid){
   if (!P.approved.length) return "";
   const rows = P.standings.map(({r, place, counted}) => {
@@ -6172,7 +6173,8 @@ function tourStandingsHtml(P, myPid){
     const rb = "";   // re-buys aren't shown in the standings
     return `<tr class="${r.playerId === myPid ? "me" : ""}${r.bustedAt ? " out" : ""}"><td>${place}</td><td class="nm">${esc(r.name || "")}</td><td class="ltr">${extra}<small>${rb}</small></td></tr>`;
   }).join("");
-  return `<fieldset class="leave-frame setup-frame"><legend>🏅 דירוג${P.lastLevel ? ` · נכון לסוף שלב ${P.lastLevel}` : ""}</legend>
+  // a ranking only once there are chip counts - until then it's just who's playing
+  return `<fieldset class="leave-frame setup-frame"><legend>${tourHasCounts(P) ? `🏅 דירוג${P.lastLevel ? ` · נכון לסוף שלב ${P.lastLevel}` : ""}` : "👥 שחקנים"}</legend>
     <div class="tbl-scroll${P.standings.length > 4 ? " capped st-cap" : ""}" data-keep-scroll="standings"><table class="tour-tbl st-tbl"><tbody>${rows}</tbody></table></div></fieldset>`;
 }
 let tourClockFull = false;   // "📋 מבנה מלא" under the clock
@@ -6343,7 +6345,7 @@ function renderTourClock(g, c, isAdmin){
     // business, and (a swipe to the right) going out, the standings and the blind structure
     return `<div class="ck${onBreak ? " ck-brk" : ""}">
       <div class="ck-sticky">${card}
-        <div class="ck-dots"><button type="button" class="${tourClockPage ? "" : "on"}" data-ck-page="0">שעון</button><button type="button" class="${tourClockPage ? "on" : ""}" data-ck-page="1">דירוג ומבנה</button></div></div>
+        <div class="ck-dots"><button type="button" class="${tourClockPage ? "" : "on"}" data-ck-page="0">שעון</button><button type="button" class="${tourClockPage ? "on" : ""}" data-ck-page="1">${tourHasCounts(P) ? "דירוג ומבנה" : "שחקנים ומבנה"}</button></div></div>
       <div class="ck-pages" data-ck-pages>
         <div class="ck-page">${admin}${chips ? `<div class="ck-chips">${chips}</div>` : ""}${acts}${panel || `<div class="ck-lower">${endPrompt}${dealHtml}${adminAlerts}${me}${stats}${tourPrizesHtml(t, approved.length, tourPot(g, t))}</div>`}${tools}</div>
         <div class="ck-page">${meOut}${tourStandingsHtml(P, myPid)}${tourClockBlindsHtml(k)}${tourClockFull ? `<div style="text-align:right">${tourPayReadHtml(t, approved.length)}</div>` : ""}</div>
