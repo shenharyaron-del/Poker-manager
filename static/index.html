@@ -6176,9 +6176,11 @@ function tourStandingsHtml(P, myPid){
     const extra = r.bustedAt ? `${P.fem && P.fem(r.playerId) ? "יצאה" : "יצא"} ${hhmm(r.bustedAt)}${r.bustLevel ? ` · שלב ${r.bustLevel}` : ""}` : counted ? Number(r.chips).toLocaleString("en-US") : "—";
     // re-buys and the add-on as small tags after the name - R2 / AO; a tap shows what they mean
     const nRb = (r.rebuys || []).length;
-    const tip = "\u2066R2\u2069 - עשה 2 ריביי\n\u2066AO\u2069 - קנה Add-on";
-    const tag = s => `<button type="button" class="st-tag" data-info-tip="${esc(tip)}" data-tip-ms="5000">${s}</button>`;
-    const tags = (nRb ? tag("R" + nRb) : "") + (r.addOnAt ? tag("AO") : "");
+    // each tag explains itself: R → the re-buys, AO → the add-on (in the player's gender)
+    const fem = P.fem && P.fem(r.playerId);
+    const tag = (s, tip) => `<button type="button" class="st-tag" data-info-tip="${esc(tip)}" data-tip-ms="5000">${s}</button>`;
+    const tags = (nRb ? tag("R" + nRb, `\u2066R${nRb}\u2069 - ${fem ? "עשתה" : "עשה"} ${nRb === 1 ? "ריביי אחד" : nRb + " ריביי"}`) : "")
+      + (r.addOnAt ? tag("AO", `\u2066AO\u2069 - ${fem ? "קנתה" : "קנה"} Add-on`) : "");
     return `<tr class="${r.playerId === myPid ? "me" : ""}${r.bustedAt ? " out" : ""}"><td>${place}</td><td class="nm">${esc(r.name || "")}${tags}</td><td class="ltr">${extra}</td></tr>`;
   }).join("");
   // a ranking only once there are chip counts - until then it's just who's playing
