@@ -1754,7 +1754,7 @@ html.theme-light .tour-full-link{color:#9a5f12;}
 .tour-note{font-size:13px;color:var(--muted);text-align:center;margin:6px 0 8px;}
 .tour-empty{font-size:15px;line-height:1.5;color:var(--muted);margin:0;}
 .tour-chip{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
-.tour-chip .tf-in{flex:1;min-width:0;} .tour-chip .tour-chip-cash{flex:0 0 76px;font-size:13px;color:var(--muted);white-space:nowrap;text-align:left;}
+.tour-chip .tf-in{flex:1;min-width:0;}
 .tour-chip img,.tour-chip-noimg{width:42px;height:42px;border-radius:50%;flex-shrink:0;object-fit:cover;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4));}
 .tour-chip-noimg{border:1px dashed var(--muted);}
 .tour-chip .tf-in{flex:1;}
@@ -10530,7 +10530,7 @@ function renderModal(m){
       inner = cvs.length ? `
         <fieldset class="leave-frame setup-frame"><legend>ערך כל ז'יטון בנקודות</legend>
           ${cvs.map((cv, i) => `<div class="tour-chip">${cv.image ? `<img src="${esc(cv.image)}" alt="">` : `<span class="tour-chip-noimg"></span>`}
-            <div class="tf-in"><input type="number" inputmode="numeric" data-tour-point="${cv.id}" value="${esc(String(tourChipPoints(t, cv, i, c) || ""))}"><span class="tf-unit">נק'</span></div>${parseFloat(cv.value) > 0 ? `<small class="tour-chip-cash">₪${esc(String(cv.value))} בקאש</small>` : ""}</div>`).join("")}
+            <div class="tf-in"><input type="number" inputmode="numeric" data-tour-point="${cv.id}" value="${esc(String(tourChipPoints(t, cv, i, c) || ""))}"><span class="tf-unit">נק'</span></div></div>`).join("")}
         </fieldset>`
         : `<fieldset class="leave-frame setup-frame"><legend>ערך כל ז'יטון בנקודות</legend><p class="tour-empty">עוד לא הוגדרו ז'יטונים למועדון - צלמו אותם בקאש ← ז'יטונים, ואז קבעו כאן כמה נקודות שווה כל אחד.</p></fieldset>`;
     } else {
