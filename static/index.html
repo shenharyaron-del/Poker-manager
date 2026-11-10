@@ -6291,7 +6291,7 @@ function renderTourClock(g, c, isAdmin){
     lateOpen && ["add", "הוספת שחקן", 0],
     (lateOpen || pending.length) && ["lobby", "לובי", pending.length],
     (lateOpen || aoNow || reqs.length) && ["rebuy", lateOpen && t.addOn ? "ריביי / Add-on" : lateOpen ? "ריביי" : "Add-on", reqs.length],
-    ["out", g2("הזן שחקן שיצא", "הזיני שחקן שיצא"), 0],
+    ["out", "הדחה", 0],
     // ending / a deal only once few are left and re-buys are over: 4 or fewer - 5 when more
     // than 20 started, 6 when more than 30
     !lateOpen && !dealOn && P.alive.length <= (approved.length > 30 ? 6 : approved.length > 20 ? 5 : 4) && ["end", "סיום / דיל", 0],
@@ -6314,9 +6314,9 @@ function renderTourClock(g, c, isAdmin){
         <button type="button" class="btn btn-ghost btn-block" data-tour-deal style="margin-top:8px">🤝 דיל - חלוקת הקופה בין ${P.alive.length} הנשארים</button>
         <p class="lb-note" style="margin-top:6px">בדיל כל שחקן ממלא כמה ז'יטונים נשארו לו, ואז מוצגת הצעת חלוקה.</p></div>`
     : tourPanel === "out"
-    ? `<div class="ck-panel"><div class="ck-panel-h">שחקן שיצא מהטורניר<button type="button" class="lb-cancel" data-ck-panel="">סגור</button></div>
+    ? `<div class="ck-panel"><div class="ck-panel-h">הדחת שחקן מהטורניר<button type="button" class="lb-cancel" data-ck-panel="">סגור</button></div>
         <div class="tf-in"><input type="text" data-find placeholder="חיפוש שחקן" autocomplete="off"></div>
-        <div class="cc-find-list" data-find-list>${P.alive.filter(r => !(P.key && r.chipsKey === P.key)).map((r, i) => `<div class="reg-row" data-name="${esc(String(r.name || "").toLowerCase())}">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}</div><button type="button" class="reg-out" data-ra="bust" data-pid="${esc(r.playerId)}" data-confirm="לסמן ש${esc(r.name || "")} ${P.fem(r.playerId) ? "יצאה" : "יצא"} מהטורניר?">${P.fem(r.playerId) ? "יצאה" : "יצא"}</button></div>`).join("")}</div></div>`
+        <div class="cc-find-list" data-find-list>${P.alive.filter(r => !(P.key && r.chipsKey === P.key)).map((r, i) => `<div class="reg-row" data-name="${esc(String(r.name || "").toLowerCase())}">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}</div><button type="button" class="reg-out" data-ra="bust" data-pid="${esc(r.playerId)}" data-confirm="להדיח את ${esc(r.name || "")} מהטורניר?">${g2("הדח", "הדיחי")}</button></div>`).join("")}</div></div>`
     : (() => {
         // requests first, then any registered player - for whoever has no phone
         const aoOpen = t.addOn && k.row.brk && k.row.addOn;
