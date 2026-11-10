@@ -6155,7 +6155,7 @@ function renderTourClock(g, c, isAdmin){
           const sel = tourCcFor && P.alive.find(r => r.playerId === tourCcFor);
           if (sel) return `<div class="cc-admin"><div class="cc-for-h"><b>${esc(sel.name || "")}</b>${sel.chipsKey === P.key ? ` · דווח ${Number(sel.chips).toLocaleString("en-US")}` : ""} <button type="button" class="lb-cancel" data-cc-pick="">שחקן אחר</button></div>${tourCcWidget(c, t, sel.playerId, sel.chipsKey === P.key ? sel.chips : null, P.key, level, true)}</div>`;
           return `<div class="cc-admin"><div class="tf-in"><input type="text" data-cc-find placeholder="חיפוש שחקן" autocomplete="off"></div>
-            <div class="cc-find-list">${P.alive.map(r => `<button type="button" class="reg-pick" data-cc-pick="${esc(r.playerId)}" data-name="${esc(String(r.name || "").toLowerCase())}">${tourAvatar(r.name, 0, r.playerId, g.communityId)}<span>${esc(r.name || "")}</span><small>${r.chipsKey === P.key ? "✓ " + Number(r.chips).toLocaleString("en-US") : "לא דיווח"}</small></button>`).join("")}</div></div>`;
+            <div class="cc-find-list">${P.alive.filter(r => r.chipsKey !== P.key).map(r => `<button type="button" class="reg-pick" data-cc-pick="${esc(r.playerId)}" data-name="${esc(String(r.name || "").toLowerCase())}">${tourAvatar(r.name, 0, r.playerId, g.communityId)}<span>${esc(r.name || "")}</span><small>לא דיווח</small></button>`).join("") || `<p class="lb-note">כולם כבר דיווחו</p>`}</div></div>`;
         })()}</div>`;
     }
   }
@@ -6224,7 +6224,8 @@ function renderTourClock(g, c, isAdmin){
     (lateOpen || pending.length) && ["lobby", "לובי", pending.length],
     (lateOpen || aoNow || reqs.length) && ["rebuy", lateOpen && t.addOn ? "ריביי / Add-on" : lateOpen ? "ריביי" : "Add-on", reqs.length],
     ["out", "הזן שחקן שיצא", 0],
-    !lateOpen && !dealOn && ["end", "סיום / דיל", 0],
+    // ending / a deal only once few are left (4 or fewer) and re-buys are over
+    !lateOpen && !dealOn && P.alive.length < 5 && ["end", "סיום / דיל", 0],
   ].filter(Boolean);
   if (tourPanel && !actList.some(a => a[0] === tourPanel)) tourPanel = null;
   const acts = !isAdmin ? "" : `<div class="ck-acts${actList.length === 1 ? " solo" : ""}">${actList
