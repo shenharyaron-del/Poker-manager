@@ -1908,6 +1908,10 @@ html.theme-light .lux-page.pp-other{--frame-c:#9b2c2c;}
 /* Acting for someone else (every theme): my own name/total card steps back - it's not who
    the screen is about now - and the line beside "X סיים את הערב" in the page's burgundy. */
 .lux-page.pp-other .pp-me-card{opacity:.5;box-shadow:none;}
+/* ...inside a frame whose title says how to get back (the frame and title stay full colour) */
+.pp-me-frame{margin:0 auto 12px;padding:0 6px 2px;width:fit-content;min-width:52%;max-width:100%;box-sizing:border-box;text-align:center;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+.pp-me-frame legend{margin:0 auto;}
+.pp-me-frame .pp-me-card{border:none!important;margin:0 auto;min-width:0;padding-top:2px;}
 .lux-page.pp-other .lv-line{background:linear-gradient(90deg,transparent,rgba(155,44,44,.7));}
 /* Dark theme too: acting for someone else is the same soft blush page as the light themes -
    with dark text on it (the dark theme's light text would vanish). */
@@ -8802,7 +8806,8 @@ function renderPlayerScreen(gameId){
       return `<span class="pp-me-av" style="${photo ? `background-image:url('${photo}');` : `background:url('/static/logo-watermark.png') center/112% no-repeat,linear-gradient(135deg,#46566f,#14213a);`}"></span>`;
     };
     if (viewingOther && me) {
-      return `<button type="button" class="pp-me-card" dir="rtl" data-pp-back-me title="חזרה למסך שלי">${meAv(myPlayerId)}<span class="pp-me-txt"><span class="pp-me-name"><bdi>${esc(me.name)}</bdi></span>${mineOut ? "" : `<span class="pp-total" data-player-total>₪${myTotal}</span>`}</span></button>`;
+      // framed with "הקש לחזור אליך" on its border, so it's clear how to get back
+      return `<fieldset class="leave-frame pp-me-frame" data-pp-back-me><legend>הקש לחזור אליך</legend><button type="button" class="pp-me-card" dir="rtl" title="חזרה למסך שלי">${meAv(myPlayerId)}<span class="pp-me-txt"><span class="pp-me-name"><bdi>${esc(me.name)}</bdi></span>${mineOut ? "" : `<span class="pp-total" data-player-total>₪${myTotal}</span>`}</span></button></fieldset>`;
     }
     return `<div class="pp-me-card" dir="rtl">${meAv(pid)}<span class="pp-me-txt"><span class="pp-me-name"${font ? ` style="font-size:${Math.min(font + 3, 23)}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut && !selfReturn ? ' · יצא' : ''}</span>${cashedOut ? (selfReturn ? `<button type="button" class="pp-self-return" data-self-return="${pid}">${RETURN_ICON}<span class="ret-txt">חזור למשחק</span></button>` : "") : `<span class="pp-total" data-player-total>₪${buyinTotal}</span>`}</span></div>`;
   })();
