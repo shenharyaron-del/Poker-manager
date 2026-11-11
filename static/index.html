@@ -6249,7 +6249,6 @@ function tourStandingsHtml(P, myPid, fold){
   // (each phase its own fold state - the first count opens it again)
   return fold ? tourFoldFrame(has ? "st1" : "st0", legend, body, has) : `<fieldset class="leave-frame setup-frame"><legend>${legend}</legend>${body}</fieldset>`;
 }
-let tourClockFull = false;   // "📋 מבנה מלא" under the clock
 function tourSoundOn(){ try { return localStorage.getItem("tour-sound") !== "0"; } catch (e) { return true; } }
 function renderTourClock(g, c, isAdmin){
   const k = tourClockInfo(g, c), t = k.t;
@@ -6416,7 +6415,7 @@ function renderTourClock(g, c, isAdmin){
         <div class="ck-dots"><button type="button" class="${tourClockPage ? "" : "on"}" data-ck-page="0">שעון</button><button type="button" class="${tourClockPage ? "on" : ""}" data-ck-page="1">${tourHasCounts(P) ? "דירוג ומבנה" : "שחקנים ומבנה"}</button></div></div>
       <div class="ck-pages" data-ck-pages>
         <div class="ck-page">${admin}${chips ? `<div class="ck-chips">${chips}</div>` : ""}${acts}${panel || `<div class="ck-lower">${endPrompt}${dealHtml}${adminAlerts}${me}${stats}${tourPrizesHtml(t, approved.length, tourPot(g, t))}</div>`}${tools}</div>
-        <div class="ck-page">${meOut}${tourStandingsHtml(P, myPid)}${tourClockBlindsHtml(k)}${tourClockFull ? `<div style="text-align:right">${tourPayReadHtml(t, approved.length)}</div>` : ""}</div>
+        <div class="ck-page">${meOut}${tourStandingsHtml(P, myPid)}${tourClockBlindsHtml(k)}<div style="text-align:right">${tourPayReadHtml(t, approved.length, true)}</div></div>
       </div>
     </div>`;
   }
@@ -12261,7 +12260,6 @@ function attachHandlers(){
   });
   app.querySelectorAll("[data-ck-sound]").forEach(el => el.onclick = () => { try { localStorage.setItem("tour-sound", tourSoundOn() ? "0" : "1"); } catch (e) {} if (tourSoundOn()) tourBeep(); render(); });
   app.querySelectorAll("[data-ck-fs]").forEach(el => el.onclick = () => { const d = document; if (d.fullscreenElement) d.exitFullscreen(); else if (d.documentElement.requestFullscreen) d.documentElement.requestFullscreen().catch(() => {}); });
-  app.querySelectorAll("[data-ck-full]").forEach(el => el.onclick = () => { tourClockFull = !tourClockFull; render(); });
   app.querySelectorAll("[data-ck-panel]").forEach(el => el.onclick = async () => {
     const v = el.dataset.ckPanel || null;
     // "🤝 דיל" isn't a panel: it offers the deal (the clock stops while everyone enters their chips)
