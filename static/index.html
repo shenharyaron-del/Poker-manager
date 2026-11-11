@@ -7211,7 +7211,7 @@ function playerClubStatsText(communityId, playerId){
   const lines = [
     `🃏 השתתפות: ${played.length} מתוך ${ofNights} ערבים · ${Math.round(wins / played.length * 100)}% ברווח`,
     `💰 ${total >= 0 ? "רווח כולל" : "הפסד כולל"}: ${money(total)} · ממוצע לערב: ${money(total / played.length)}`,
-    place && place <= Math.floor(eligible.length / 2) ? `🏆 מקום ${place} מתוך ${eligible.length} במועדון` : "",
+    place && place <= Math.floor(eligible.length / 2) ? `🏆 מקום ${place} מתוך ${eligible.length}` : "",
     `🔥 רצף הניצחונות הכי ארוך: ${best === 1 ? "ערב אחד" : `${best} ערבים`}`,
     `⭐ הערב הכי טוב: ${money(top.profit)} (${dm(top.g)})`,
     `🥶 הערב הכי קשה: ${money(low.profit)} (${dm(low.g)})`,
