@@ -1702,7 +1702,7 @@ html.theme-light.theme-blue .reg-me{border-color:#ffe39a;background:rgba(255,227
 /* up to 4 players, then scroll */
 .reg-list.capped{max-height:212px;overflow-y:auto;position:relative;}
 /* the read-only tables: 4 rows, then an inner scroll - like the registered list */
-.tbl-scroll.capped{max-height:212px;overflow-y:auto;position:relative;}
+.tbl-scroll.capped{max-height:212px;overflow-y:auto;position:relative;} .tbl-scroll.blinds.capped{max-height:131px;}   /* the blind structure: 3 rows shorter */
 .tbl-scroll.st-cap{max-height:156px;}
 .tbl-scroll.capped thead th{position:sticky;top:0;z-index:1;background:#0f3f2e;}
 html.theme-light .tbl-scroll.capped thead th{background:#f6eee0;}
@@ -5879,7 +5879,7 @@ function tourBlindsReadHtml(t, c){
   const nLevels = levels.filter(r => !r.brk).length, hours = Math.round((levels.estTo || levels[levels.length - 1].to) / 30) / 2;
   const speed = {1: "איטי", 2: "רגיל", 3: "מהיר"}[t.speed] || "מותאם אישית";
   return `<fieldset class="leave-frame setup-frame"><legend>מבנה בליינדים</legend>
-    <div class="tbl-scroll${tourLobbyFull.blinds ? "" : " capped"}" data-keep-scroll="blinds">
+    <div class="tbl-scroll blinds${tourLobbyFull.blinds ? "" : " capped"}" data-keep-scroll="blinds">
     <table class="tour-tbl"><thead><tr><th>רמה</th><th>טווח זמן</th><th>בליינדים</th><th>אנטה</th></tr></thead><tbody>
     ${shown.map(r => r.brk ? `<tr class="brk"><td>☕</td><td class="ltr">${r.from + 1}–${r.to}</td><td colspan="2">${r.addOn ? "הפסקה + Add-on" : "הפסקה"}</td></tr>`
       : `<tr><td>${r.level}</td><td class="ltr">${r.from ? r.from + 1 : 0}–${r.to}</td><td class="ltr">${r.sb.toLocaleString("en-US")}/${r.bb.toLocaleString("en-US")}</td><td class="ltr${r.ante ? "" : " off"}">${r.ante ? r.ante.toLocaleString("en-US") : "–"}</td></tr>`).join("")}
