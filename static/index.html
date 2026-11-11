@@ -5912,20 +5912,21 @@ function tourBlindsReadHtml(t, c){
 // count: players registered so far - their row is marked and opened, its split one place under
 // the other with each place's amount. Another row can be opened by tapping it; when a player
 // joining moves the count into another row, that row opens instead.
-function tourPayReadHtml(t, count, fold){
+function tourPayReadHtml(t, count, fold, potIn){
   const groups = [];
   for (let e = 1; e <= 200; e++) { const pl = tourPlacesPaid(e, t.payoutPct); const g = groups[groups.length - 1]; if (g && g.pl === pl) g.to = e; else groups.push({pl, from: e, to: e}); }
   const cur = count ? groups.find(g => count >= g.from && count <= g.to) : null;
   const curKey = cur ? cur.pl : 0;
   if (tourLobbyFull.payCur !== curKey) { tourLobbyFull.payCur = curKey; tourLobbyFull.payOpen = cur ? cur.pl : 2; }
   const shown = groups.slice(0, 20);   // up to 20 rows shown
-  const pot = (count || 0) * (+t.prize || 0), medals = ["🥇", "🥈", "🥉"];
+  // the real pot when given (re-buys and add-ons in it), else the entries alone
+  const pot = potIn ?? (count || 0) * (+t.prize || 0), medals = ["🥇", "🥈", "🥉"];
   // not final: the amounts grow with more players joining (and re-buys / add-ons)
   const tip = `ערך לא סופי - תלוי בכמות האנשים שיצטרפו${t.addOn ? ", בכמות הריביי וה-Add-on" : " ובכמות הריביי"}`;
   const split = g => {
     const withAmt = g === cur, places = withAmt ? Math.min(count, g.pl) : g.pl;
     const bands = tourPrizeBands(places, t.payoutModel);
-    return `<tr class="pay-detail pay-split"><td colspan="2">${withAmt ? `<div class="pay-note">סכומים לפי ${count} רשומים<button type="button" class="info-i" data-info-tip="${esc(tip)}" data-tip-ms="5000" aria-label="מידע">i</button></div>` : ""}
+    return `<tr class="pay-detail pay-split"><td colspan="2">${withAmt ? `<div class="pay-note">סכומים לפי ${count} רשומים${potIn != null && pot > count * (+t.prize || 0) ? ` · קופה ₪${Math.round(pot).toLocaleString("en-US")}` : ""}<button type="button" class="info-i" data-info-tip="${esc(tip)}" data-tip-ms="5000" aria-label="מידע">i</button></div>` : ""}
       <div class="pay-list${withAmt ? " amt" : ""}">${bands.map(b => `<span class="ic">${b.from === b.to ? (medals[b.from - 1] || "") : ""}</span><span class="lb">${b.from === b.to ? `מקום ${b.from}` : `מקומות <bdi dir="ltr">${b.from}–${b.to}</bdi>`}</span><b>${b.pct}%</b>${withAmt ? `<span class="am">₪${Math.round(pot * b.pct / 100).toLocaleString("en-US")}</span>` : ""}`).join("")}</div></td></tr>`;
   };
   const legend = `חלוקת פרסים · ${t.payoutPct}% זוכים`, body = `
@@ -6252,7 +6253,7 @@ function tourStandingsHtml(P, myPid, fold, admin){
     // re-buys and the add-on as small tags after the name - R2 / AO; a tap shows what they mean
     const nRb = (r.rebuys || []).length;
     // each tag explains itself: R → the re-buys, AO → the add-on
-    const tag = (s, tip) => `<button type="button" class="st-tag" data-info-tip="${esc(tip)}" data-tip-ms="5000">${s}</button>`;
+    const tag = (s, tip) => `<button type="button" class="st-tag" data-info-tip="${esc(tip)}" data-tip-ms="2000">${s}</button>`;
     const tags = (nRb ? tag("R" + nRb, nRb === 1 ? "ריביי אחד" : `${["", "", "שני", "שלושה", "ארבעה", "חמישה", "שישה", "שבעה", "שמונה", "תשעה", "עשרה"][nRb] || nRb} ריביי`) : "")
       + (r.addOnAt ? tag("AO", `${P.fem && P.fem(r.playerId) ? "קנתה" : "קנה"} ADD-ON`) : "");
     return `<tr class="${r.playerId === myPid ? "me" : ""}${r.bustedAt ? " out" : ""}"><td>${place}</td><td class="nm">${esc(r.name || "")}${tags}</td><td class="ltr">${extra}</td></tr>`;
@@ -6438,7 +6439,7 @@ function renderTourClock(g, c, isAdmin){
         <div class="ck-dots"><button type="button" class="${tourClockPage ? "" : "on"}" data-ck-page="0">שעון</button><button type="button" class="${tourClockPage ? "on" : ""}" data-ck-page="1">${tourHasCounts(P) ? "דירוג ומבנה" : "שחקנים ומבנה"}</button></div></div>
       <div class="ck-pages" data-ck-pages>
         <div class="ck-page">${admin}${chips ? `<div class="ck-chips">${chips}</div>` : ""}${acts}${panel || `<div class="ck-lower">${endPrompt}${dealHtml}${adminAlerts}${me}${stats}${tourPrizesHtml(t, approved.length, tourPot(g, t))}</div>`}${tools}</div>
-        <div class="ck-page">${meOut}${tourStandingsHtml(P, myPid, true, true)}${tourClockBlindsHtml(k)}<div style="text-align:right">${payFinal ? tourPayFinalHtml(t, approved.length, tourPot(g, t)) : tourPayReadHtml(t, approved.length, true)}</div></div>
+        <div class="ck-page">${meOut}${tourStandingsHtml(P, myPid, true, true)}${tourClockBlindsHtml(k)}<div style="text-align:right">${payFinal ? tourPayFinalHtml(t, approved.length, tourPot(g, t)) : tourPayReadHtml(t, approved.length, true, tourPot(g, t))}</div></div>
       </div>
     </div>`;
   }
@@ -6452,7 +6453,7 @@ function renderTourClock(g, c, isAdmin){
     ${tourPrizesHtml(t, approved.length, tourPot(g, t))}
     ${tourClockBlindsHtml(k)}
     ${tourStandingsHtml(P, myPid, true)}
-    <div style="text-align:right">${payFinal ? tourPayFinalHtml(t, approved.length, tourPot(g, t)) : tourPayReadHtml(t, approved.length, true)}</div>
+    <div style="text-align:right">${payFinal ? tourPayFinalHtml(t, approved.length, tourPot(g, t)) : tourPayReadHtml(t, approved.length, true, tourPot(g, t))}</div>
     <div class="ck-tools"><button type="button" data-ck-sound>${tourSoundOn() ? "🔊 צליל" : "🔇 צליל כבוי"}</button><button type="button" data-ck-fs>⛶ מסך מלא</button></div>
   </div>`;
 }
