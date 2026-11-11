@@ -1730,7 +1730,7 @@ html.theme-light .reg-row.me{background:rgba(242,193,78,.25);}
 .tour-pay tr.pay-detail.pay-split td{font-size:16px;color:var(--text);padding:6px 6px 10px;}
 .pay-list{display:grid;grid-template-columns:26px auto 1fr;column-gap:6px;row-gap:3px;max-width:220px;margin:0 auto;align-items:center;}
 .pay-list .ic{text-align:center;} .pay-list .lb{text-align:right;font-weight:400;}
-.pay-list.amt{grid-template-columns:26px auto auto 1fr;max-width:260px;} .pay-list .am{text-align:left;font-weight:800;color:var(--gold);direction:ltr;} html.theme-light .pay-list .am{color:#9a5f12;} html.theme-light.theme-blue .pay-list .am{color:#ffe39a;}   /* brown is muddy on the blue card */
+.pay-list.pay-final{max-width:240px;margin:2px auto 4px;} .pay-list.amt{grid-template-columns:26px auto auto 1fr;max-width:260px;} .pay-list .am{text-align:left;font-weight:800;color:var(--gold);direction:ltr;} html.theme-light .pay-list .am{color:#9a5f12;} html.theme-light.theme-blue .pay-list .am{color:#ffe39a;}   /* brown is muddy on the blue card */
 .pay-note{display:flex;align-items:center;justify-content:center;gap:4px;font-size:13px;color:var(--muted);margin:0 0 6px;} .pay-list b{text-align:left;font-weight:800;direction:ltr;}
 .tf-sub{display:block;font-size:13px;font-weight:400;color:var(--muted);}
 .fold-lg{cursor:pointer;}
@@ -5932,6 +5932,13 @@ function tourPayReadHtml(t, count, fold){
     <button type="button" class="tour-full-link" data-lobby-full="pay">${tourLobbyFull.pay ? "הסתר ▴" : "טבלה מלאה"}</button>`;
   return fold ? tourFoldFrame("pay", legend, body) : `<fieldset class="leave-frame setup-frame"><legend>${legend}</legend>${body}</fieldset>`;
 }
+// The final prizes (the pot no longer grows): each paid place and its amount, equal ones as a band
+function tourPayFinalHtml(t, count, pot){
+  const am = tourPrizeAmounts(t, count, pot), medals = ["🥇", "🥈", "🥉"], bands = [];
+  am.forEach((v, i) => { const b = bands[bands.length - 1]; if (b && i >= 3 && b.v === v) b.to = i + 1; else bands.push({from: i + 1, to: i + 1, v}); });
+  return tourFoldFrame("pay", `חלוקת פרסים · ₪${Math.round(pot).toLocaleString("en-US")}`,
+    `<div class="pay-list pay-final">${bands.map(b => `<span class="ic">${b.from === b.to ? (medals[b.from - 1] || "") : ""}</span><span class="lb">${b.from === b.to ? `מקום ${b.from}` : `מקומות <bdi dir="ltr">${b.from}–${b.to}</bdi>`}</span><span class="am">₪${b.v.toLocaleString("en-US")}</span>`).join("")}</div>`);
+}
 // The prize pot so far (registered x the prize part of the entry) and what each paid place
 // would get with this many players.
 function tourPotNowHtml(t, count){
@@ -6256,6 +6263,10 @@ function renderTourClock(g, c, isAdmin){
   const regs = g.registrations || [], approved = regs.filter(r => r.status === "approved"), pending = regs.filter(r => r.status === "pending");
   const myPid = tourMyPid(g), mine = myPid && regs.find(r => r.playerId === myPid);
   const lateOpen = k.rbLeft > 0;
+  // once re-buys, late registration and the add-on are over the pot is final: the prize frame
+  // shows just the prizes (no table of player ranges)
+  const aoIdx = k.rows.findIndex(r => r.brk && r.addOn);
+  const payFinal = !lateOpen && (!t.addOn || aoIdx < 0 || k.i > aoIdx);
   const onBreak = k.row.brk || k.cs.reason === "break";
   const P = tourPlayers(g, c, k);
   const level = k.curLevel.level;
@@ -6416,7 +6427,7 @@ function renderTourClock(g, c, isAdmin){
         <div class="ck-dots"><button type="button" class="${tourClockPage ? "" : "on"}" data-ck-page="0">שעון</button><button type="button" class="${tourClockPage ? "on" : ""}" data-ck-page="1">${tourHasCounts(P) ? "דירוג ומבנה" : "שחקנים ומבנה"}</button></div></div>
       <div class="ck-pages" data-ck-pages>
         <div class="ck-page">${admin}${chips ? `<div class="ck-chips">${chips}</div>` : ""}${acts}${panel || `<div class="ck-lower">${endPrompt}${dealHtml}${adminAlerts}${me}${stats}${tourPrizesHtml(t, approved.length, tourPot(g, t))}</div>`}${tools}</div>
-        <div class="ck-page">${meOut}${tourStandingsHtml(P, myPid, true, true)}${tourClockBlindsHtml(k)}<div style="text-align:right">${tourPayReadHtml(t, approved.length, true)}</div></div>
+        <div class="ck-page">${meOut}${tourStandingsHtml(P, myPid, true, true)}${tourClockBlindsHtml(k)}<div style="text-align:right">${payFinal ? tourPayFinalHtml(t, approved.length, tourPot(g, t)) : tourPayReadHtml(t, approved.length, true)}</div></div>
       </div>
     </div>`;
   }
@@ -6430,7 +6441,7 @@ function renderTourClock(g, c, isAdmin){
     ${tourPrizesHtml(t, approved.length, tourPot(g, t))}
     ${tourClockBlindsHtml(k)}
     ${tourStandingsHtml(P, myPid, true)}
-    <div style="text-align:right">${tourPayReadHtml(t, approved.length, true)}</div>
+    <div style="text-align:right">${payFinal ? tourPayFinalHtml(t, approved.length, tourPot(g, t)) : tourPayReadHtml(t, approved.length, true)}</div>
     <div class="ck-tools"><button type="button" data-ck-sound>${tourSoundOn() ? "🔊 צליל" : "🔇 צליל כבוי"}</button><button type="button" data-ck-fs>⛶ מסך מלא</button></div>
   </div>`;
 }
@@ -12170,17 +12181,17 @@ function attachHandlers(){
   app.querySelectorAll("[data-reg-full]").forEach(el => el.onclick = () => { tourRegFull = !tourRegFull; render(); });
   // the standings show exactly 4 rows, the rest scroll inside
   app.querySelectorAll(".st-cap").forEach(el => { const rows = [...el.querySelectorAll("tr")].slice(0, 4); el.style.maxHeight = rows.reduce((h, r) => h + r.offsetHeight, 0) + 1 + "px"; });
-  // the prize table: 5 rows high (an open split inside them counted in), and scrolled so the current row (the players registered so far) is the first
+  // the prize table: 3 rows high (plus the open split), and scrolled so the current row (the players registered so far) is the first
   // one under the header - again each time a player joining moves it to another row
   app.querySelectorAll('.tbl-scroll.capped[data-keep-scroll="pay"]').forEach(el => {
     const head = el.querySelector("thead"), hh = head ? head.offsetHeight : 0;
     const cur = el.querySelector("tr.pay-cur");
     const top0 = el.getBoundingClientRect().top - el.scrollTop, at = r => r.getBoundingClientRect().top - top0;
     const from = cur ? at(cur) - hh : 0;
-    // 5 rows from the current one (from the top with no players yet)
+    // 3 rows from the current one (from the top with no players yet)
     { const trs = [...el.querySelectorAll("tbody tr")], i0 = Math.max(0, trs.indexOf(cur));
       let h = 0, n = 0;
-      for (const tr of trs.slice(i0)) { if (tr.classList.contains("pay-more")) { if (n === 5) break; n++; } h += tr.offsetHeight; }
+      for (const tr of trs.slice(i0)) { if (tr.classList.contains("pay-more")) { if (n === 3) break; n++; } h += tr.offsetHeight; }
       el.style.maxHeight = hh + h + 1 + "px"; }
     const key = (nav.gameId || "") + ":pay";
     if (cur && tourLobbyFull.payScrolledTo !== key + ":" + tourLobbyFull.payCur) {
