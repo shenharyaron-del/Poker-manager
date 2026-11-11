@@ -12133,8 +12133,9 @@ function attachHandlers(){
   // the blind table starts at the current level (past ones are gone): 4 rows, the rest scroll
   // the blind structure, open but not full: exactly 4 rows under the header (clock and lobby)
   app.querySelectorAll("[data-ck-blinds].capped, .tbl-scroll.blinds.capped").forEach(w => {
-    const rows = [...w.querySelectorAll("tbody tr")].slice(0, 4), th = w.querySelector("thead");
-    w.style.maxHeight = (th ? th.offsetHeight : 0) + rows.reduce((h, r) => h + r.offsetHeight, 0) + 1 + "px"; });
+    // measured to the 4th row's bottom edge (the table's own top margin included)
+    const rows = w.querySelectorAll("tbody tr"), last = rows[Math.min(3, rows.length - 1)];
+    if (last) w.style.maxHeight = Math.ceil(last.getBoundingClientRect().bottom - w.getBoundingClientRect().top + w.scrollTop) + 1 + "px"; });
   { const cardEl = app.querySelector(".ck-sticky .ck-card");
     if (cardEl) { if (tourCardHFor !== nav.gameId + ":" + innerWidth) { tourCardH = 0; tourCardHFor = nav.gameId + ":" + innerWidth; }
       cardEl.style.minHeight = ""; tourCardH = Math.max(tourCardH, cardEl.offsetHeight); cardEl.style.minHeight = tourCardH + "px"; } }
@@ -12190,9 +12191,10 @@ function attachHandlers(){
     const from = cur ? at(cur) - hh : 0;
     // 3 rows from the current one (from the top with no players yet)
     { const trs = [...el.querySelectorAll("tbody tr")], i0 = Math.max(0, trs.indexOf(cur));
-      let h = 0, n = 0;
-      for (const tr of trs.slice(i0)) { if (tr.classList.contains("pay-more")) { if (n === 3) break; n++; } h += tr.offsetHeight; }
-      el.style.maxHeight = hh + h + 1 + "px"; }
+      let last = null, n = 0;
+      for (const tr of trs.slice(i0)) { if (tr.classList.contains("pay-more")) { if (n === 3) break; n++; } last = tr; }
+      // from the current row (scrolled to just under the header) to the 3rd row's bottom edge
+      if (last) el.style.maxHeight = Math.ceil(hh + last.getBoundingClientRect().bottom - (trs[i0] || last).getBoundingClientRect().top) + 2 + "px"; }
     const key = (nav.gameId || "") + ":pay";
     if (cur && tourLobbyFull.payScrolledTo !== key + ":" + tourLobbyFull.payCur) {
       tourLobbyFull.payScrolledTo = key + ":" + tourLobbyFull.payCur;
