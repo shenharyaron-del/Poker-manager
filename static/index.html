@@ -1733,6 +1733,8 @@ html.theme-light .reg-row.me{background:rgba(242,193,78,.25);}
 .pay-list.amt{grid-template-columns:26px auto auto 1fr;max-width:260px;} .pay-list .am{text-align:left;font-weight:800;color:var(--gold);direction:ltr;} html.theme-light .pay-list .am{color:#9a5f12;} html.theme-light.theme-blue .pay-list .am{color:#ffe39a;}   /* brown is muddy on the blue card */
 .pay-note{display:flex;align-items:center;justify-content:center;gap:4px;font-size:13px;color:var(--muted);margin:0 0 6px;} .pay-list b{text-align:left;font-weight:800;direction:ltr;}
 .tf-sub{display:block;font-size:13px;font-weight:400;color:var(--muted);}
+.fold-lg{cursor:pointer;} .fold-arr{font-size:.85em;margin-right:4px;}
+.fold-shut{padding-top:2px!important;padding-bottom:4px!important;min-height:0!important;cursor:pointer;}
 .tour-full-link{display:block;margin:8px auto 0;background:none;border:none;font:inherit;font-size:15px;font-weight:700;color:var(--gold);text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
 html.theme-light .tour-full-link{color:#9a5f12;}
 .tf-seg{display:flex;border:1px solid var(--gold);border-radius:10px;overflow:hidden;}
@@ -5840,6 +5842,14 @@ function tourSummaryHtml(t){
 }
 // ---------- a tournament night: the player's lobby and the admin's registration screen ----------
 let tourLobbyFull = {blinds: false, pay: false, payOpen: 0};
+// The lobby's three tables (registered / blinds / prizes) start folded to their title: ▾ opens
+// the short list, ▴ in the title folds it back.
+let tourLobbyOpen = {reg: false, blinds: false, pay: false};
+function tourFoldFrame(key, legend, body){
+  return tourLobbyOpen[key]
+    ? `<fieldset class="leave-frame setup-frame"><legend class="fold-lg" data-lobby-fold="${key}">${legend} <span class="fold-arr">▴</span></legend>${body}</fieldset>`
+    : `<fieldset class="leave-frame setup-frame fold-shut" data-lobby-fold="${key}"><legend class="fold-lg">${legend} <span class="fold-arr">▾</span></legend></fieldset>`;
+}
 const tourInnerScroll = {};   // the tables' inner scroll positions, kept across re-renders   // the read-only tables' "טבלה מלאה"
 function tourSmallChip(c, t){
   const small = Math.min(...((c && c.chipValues) || []).map((cv, i) => tourChipPoints(t, cv, i, c) || Infinity), Infinity);
@@ -5878,19 +5888,18 @@ function tourBlindsReadHtml(t, c){
   const shown = lv15 >= 0 ? levels.slice(0, lv15 + 1) : levels;
   const nLevels = levels.filter(r => !r.brk).length, hours = Math.round((levels.estTo || levels[levels.length - 1].to) / 30) / 2;
   const speed = {1: "איטי", 2: "רגיל", 3: "מהיר"}[t.speed] || "מותאם אישית";
-  return `<fieldset class="leave-frame setup-frame"><legend>מבנה בליינדים</legend>
+  return tourFoldFrame("blinds", "מבנה בליינדים", `
     <div class="tbl-scroll blinds${tourLobbyFull.blinds ? "" : " capped"}" data-keep-scroll="blinds">
     <table class="tour-tbl"><thead><tr><th>רמה</th><th>טווח זמן</th><th>בליינדים</th><th>אנטה</th></tr></thead><tbody>
     ${shown.map(r => r.brk ? `<tr class="brk"><td>☕</td><td class="ltr">${r.from + 1}–${r.to}</td><td colspan="2">${r.addOn ? "הפסקה + Add-on" : "הפסקה"}</td></tr>`
       : `<tr><td>${r.level}</td><td class="ltr">${r.from ? r.from + 1 : 0}–${r.to}</td><td class="ltr">${r.sb.toLocaleString("en-US")}/${r.bb.toLocaleString("en-US")}</td><td class="ltr${r.ante ? "" : " off"}">${r.ante ? r.ante.toLocaleString("en-US") : "–"}</td></tr>`).join("")}
     </tbody></table></div>
-    ${cut >= 0 ? `<button type="button" class="tour-full-link" data-lobby-full="blinds">${tourLobbyFull.blinds ? "הסתר ▴" : `טבלה מלאה · סיום משוער כ-${hours} שעות ▾`}</button>` : ""}
-  </fieldset>`;
+    ${cut >= 0 ? `<button type="button" class="tour-full-link" data-lobby-full="blinds">${tourLobbyFull.blinds ? "הסתר ▴" : `טבלה מלאה · סיום משוער כ-${hours} שעות`}</button>` : ""}`);
 }
 // count: players registered so far - their row is marked and opened, its split one place under
 // the other with each place's amount. Another row can be opened by tapping it; when a player
 // joining moves the count into another row, that row opens instead.
-function tourPayReadHtml(t, count){
+function tourPayReadHtml(t, count, fold){
   const groups = [];
   for (let e = 1; e <= 200; e++) { const pl = tourPlacesPaid(e, t.payoutPct); const g = groups[groups.length - 1]; if (g && g.pl === pl) g.to = e; else groups.push({pl, from: e, to: e}); }
   const cur = count ? groups.find(g => count >= g.from && count <= g.to) : null;
@@ -5906,7 +5915,7 @@ function tourPayReadHtml(t, count){
     return `<tr class="pay-detail pay-split"><td colspan="2">${withAmt ? `<div class="pay-note">סכומים לפי ${count} רשומים<button type="button" class="info-i" data-info-tip="${esc(tip)}" data-tip-ms="5000" aria-label="מידע">i</button></div>` : ""}
       <div class="pay-list${withAmt ? " amt" : ""}">${bands.map(b => `<span class="ic">${b.from === b.to ? (medals[b.from - 1] || "") : ""}</span><span class="lb">${b.from === b.to ? `מקום ${b.from}` : `מקומות <bdi dir="ltr">${b.from}–${b.to}</bdi>`}</span><b>${b.pct}%</b>${withAmt ? `<span class="am">₪${Math.round(pot * b.pct / 100).toLocaleString("en-US")}</span>` : ""}`).join("")}</div></td></tr>`;
   };
-  return `<fieldset class="leave-frame setup-frame"><legend>חלוקת פרסים · ${t.payoutPct}% זוכים</legend>
+  const legend = `חלוקת פרסים · ${t.payoutPct}% זוכים`, body = `
     <div class="tbl-scroll${tourLobbyFull.pay ? "" : " capped"}" data-keep-scroll="pay">
     <table class="tour-tbl tour-pay"><thead><tr><th>משתתפים</th><th>מקומות זוכים</th></tr></thead><tbody>
     ${shown.map(g => {
@@ -5914,8 +5923,8 @@ function tourPayReadHtml(t, count){
       return `<tr class="pay-more${g === cur ? " pay-cur" : ""}${open ? " open" : ""}" data-lobby-pay="${g.pl}"><td class="ltr">${g.from}–${g.to}</td><td>${g.pl}</td></tr>` + (open ? split(g) : "");
     }).join("")}
     </tbody></table></div>
-    <button type="button" class="tour-full-link" data-lobby-full="pay">${tourLobbyFull.pay ? "הסתר ▴" : "טבלה מלאה ▾"}</button>
-  </fieldset>`;
+    <button type="button" class="tour-full-link" data-lobby-full="pay">${tourLobbyFull.pay ? "הסתר ▴" : "טבלה מלאה"}</button>`;
+  return fold ? tourFoldFrame("pay", legend, body) : `<fieldset class="leave-frame setup-frame"><legend>${legend}</legend>${body}</fieldset>`;
 }
 // The prize pot so far (registered x the prize part of the entry) and what each paid place
 // would get with this many players.
@@ -6437,15 +6446,14 @@ function tourRegNameHtml(g, t, r, showNew){
 // The registered list (4 rows, scroll, "רשימה מלאה"); actions only on the admin's screen.
 function tourRegListHtml(g, approved, rowTail){
   const t = Object.assign({}, TOUR_DEFAULTS, g.tournamentSettings || {}), me = tourMyPid(g);
-  return !approved.length ? "" : `<fieldset class="leave-frame setup-frame"><legend>✓ רשומים (${approved.length})</legend>
+  return !approved.length ? "" : tourFoldFrame("reg", `✓ רשומים (${approved.length})`, `
     <div class="reg-list${approved.length > 4 && !tourRegFull ? " capped" : ""}">
     ${approved.map((r, i) => `<div class="reg-row${r.bustedAt ? " out" : ""}${r.playerId === me ? " me" : ""}">${r.playerId === me
         // my own picture: tap to change it (the profile window, with the avatar picker)
         ? `<button type="button" class="reg-av-edit" data-tour-avatar title="החלפת תמונה">${tourAvatar(r.name, i, r.playerId, g.communityId)}<span class="reg-av-pen">✎</span></button>`
         : tourAvatar(r.name, i, r.playerId, g.communityId)}${tourRegNameHtml(g, t, r, !!rowTail)}${rowTail ? rowTail(r) : ""}</div>`).join("")}
     </div>
-    ${approved.length > 4 ? `<button type="button" class="tour-full-link" data-reg-full>${tourRegFull ? "הסתר ▴" : `רשימה מלאה (${approved.length}) ▾`}</button>` : ""}
-  </fieldset>`;
+    ${approved.length > 4 ? `<button type="button" class="tour-full-link" data-reg-full>${tourRegFull ? "הסתר ▴" : `רשימה מלאה (${approved.length})`}</button>` : ""}`);
 }
 let tourAdminView = null;
 let tourRegFull = false;   // the registered list opened in full
@@ -6545,7 +6553,7 @@ function renderTourGame(g, c){
       <button type="button" class="btn btn-ghost btn-block tour-start-btn" data-tour-start ${approved.length >= 2 ? "" : "disabled"}>▶ התחל טורניר</button>
       ${approved.length >= 2 ? "" : `<div class="lb-note" style="margin-top:0">אפשר להתחיל כשיש לפחות 2 רשומים</div>`}
       ${tourRegListHtml(g, approved, r => `<button type="button" class="reg-rm" data-reg-remove="${esc(r.playerId)}">הסר</button>`)}
-      ${tourBlindsReadHtml(t, c)}${tourPayReadHtml(t, approved.length)}
+      ${tourBlindsReadHtml(t, c)}${tourPayReadHtml(t, approved.length, true)}
     </div>`;
   }
   const myPid = tourMyPid(g);
@@ -6560,7 +6568,7 @@ function renderTourGame(g, c){
     ${status}
     ${tourPotNowHtml(t, approved.length)}
     ${tourRegListHtml(g, approved)}
-    ${mine && mine.status === "approved" ? "" : tourInfoHtml(t)}${tourBlindsReadHtml(t, c)}${tourPayReadHtml(t, approved.length)}
+    ${mine && mine.status === "approved" ? "" : tourInfoHtml(t)}${tourBlindsReadHtml(t, c)}${tourPayReadHtml(t, approved.length, true)}
   </div>`;
 }
 // The tournament screen has three uses: the club's profile (default), a new table's settings
@@ -12183,6 +12191,7 @@ function attachHandlers(){
     tip.style.left = Math.max(8, Math.min(window.innerWidth - tip.offsetWidth - 8, r.left + r.width / 2 - tip.offsetWidth / 2)) + "px";
     setTimeout(() => { tip.classList.add("out"); setTimeout(() => tip.remove(), 300); }, Number(el.dataset.tipMs) || 3000);
   });
+  app.querySelectorAll("[data-lobby-fold]").forEach(el => el.onclick = () => { const k = el.dataset.lobbyFold; tourLobbyOpen[k] = !tourLobbyOpen[k]; render(); });
   app.querySelectorAll("[data-lobby-full]").forEach(el => el.onclick = () => { tourLobbyFull[el.dataset.lobbyFull] = !tourLobbyFull[el.dataset.lobbyFull]; render(); });
   app.querySelectorAll("[data-tour-register]").forEach(el => el.onclick = () => tourAct(el, async () => {
     const g = getGame(tourGid), c = getCommunity(g.communityId);
