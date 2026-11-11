@@ -8308,9 +8308,19 @@ async function inviteToGame(gameId){
   // Straight to this table, with the club's code riding along so someone new joins the
   // club first (see the invite handling at startup), then sits down here.
   const url = gameInviteUrl(g, c);
-  const text = `הצטרפו אליי למשחק פוקר ב${c.name} - ${g.name || ilDate(g.date)}`;
+  // The text: a tournament's day, date and entry; a cash night just the club (the club's name
+  // between * - bold on WhatsApp). The link follows on its own line.
+  const isTour = g.gameType === "tournament";
+  let text;
+  if (isTour) {
+    const t = Object.assign({}, TOUR_DEFAULTS, g.tournamentSettings || {}), d = g.date ? new Date(g.date) : null;
+    const when = d && !isNaN(d) ? `${["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"][d.getDay()]} ${d.getDate()}.${d.getMonth() + 1} · ` : "";
+    text = `🏆 טורניר פוקר – *${c.name}*\n${when}כניסה \u2066₪${tourEntryTotal(t).toLocaleString("en-US")}\u2069\nהרשמה 👇`;
+  } else {
+    text = `🃏 ערב פוקר במועדון *${c.name}*\nשולחן פתוח, להצטרפות 👇`;
+  }
   if (navigator.share) {
-    try { await navigator.share({title: "הזמנה למשחק פוקר", text, url}); } catch(err) { /* user cancelled the share sheet */ }
+    try { await navigator.share({title: isTour ? "הזמנה לטורניר פוקר" : "הזמנה לערב פוקר", text, url}); } catch(err) { /* user cancelled the share sheet */ }
   } else if (navigator.clipboard && navigator.clipboard.writeText) {
     try { await navigator.clipboard.writeText(url); showAlert("הקישור הועתק! שלחו אותו לשחקן."); }
     catch(err) { showAlert(url); }
