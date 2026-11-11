@@ -7206,7 +7206,7 @@ function playerClubStatsText(communityId, playerId){
   const timeLine = timed.length ? `⏱️ ${totalTxt}${perHour} · ממוצע ${Math.floor(avgMin / 60)}:${String(avgMin % 60).padStart(2, "0")}` : "";
   const arrows = played.slice(-5).reverse().map(r => r.profit > 0.5 ? "⬆️" : r.profit < -0.5 ? "⬇️" : "➖").join("");
   const lines = [
-    `🃏 ${played.length} מתוך ${ofNights} ערבים · ${Math.round(wins / played.length * 100)}% ברווח`,
+    `🃏 השתתפות: ${played.length} מתוך ${ofNights} ערבים · ${Math.round(wins / played.length * 100)}% ברווח`,
     `💰 ${total >= 0 ? "רווח כולל" : "הפסד כולל"}: ${money(total)} · ממוצע לערב: ${money(total / played.length)}`,
     place && place <= Math.floor(eligible.length / 2) ? `🏆 מקום ${place} מתוך ${eligible.length} במועדון` : "",
     `🔥 רצף הניצחונות הכי ארוך: ${best === 1 ? "ערב אחד" : `${best} ערבים`}`,
