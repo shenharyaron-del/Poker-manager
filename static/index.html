@@ -10686,7 +10686,7 @@ function renderModal(m){
         </fieldset>
         <fieldset class="leave-frame setup-frame"><legend>חלוקת פרסים (Payout Structure)</legend>
           <div class="tf"><span>אחוז הזוכים</span>${seg("payoutPct", [[10, "10%"], [12, "12%"], [15, "15%"], [20, "20%"]], t.payoutPct)}</div>
-          <div class="tf"><span>מודל חלוקה</span>${seg("payoutModel", [[1, "מדורגת"], [2, "שטוחה"]], t.payoutModel || 1)}</div>
+          <div class="tf"><span>מודל חלוקה<button type="button" class="info-i" data-info-tip="${esc("מדורגת - פרס ראשון גדול, כמו בטורנירים חיים (3 זוכים: \u206650/30/20\u2069)\nשטוחה - הפרסים קרובים יותר, יותר כסף למקומות הנמוכים (3 זוכים: \u206643/32/24\u2069)")}" data-tip-ms="7000" aria-label="מידע">i</button></span>${seg("payoutModel", [[1, "מדורגת"], [2, "שטוחה"]], t.payoutModel || 1)}</div>
           <table class="tour-tbl tour-pay"><thead><tr><th>משתתפים</th><th>מקומות זוכים</th></tr></thead><tbody>
             ${(t.payFull ? groups : groups.slice(0, 5)).map(g => {
               // tap a row: its split opens under it, one place under the other (the medals in a
