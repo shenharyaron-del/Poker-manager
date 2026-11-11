@@ -1698,6 +1698,7 @@ html.theme-light .en-mv button{background:rgba(255,255,255,.6);} .en-mv button:d
 .tour-pay tr.pay-detail.pay-now td{background:rgba(242,193,78,.07);text-align:center;color:var(--text);font-size:14.5px;}
 .reg-me{padding:6px 16px;border-radius:999px;border:1.5px solid #3fb383;background:rgba(63,179,131,.12);color:#6ee7b7;font:inherit;font-weight:700;font-size:15px;cursor:pointer;}
 html.theme-light .reg-me{color:#047857;}
+html.theme-light.theme-blue .reg-me{border-color:#ffe39a;background:rgba(255,227,154,.16);color:#ffe39a;}
 /* up to 4 players, then scroll */
 .reg-list.capped{max-height:212px;overflow-y:auto;position:relative;}
 /* the read-only tables: 4 rows, then an inner scroll - like the registered list */
@@ -1729,7 +1730,7 @@ html.theme-light .reg-row.me{background:rgba(242,193,78,.25);}
 .tour-pay tr.pay-detail.pay-split td{font-size:16px;color:var(--text);padding:6px 6px 10px;}
 .pay-list{display:grid;grid-template-columns:26px auto 1fr;column-gap:6px;row-gap:3px;max-width:220px;margin:0 auto;align-items:center;}
 .pay-list .ic{text-align:center;} .pay-list .lb{text-align:right;font-weight:400;}
-.pay-list.amt{grid-template-columns:26px auto auto 1fr;max-width:260px;} .pay-list .am{text-align:left;font-weight:800;color:var(--gold);direction:ltr;} html.theme-light .pay-list .am{color:#9a5f12;}
+.pay-list.amt{grid-template-columns:26px auto auto 1fr;max-width:260px;} .pay-list .am{text-align:left;font-weight:800;color:var(--gold);direction:ltr;} html.theme-light .pay-list .am{color:#9a5f12;} html.theme-light.theme-blue .pay-list .am{color:#ffe39a;}   /* brown is muddy on the blue card */
 .pay-note{display:flex;align-items:center;justify-content:center;gap:4px;font-size:13px;color:var(--muted);margin:0 0 6px;} .pay-list b{text-align:left;font-weight:800;direction:ltr;}
 .tf-sub{display:block;font-size:13px;font-weight:400;color:var(--muted);}
 .tour-full-link{display:block;margin:8px auto 0;background:none;border:none;font:inherit;font-size:15px;font-weight:700;color:var(--gold);text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
@@ -6538,7 +6539,7 @@ function renderTourGame(g, c){
       ${(() => { const mp = tourMyPid(g); return mp && approved.some(r => r.playerId === mp) ? "" : tourInfoHtml(t); })()}
       ${(() => {   // the admin registers themself (only while not registered yet)
         const myPid = tourMyPid(g);
-        return myPid && approved.some(r => r.playerId === myPid) ? "" : `<div style="text-align:center;margin:0 0 10px;"><button type="button" class="reg-me" data-reg-me>＋ רשום אותי</button></div>`;
+        return myPid && approved.some(r => r.playerId === myPid) ? "" : `<div style="text-align:center;margin:0 0 10px;"><button type="button" class="reg-me" data-reg-me>רשום אותי</button></div>`;
       })()}
       <div class="ad-btns"><button type="button" class="btn btn-ghost" data-reg-add>＋ רישום שחקן</button><button type="button" class="btn btn-ghost" data-invite-game="${g.id}">📤 הזמנת שחקנים</button></div>
       <button type="button" class="btn btn-ghost btn-block tour-start-btn" data-tour-start ${approved.length >= 2 ? "" : "disabled"}>▶ התחל טורניר</button>
