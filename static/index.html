@@ -5817,12 +5817,14 @@ function tourRebuyText(t){
 // The new-table window's short summary of a tournament's settings.
 function tourSummaryHtml(t){
   const total = (+t.fee || 0) + (+t.prize || 0), n = v => Number(v || 0).toLocaleString("en-US");
-  const speed = {1: "איטי", 2: "רגיל", 3: "מהיר"}[t.speed] || "מותאם אישית";
   const ante = {0.25: "¼ שמאל", 0.5: "½ שמאל", 1: "שמאל"}[t.ante] || "ללא";
   const addOnPrice = t.addOnPrice ?? total;
-  return `<div class="l">כניסה <b>₪${n(total)}</b> (${n(t.prize)} לפרס + ${n(t.fee)}) · <b>${n(t.chips)}</b> ז'יטונים</div>
+  // the chips on a line of their own, with the early-registration bonus (a share of the stack)
+  const early = Math.round((+t.chips || 0) * (+t.early || 0) / 100);
+  return `<div class="l">כניסה <b>₪${n(total)}</b> (${n(t.prize)} לפרס + ${n(t.fee)})</div>
+    <div class="l"><b>${n(t.chips)}</b> ז'יטונים${early ? ` + <b>${n(early)}</b> להרשמה מוקדמת` : ""}</div>
     <div class="l">${tourRebuyText(t)}${t.addOn ? ` · <b>Add-on</b> ₪${n(addOnPrice)}` : ""}</div>
-    <div class="l">קצב <b>${speed}</b> · ${t.level} דק' לשלב · ${t.breakLen ? `הפסקה אחרי ${tourSlText(Math.max(t.level, t.breakEvery) - t.breakLen, "דק' משחק")}` : "ללא הפסקות"}</div>
+    <div class="l">${t.level} דק' לשלב · ${t.breakLen ? `הפסקה אחרי ${tourSlText(Math.max(t.level, t.breakEvery) - t.breakLen, "דק' משחק")}` : "ללא הפסקות"}</div>
     <div class="l">אנטה ${ante} · <b>${t.payoutPct}%</b> זוכים</div>`;
 }
 // ---------- a tournament night: the player's lobby and the admin's registration screen ----------
