@@ -7160,6 +7160,51 @@ function playerNetProfit(communityId, playerId){
   });
   return { net, count };
 }
+// A player's cash stats in the club, as a WhatsApp message (the super admin sends it from
+// a night's "סיכום ערב"). Nights = the club's cash nights that were played (someone
+// finished), from this player's first one on.
+function playerClubStatsText(communityId, playerId){
+  const c = getCommunity(communityId), roster = (c && c.roster) || [];
+  const nights = gamesForCommunity(communityId).filter(g => g.gameType !== "tournament" && Object.keys(g.cashouts || {}).length)
+    .slice().sort((a, b) => (a.date || "") < (b.date || "") ? -1 : (a.date || "") > (b.date || "") ? 1 : 0);
+  const pidIn = (g, id) => { if ((g.cashouts || {})[id]) return id;
+    const row = roster.find(r => r.id === id), ids = new Set(roster.map(r => r.id));
+    return row ? ((g.players || []).find(pl => !ids.has(pl.id) && g.cashouts[pl.id] && sameName(pl.name, row.name)) || {}).id : null; };
+  const bought = (g, id) => (g.buyins || g.buyinTotals || []).filter(b => b.playerId === id).reduce((s, b) => s + (b.amount || 0), 0);
+  // re-buys in ₪: everything bought after the first buy-in (only where each buy-in is known)
+  const rebuyOf = (g, id) => { if (!g.buyins) return null; const bs = g.buyins.filter(b => b.playerId === id).sort((a, b) => (a.ts || 0) - (b.ts || 0)); return bs.slice(1).reduce((s, b) => s + (b.amount || 0), 0); };
+  const resultsFor = id => nights.map(g => { const pid = pidIn(g, id); return pid ? {g, profit: (g.cashouts[pid].amount || 0) - bought(g, pid), rebuy: rebuyOf(g, pid)} : null; });
+  const mine = resultsFor(playerId), played = mine.filter(Boolean);
+  if (!played.length) return null;
+  const first = mine.findIndex(Boolean), ofNights = nights.length - first;
+  const wins = played.filter(r => r.profit > 0.5).length;
+  const total = played.reduce((s, r) => s + r.profit, 0);
+  let streak = 0, best = 0; mine.slice(first).forEach(r => { if (r && r.profit > 0.5) { streak++; best = Math.max(best, streak); } else if (r) streak = 0; });
+  const top = played.reduce((a, r) => r.profit > a.profit ? r : a, played[0]);
+  const low = played.reduce((a, r) => r.profit < a.profit ? r : a, played[0]);
+  const rb = played.filter(r => r.rebuy !== null), lastRb = rb.length ? rb[rb.length - 1].rebuy : null;
+  const avgRb = rb.length ? rb.reduce((s, r) => s + r.rebuy, 0) / rb.length : null;
+  // ₪ amounts kept left-to-right inside the Hebrew line (₪-260 never turns around)
+  const money = v => { const n = Math.round(v); return `\u2066₪${n < 0 ? "-" : ""}${Math.abs(n).toLocaleString("en-US")}\u2069`; };
+  const dm = g => { const d = g.date ? new Date(g.date) : null; return d && !isNaN(d) ? `${d.getDate()}.${d.getMonth() + 1}` : ""; };
+  // the club's place: by total profit, among those who played at least 35% of the nights -
+  // shown only to who is in the top half
+  const eligible = roster.map(r => { const rs = resultsFor(r.id).filter(Boolean); return {id: r.id, n: rs.length, total: rs.reduce((s, x) => s + x.profit, 0)}; })
+    .filter(x => nights.length && x.n / nights.length >= 0.35).sort((a, b) => b.total - a.total);
+  const place = eligible.findIndex(x => x.id === playerId) + 1;
+  const arrows = played.slice(-5).reverse().map(r => r.profit > 0.5 ? "⬆️" : r.profit < -0.5 ? "⬇️" : "➖").join("");
+  const lines = [
+    `🃏 ${played.length} מתוך ${ofNights} ערבים · ${Math.round(wins / played.length * 100)}% ברווח`,
+    `💰 ${total >= 0 ? "רווח כולל" : "הפסד כולל"}: ${money(total)} · ממוצע לערב: ${money(total / played.length)}`,
+    place && place <= Math.floor(eligible.length / 2) ? `🏆 מקום ${place} מתוך ${eligible.length} במועדון` : "",
+    `🔥 רצף הניצחונות הכי ארוך: ${best === 1 ? "ערב אחד" : `${best} ערבים`}`,
+    `⭐ הערב הכי טוב: ${money(top.profit)} (${dm(top.g)})`,
+    `🥶 הערב הכי קשה: ${money(low.profit)} (${dm(low.g)})`,
+    lastRb !== null ? `🔁 ריביי בערב האחרון: ${money(lastRb)} · ממוצע לערב: ${money(avgRb)}` : "",
+    `📈 ${Math.min(5, played.length)} ערבים אחרונים: ${arrows}`,
+  ];
+  return lines.filter(Boolean).join("\n");
+}
 function netBadge(stat){
   const { net, count } = stat;
   if (count === 0) return `<span class="balance-line balance-neutral" style="margin-top:0;">עדיין לא שיחק</span>`;
@@ -11713,7 +11758,9 @@ function renderModal(m){
     } else if (!m.data) {
       body = `<p style="color:var(--muted);text-align:center;">טוען...</p>`;
     } else {
-      body = nightSummaryHtml(g, m.playerId, m.data.buyins, m.data.deleted, true);
+      body = nightSummaryHtml(g, m.playerId, m.data.buyins, m.data.deleted, true)
+        + (isSuperAdmin() && g.gameType !== "tournament" && g.communityId
+          ? `<button type="button" class="btn btn-ghost btn-block" data-share-player-stats="${esc(m.playerId)}" style="margin-top:12px">📤 שליחת סטטיסטיקה בוואטסאפ</button>` : "");
     }
   } else if (m.type === "returnToGamePayment") {
     const g = getGame(m.gameId);
@@ -12464,6 +12511,13 @@ function attachHandlers(){
     const qrBtn = app.querySelector("[data-invite-qr]");
     if (qrBtn) qrBtn.onclick = () => updateModal({showQr: true});
   }
+  // the super admin sends a player's club stats (cash) - see playerClubStatsText
+  app.querySelectorAll("[data-share-player-stats]").forEach(el => el.onclick = async () => {
+    const g = getGame(modal && modal.gameId), text = g && playerClubStatsText(g.communityId, el.dataset.sharePlayerStats);
+    if (!text) { showAlert("אין עדיין נתונים לשחקן הזה."); return; }
+    if (navigator.share) { try { await navigator.share({text}); } catch (e) { /* cancelled */ } }
+    else window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank", "noopener");
+  });
   const shareAppBtn = app.querySelector("[data-share-app]");
   if (shareAppBtn) shareAppBtn.onclick = async () => {
     const url = location.origin + location.pathname;
