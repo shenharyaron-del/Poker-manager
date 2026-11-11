@@ -1653,7 +1653,8 @@ html.theme-light .rp-go{border-color:#9a5f12;color:#9a5f12;}
 html.theme-light .rp-new{border-color:#9a5f12;}
 .rp-new .t{font-size:16.5px;font-weight:800;} .rp-new .t b{color:var(--gold);} html.theme-light .rp-new .t b{color:#9a5f12;}
 .rp-new .r{display:flex;gap:8px;margin-top:8px;align-items:center;} .rp-new .r .gender-seg{flex:0 0 auto;}
-.rp-new.soft{background:transparent;padding:7px 12px;} .rp-new.soft .t{font-size:15px;font-weight:600;color:var(--muted);}
+.rp-new.soft{background:transparent;padding:7px 12px;}
+.rp-need{margin-top:6px;font-size:14px;font-weight:700;color:#f3c26b;} html.theme-light .rp-need{color:#b45309;} .rp-new.soft .t{font-size:15px;font-weight:600;color:var(--muted);}
 .rp-toast{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:12px;background:rgba(63,179,131,.14);border:1.5px solid #3fb383;color:#6ee7b7;font-weight:800;font-size:15.5px;margin:0 0 8px;}
 html.theme-light .rp-toast{color:#047857;}
 .rp-toast button{margin-inline-start:auto;background:none;border:none;color:inherit;text-decoration:underline;font:inherit;font-size:14px;font-weight:600;cursor:pointer;}
@@ -6184,7 +6185,8 @@ function tourRegPickerHtml(g, c, t){
     <div class="rp-search"><span class="ic">🔍</span><input type="text" data-rp-q placeholder="חיפוש שחקן או שם חדש" autocomplete="off"></div>
     <div class="rp-hint" data-rp-hint>כתבו שם - נחפש במועדון. לא נמצא? אפשר להוסיף שחקן חדש. כל רישום = שילם ₪${nn2(total)}.</div>
     <div class="rp-new" data-rp-new style="display:none"><div class="t">אין במועדון שחקן בשם <b data-rp-newname></b></div>
-      <div class="r"><div class="gender-seg" role="group" aria-label="מין"><button type="button" class="on" data-tr-gender="male" title="זכר">ז</button><button type="button" data-tr-gender="female" title="נקבה">נ</button></div><button type="button" class="btn btn-primary" data-tr-add style="flex:1">＋ הוסף ורשום · ₪${nn2(total)}</button></div></div>
+      <div class="r"><div class="gender-seg" role="group" aria-label="מין"><button type="button" class="on" data-tr-gender="male" title="זכר">ז</button><button type="button" data-tr-gender="female" title="נקבה">נ</button></div><button type="button" class="btn btn-primary" data-tr-add style="flex:1">＋ הוסף ורשום · ₪${nn2(total)}</button></div>
+      <div class="rp-need" data-rp-need style="display:none">לשחקן חדש צריך שם פרטי ושם משפחה</div></div>
     <div class="rp-new soft" data-rp-soft style="display:none"><div class="t">לא ברשימה? <button type="button" class="lb-cancel" data-rp-addsoft>הוסף את "<span data-rp-softname></span>" כשחקן חדש</button></div></div>
     <div class="rp-sec" data-rp-sec="found" style="display:none"></div>
     <div class="rp-sec" data-rp-sec="maybe" style="display:none">אולי התכוונת ל…</div>
@@ -12358,6 +12360,9 @@ function attachHandlers(){
         // as a small link while what's typed still matches someone
         const strong = !exact && raw.length >= 2 && (!found.length || words.length >= 2);
         show(box.querySelector("[data-rp-new]"), strong); box.querySelector("[data-rp-newname]").textContent = raw;
+        // a new player needs a first and a last name
+        const full = words.length >= 2, addB = box.querySelector("[data-tr-add]");
+        if (addB) addB.disabled = !full; show(box.querySelector("[data-rp-need]"), strong && !full);
         show(box.querySelector("[data-rp-soft]"), !strong && !exact && raw.length >= 2); box.querySelector("[data-rp-softname]").textContent = raw;
       };
       q.oninput = filter;
@@ -12372,12 +12377,15 @@ function attachHandlers(){
       const addNew = (btn) => {
         const name = q.value.trim().replace(/\s+/g, " ");
         if (!name) return;
+        if (name.split(" ").length < 2) { showAlert("לשחקן חדש צריך שם פרטי ושם משפחה."); return; }
         const c = getCommunity(getGame(regGid).communityId);
         const same = c.roster.find(p2 => String(p2.name).trim() === name);
         register(btn, same ? same.id : null, name, !same);
       };
       const addBtn = box.querySelector("[data-tr-add]"); if (addBtn) addBtn.onclick = () => addNew(addBtn);
-      const soft = box.querySelector("[data-rp-addsoft]"); if (soft) soft.onclick = () => { show(box.querySelector("[data-rp-new]"), true); show(box.querySelector("[data-rp-soft]"), false); box.querySelector("[data-rp-newname]").textContent = q.value.trim(); };
+      const soft = box.querySelector("[data-rp-addsoft]"); if (soft) soft.onclick = () => { const full = q.value.trim().split(/\s+/).length >= 2;
+        show(box.querySelector("[data-rp-new]"), true); show(box.querySelector("[data-rp-soft]"), false); box.querySelector("[data-rp-newname]").textContent = q.value.trim();
+        const addB = box.querySelector("[data-tr-add]"); if (addB) addB.disabled = !full; show(box.querySelector("[data-rp-need]"), !full); };
       const undo = box.querySelector("[data-reg-undo]");
       if (undo) undo.onclick = () => { const pid = undo.dataset.regUndo; tourRegLast = null; tourAct(undo, () => v2TourRemoveReg(regGid, pid)); };
     }
