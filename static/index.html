@@ -1723,7 +1723,9 @@ html.theme-light .reg-row.me{background:rgba(242,193,78,.25);}
 .tour-pay tr.pay-detail b{color:var(--text);font-weight:700;}
 .tour-pay tr.pay-detail.pay-split td{font-size:16px;color:var(--text);padding:6px 6px 10px;}
 .pay-list{display:grid;grid-template-columns:26px auto 1fr;column-gap:6px;row-gap:3px;max-width:220px;margin:0 auto;align-items:center;}
-.pay-list .ic{text-align:center;} .pay-list .lb{text-align:right;font-weight:400;} .pay-list b{text-align:left;font-weight:800;direction:ltr;}
+.pay-list .ic{text-align:center;} .pay-list .lb{text-align:right;font-weight:400;}
+.pay-list.amt{grid-template-columns:26px auto auto 1fr;max-width:260px;} .pay-list .am{text-align:left;font-weight:800;color:var(--gold);direction:ltr;} html.theme-light .pay-list .am{color:#9a5f12;}
+.pay-note{display:flex;align-items:center;justify-content:center;gap:4px;font-size:13px;color:var(--muted);margin:0 0 6px;} .pay-list b{text-align:left;font-weight:800;direction:ltr;}
 .tf-sub{display:block;font-size:13px;font-weight:400;color:var(--muted);}
 .tour-full-link{display:block;margin:8px auto 0;background:none;border:none;font:inherit;font-size:15px;font-weight:700;color:var(--gold);text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
 html.theme-light .tour-full-link{color:#9a5f12;}
@@ -5879,27 +5881,31 @@ function tourBlindsReadHtml(t, c){
     ${cut >= 0 ? `<button type="button" class="tour-full-link" data-lobby-full="blinds">${tourLobbyFull.blinds ? "הסתר ▴" : `טבלה מלאה · סיום משוער כ-${hours} שעות ▾`}</button>` : ""}
   </fieldset>`;
 }
-// count: players registered so far - their row is marked, with each place's amount under it.
+// count: players registered so far - their row is marked and opened, its split one place under
+// the other with each place's amount. Another row can be opened by tapping it; when a player
+// joining moves the count into another row, that row opens instead.
 function tourPayReadHtml(t, count){
   const groups = [];
   for (let e = 1; e <= 200; e++) { const pl = tourPlacesPaid(e, t.payoutPct); const g = groups[groups.length - 1]; if (g && g.pl === pl) g.to = e; else groups.push({pl, from: e, to: e}); }
   const cur = count ? groups.find(g => count >= g.from && count <= g.to) : null;
+  const curKey = cur ? cur.pl : 0;
+  if (tourLobbyFull.payCur !== curKey) { tourLobbyFull.payCur = curKey; tourLobbyFull.payOpen = cur ? cur.pl : 2; }
   const shown = groups.slice(0, 20);   // up to 20 rows shown
-  const pot = (count || 0) * (+t.prize || 0);
-  const amountsRow = g => {
-    const places = Math.min(count, g.pl), medals = ["🥇", "🥈", "🥉"];
-    // not final: the amounts grow with more players joining (and re-buys / add-ons)
-    const tip = `ערך לא סופי - תלוי בכמות האנשים שיצטרפו${t.addOn ? ", בכמות הריביי וה-Add-on" : " ובכמות הריביי"}`;
-    return `<tr class="pay-detail pay-now"><td colspan="3" dir="ltr"><button type="button" class="info-i" style="margin:0 6px 0 0" data-info-tip="${esc(tip)}" data-tip-ms="5000" aria-label="מידע">i</button>${tourPrizeShares(places, t.payoutModel).slice(0, count).map((x, i) => `<span>${medals[i] || (i + 1) + "."} <b>₪${Math.round(pot * x / 100).toLocaleString("en-US")}</b></span>`).join("")}</td></tr>`;
+  const pot = (count || 0) * (+t.prize || 0), medals = ["🥇", "🥈", "🥉"];
+  // not final: the amounts grow with more players joining (and re-buys / add-ons)
+  const tip = `ערך לא סופי - תלוי בכמות האנשים שיצטרפו${t.addOn ? ", בכמות הריביי וה-Add-on" : " ובכמות הריביי"}`;
+  const split = g => {
+    const withAmt = g === cur, places = withAmt ? Math.min(count, g.pl) : g.pl;
+    const bands = tourPrizeBands(places, t.payoutModel);
+    return `<tr class="pay-detail pay-split"><td colspan="2">${withAmt ? `<div class="pay-note">סכומים לפי ${count} רשומים<button type="button" class="info-i" data-info-tip="${esc(tip)}" data-tip-ms="5000" aria-label="מידע">i</button></div>` : ""}
+      <div class="pay-list${withAmt ? " amt" : ""}">${bands.map(b => `<span class="ic">${b.from === b.to ? (medals[b.from - 1] || "") : ""}</span><span class="lb">${b.from === b.to ? `מקום ${b.from}` : `מקומות <bdi dir="ltr">${b.from}–${b.to}</bdi>`}</span><b>${b.pct}%</b>${withAmt ? `<span class="am">₪${Math.round(pot * b.pct / 100).toLocaleString("en-US")}</span>` : ""}`).join("")}</div></td></tr>`;
   };
   return `<fieldset class="leave-frame setup-frame"><legend>חלוקת פרסים · ${t.payoutPct}% זוכים</legend>
     <div class="tbl-scroll${tourLobbyFull.pay ? "" : " capped"}" data-keep-scroll="pay">
-    <table class="tour-tbl tour-pay"><thead><tr><th>משתתפים</th><th>מקומות</th><th>חלוקה (%)</th></tr></thead><tbody>
+    <table class="tour-tbl tour-pay"><thead><tr><th>משתתפים</th><th>מקומות זוכים</th></tr></thead><tbody>
     ${shown.map(g => {
-      const sh = tourPrizeShares(g.pl, t.payoutModel), long = g.pl > 6, open = long && tourLobbyFull.payOpen === g.pl;
-      // a row with more than 6 places shows the top 3 and "…" - tapping it opens the whole split
-      const detail = open ? `<tr class="pay-detail"><td colspan="3" dir="ltr">${tourPrizeBands(g.pl, t.payoutModel).map(b => `<span>${b.from === b.to ? b.from : `${b.from}–${b.to}`}: <b>${b.pct}%</b></span>`).join("")}</td></tr>` : "";
-      return `<tr class="${g === cur ? "pay-cur" : ""}${long ? " pay-more" + (open ? " open" : "") : ""}"${long ? ` data-lobby-pay="${g.pl}"` : ""}><td class="ltr">${g.from}–${g.to}</td><td>${g.pl}</td><td class="ltr">${long ? sh.slice(0, 3).join(" / ") + " …" : sh.join(" / ")}</td></tr>` + detail + (g === cur ? amountsRow(g) : "");
+      const open = tourLobbyFull.payOpen === g.pl;
+      return `<tr class="pay-more${g === cur ? " pay-cur" : ""}${open ? " open" : ""}" data-lobby-pay="${g.pl}"><td class="ltr">${g.from}–${g.to}</td><td>${g.pl}</td></tr>` + (open ? split(g) : "");
     }).join("")}
     </tbody></table></div>
     <button type="button" class="tour-full-link" data-lobby-full="pay">${tourLobbyFull.pay ? "הסתר ▴" : "טבלה מלאה ▾"}</button>
@@ -12138,6 +12144,11 @@ function attachHandlers(){
   app.querySelectorAll("[data-reg-full]").forEach(el => el.onclick = () => { tourRegFull = !tourRegFull; render(); });
   // the standings show exactly 4 rows, the rest scroll inside
   app.querySelectorAll(".st-cap").forEach(el => { const rows = [...el.querySelectorAll("tr")].slice(0, 4); el.style.maxHeight = rows.reduce((h, r) => h + r.offsetHeight, 0) + 1 + "px"; });
+  // the prize table grows to show the open row's whole split (its height is capped otherwise)
+  app.querySelectorAll('.tbl-scroll.capped[data-keep-scroll="pay"]').forEach(el => {
+    const d = el.querySelector("tr.pay-split");
+    if (d) el.style.maxHeight = Math.max(212, Math.ceil(d.getBoundingClientRect().bottom - el.getBoundingClientRect().top + el.scrollTop) + 2) + "px";
+  });
   app.querySelectorAll("[data-keep-scroll]").forEach(el => {
     const key = (nav.gameId || "") + ":" + el.dataset.keepScroll;
     if (tourInnerScroll[key] != null) el.scrollTop = tourInnerScroll[key];
