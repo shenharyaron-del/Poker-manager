@@ -1471,10 +1471,10 @@ html.theme-light.theme-blue .ck-tools{background:rgba(52,104,134,.97);}
 .ck-brk .ck-card{border-color:#3fb383;box-shadow:0 0 22px rgba(63,179,131,.25);background:radial-gradient(120% 90% at 50% 0%,rgba(63,179,131,.16),rgba(0,0,0,.18));}
 .ck-brk .ck-lvl{color:#6ee7b7;} html.theme-light .ck-brk .ck-lvl{color:#047857;}
 .ck-brk .ck-bar i{background:linear-gradient(90deg,#9be7c4,#3fb383);}
-.ck-ao{margin:12px 0 0;padding:10px;border-radius:12px;border:1.5px dashed #e0a43a;color:#f3c26b;font-weight:800;font-size:17px;}
+.ck-ao{margin:12px 0 0;padding:10px 6px;border-radius:12px;border:1.5px dashed #e0a43a;color:#f3c26b;font-weight:800;font-size:min(17px,4.1vw);white-space:nowrap;}
 html.theme-light .ck-ao{color:#9a3412;border-color:#c2410c;}
 html.theme-light.theme-blue .ck-ao{color:#f3c26b;border-color:#e0a43a;}
-.ck-ao small{display:block;font-weight:500;color:var(--muted);font-size:13.5px;}
+.ck-ao small{display:block;white-space:normal;font-weight:500;color:var(--muted);font-size:13.5px;}
 .ck-admin{margin-top:14px;border:1px solid rgba(212,175,55,.45);border-radius:14px;padding:10px;}
 .ck-page .ck-admin{margin-top:2px;padding:8px;}
 .ck-admin .ck-row button{white-space:nowrap;}
@@ -6244,6 +6244,7 @@ function tourRegPickerHtml(g, c, t){
   </div>`;
 }
 function tourHasCounts(P){ return !!P.lastLevel || P.standings.some(s => s.counted); }
+let tourStFull = false;   // the players / ranking list in full ("רשימה מלאה")
 function tourStandingsHtml(P, myPid, fold, admin){
   if (!P.approved.length) return "";
   const rows = P.standings.map(({r, place, counted}) => {
@@ -6258,7 +6259,9 @@ function tourStandingsHtml(P, myPid, fold, admin){
   }).join("");
   // a ranking only once there are chip counts - until then it's just who's playing
   const has = tourHasCounts(P), legend = has ? `🏅 דירוג${P.lastLevel ? ` · נכון לסוף שלב ${P.lastLevel}` : ""}` : "👥 שחקנים";
-  const body = `<div class="tbl-scroll${P.standings.length > 4 ? " capped st-cap" : ""}" data-keep-scroll="standings"><table class="tour-tbl st-tbl"><tbody>${rows}</tbody></table></div>`;
+  const many = P.standings.length > 4;
+  const body = `<div class="tbl-scroll${many && !tourStFull ? " capped st-cap" : ""}" data-keep-scroll="standings"><table class="tour-tbl st-tbl"><tbody>${rows}</tbody></table></div>
+    ${many ? `<button type="button" class="tour-full-link" data-st-full>${tourStFull ? "הסתר ▴" : `רשימה מלאה (${P.standings.length})`}</button>` : ""}`;
   // a regular player's clock: folded while it's only names, open once it's a ranking
   // (each phase its own fold state - the first count opens it again)
   // the admin's page: open by default either way
@@ -6364,7 +6367,7 @@ function renderTourClock(g, c, isAdmin){
     : k.row.brk
     ? `<div class="ck-card"><div class="ck-lvl">☕ ${k.row.addOn ? "הפסקה + Add-on" : "הפסקה"}</div><div class="ck-time${k.cs.paused ? " paused" : ""}" data-ck-time>${fmtClock(k.left)}</div>${k.cs.paused ? `<div class="ck-paused">⏸ השעון מושהה</div>` : ""}<div class="ck-bar"><i data-ck-bar style="width:${pct}%"></i></div>
         ${k.nextLevel ? `<div class="ck-ante">אחרי ההפסקה: <b>שלב ${k.nextLevel.level} · ${fmtBlinds(k.nextLevel)}</b>${k.nextLevel.ante ? ` · אנטה ${k.nextLevel.ante.toLocaleString("en-US")}` : ""}</div>` : ""}
-        ${k.row.addOn ? `<div class="ck-ao">Add-on עכשיו · ₪${Number(t.addOnPrice ?? tourEntryTotal(t)).toLocaleString("en-US")} → ${Number(t.addOnChips).toLocaleString("en-US")} ז'יטונים<small>קנייה אחת לשחקן, עד סוף ההפסקה</small></div>` : ""}</div>`
+        ${k.row.addOn ? `<div class="ck-ao">Add-on עכשיו · ₪${Number(t.addOnPrice ?? tourEntryTotal(t)).toLocaleString("en-US")} ← ${Number(t.addOnChips).toLocaleString("en-US")} ז'יטונים<small>קנייה אחת לשחקן, עד סוף ההפסקה</small></div>` : ""}</div>`
     : `<div class="ck-card"><div class="ck-lvl">שלב ${k.row.level}${k.past ? " · שלב אחרון בטבלה" : ""}</div><div class="ck-time${k.cs.paused ? " paused" : ""}" data-ck-time>${fmtClock(k.left)}</div>${k.cs.paused ? `<div class="ck-paused">⏸ השעון מושהה</div>` : ""}<div class="ck-bar"><i data-ck-bar style="width:${pct}%"></i></div>
         <div class="ck-blinds">${fmtBlinds(k.row)}</div><div class="ck-ante">${k.row.ante ? `אנטה <b>${k.row.ante.toLocaleString("en-US")}</b>` : "ללא אנטה"}</div>
         <div class="ck-next"><div>שלב הבא<b>${k.nextLevel ? fmtBlinds(k.nextLevel) : "—"}</b>${k.nextLevel ? `<span class="ck-na">${k.nextLevel.ante ? `אנטה <strong>${k.nextLevel.ante.toLocaleString("en-US")}</strong>` : "ללא אנטה"}</span>` : ""}</div>
@@ -12187,6 +12190,7 @@ function attachHandlers(){
       else if (meRow) list.scrollTop = Math.max(0, meRow.offsetTop - 4);   // the list is positioned: offsetTop is within it
       list.addEventListener("scroll", () => { tourRegListScroll = {gid: nav.gameId, top: list.scrollTop}; }, {passive: true});
     } }
+  app.querySelectorAll("[data-st-full]").forEach(el => el.onclick = () => { tourStFull = !tourStFull; render(); });
   app.querySelectorAll("[data-reg-full]").forEach(el => el.onclick = () => { tourRegFull = !tourRegFull; render(); });
   // the standings show exactly 4 rows, the rest scroll inside
   app.querySelectorAll(".st-cap").forEach(el => { const rows = [...el.querySelectorAll("tr")].slice(0, 4); el.style.maxHeight = rows.reduce((h, r) => h + r.offsetHeight, 0) + 1 + "px"; });
