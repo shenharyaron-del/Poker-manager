@@ -5847,11 +5847,13 @@ function tourSummaryHtml(t){
 // ---------- a tournament night: the player's lobby and the admin's registration screen ----------
 let tourLobbyFull = {blinds: false, pay: false, payOpen: 0};
 // The lobby's three tables (registered / blinds / prizes) start folded to their title: ▾ opens
-// the short list, ▴ in the title folds it back.
-let tourLobbyOpen = {reg: false, blinds: false, pay: false};
-function tourFoldFrame(key, legend, body){
-  return tourLobbyOpen[key]
-    ? `<fieldset class="leave-frame setup-frame"><legend class="fold-lg" data-lobby-fold="${key}">${legend} <span class="fold-arr">▴</span></legend>${body}</fieldset>`
+// the short list, ▴ in the title folds it back. A regular player's screen opens with the
+// registered list showing (null = not toggled yet: that default).
+let tourLobbyOpen = {reg: null, blinds: null, pay: null};
+function tourFoldFrame(key, legend, body, def){
+  const open = tourLobbyOpen[key] ?? !!def;
+  return open
+    ? `<fieldset class="leave-frame setup-frame"><legend class="fold-lg" data-lobby-fold="${key}" data-fold-open="1">${legend} <span class="fold-arr">▴</span></legend>${body}</fieldset>`
     : `<fieldset class="leave-frame setup-frame fold-shut" data-lobby-fold="${key}"><legend class="fold-lg">${legend} <span class="fold-arr">▾</span></legend></fieldset>`;
 }
 const tourInnerScroll = {};   // the tables' inner scroll positions, kept across re-renders   // the read-only tables' "טבלה מלאה"
@@ -6457,7 +6459,7 @@ function tourRegListHtml(g, approved, rowTail){
         ? `<button type="button" class="reg-av-edit" data-tour-avatar title="החלפת תמונה">${tourAvatar(r.name, i, r.playerId, g.communityId)}<span class="reg-av-pen">✎</span></button>`
         : tourAvatar(r.name, i, r.playerId, g.communityId)}${tourRegNameHtml(g, t, r, !!rowTail)}${rowTail ? rowTail(r) : ""}</div>`).join("")}
     </div>
-    ${approved.length > 4 ? `<button type="button" class="tour-full-link" data-reg-full>${tourRegFull ? "הסתר ▴" : `רשימה מלאה (${approved.length})`}</button>` : ""}`);
+    ${approved.length > 4 ? `<button type="button" class="tour-full-link" data-reg-full>${tourRegFull ? "הסתר ▴" : `רשימה מלאה (${approved.length})`}</button>` : ""}`, !rowTail);   // open by default on a regular player's screen (rowTail = the admin's actions)
 }
 let tourAdminView = null;
 let tourRegFull = false;   // the registered list opened in full
@@ -12195,7 +12197,7 @@ function attachHandlers(){
     tip.style.left = Math.max(8, Math.min(window.innerWidth - tip.offsetWidth - 8, r.left + r.width / 2 - tip.offsetWidth / 2)) + "px";
     setTimeout(() => { tip.classList.add("out"); setTimeout(() => tip.remove(), 300); }, Number(el.dataset.tipMs) || 3000);
   });
-  app.querySelectorAll("[data-lobby-fold]").forEach(el => el.onclick = () => { const k = el.dataset.lobbyFold; tourLobbyOpen[k] = !tourLobbyOpen[k]; render(); });
+  app.querySelectorAll("[data-lobby-fold]").forEach(el => el.onclick = () => { tourLobbyOpen[el.dataset.lobbyFold] = !el.dataset.foldOpen; render(); });
   app.querySelectorAll("[data-lobby-full]").forEach(el => el.onclick = () => { tourLobbyFull[el.dataset.lobbyFull] = !tourLobbyFull[el.dataset.lobbyFull]; render(); });
   app.querySelectorAll("[data-tour-register]").forEach(el => el.onclick = () => tourAct(el, async () => {
     const g = getGame(tourGid), c = getCommunity(g.communityId);
