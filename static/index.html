@@ -1733,7 +1733,11 @@ html.theme-light .reg-row.me{background:rgba(242,193,78,.25);}
 .pay-list.amt{grid-template-columns:26px auto auto 1fr;max-width:260px;} .pay-list .am{text-align:left;font-weight:800;color:var(--gold);direction:ltr;} html.theme-light .pay-list .am{color:#9a5f12;} html.theme-light.theme-blue .pay-list .am{color:#ffe39a;}   /* brown is muddy on the blue card */
 .pay-note{display:flex;align-items:center;justify-content:center;gap:4px;font-size:13px;color:var(--muted);margin:0 0 6px;} .pay-list b{text-align:left;font-weight:800;direction:ltr;}
 .tf-sub{display:block;font-size:13px;font-weight:400;color:var(--muted);}
-.fold-lg{cursor:pointer;} .fold-arr{font-size:.85em;margin-right:4px;}
+.fold-lg{cursor:pointer;}
+/* the fold arrow: a round badge in the frame colour, big enough to see and tap */
+.fold-arr{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;margin-right:6px;border-radius:50%;
+  background:var(--frame-c,var(--gold));color:#1a1a1a;font-size:14px;line-height:1;vertical-align:middle;}
+html.theme-light.theme-sand .fold-arr{color:#fff6e3;}   /* the sand frame colour is dark brown */
 .fold-shut{padding-top:2px!important;padding-bottom:4px!important;min-height:0!important;cursor:pointer;}
 .tour-full-link{display:block;margin:8px auto 0;background:none;border:none;font:inherit;font-size:15px;font-weight:700;color:var(--gold);text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
 html.theme-light .tour-full-link{color:#9a5f12;}
