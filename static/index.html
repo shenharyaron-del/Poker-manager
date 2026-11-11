@@ -1502,7 +1502,7 @@ html.theme-light.theme-blue .ck-sticky{background:rgba(214,233,242,.95);}
 .ck-dots button{background:none;border:1px solid rgba(212,175,55,.4);border-radius:999px;padding:3px 12px;font:inherit;font-size:13px;color:var(--muted);cursor:pointer;}
 .ck-dots button.on{background:rgba(242,193,78,.2);color:var(--text);border-color:#f2c14e;font-weight:700;}
 .ck-blinds-wrap{position:relative;}
-.ck-blinds-wrap.capped{max-height:236px;overflow-y:auto;}
+.ck-blinds-wrap.capped{max-height:182px;overflow-y:auto;}
 .ck-blinds-wrap thead th{position:sticky;top:0;z-index:1;background:#0f3f2e;}
 html.theme-light .ck-blinds-wrap thead th{background:#f6eee0;}
 html.theme-light.theme-blue .ck-blinds-wrap thead th{background:#3f7d9c;color:#e3f1f7;}
@@ -12120,9 +12120,10 @@ function attachHandlers(){
   };
   app.querySelectorAll("[data-lobby-pay]").forEach(el => el.onclick = () => { const n = Number(el.dataset.lobbyPay); tourLobbyFull.payOpen = tourLobbyFull.payOpen === n ? 0 : n; render(); });
   // the blind table starts at the current level (past ones are gone): 4 rows, the rest scroll
-  { const w = app.querySelector("[data-ck-blinds].capped");
-    if (w) { const rows = [...w.querySelectorAll("tbody tr")].slice(0, 6), th = w.querySelector("thead");
-      w.style.maxHeight = (th ? th.offsetHeight : 0) + rows.reduce((h, r) => h + r.offsetHeight, 0) + 1 + "px"; } }
+  // the blind structure, open but not full: exactly 4 rows under the header (clock and lobby)
+  app.querySelectorAll("[data-ck-blinds].capped, .tbl-scroll.blinds.capped").forEach(w => {
+    const rows = [...w.querySelectorAll("tbody tr")].slice(0, 4), th = w.querySelector("thead");
+    w.style.maxHeight = (th ? th.offsetHeight : 0) + rows.reduce((h, r) => h + r.offsetHeight, 0) + 1 + "px"; });
   { const cardEl = app.querySelector(".ck-sticky .ck-card");
     if (cardEl) { if (tourCardHFor !== nav.gameId + ":" + innerWidth) { tourCardH = 0; tourCardHFor = nav.gameId + ":" + innerWidth; }
       cardEl.style.minHeight = ""; tourCardH = Math.max(tourCardH, cardEl.offsetHeight); cardEl.style.minHeight = tourCardH + "px"; } }
