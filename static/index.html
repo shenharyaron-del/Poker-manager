@@ -9883,10 +9883,11 @@ function renderTableTimeline(g, c, myPlayerId){
     </div>`;
 }
 
-// Pre-filled name for a new table: the short Hebrew date, e.g. "אוק 14".
-// A new table's suggested name: "ערב#8" - the club's nights so far plus one.
+// A new table's suggested name: today's day and date, e.g. "חמישי 12.11".
 function defaultGameName(communityId){
-  return `ערב#${gamesForCommunity(communityId).length + 1}`;
+  const d = new Date();
+  const day = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"][d.getDay()];
+  return `${day} ${d.getDate()}.${d.getMonth() + 1}`;
 }
 // One player's night as rows, oldest first: the entry ("קנייה ראשונית"), numbered rebuys,
 // cancelled rebuys struck through at the time they were cancelled (game_events only keep
