@@ -7171,8 +7171,8 @@ function playerClubStatsText(communityId, playerId){
     const row = roster.find(r => r.id === id), ids = new Set(roster.map(r => r.id));
     return row ? ((g.players || []).find(pl => !ids.has(pl.id) && g.cashouts[pl.id] && sameName(pl.name, row.name)) || {}).id : null; };
   const bought = (g, id) => (g.buyins || g.buyinTotals || []).filter(b => b.playerId === id).reduce((s, b) => s + (b.amount || 0), 0);
-  // re-buys in ₪: everything bought after the first buy-in (only where each buy-in is known)
-  const rebuyOf = (g, id) => { if (!g.buyins) return null; const bs = g.buyins.filter(b => b.playerId === id).sort((a, b) => (a.ts || 0) - (b.ts || 0)); return bs.slice(1).reduce((s, b) => s + (b.amount || 0), 0); };
+  // re-buys: how many times they bought again after the first buy-in (only where each buy-in is known)
+  const rebuyOf = (g, id) => g.buyins ? Math.max(0, g.buyins.filter(b => b.playerId === id).length - 1) : null;
   // minutes played: from the first buy-in (or the game's start, if later) to finishing - like
   // the night's own "זמן משחק" (only where each buy-in's time is known)
   const minutesOf = (g, id) => { if (!g.buyins) return null; const bs = g.buyins.filter(b => b.playerId === id && b.ts).sort((a, b) => a.ts - b.ts);
@@ -7215,7 +7215,7 @@ function playerClubStatsText(communityId, playerId){
     `🔥 רצף הניצחונות הכי ארוך: ${best === 1 ? "ערב אחד" : `${best} ערבים`}`,
     `⭐ הערב הכי טוב: ${money(top.profit)} (${dm(top.g)})`,
     `🥶 הערב הכי קשה: ${money(low.profit)} (${dm(low.g)})`,
-    lastRb !== null ? `🔁 ריביי אחרון: ${money(lastRb)} · ממוצע: ${money(avgRb)}` : "",
+    lastRb !== null ? `🔁 ריביי אחרון: ${lastRb} · ממוצע: ${Math.round(avgRb * 10) / 10}` : "",
     timeLine,
     `📈 ${Math.min(5, played.length)} ערבים אחרונים: ${arrows}`,
   ];
