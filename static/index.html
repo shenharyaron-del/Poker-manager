@@ -12144,10 +12144,20 @@ function attachHandlers(){
   app.querySelectorAll("[data-reg-full]").forEach(el => el.onclick = () => { tourRegFull = !tourRegFull; render(); });
   // the standings show exactly 4 rows, the rest scroll inside
   app.querySelectorAll(".st-cap").forEach(el => { const rows = [...el.querySelectorAll("tr")].slice(0, 4); el.style.maxHeight = rows.reduce((h, r) => h + r.offsetHeight, 0) + 1 + "px"; });
-  // the prize table grows to show the open row's whole split (its height is capped otherwise)
+  // the prize table: tall enough to show the open row's whole split (its height is capped
+  // otherwise), and scrolled so the current row (the players registered so far) is the first
+  // one under the header - again each time a player joining moves it to another row
   app.querySelectorAll('.tbl-scroll.capped[data-keep-scroll="pay"]').forEach(el => {
-    const d = el.querySelector("tr.pay-split");
-    if (d) el.style.maxHeight = Math.max(212, Math.ceil(d.getBoundingClientRect().bottom - el.getBoundingClientRect().top + el.scrollTop) + 2) + "px";
+    const head = el.querySelector("thead"), hh = head ? head.offsetHeight : 0;
+    const cur = el.querySelector("tr.pay-cur"), d = el.querySelector("tr.pay-split");
+    const top0 = el.getBoundingClientRect().top - el.scrollTop, at = r => r.getBoundingClientRect().top - top0;
+    const from = cur ? at(cur) - hh : 0;
+    if (d) el.style.maxHeight = Math.max(212, Math.ceil(d.getBoundingClientRect().bottom - top0 - Math.max(0, from)) + 2) + "px";
+    const key = (nav.gameId || "") + ":pay";
+    if (cur && tourLobbyFull.payScrolledTo !== key + ":" + tourLobbyFull.payCur) {
+      tourLobbyFull.payScrolledTo = key + ":" + tourLobbyFull.payCur;
+      tourInnerScroll[key] = Math.max(0, Math.round(from));
+    }
   });
   app.querySelectorAll("[data-keep-scroll]").forEach(el => {
     const key = (nav.gameId || "") + ":" + el.dataset.keepScroll;
