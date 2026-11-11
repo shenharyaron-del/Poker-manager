@@ -967,6 +967,14 @@ html.theme-light .profit-win,html.theme-light.theme-sand .profit-win{color:#1580
 /* the blue theme's background is dark enough for the light green - with a soft shadow */
 html.theme-light.theme-blue .profit-win{color:#b9f5d0!important;text-shadow:0 1px 3px rgba(0,0,0,.35);}
 html.theme-light.theme-blue .profit-loss{color:#ffc2cc!important;text-shadow:0 1px 3px rgba(0,0,0,.35);}
+/* "נשאר בקופה" under the profit / loss: the amount as big as they are, in gold */
+.pot-left{margin:12px 0 4px;text-align:center;}
+.pot-left .l{font-size:15px;font-weight:700;color:var(--muted);}
+.pot-left .n{font-size:34px;font-weight:800;line-height:1.1;color:#f2c14e;}
+.pot-left .s{font-size:14px;color:var(--muted);}
+html.theme-light .pot-left .n,.lux-page.pp-other .pot-left .n{color:#9a5f12;}
+html.theme-light.theme-blue .pot-left .n{color:#ffe39a;text-shadow:0 1px 3px rgba(0,0,0,.3);}
+html.theme-light.theme-blue .pot-left :is(.l,.s){color:#dbeafe;}
 /* Acting for someone else (the blush page, every theme): the light green / pink of the
    dark felt fade into it - deep green and red instead. */
 .lux-page.pp-other .profit-win,.lux-page.pp-other [style*="color:#6ee7b7"]{color:#15803d!important;}
@@ -8836,10 +8844,10 @@ function renderPlayerScreen(gameId){
     // minus everything already cashed out).
     const stillPlaying = seatedIdsForSettlement.filter(sid => !(sid in g.cashouts)).length;
     const potLeft = Math.round((totalBuyinsForSettlement - totalCashedOutForSettlement) * 100) / 100;
+    // what's still in the pot, as clear as the profit / loss above it (same size, in gold)
     const stillPlayingHtml = stillPlaying > 0 ? `
-      <div class="still-playing-note" style="margin-top:12px;font-size:19px;font-weight:700;color:var(--text);">
-        ${stillPlaying === 1 ? "שחקן אחד עדיין לא יצא" : `${stillPlaying} שחקנים עדיין לא יצאו`} · בקופה ₪${potLeft}
-      </div>` : "";
+      <div class="pot-left still-playing-note"><div class="l">נשאר בקופה</div><div class="n">₪${potLeft}</div>
+        <div class="s">${stillPlaying === 1 ? "שחקן אחד עדיין משחק" : `${stillPlaying} שחקנים עדיין משחקים`}</div></div>` : "";
     // The nice facts about my recent nights were in the end-of-night popup ("nightResult") -
     // not repeated here.
     cashedOutInfoHtml = breakdownHtml + paymentNotesHtml + statusHtml + stillPlayingHtml
