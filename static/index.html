@@ -7177,7 +7177,10 @@ function playerClubStatsText(communityId, playerId){
   // the night's own "זמן משחק" (only where each buy-in's time is known)
   const minutesOf = (g, id) => { if (!g.buyins) return null; const bs = g.buyins.filter(b => b.playerId === id && b.ts).sort((a, b) => a.ts - b.ts);
     const st = gameStartEvent(g), from = Math.max((bs[0] && bs[0].ts) || 0, (st && st.ts) || 0), end = (g.cashouts[id] || {}).ts;
-    return from && end && end > from ? Math.round((end - from) / 60000) : null; };
+    // a night's finish saved long after it (the amount fixed days later, a night closed late)
+    // isn't a real length - over 12 hours (or under 5 minutes) is left out of the times
+    const min = from && end && end > from ? Math.round((end - from) / 60000) : null;
+    return min !== null && min >= 5 && min <= 12 * 60 ? min : null; };
   const resultsFor = id => nights.map(g => { const pid = pidIn(g, id); return pid ? {g, profit: (g.cashouts[pid].amount || 0) - bought(g, pid), rebuy: rebuyOf(g, pid), min: minutesOf(g, pid)} : null; });
   const mine = resultsFor(playerId), played = mine.filter(Boolean);
   if (!played.length) return null;
