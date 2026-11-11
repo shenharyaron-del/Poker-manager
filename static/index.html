@@ -7173,7 +7173,12 @@ function playerClubStatsText(communityId, playerId){
   const bought = (g, id) => (g.buyins || g.buyinTotals || []).filter(b => b.playerId === id).reduce((s, b) => s + (b.amount || 0), 0);
   // re-buys in ₪: everything bought after the first buy-in (only where each buy-in is known)
   const rebuyOf = (g, id) => { if (!g.buyins) return null; const bs = g.buyins.filter(b => b.playerId === id).sort((a, b) => (a.ts || 0) - (b.ts || 0)); return bs.slice(1).reduce((s, b) => s + (b.amount || 0), 0); };
-  const resultsFor = id => nights.map(g => { const pid = pidIn(g, id); return pid ? {g, profit: (g.cashouts[pid].amount || 0) - bought(g, pid), rebuy: rebuyOf(g, pid)} : null; });
+  // minutes played: from the first buy-in (or the game's start, if later) to finishing - like
+  // the night's own "זמן משחק" (only where each buy-in's time is known)
+  const minutesOf = (g, id) => { if (!g.buyins) return null; const bs = g.buyins.filter(b => b.playerId === id && b.ts).sort((a, b) => a.ts - b.ts);
+    const st = gameStartEvent(g), from = Math.max((bs[0] && bs[0].ts) || 0, (st && st.ts) || 0), end = (g.cashouts[id] || {}).ts;
+    return from && end && end > from ? Math.round((end - from) / 60000) : null; };
+  const resultsFor = id => nights.map(g => { const pid = pidIn(g, id); return pid ? {g, profit: (g.cashouts[pid].amount || 0) - bought(g, pid), rebuy: rebuyOf(g, pid), min: minutesOf(g, pid)} : null; });
   const mine = resultsFor(playerId), played = mine.filter(Boolean);
   if (!played.length) return null;
   const first = mine.findIndex(Boolean), ofNights = nights.length - first;
@@ -7192,6 +7197,10 @@ function playerClubStatsText(communityId, playerId){
   const eligible = roster.map(r => { const rs = resultsFor(r.id).filter(Boolean); return {id: r.id, n: rs.length, total: rs.reduce((s, x) => s + x.profit, 0)}; })
     .filter(x => nights.length && x.n / nights.length >= 0.35).sort((a, b) => b.total - a.total);
   const place = eligible.findIndex(x => x.id === playerId) + 1;
+  const timed = played.filter(r => r.min !== null), totalMin = timed.reduce((s, r) => s + r.min, 0);
+  const hrs = Math.round(totalMin / 60), avgMin = timed.length ? Math.round(totalMin / timed.length) : 0;
+  const totalTxt = totalMin < 60 ? `${totalMin} דקות` : hrs === 1 ? "שעה אחת" : hrs === 2 ? "שעתיים" : `${hrs} שעות`;
+  const timeLine = timed.length ? `⏱️ ${totalTxt} משחק · ממוצע לערב ${Math.floor(avgMin / 60)}:${String(avgMin % 60).padStart(2, "0")}` : "";
   const arrows = played.slice(-5).reverse().map(r => r.profit > 0.5 ? "⬆️" : r.profit < -0.5 ? "⬇️" : "➖").join("");
   const lines = [
     `🃏 ${played.length} מתוך ${ofNights} ערבים · ${Math.round(wins / played.length * 100)}% ברווח`,
@@ -7201,6 +7210,7 @@ function playerClubStatsText(communityId, playerId){
     `⭐ הערב הכי טוב: ${money(top.profit)} (${dm(top.g)})`,
     `🥶 הערב הכי קשה: ${money(low.profit)} (${dm(low.g)})`,
     lastRb !== null ? `🔁 ריביי בערב האחרון: ${money(lastRb)} · ממוצע לערב: ${money(avgRb)}` : "",
+    timeLine,
     `📈 ${Math.min(5, played.length)} ערבים אחרונים: ${arrows}`,
   ];
   return lines.filter(Boolean).join("\n");
