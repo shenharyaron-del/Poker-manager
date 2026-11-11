@@ -1723,7 +1723,7 @@ html.theme-light .reg-row.me{background:rgba(242,193,78,.25);}
 .tour-pay tr.pay-detail b{color:var(--text);font-weight:700;}
 .tour-pay tr.pay-detail.pay-split td{font-size:16px;color:var(--text);padding:6px 6px 10px;}
 .pay-list{display:grid;grid-template-columns:26px auto 1fr;column-gap:6px;row-gap:3px;max-width:220px;margin:0 auto;align-items:center;}
-.pay-list .ic{text-align:center;} .pay-list .lb{text-align:right;font-weight:700;} .pay-list b{text-align:left;font-weight:800;direction:ltr;}
+.pay-list .ic{text-align:center;} .pay-list .lb{text-align:right;font-weight:400;} .pay-list b{text-align:left;font-weight:800;direction:ltr;}
 .tf-sub{display:block;font-size:13px;font-weight:400;color:var(--muted);}
 .tour-full-link{display:block;margin:8px auto 0;background:none;border:none;font:inherit;font-size:15px;font-weight:700;color:var(--gold);text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
 html.theme-light .tour-full-link{color:#9a5f12;}
@@ -5778,7 +5778,7 @@ function setupModeSwitchHtml(communityId, on){
 // ---------- Tournament (club profile) - stage 1: the screen only, nothing saved ----------
 const TOUR_DEFAULTS = {tab: "struct", fee: 20, prize: 80, chips: 10000, early: 5, rebuys: 0, rebuyChips: 10000,
   rebuyLevels: 4, addOn: 0, addOnChips: 10000, addOnPrice: null, addOnExtra: 5,
-  rebuyPrice: null, rebuyFee: 0, addOnFee: 0, estRebuys: null, estAddOns: null, fullTable: 0, payFull: 0, payOpen: 0, payoutModel: 1, level: 15, jump: 1, breakEvery: 70, breakLen: 10, speed: 2, ante: 0.25, payoutPct: 20, entries: 16, points: {}};
+  rebuyPrice: null, rebuyFee: 0, addOnFee: 0, estRebuys: null, estAddOns: null, fullTable: 0, payFull: 0, payOpen: 2, payoutModel: 1, level: 15, jump: 1, breakEvery: 70, breakLen: 10, speed: 2, ante: 0.25, payoutPct: 20, entries: 16, points: {}};
 // Blind speed presets: a level's length and how many rungs of the blind ladder each level
 // climbs. Moving either slider by hand makes it "מותאם אישית" (4).
 // Slow / normal: longer or shorter levels, one rung at a time; fast: the blinds climb two rungs.
@@ -5805,7 +5805,7 @@ function tourSavedPart(t){
 function openTourSetupModal(communityId){
   const c = getCommunity(communityId);
   if (!c || !(isSuperAdmin() || isClubCreator(c))) return;
-  const t = Object.assign({}, TOUR_DEFAULTS, (c && c.tournamentSettings) || {});
+  const t = Object.assign({}, TOUR_DEFAULTS, (c && c.tournamentSettings) || {}, {payOpen: 2});   // the 2-places row opens
   modal = {type: "tourSetup", communityId, tour: t, tourSaved: JSON.stringify(tourSavedPart(t))};
   render();
 }
@@ -12415,7 +12415,7 @@ function attachHandlers(){
     e.stopPropagation();
     const g = getGame(el.dataset.openGameTour);
     if (!g) return;
-    const t = Object.assign({}, TOUR_DEFAULTS, g.tournamentSettings || {});
+    const t = Object.assign({}, TOUR_DEFAULTS, g.tournamentSettings || {}, {payOpen: 2});
     modal = {type: "tourSetup", communityId: g.communityId, gameId: g.id, tour: t, tourSaved: JSON.stringify(tourSavedPart(t))};
     render();
   });
@@ -14207,7 +14207,7 @@ function attachHandlers(){
     app.querySelectorAll("[data-newgame-tour-edit]").forEach(el => el.onclick = () => {
       const c = getCommunity(modal.communityId);
       const back = Object.assign({}, modal, {name: nameEl ? nameEl.value : modal.name});
-      const t = Object.assign({}, TOUR_DEFAULTS, back.tour || (c && c.tournamentSettings) || {});
+      const t = Object.assign({}, TOUR_DEFAULTS, back.tour || (c && c.tournamentSettings) || {}, {payOpen: 2});
       modal = {type: "tourSetup", communityId: back.communityId, forNewGame: true, back, tour: t, tourSaved: JSON.stringify(tourSavedPart(t))};
       render();
     });
