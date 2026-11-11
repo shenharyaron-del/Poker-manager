@@ -1734,6 +1734,10 @@ html.theme-light .reg-row.me{background:rgba(242,193,78,.25);}
 .pay-note{display:flex;align-items:center;justify-content:center;gap:4px;font-size:13px;color:var(--muted);margin:0 0 6px;} .pay-list b{text-align:left;font-weight:800;direction:ltr;}
 .tf-sub{display:block;font-size:13px;font-weight:400;color:var(--muted);}
 .fold-lg{cursor:pointer;}
+.has-me{position:relative;}
+.me-jump{position:absolute;left:18px;top:-13px;z-index:3;padding:2px 12px;border-radius:999px;border:none;background:var(--frame-c,var(--gold));color:#1a1a1a;font:inherit;font-size:14px;font-weight:800;line-height:1.5;cursor:pointer;}
+html.theme-light.theme-sand .me-jump{color:#fff6e3;}
+.reg-row.me-flash,tr.me-flash td{animation:me-flash 1s ease 2;} @keyframes me-flash{50%{background:rgba(255,227,154,.75);}}
 /* the fold arrow: a round badge in the frame colour, big enough to see and tap */
 .fold-arr{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;margin-right:6px;border-radius:50%;
   background:var(--frame-c,var(--gold));color:#1a1a1a;font-size:14px;line-height:1;vertical-align:middle;}
@@ -5850,11 +5854,14 @@ let tourLobbyFull = {blinds: false, pay: false, payOpen: 0};
 // the short list, ▴ in the title folds it back. A regular player's screen opens with the
 // registered list showing (null = not toggled yet: that default).
 let tourLobbyOpen = {reg: null, blinds: null, pay: null};
-function tourFoldFrame(key, legend, body, def){
+// meJump: a "👤 אני" button on the frame's top line (only for a registered player) - it opens
+// the frame and scrolls to my own row
+function tourFoldFrame(key, legend, body, def, meJump){
   const open = tourLobbyOpen[key] ?? !!def;
+  const me = meJump ? `<button type="button" class="me-jump" data-me-jump="${key}">👤 אני</button>` : "";
   return open
-    ? `<fieldset class="leave-frame setup-frame"><legend class="fold-lg" data-lobby-fold="${key}" data-fold-open="1">${legend} <span class="fold-arr">▴</span></legend>${body}</fieldset>`
-    : `<fieldset class="leave-frame setup-frame fold-shut" data-lobby-fold="${key}"><legend class="fold-lg">${legend} <span class="fold-arr">▾</span></legend></fieldset>`;
+    ? `<fieldset class="leave-frame setup-frame has-me"><legend class="fold-lg" data-lobby-fold="${key}" data-fold-open="1">${legend} <span class="fold-arr">▴</span></legend>${me}${body}</fieldset>`
+    : `<fieldset class="leave-frame setup-frame fold-shut has-me" data-lobby-fold="${key}"><legend class="fold-lg">${legend} <span class="fold-arr">▾</span></legend>${me}</fieldset>`;
 }
 const tourInnerScroll = {};   // the tables' inner scroll positions, kept across re-renders   // the read-only tables' "טבלה מלאה"
 function tourSmallChip(c, t){
@@ -6255,7 +6262,8 @@ function tourStandingsHtml(P, myPid, fold, admin){
   // a regular player's clock: folded while it's only names, open once it's a ranking
   // (each phase its own fold state - the first count opens it again)
   // the admin's page: open by default either way
-  return admin ? tourFoldFrame("stAdmin", legend, body, true) : tourFoldFrame(has ? "st1" : "st0", legend, body, has);
+  const meIn = !!myPid && P.approved.some(r => r.playerId === myPid);   // an admin who doesn't play gets no "אני"
+  return admin ? tourFoldFrame("stAdmin", legend, body, true, meIn) : tourFoldFrame(has ? "st1" : "st0", legend, body, has, meIn);
 }
 function tourSoundOn(){ try { return localStorage.getItem("tour-sound") !== "0"; } catch (e) { return true; } }
 function renderTourClock(g, c, isAdmin){
@@ -6473,7 +6481,7 @@ function tourRegListHtml(g, approved, rowTail){
         ? `<button type="button" class="reg-av-edit" data-tour-avatar title="החלפת תמונה">${tourAvatar(r.name, i, r.playerId, g.communityId)}<span class="reg-av-pen">✎</span></button>`
         : tourAvatar(r.name, i, r.playerId, g.communityId)}${tourRegNameHtml(g, t, r, !!rowTail)}${rowTail ? rowTail(r) : ""}</div>`).join("")}
     </div>
-    ${approved.length > 4 ? `<button type="button" class="tour-full-link" data-reg-full>${tourRegFull ? "הסתר ▴" : `רשימה מלאה (${approved.length})`}</button>` : ""}`, !rowTail);   // open by default on a regular player's screen (rowTail = the admin's actions)
+    ${approved.length > 4 ? `<button type="button" class="tour-full-link" data-reg-full>${tourRegFull ? "הסתר ▴" : `רשימה מלאה (${approved.length})`}</button>` : ""}`, !rowTail, !!me && approved.some(r => r.playerId === me));   // open by default on a regular player's screen (rowTail = the admin's actions)
 }
 let tourAdminView = null;
 let tourRegFull = false;   // the registered list opened in full
@@ -12216,6 +12224,23 @@ function attachHandlers(){
     tip.style.top = (r.top - tip.offsetHeight - 8) + "px";
     tip.style.left = Math.max(8, Math.min(window.innerWidth - tip.offsetWidth - 8, r.left + r.width / 2 - tip.offsetWidth / 2)) + "px";
     setTimeout(() => { tip.classList.add("out"); setTimeout(() => tip.remove(), 300); }, Number(el.dataset.tipMs) || 3000);
+  });
+  // "👤 אני": on the frame's top line, level with its title; opens the frame, scrolls to my row
+  app.querySelectorAll("[data-me-jump]").forEach(el => {
+    const lg = el.parentNode.querySelector("legend");
+    if (lg) { const l = lg.getBoundingClientRect(), b = el.getBoundingClientRect();
+      el.style.top = Math.round(el.offsetTop + (l.top + l.height / 2) - (b.top + b.height / 2)) + "px"; }
+    el.onclick = (e) => {
+      e.stopPropagation();
+      const k = el.dataset.meJump;
+      if (!(tourLobbyOpen[k] ?? el.closest("fieldset").querySelector("legend[data-fold-open]"))) { tourLobbyOpen[k] = true; render(); }
+      const me = app.querySelector(`[data-me-jump="${k}"]`)?.closest("fieldset")?.querySelector(".reg-row.me, tr.me");
+      if (!me) return;
+      const box = me.closest(".reg-list.capped, .tbl-scroll.capped");
+      if (box) { const r = me.getBoundingClientRect(), b = box.getBoundingClientRect(); box.scrollTop = Math.max(0, box.scrollTop + r.top - b.top - (box.clientHeight - r.height) / 2); }
+      me.scrollIntoView({block: "nearest", behavior: "smooth"});
+      me.classList.remove("me-flash"); void me.offsetWidth; me.classList.add("me-flash");
+    };
   });
   app.querySelectorAll("[data-lobby-fold]").forEach(el => el.onclick = () => { tourLobbyOpen[el.dataset.lobbyFold] = !el.dataset.foldOpen; render(); });
   app.querySelectorAll("[data-lobby-full]").forEach(el => el.onclick = () => { tourLobbyFull[el.dataset.lobbyFull] = !tourLobbyFull[el.dataset.lobbyFull]; render(); });
