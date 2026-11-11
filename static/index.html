@@ -7200,7 +7200,10 @@ function playerClubStatsText(communityId, playerId){
   const timed = played.filter(r => r.min !== null), totalMin = timed.reduce((s, r) => s + r.min, 0);
   const hrs = Math.round(totalMin / 60), avgMin = timed.length ? Math.round(totalMin / timed.length) : 0;
   const totalTxt = totalMin < 60 ? `${totalMin} דקות` : hrs === 1 ? "שעה אחת" : hrs === 2 ? "שעתיים" : `${hrs} שעות`;
-  const timeLine = timed.length ? `⏱️ ${totalTxt} משחק · ממוצע לערב ${Math.floor(avgMin / 60)}:${String(avgMin % 60).padStart(2, "0")}` : "";
+  // profit (or loss) per hour played, over the timed nights only - short enough for one line
+  const timedProfit = timed.reduce((s, r) => s + r.profit, 0);
+  const perHour = totalMin >= 60 ? ` (${money(timedProfit / (totalMin / 60))} לשעה)` : "";
+  const timeLine = timed.length ? `⏱️ ${totalTxt}${perHour} · ממוצע ${Math.floor(avgMin / 60)}:${String(avgMin % 60).padStart(2, "0")}` : "";
   const arrows = played.slice(-5).reverse().map(r => r.profit > 0.5 ? "⬆️" : r.profit < -0.5 ? "⬇️" : "➖").join("");
   const lines = [
     `🃏 ${played.length} מתוך ${ofNights} ערבים · ${Math.round(wins / played.length * 100)}% ברווח`,
@@ -7209,7 +7212,7 @@ function playerClubStatsText(communityId, playerId){
     `🔥 רצף הניצחונות הכי ארוך: ${best === 1 ? "ערב אחד" : `${best} ערבים`}`,
     `⭐ הערב הכי טוב: ${money(top.profit)} (${dm(top.g)})`,
     `🥶 הערב הכי קשה: ${money(low.profit)} (${dm(low.g)})`,
-    lastRb !== null ? `🔁 ריביי בערב האחרון: ${money(lastRb)} · ממוצע לערב: ${money(avgRb)}` : "",
+    lastRb !== null ? `🔁 ריביי אחרון: ${money(lastRb)} · ממוצע: ${money(avgRb)}` : "",
     timeLine,
     `📈 ${Math.min(5, played.length)} ערבים אחרונים: ${arrows}`,
   ];
