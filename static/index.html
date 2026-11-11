@@ -6168,6 +6168,9 @@ let tourCcFor = null;      // ...and the player picked there
 // name the club doesn't have yet offers "הוסף ורשום" (with ז / נ) right there; after a
 // registration a line says so, with "ביטול".
 let tourRegLast = null;   // {pid, name, gameId, at} - the last one registered here
+// what's typed in the search and whether it had the keyboard - kept across redraws (a
+// refresh, a registration) so the text and the cursor stay where they were
+let tourRegQ = {gid: null, v: "", focused: false};
 function tourLastPlayed(c){
   const last = {};
   gamesForCommunity(c.id).forEach(g => {
@@ -12244,7 +12247,7 @@ function attachHandlers(){
       tourPanel = null; tourDealMethod = "guarantee"; tourCcFor = null;
       return tourAct(el, () => v2TourClock(tourGid, "deal"));
     }
-    tourPanel = tourPanel === v ? null : v; tourAddFocusKey = null; render();
+    tourPanel = tourPanel === v ? null : v; tourAddFocusKey = null; tourRegQ = {gid: null, v: "", focused: false}; render();
   });
   app.querySelectorAll("[data-ck-changes]").forEach(el => el.onclick = () => openModal({type: "tourChanges", gameId: tourGid}));
   // ----- the end: finish (places + prizes), a deal, the winners -----
@@ -12365,7 +12368,7 @@ function attachHandlers(){
     if (!(await showConfirm(`לסמן כפרשו: ${missing.map(r => r.name).join(", ")}?`, {okLabel: g2("סמן", "סמני"), cancelLabel: "ביטול"}))) return;
     tourAct(el, async () => { for (const r of missing) await v2TourAction(tourGid, r.playerId, "bust", {level: k.curLevel.level}); });
   });
-  app.querySelectorAll("[data-reg-add]").forEach(el => el.onclick = () => openModal({type: "tourRegPick", gameId: tourGid, openedAt: Date.now()}));
+  app.querySelectorAll("[data-reg-add]").forEach(el => el.onclick = () => { tourRegQ = {gid: null, v: "", focused: false}; openModal({type: "tourRegPick", gameId: tourGid, openedAt: Date.now()}); });
   if ((modal && modal.type === "tourRegPick") || (!modal && tourPanel === "add" && tourGid)) {
     const regGid = modal ? modal.gameId : tourGid;
     const box = app.querySelector(".rp");
@@ -12377,8 +12380,11 @@ function attachHandlers(){
         await v2TourRegister(g.id, pid, name, true);
         const rp = (getCommunity(g.communityId).roster || []).find(x => x.id === pid);
         tourRegLast = {pid, name, gameId: g.id, at: Date.now(), fem: (rp && rp.gender === "female") || gender === "female"};
+        tourRegQ = {gid: g.id, v: "", focused: false};
       });
-      setTimeout(() => { if (tourRegLast && Date.now() - tourRegLast.at >= 15000) render(); }, 15200);
+      // the "✓ X נרשם" line goes after 15 seconds - removed in place, not by redrawing (which
+      // would take what's being typed for the next one with it)
+      setTimeout(() => { if (tourRegLast && Date.now() - tourRegLast.at >= 15000) document.querySelectorAll(".rp-toast").forEach(e2 => e2.remove()); }, 15200);
     };
     if (box) {
       const q = box.querySelector("[data-rp-q]");
@@ -12416,7 +12422,15 @@ function attachHandlers(){
         if (addB) addB.disabled = !full; show(box.querySelector("[data-rp-need]"), strong && !full);
         show(box.querySelector("[data-rp-soft]"), !strong && !exact && raw.length >= 2); box.querySelector("[data-rp-softname]").textContent = raw;
       };
-      q.oninput = filter;
+      q.oninput = () => { tourRegQ = {gid: regGid, v: q.value, focused: true}; filter(); };
+      q.onfocus = () => { tourRegQ = Object.assign({}, tourRegQ, {gid: regGid, focused: true}); };
+      // (a redraw takes the field away - that blur isn't the user leaving it)
+      q.onblur = () => setTimeout(() => { if (q.isConnected) tourRegQ = Object.assign({}, tourRegQ, {focused: false}); }, 0);
+      // back as it was before this redraw: the text, the filtered list, the keyboard and cursor
+      if (tourRegQ.gid === regGid && tourRegQ.v) {
+        q.value = tourRegQ.v; filter();
+        if (tourRegQ.focused) setTimeout(() => { q.focus(); try { q.setSelectionRange(q.value.length, q.value.length); } catch (e2) {} }, 0);
+      }
       // the keyboard comes up only when the window / panel has just been opened
       const openKey = modal ? "modal:" + regGid + ":" + (modal.openedAt || "") : "panel:" + regGid;
       if (tourAddFocusKey !== openKey) { tourAddFocusKey = openKey; setTimeout(() => q.focus(), 50); }
