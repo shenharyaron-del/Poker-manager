@@ -6230,7 +6230,7 @@ function tourRegPickerHtml(g, c, t){
   </div>`;
 }
 function tourHasCounts(P){ return !!P.lastLevel || P.standings.some(s => s.counted); }
-function tourStandingsHtml(P, myPid){
+function tourStandingsHtml(P, myPid, fold){
   if (!P.approved.length) return "";
   const rows = P.standings.map(({r, place, counted}) => {
     const extra = r.bustedAt ? `${P.fem && P.fem(r.playerId) ? "יצאה" : "יצא"} ${hhmm(r.bustedAt)}${r.bustLevel ? ` · שלב ${r.bustLevel}` : ""}` : counted ? Number(r.chips).toLocaleString("en-US") : "—";
@@ -6243,8 +6243,11 @@ function tourStandingsHtml(P, myPid){
     return `<tr class="${r.playerId === myPid ? "me" : ""}${r.bustedAt ? " out" : ""}"><td>${place}</td><td class="nm">${esc(r.name || "")}${tags}</td><td class="ltr">${extra}</td></tr>`;
   }).join("");
   // a ranking only once there are chip counts - until then it's just who's playing
-  return `<fieldset class="leave-frame setup-frame"><legend>${tourHasCounts(P) ? `🏅 דירוג${P.lastLevel ? ` · נכון לסוף שלב ${P.lastLevel}` : ""}` : "👥 שחקנים"}</legend>
-    <div class="tbl-scroll${P.standings.length > 4 ? " capped st-cap" : ""}" data-keep-scroll="standings"><table class="tour-tbl st-tbl"><tbody>${rows}</tbody></table></div></fieldset>`;
+  const has = tourHasCounts(P), legend = has ? `🏅 דירוג${P.lastLevel ? ` · נכון לסוף שלב ${P.lastLevel}` : ""}` : "👥 שחקנים";
+  const body = `<div class="tbl-scroll${P.standings.length > 4 ? " capped st-cap" : ""}" data-keep-scroll="standings"><table class="tour-tbl st-tbl"><tbody>${rows}</tbody></table></div>`;
+  // a regular player's clock: folded while it's only names, open once it's a ranking
+  // (each phase its own fold state - the first count opens it again)
+  return fold ? tourFoldFrame(has ? "st1" : "st0", legend, body, has) : `<fieldset class="leave-frame setup-frame"><legend>${legend}</legend>${body}</fieldset>`;
 }
 let tourClockFull = false;   // "📋 מבנה מלא" under the clock
 function tourSoundOn(){ try { return localStorage.getItem("tour-sound") !== "0"; } catch (e) { return true; } }
@@ -6425,9 +6428,9 @@ function renderTourClock(g, c, isAdmin){
     ${adminAlerts}${me}${dealHtml}${meOut}
     <div class="ck-stats"><div><b>${P.alive.length}/${approved.length}</b>נשארו</div><div><b>${P.alive.length ? Math.round(P.expected / P.alive.length).toLocaleString("en-US") : "—"}</b>ממוצע ז'יטונים</div><div><b data-ck-played>${Math.floor(playedMin / 60)}:${String(playedMin % 60).padStart(2, "0")}</b>זמן משחק</div></div>
     ${tourPrizesHtml(t, approved.length, tourPot(g, t))}
-    ${tourStandingsHtml(P, myPid)}
     ${tourClockBlindsHtml(k)}
-    ${tourClockFull ? `<div style="text-align:right">${tourPayReadHtml(t, approved.length)}</div>` : ""}
+    ${tourStandingsHtml(P, myPid, true)}
+    <div style="text-align:right">${tourPayReadHtml(t, approved.length, true)}</div>
     <div class="ck-tools"><button type="button" data-ck-sound>${tourSoundOn() ? "🔊 צליל" : "🔇 צליל כבוי"}</button><button type="button" data-ck-fs>⛶ מסך מלא</button></div>
   </div>`;
 }
