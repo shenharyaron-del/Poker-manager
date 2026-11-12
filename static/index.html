@@ -809,8 +809,10 @@ html.theme-light .menu-sec{color:#9a5f12;}
    avatar's own visible edge. */
 .seat-info{display:flex;flex-direction:column;align-items:center;gap:1px;cursor:pointer;background:rgba(8,8,8,.82);border-radius:10px;padding:13px 10px 5px;margin-top:-13px;}
 .seat-name{font-size:11px;font-weight:700;color:var(--text);text-align:center;white-space:nowrap;max-width:78px;overflow:hidden;text-overflow:ellipsis;}
-.buyin-bar{align-self:stretch;height:6px;margin-top:3px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;direction:ltr;}
-.buyin-bar span{display:block;height:100%;border-radius:3px;background:#d8cdb8;}
+.buyin-bar{align-self:stretch;height:6px;margin-top:3px;display:flex;align-items:center;gap:2px;direction:ltr;overflow:hidden;}
+.buyin-bar span{display:block;flex-shrink:0;height:100%;border-radius:2px;background:#d8cdb8;}
+.buyin-bar b{font-size:9px;line-height:1;font-weight:800;color:#d8cdb8;margin-left:1px;}
+html.theme-light.theme-sand .buyin-bar b{color:#9a7b55;} html.theme-light.theme-blue .buyin-bar b{color:#6f8f9f;}
 html.theme-light.theme-sand .buyin-bar span{background:#9a7b55;}
 html.theme-light.theme-blue .buyin-bar span{background:#6f8f9f;}
 .seat-caption{font-size:13px;color:var(--gold);font-weight:700;text-align:center;line-height:1.35;white-space:nowrap;}
@@ -828,7 +830,7 @@ html.theme-light.theme-blue .buyin-bar span{background:#6f8f9f;}
 .seat-card .seat-name{max-width:100%;font-size:clamp(10px,2.9vw,11.5px);font-weight:800;text-align:right;line-height:1.2;}
 .seat-card .seat-caption{font-size:clamp(10px,2.9vw,11.5px);text-align:right;line-height:1.25;max-width:100%;}
 .seat-card .seat-co-profit{font-size:14px!important;}
-.seat-card .buyin-bar{position:absolute;left:5px;right:5px;bottom:4px;margin:0;height:5px;background:rgba(0,0,0,.3);}
+.seat-card .buyin-bar{position:absolute;left:5px;right:5px;bottom:4px;margin:0;height:5px;}
 .seat-card .seat-history-toggle{top:1px;right:1px;}
 .seat-card .seat-info{padding-right:0!important;}
 .seat-card .seat-name{padding-right:11px;box-sizing:border-box;}
@@ -836,10 +838,8 @@ html.theme-light.theme-blue .buyin-bar span{background:#6f8f9f;}
 .seat-card.seat-card-out{opacity:.7;}
 html.theme-light.theme-sand .seat-wrap.seat-card{background:linear-gradient(180deg,#fffaf2,#f1e3c6);border-color:#9a6a2a;box-shadow:0 4px 10px rgba(90,55,20,.3);}
 html.theme-light.theme-sand .seat-card .seat-info{--text:#3a2614;--gold:#8a5a12;--muted:#7a5a3a;}
-html.theme-light.theme-sand .seat-card .buyin-bar{background:rgba(90,55,20,.15);}
 html.theme-light.theme-blue .seat-wrap.seat-card{background:linear-gradient(180deg,#f4f9fb,#d9eaf2);border-color:#3f7d9c;box-shadow:0 4px 10px rgba(10,30,50,.3);}
 html.theme-light.theme-blue .seat-card .seat-info{--text:#0e2633;--gold:#a86a12;--muted:#3b6b80;}
-html.theme-light.theme-blue .seat-card .buyin-bar{background:rgba(14,38,51,.12);}
 html.theme-light .seat-wrap.seat-card.seat-card-me,html.theme-light.theme-sand .seat-wrap.seat-card.seat-card-me,html.theme-light.theme-blue .seat-wrap.seat-card.seat-card-me{box-shadow:0 0 0 2px #22a8c9,0 4px 10px rgba(0,0,0,.25);}
 html.theme-light .seat-card .seat-co-profit.pos{color:#15803d!important;}
 html.theme-light .seat-card .seat-co-profit.neg{color:#b91c1c!important;}
@@ -8667,14 +8667,15 @@ function monthlyReportText(c, ym, st){
 const SEAT_POS = [
   [32,7],[68,7],[86,26],[86,52],[78,76],[38,92],[18,76],[14,52],[14,26],[3,90]
 ];
-// A seat's buy-in bar (under the name and amount; filling left to right, gone once the
-// player has left): as long as the player's buy-in
-// relative to whoever bought in the most tonight. One neutral colour for everyone (per
-// theme, see the CSS) - only the length tells.
-function buyinBarHtml(amount, max){
-  if (!(amount > 0) || !(max > 0)) return "";
-  const pct = Math.max(6, Math.round(amount / max * 100));
-  return `<div class="buyin-bar"><span style="width:${pct}%;"></span></div>`;
+// A seat's buy-in bar (under the name and amount, left to right, gone once the player has
+// left): one segment per buy-in, each as long as its amount relative to whoever bought in
+// the most tonight - so it tells both how many times and how much. Up to 8 segments, then
+// "+N". One neutral colour for everyone (per theme, see the CSS).
+function buyinBarHtml(amounts, max){
+  const list = (amounts || []).filter(a => a > 0);
+  if (!list.length || !(max > 0)) return "";
+  const shown = list.slice(0, 8), more = list.length - shown.length;
+  return `<div class="buyin-bar">${shown.map(a => `<span style="width:max(3px,calc(${(a / max * 100).toFixed(1)}% - 2px));"></span>`).join("")}${more > 0 ? `<b>+${more}</b>` : ""}</div>`;
 }
 // The table screen's default face for a seated player: their own name/total up top, their
 // buy-in history, a one-tap buy-in row, a leave-the-table shortcut, and a WhatsApp-style
@@ -9617,7 +9618,7 @@ function renderTable(gameId){
         ${historyToggleHtml}
         <div class="seat-name">${esc(name)}</div>
         <div class="seat-caption">${caption}</div>
-        ${cashedOut ? "" : buyinBarHtml(buyin, maxSeatBuyin)}
+        ${cashedOut ? "" : buyinBarHtml((g.buyins || []).filter(b => b.playerId === pid).map(b => b.amount), maxSeatBuyin)}
         ${historyPopupHtml}
       </div>
     </div>`;
