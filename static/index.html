@@ -143,6 +143,9 @@ body.page-bg-lifted .swipe-page.lux-page{background:transparent!important;}
 .card:active{transform:scale(0.98);}
 .card .name{font-weight:700;font-size:16px;}
 .club-front .name,.card[data-new-community] .name,.card[data-new-game] .name{font-size:24px;}
+/* the club screen's game cards: a bigger name and date */
+.club-front[data-open-game] .name{font-size:28px;line-height:1.2;}
+.gc-date{font-size:18px;color:var(--muted);margin-top:3px;}
 .card.club-front .meta,.card[data-new-community] .meta,.card[data-new-game] .meta{font-size:16px;}
 .card .meta{color:var(--muted);font-size:12px;margin-top:4px;display:flex;align-items:center;gap:5px;}
 .chev{color:#059669;flex-shrink:0;}
@@ -8535,7 +8538,7 @@ function renderCommunity(communityId){
         + (regWait && canDelete ? `<div class="gc-wait">⏳ ${regWait === 1 ? "ממתין אחד" : `${regWait} ממתינים`} לאישור</div>` : "");
     const front = `
     <div class="card club-front ${g.closed?"":"card-open"}" data-open-game="${g.id}">
-      <div class="row flex1"><div class="flex1"><div class="name serif">${isTour ? `<span class="gc-trophy">🏆</span>` : ""}${esc(g.name || ilDate(g.date))}</div>${g.name ? `<div style="font-size:15px;color:var(--muted);margin-top:2px;">${esc(ilDate(g.date))}</div>` : ""}${isTour ? `<div class="gc-tour-sub">${tourSub}</div>` : ""}${gameAlert ? `<div class="game-alert-line">${gameAlert.text}</div>` : ""}</div><div class="game-status-col">${gameStatusBadge(g)}${treasurerFirstName(g) ? `<div class="game-treasurer">גיזבר: <bdi>${esc(treasurerFirstName(g))}</bdi></div>` : ""}</div></div>
+      <div class="row flex1"><div class="flex1"><div class="name serif">${isTour ? `<span class="gc-trophy">🏆</span>` : ""}${esc(g.name || ilDate(g.date))}</div>${g.name ? `<div class="gc-date">${esc(ilDate(g.date))}</div>` : ""}${isTour ? `<div class="gc-tour-sub">${tourSub}</div>` : ""}${gameAlert ? `<div class="game-alert-line">${gameAlert.text}</div>` : ""}</div><div class="game-status-col">${gameStatusBadge(g)}${treasurerFirstName(g) ? `<div class="game-treasurer">גיזבר: <bdi>${esc(treasurerFirstName(g))}</bdi></div>` : ""}</div></div>
       ${gameEnded(g) ? `<button type="button" class="gc-lock${gameLocked(g) ? "" : " open"}" data-game-lock="${g.id}" aria-label="${gameLocked(g) ? "משחק נעול" : "משחק פתוח לעריכה"}">${gameLocked(g) ? LOCK_SVG : UNLOCK_SVG}</button>` : ""}
       <div class="chev">${icon('chev')}</div>
     </div>`;
