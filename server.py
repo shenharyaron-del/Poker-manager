@@ -1277,6 +1277,11 @@ def _game_locked(cur, game_id):
         return False
     if (row[2] or "cash") == "tournament":
         return True
+    # final only once everyone who bought in has cashed out (and the pot balances)
+    cur.execute("SELECT 1 FROM buyins b WHERE b.game_id = %s AND NOT EXISTS "
+                "(SELECT 1 FROM cashouts c WHERE c.game_id = b.game_id AND c.player_id = b.player_id) LIMIT 1", (game_id,))
+    if cur.fetchone():
+        return False
     return abs(float(row[4]) - float(row[3])) <= 5
 
 
