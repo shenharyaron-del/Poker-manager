@@ -1468,7 +1468,9 @@ html.theme-light .ck-acts button{background:rgba(255,255,255,.45);border-color:#
 .ck-acts .bd{position:absolute;top:-7px;left:6px;min-width:18px;height:18px;line-height:18px;border-radius:9px;background:#f59e0b;color:#1c1917;font-size:12px;font-weight:800;padding:0 4px;}
 .ck-panel{border:1px solid rgba(212,175,55,.45);border-radius:14px;padding:8px 10px;margin:0 0 10px;text-align:right;}
 .ck-panel-h{display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:15px;margin-bottom:6px;}
-.ck-qr{background:#fff;border-radius:14px;padding:10px;margin:0 auto;max-width:230px;} .ck-qr img{display:block;width:100%;height:auto;}
+.ck-qr{background:#fff;border-radius:14px;padding:10px;margin:0 auto;max-width:230px;}
+/* "QR": the whole page under the clock is the code (the controls come back with "סגור") */
+.ck-qr-page .ck-panel{margin:0;padding:10px 12px 14px;} .ck-qr-page .ck-qr{max-width:min(320px,78vw);margin-top:8px;} .ck-qr img{display:block;width:100%;height:auto;}
 .ck-reg{background:rgba(242,193,78,.14);border:1px solid #f2c14e;border-radius:999px;padding:4px 12px;font:inherit;font-size:14px;font-weight:700;color:var(--text);cursor:pointer;}
 .ck-reg b{display:inline-block;min-width:18px;padding:0 5px;border-radius:9px;background:#f59e0b;color:#1c1917;margin-inline-start:2px;}
 .ck-ctl{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin:8px 0 2px;}
@@ -6451,7 +6453,7 @@ function renderTourClock(g, c, isAdmin){
       <div class="ck-sticky">${card}
         <div class="ck-dots"><button type="button" class="${tourClockPage ? "" : "on"}" data-ck-page="0">שעון</button><button type="button" class="${tourClockPage ? "on" : ""}" data-ck-page="1">${tourHasCounts(P) ? "דירוג ומבנה" : "שחקנים ומבנה"}</button></div></div>
       <div class="ck-pages" data-ck-pages>
-        <div class="ck-page">${admin}${chips ? `<div class="ck-chips">${chips}</div>` : ""}${acts}${panel || `<div class="ck-lower">${endPrompt}${dealHtml}${adminAlerts}${me}${stats}${tourPrizesHtml(t, approved.length, tourPot(g, t))}</div>`}${tools}</div>
+        ${tourPanel === "qr" && isAdmin ? `<div class="ck-page ck-qr-page">${panel}</div>` : `<div class="ck-page">${admin}${chips ? `<div class="ck-chips">${chips}</div>` : ""}${acts}${panel || `<div class="ck-lower">${endPrompt}${dealHtml}${adminAlerts}${me}${stats}${tourPrizesHtml(t, approved.length, tourPot(g, t))}</div>`}${tools}</div>`}
         <div class="ck-page">${meOut}${tourStandingsHtml(P, myPid, true, true)}${tourClockBlindsHtml(k)}<div style="text-align:right">${payFinal ? tourPayFinalHtml(t, approved.length, tourPot(g, t)) : tourPayReadHtml(t, approved.length, true, tourPot(g, t))}</div></div>
       </div>
     </div>`;
@@ -12187,6 +12189,8 @@ function attachHandlers(){
       if (tourClockPage && pg) pages.scrollLeft = pg.offsetLeft - pages.children[0].offsetLeft;
       // as tall as the page on screen (the other one must not leave empty space to scroll)
       const fitH = () => { const cur = pages.children[tourClockPage]; if (cur) pages.style.height = cur.scrollHeight + "px"; };
+      // an image still loading (the QR code) grows the page later - fit again then, or it stays cut
+      pages.querySelectorAll("img").forEach(img => { if (!img.complete) img.addEventListener("load", fitH, {once: true}); });
       // the part under the buttons grows (up to 1.5x) to take the free height - no scroll,
       // and never wider than the screen (a long prize row: 1st-3rd … the last two);
       // what's still left is spread as space between its parts
