@@ -1409,6 +1409,18 @@ html.theme-light .tf-unit{color:#9a5f12;}
 .tf-plus{flex:0 0 auto;padding-bottom:20px;font-size:20px;font-weight:800;color:var(--muted);}
 .tour-pay td:last-child{font-size:14px;}
 /* the new-table window's tournament summary, and a tournament night's card */
+/* the new-table window's "לפי טורניר קודם": the club's tournaments saved as a template */
+.ng-prev-link{display:block;margin:-4px auto 12px;background:none;border:none;font:inherit;font-size:15px;font-weight:700;color:var(--gold);text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
+html.theme-light .ng-prev-link{color:#9a5f12;} html.theme-light.theme-blue .ng-prev-link{color:#1d4558;}
+.ng-prev{border:1px solid rgba(212,175,55,.5);border-radius:12px;margin:-4px 0 12px;overflow:hidden;}
+.ng-prev .r{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 12px;border-top:1px solid rgba(255,255,255,.12);font-size:15px;text-align:right;}
+.ng-prev .r:first-child{border-top:none;}
+.ng-prev .r b{display:block;font-size:15.5px;} .ng-prev .r small{color:var(--muted);font-size:13px;}
+.ng-prev .r .use{flex-shrink:0;padding:5px 12px;border-radius:999px;border:1.5px solid var(--frame-c,var(--gold));background:none;font:inherit;font-size:14px;font-weight:800;color:inherit;cursor:pointer;}
+.ng-prev .r.on{background:rgba(255,227,154,.22);} .ng-prev .r.on .use{background:var(--frame-c,var(--gold));color:#1a1a1a;}
+.ng-prev-club{display:block;width:100%;padding:8px;border:none;border-top:1px solid rgba(255,255,255,.12);background:none;font:inherit;font-size:14px;color:var(--muted);text-decoration:underline;cursor:pointer;}
+.ts-template{display:flex;align-items:center;justify-content:center;gap:8px;font-size:15.5px;font-weight:700;cursor:pointer;}
+.ts-template input{width:20px;height:20px;accent-color:#e9b949;}
 .ng-tour{border:1px solid rgba(212,175,55,.5);border-radius:12px;padding:10px 12px;margin:4px 0 12px;font-size:15.5px;line-height:1.75;}
 .ng-tour .h{display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:800;color:var(--gold);margin-bottom:2px;}
 html.theme-light .ng-tour .h{color:#9a5f12;}
@@ -5788,7 +5800,7 @@ function setupModeSwitchHtml(communityId, on){
 // ---------- Tournament (club profile) - stage 1: the screen only, nothing saved ----------
 const TOUR_DEFAULTS = {tab: "struct", fee: 20, prize: 80, chips: 10000, early: 5, rebuys: 0, rebuyChips: 10000,
   rebuyLevels: 4, addOn: 0, addOnChips: 10000, addOnPrice: null, addOnExtra: 5,
-  rebuyPrice: null, rebuyFee: 0, addOnFee: 0, estRebuys: null, estAddOns: null, fullTable: 0, payFull: 0, payOpen: 2, payoutModel: 1, level: 15, jump: 1, breakEvery: 70, breakLen: 10, speed: 2, ante: 0.25, payoutPct: 20, entries: 16, points: {}};
+  rebuyPrice: null, rebuyFee: 0, addOnFee: 0, estRebuys: null, estAddOns: null, fullTable: 0, payFull: 0, payOpen: 2, payoutModel: 1, level: 15, jump: 1, breakEvery: 70, breakLen: 10, speed: 2, ante: 0.25, payoutPct: 20, entries: 16, points: {}, template: 0};
 // Blind speed presets: a level's length and how many rungs of the blind ladder each level
 // climbs. Moving either slider by hand makes it "מותאם אישית" (4).
 // Slow / normal: longer or shorter levels, one rung at a time; fast: the blinds climb two rungs.
@@ -6601,7 +6613,7 @@ function renderTourGame(g, c){
 async function saveTourSettings(){
   const cid = modal.communityId, settings = tourSavedPart(Object.assign({}, TOUR_DEFAULTS, modal.tour));
   if (modal.forNewGame) {
-    const back = Object.assign({}, modal.back, {tour: settings});
+    const back = Object.assign({}, modal.back, {tour: settings, tourEdited: true});
     modal = back; render();
     return true;
   }
@@ -10767,7 +10779,7 @@ function renderModal(m){
       ${m.gameId || m.forNewGame ? "" : setupModeSwitchHtml(m.communityId, "tour")}
       ${tabs}
       <div class="tour-panel tp-${t.tab === "chips" ? "chips" : "struct"}">${inner}</div>
-      <div class="setup-footer" style="display:flex;flex-direction:column;gap:8px;margin-top:12px;"><button class="btn btn-primary btn-block" data-tour-save ${tourSetupDirty() ? "" : "disabled"}>${!tourSetupDirty() ? (m.forNewGame ? "✓ ללא שינוי" : "✓ נשמר") : m.forNewGame ? "שמור לערב הזה" : "שמור שינויים"}</button></div>
+      <div class="setup-footer" style="display:flex;flex-direction:column;gap:8px;margin-top:12px;">${m.gameId || m.forNewGame ? `<label class="ts-template"><input type="checkbox" data-tour-template ${t.template ? "checked" : ""}> ⭐ לשמור כתבנית לשולחן חדש</label>` : ""}<button class="btn btn-primary btn-block" data-tour-save ${tourSetupDirty() ? "" : "disabled"}>${!tourSetupDirty() ? (m.forNewGame ? "✓ ללא שינוי" : "✓ נשמר") : m.forNewGame ? "שמור לערב הזה" : "שמור שינויים"}</button></div>
     `;
   } else if (m.type === "chipSetup") {
     const c = getCommunity(m.communityId);
@@ -11090,6 +11102,12 @@ function renderModal(m){
     const clubTour = c && c.tournamentSettings;
     const t = Object.assign({}, TOUR_DEFAULTS, m.tour || clubTour || {});
     const edited = !!m.tour && JSON.stringify(tourSavedPart(t)) !== JSON.stringify(tourSavedPart(Object.assign({}, TOUR_DEFAULTS, clubTour || {})));
+    // tournaments of this club saved as a template ("⭐ לשמור כתבנית לשולחן חדש"), newest first
+    const templates = !c ? [] : (state.games || []).filter(g => g.communityId === c.id && g.gameType === "tournament" && g.tournamentSettings && g.tournamentSettings.template)
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")) || (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 5);
+    const tplLine = g => { const s = Object.assign({}, TOUR_DEFAULTS, g.tournamentSettings), n = v => Number(v || 0).toLocaleString("en-US");
+      return `₪${n(tourEntryTotal(s))} · ${n(s.chips)} ז'יטונים · ${s.level} דק' לשלב`; };
+    const fromTpl = m.tourFrom && templates.find(g => g.id === m.tourFrom);
     title = "שולחן חדש";
     body = `
       <div class="field"><label>שם השולחן</label><input type="text" id="new-game-name" value="${esc(m.name ?? defaultGameName(m.communityId))}" placeholder="${esc(c ? c.name : "")}" onfocus="this.select()" autofocus></div>
@@ -11099,10 +11117,13 @@ function renderModal(m){
       : !clubTour ? `<p class="tour-empty" style="margin:0 0 12px;">עוד לא הוגדר טורניר למועדון - הגדירו אותו בפרופיל המועדון ← 🏆 טורניר.</p>
       <button class="btn btn-primary btn-block" disabled>פתח טורניר</button>`
       : `<div class="ng-tour">
-          <div class="h"><span>🏆 הגדרות הטורניר</span><small class="${edited ? "ed" : ""}">${edited ? "✎ שונה לערב הזה" : "מפרופיל המועדון"}</small></div>
+          <div class="h"><span>🏆 הגדרות הטורניר</span><small class="${edited ? "ed" : ""}">${fromTpl && !m.tourEdited ? `לפי ${esc(fromTpl.name || "טורניר")} · ${esc(ilDate(fromTpl.date))}` : edited ? "✎ שונה לערב הזה" : "מפרופיל המועדון"}</small></div>
           ${tourSummaryHtml(t)}
           <button type="button" class="ng-tour-edit" data-newgame-tour-edit>✎ ערוך לערב הזה</button>
         </div>
+        ${templates.length ? `<button type="button" class="ng-prev-link" data-newgame-tpl-toggle>📋 לפי טורניר קודם ${m.tplOpen ? "▴" : "▾"}</button>
+        ${m.tplOpen ? `<div class="ng-prev">${templates.map(g => `<div class="r${fromTpl && fromTpl.id === g.id ? " on" : ""}"><div><b>${esc(g.name || "טורניר")} · ${esc(ilDate(g.date))}</b><small>${tplLine(g)}</small></div><button type="button" class="use" data-newgame-tpl="${g.id}">${fromTpl && fromTpl.id === g.id ? "✓ נבחר" : "בחר"}</button></div>`).join("")}
+          ${m.tourFrom ? `<button type="button" class="ng-prev-club" data-newgame-tpl="">חזרה לפרופיל המועדון</button>` : ""}</div>` : ""}` : ""}
       <button class="btn btn-primary btn-block" data-create-game>פתח טורניר</button>`}
     `;
   } else if (m.type === "deleteGame") {
@@ -12547,6 +12568,7 @@ function attachHandlers(){
     const setTour = (patch) => updateModal({tour: Object.assign({}, TOUR_DEFAULTS, modal.tour, patch)});
     app.querySelectorAll("[data-tour-tab]").forEach(el => el.onclick = () => setTour({tab: el.dataset.tourTab}));
     app.querySelectorAll("[data-tour-full]").forEach(el => el.onclick = () => setTour({fullTable: modal.tour.fullTable ? 0 : 1}));
+    app.querySelectorAll("[data-tour-template]").forEach(el => el.onchange = () => { modal.tour = Object.assign({}, modal.tour, {template: el.checked ? 1 : 0}); render(); });
     app.querySelectorAll("[data-tour-save]").forEach(el => el.onclick = async () => {
       el.disabled = true; el.textContent = "שומר...";
       const kind = modal.forNewGame ? "new" : modal.gameId ? "game" : "club";
@@ -14311,6 +14333,14 @@ function attachHandlers(){
     const nameEl = document.getElementById("new-game-name");
     if (nameEl) nameEl.oninput = () => { modal.name = nameEl.value; };
     app.querySelectorAll("[data-newgame-mode]").forEach(el => el.onclick = () => { modal = Object.assign({}, modal, {mode: el.dataset.newgameMode, name: nameEl ? nameEl.value : modal.name}); render(); });
+    app.querySelectorAll("[data-newgame-tpl-toggle]").forEach(el => el.onclick = () => { modal = Object.assign({}, modal, {tplOpen: !modal.tplOpen, name: nameEl ? nameEl.value : modal.name}); render(); });
+    // a template's settings become this table's own copy (not itself a template)
+    app.querySelectorAll("[data-newgame-tpl]").forEach(el => el.onclick = () => {
+      const g = el.dataset.newgameTpl && getGame(el.dataset.newgameTpl);
+      modal = Object.assign({}, modal, {name: nameEl ? nameEl.value : modal.name, tourFrom: g ? g.id : null, tourEdited: false,
+        tour: g ? Object.assign({}, TOUR_DEFAULTS, g.tournamentSettings, {template: 0}) : null});
+      render();
+    });
     app.querySelectorAll("[data-newgame-tour-edit]").forEach(el => el.onclick = () => {
       const c = getCommunity(modal.communityId);
       const back = Object.assign({}, modal, {name: nameEl ? nameEl.value : modal.name});
