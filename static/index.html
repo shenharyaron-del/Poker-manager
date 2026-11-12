@@ -7811,11 +7811,8 @@ function render(){
       if (!["player", "table", "invite"].includes(tableSubView)) tableSubView = "player";
       html = gameTabsScreen(g, c, true);
     } else {
-      // Not seated: no "משחק" tab - just the table (free seats to pick from) and timeline.
-      const watchFeed = watchView === "feed" && isSuperAdmin() && !isSeatedInGame(g);
-      html = watchFeed
-        ? `<div class="table-swipe-root" style="display:flex;flex-direction:column;height:100%;">${renderWatchFeed(nav.gameId)}</div>`
-        : gameTabsScreen(g, c, false);
+      // Not seated: the same tabs - "משחק" points to the free seats
+      html = gameTabsScreen(g, c, false);
     }
     }
   }
@@ -7823,10 +7820,9 @@ function render(){
   // current view (the seats, or the timeline).
   const tableViewLabel = () => tableTimelineOn() ? "ציר זמן" : "שולחן";
   const SUB_VIEW_LABELS = { player: "שחקן", table: tableViewLabel() };
-  const watchFeedOn = nav.screen === "table" && !resultsScreen && !seated && watchView === "feed" && isSuperAdmin();
-  const screenLabel = resultsScreen ? "תוצאות משחק" : watchFeedOn ? "פעילות בשולחן" : ((seated && SUB_VIEW_LABELS[tableSubView]) || (nav.screen === "table" ? tableViewLabel() : (SCREEN_NAMES[nav.screen] || nav.screen)));
+  const screenLabel = resultsScreen ? "תוצאות משחק" : ((seated && SUB_VIEW_LABELS[tableSubView]) || (nav.screen === "table" ? tableViewLabel() : (SCREEN_NAMES[nav.screen] || nav.screen)));
   // A live table's tabs already say which view is open - the breadcrumbs stop at the club.
-  const crumbsStopAtClub = nav.screen === "table" && !resultsScreen && !watchFeedOn;
+  const crumbsStopAtClub = nav.screen === "table" && !resultsScreen;
   // On the club and game screens the tag doubles as breadcrumbs: בית › <club name>
   // › <this screen>, the first two linking home and to the club. One line: a long club
   // name gives way first ("…", down to nothing), never the current screen's name.
@@ -8726,8 +8722,7 @@ function renderGameWelcomeOverlay(gameId, playerId){
 }
 // The table's activity feed ("פעילות בשולחן") - buy-ins (incl. struck-through deleted
 // ones this device saw), cash-outs, logged events and direct transfers, oldest first.
-// Shared by the player screen and the super admin's watch-only feed page; nothing in it
-// depends on who's looking.
+// Shown on the player screen; nothing in it depends on who's looking.
 function buildTableFeed(g, c){
   const isFemale = playerId => playerIsFemale(g, c, playerId);
   if (!localBuyinLogs[g.id]) localBuyinLogs[g.id] = {};
@@ -9487,36 +9482,6 @@ function renderPotFix(gameId){
 
   return potFixHtml || `<div class="empty" style="padding:14px 0;font-size:18px;">הקופה מאוזנת ✓</div>`;
 }
-// Super admin on a table they don't sit at (a club they aren't a player in): "שולחן" /
-// "פעילות בשולחן" switch - the feed page is the activity feed alone, full height.
-let watchView = "table";
-function watchStripHtml(g){
-  const watching = !isSeatedInGame(g);
-  if (!(watching && isSuperAdmin())) return "";
-  const tab = (key, label) => `<button class="btn ${watchView===key?'btn-primary':'btn-ghost'}" style="padding:5px 10px;font-size:12px;" data-watch-view="${key}">${label}</button>`;
-  return `
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:-6px 20px 10px;padding:6px 10px;border:1px solid rgba(212,175,55,.45);border-radius:12px;flex-wrap:wrap;">
-      <div style="display:flex;gap:6px;flex-wrap:wrap;">${tab("table", "שולחן") + tab("feed", "פעילות בשולחן")}</div>
-    </div>`;
-}
-function renderWatchFeed(gameId){
-  const g = getGame(gameId);
-  const c = getCommunity(g.communityId) || {name:"מועדון", roster:[]};
-  const {feedRows, latestFeedEventKey} = buildTableFeed(g, c);
-  return `
-    <div class="top row" style="padding-top:14px;padding-bottom:16px;flex-shrink:0;">
-      <button class="back-arrow" data-back-community="${g.communityId}">${icon('back')}</button>
-      <div class="flex1" style="min-width:0;">
-        <h1 class="serif sm" style="color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g.name || c.name)}</h1>
-        <div class="meta" style="color:#6ee7b7;font-size:15px;display:flex;align-items:center;gap:4px;">${icon('cal')}${esc(ilDate(g.date))}</div>
-      </div>
-    </div>
-    ${watchStripHtml(g)}
-    <div style="flex:1;min-height:0;display:flex;flex-direction:column;padding:0 20px 20px;">
-      <div class="player-history-feed-body mode-feed" data-player-feed data-latest-event="${latestFeedEventKey}" style="border-radius:16px;">${feedRows}</div>
-    </div>`;
-}
-
 function renderTable(gameId){
   const g = getGame(gameId);
   if (!g) return missingGameHtml();
@@ -9700,7 +9665,6 @@ function renderTable(gameId){
   const cropClass = mySlotY < 50 ? "crop-from-bottom" : "crop-from-top";
 
   return `
-    ${watchStripHtml(g)}
     ${canTakeSeatHere(g) && !tableTimelineOn() && !tableSeatsFull(g) ? `<div class="pick-seat-hint">לחצו על כיסא פנוי (+) כדי להתיישב</div>` : ""}
     ${tableTimelineOn() ? renderTableTimeline(g, c, myPlayerId) : `<div class="poker-table-wrap">
       <div class="poker-table-inner ${cropClass}">
@@ -14930,7 +14894,6 @@ function attachHandlers(){
   }
 
 
-  app.querySelectorAll("[data-watch-view]").forEach(el => el.onclick = () => { watchView = el.dataset.watchView; render(); });
 
   if (modal && modal.type === "installViaChrome") {
     const btn = app.querySelector("[data-confirm-install-chrome]");
