@@ -9043,7 +9043,11 @@ function renderPlayerScreen(gameId){
     // The nice facts about my recent nights were in the end-of-night popup ("nightResult") -
     // not repeated here.
     cashedOutInfoHtml = breakdownHtml + paymentNotesHtml + statusHtml + stillPlayingHtml
-      + (((gameTreasurer(g) ? iAmTreasurer(g) : isAdminView) && allCashedOutForSettlement && !potBalancedForSettlement) ? `<div class="pot-fix-cta"><button class="btn btn-blue co-act" data-open-pot-fix>${icon('coins')} סידור קופה</button><span class="pot-fix-hand">👈</span></div>` : "")
+      + (((gameTreasurer(g) ? iAmTreasurer(g) : isAdminView) && allCashedOutForSettlement && !potBalancedForSettlement) ? `<div class="pot-fix-cta"><button class="btn btn-blue co-act" data-open-pot-fix>${icon('coins')} סידור קופה${(() => {
+        // how far off: players took out more than went in = money missing, less = money left over
+        const off = Math.round((totalCashedOutForSettlement - totalBuyinsForSettlement) * 100) / 100;
+        return off ? ` · ${off > 0 ? "חסרים" : "עודף"} ₪${Math.abs(off)}` : "";
+      })()}</button><span class="pot-fix-hand">👈</span></div>` : "")
       + (viewingOther ? "" : `<button class="btn btn-ghost co-act" data-open-my-stats>${icon('bar')} הביצועים שלי</button>`);
   }
   const canDeleteBuyins = canHandleMoney(g); // with a treasurer tonight, only them
