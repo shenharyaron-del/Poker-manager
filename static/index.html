@@ -8494,7 +8494,8 @@ function renderCommunity(communityId){
     const canInvite = !g.closed;
     // The table's creator, any club admin (the creator included) or a super admin - the
     // same table-admin rights the server checks on delete.
-    const canDelete = isSuperAdmin() || isTableAdmin(g, c);
+    // A locked (finished) night can't be deleted - no swipe to reveal it until it's unlocked.
+    const canDelete = (isSuperAdmin() || isTableAdmin(g, c)) && !gameLocked(g);
     // A tournament night: 🏆 and a line of its own (the clock and its live state come later).
     const isTour = g.gameType === "tournament";
     const tt = isTour ? Object.assign({}, TOUR_DEFAULTS, g.tournamentSettings || {}) : null;
