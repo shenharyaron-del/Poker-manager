@@ -193,6 +193,8 @@ body.table-screen #app{height:100vh;height:100dvh;height:var(--real-vh, 100dvh);
 body.table-screen.kb-open{overflow:visible;}
 body.kb-open .overlay{top:var(--kb-top,0px);bottom:var(--kb-h,0px);}
 body.kb-open .overlay .modal{max-height:100%;}
+/* room under the page to scroll its bottom (the end-of-night frame) above the keyboard */
+body.kb-open .lux-page{padding-bottom:calc(var(--kb-h,0px) + 16px);}
 /* Wraps whichever face of the table screen is showing (see render()) - re-establishes
    the column layout #app used to give its children directly, now one level removed.
    touch-action:pan-y lets native vertical scroll work everywhere inside (the felt, the
@@ -8063,6 +8065,29 @@ function updateRealVh(){
   document.body.classList.toggle("kb-open", kb);
   // Keyboard just opened inside a modal: bring the field into the (now smaller) view.
   if (kb && !wasKb && ae.closest && ae.closest(".modal")) setTimeout(() => { try { ae.scrollIntoView({block: "center"}); } catch(e) {} }, 60);
+  // ...or in the end-of-night frame ("סיימתי את הערב"): the whole frame above the keyboard,
+  // down to "בקופה נשארו / נשארו X שחקנים"
+  else if (kb && !wasKb && ae.closest && ae.closest(".lv-body")) setTimeout(() => fitLeaveFrame(ae), 80);
+}
+// Scrolls so the end-of-night frame - from its "סיים את הערב" line to the pot summary - sits
+// in the part of the screen the keyboard leaves visible (its top first if it doesn't fit).
+function fitLeaveFrame(ae){
+  const body = ae.closest(".lv-body"); if (!body) return;
+  const head = body.previousElementSibling && body.previousElementSibling.matches(".lv-arm") ? body.previousElementSibling : body;
+  const vv = window.visualViewport, visTop = vv ? vv.offsetTop : 0, visBottom = visTop + (vv ? vv.height : window.innerHeight);
+  const top = head.getBoundingClientRect().top - 8, bottom = body.getBoundingClientRect().bottom + 8;
+  let delta = bottom - visBottom;                       // > 0: the frame's bottom is behind the keyboard
+  if (top - delta < visTop) delta = top - visTop;       // too tall: keep its top line in view instead
+  if (Math.abs(delta) < 2) return;
+  // the nearest scrolling box that can move, else the page itself
+  let sc = body.parentElement;
+  while (sc && sc !== document.body) {
+    const oy = getComputedStyle(sc).overflowY;
+    if ((oy === "auto" || oy === "scroll") && sc.scrollHeight > sc.clientHeight) break;
+    sc = sc.parentElement;
+  }
+  if (sc && sc !== document.body) sc.scrollBy({top: delta, behavior: "smooth"});
+  else window.scrollBy({top: delta, behavior: "smooth"});
 }
 document.addEventListener("focusout", () => setTimeout(() => requestAnimationFrame(updateRealVh), 50));
 updateRealVh();
