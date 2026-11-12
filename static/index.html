@@ -9527,14 +9527,6 @@ function renderPotFix(gameId){
     const groupIds = seatedIds.filter(pid => { const pr = (liveChips[pid]||0) - (buyinTotals[pid]||0); return taking ? pr > 0 : pr < 0; });
     const allSel = seatedIds.length > 0 && seatedIds.every(pid => adminBalanceFixSelected[pid]);
     const groupSel = groupIds.length > 0 && groupIds.every(pid => adminBalanceFixSelected[pid]) && seatedIds.every(pid => groupIds.includes(pid) || !adminBalanceFixSelected[pid]);
-    // Someone who cashed out more than 10 minutes ago has probably left already - worth
-    // knowing before changing their numbers.
-    const leftAgoNote = pid => {
-      const ts = g.cashouts[pid] && g.cashouts[pid].ts;
-      const t = ts ? new Date(ts).getTime() : 0;
-      const mins = t ? Math.floor((Date.now() - t) / 60000) : 0;
-      return mins > 10 ? `<div style="color:var(--muted);font-size:15px;font-weight:400;">יצא לפני ${mins >= 60 ? `${Math.floor(mins/60)} ש' ו-${mins%60} דק'` : `${mins} דק'`}</div>` : "";
-    };
     potFixHtml = `
       <div class="section-title" style="padding:0;margin:16px 0 8px;">סדר קופה</div>
       <div style="background:#450a0a;color:#fca5a5;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:17px;text-align:center;font-weight:700;">הקופה לא מאוזנת - ${direction} של ₪${Math.abs(Math.round(diff))}</div>
@@ -9555,7 +9547,7 @@ function renderPotFix(gameId){
           <span class="pf-num">₪${Math.round(buyinTotals[pid]||0)}</span>
           <span class="pf-num">₪${Math.round(liveChips[pid]||0)}</span>
           <span class="pf-num" style="color:${profitColor(playerProfit)};font-weight:700;"><bdi>${playerProfit>0?'+':''}${Math.round(playerProfit)}</bdi></span>
-          <span class="pf-sub">${buys}${change ? ` <span class="pf-change">← ${change>0?'+':''}₪${Math.round(change*100)/100}</span>` : ''}${leftAgoNote(pid)}</span>
+          <span class="pf-sub">${buys}${change ? ` <span class="pf-change">← ${change>0?'+':''}₪${Math.round(change*100)/100}</span>` : ''}</span>
         </label>`;
       }).join("")}
       <div style="text-align:center;color:var(--muted);font-size:16px;margin:6px 0;">${selectedIds.length
