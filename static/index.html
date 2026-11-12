@@ -197,6 +197,7 @@ body.kb-open .overlay .modal{max-height:100%;}
 body.table-screen.kb-open .player-screen-scroll{padding-bottom:calc(var(--kb-h,0px) + 20px);}
 /* ...and the frame a little shorter meanwhile: the field shows what it is for */
 body.kb-open .lv-body .lv-amount-label{display:none;}
+body.kb-open .night-closed-row{display:none!important;}   /* "ערב סגור" under the frame: not while typing the amount */
 /* Wraps whichever face of the table screen is showing (see render()) - re-establishes
    the column layout #app used to give its children directly, now one level removed.
    touch-action:pan-y lets native vertical scroll work everywhere inside (the felt, the
@@ -8069,7 +8070,7 @@ function updateRealVh(){
   if (kb && !wasKb && ae.closest && ae.closest(".modal")) setTimeout(() => { try { ae.scrollIntoView({block: "center"}); } catch(e) {} }, 60);
   // ...or in the end-of-night frame ("סיימתי את הערב"): the whole frame above the keyboard,
   // down to "בקופה נשארו / נשארו X שחקנים"
-  else if (kb && !wasKb && ae.closest && ae.closest(".lv-body")) setTimeout(() => fitLeaveFrame(ae), 80);
+  else if (kb && !wasKb && ae.closest && ae.closest(".lv-body")) { setTimeout(() => fitLeaveFrame(ae), 80); setTimeout(() => fitLeaveFrame(ae), 400); }
 }
 // Scrolls so the end-of-night frame sits in the part of the screen the keyboard leaves
 // visible, down to its pot summary ("בקופה נשארו / נשארו X שחקנים"). The "סיים את הערב"
@@ -8092,7 +8093,7 @@ function fitLeaveFrame(ae){
   let delta = bottom - visBottom;                       // > 0: the frame's bottom is behind the keyboard
   if (top - delta < visTop) delta = top - visTop;       // too tall even so: keep the amount row in view
   if (Math.abs(delta) < 2) return;
-  if (sc) sc.scrollBy({top: delta, behavior: "smooth"}); else window.scrollBy({top: delta, behavior: "smooth"});
+  if (sc) sc.scrollTop += delta; else window.scrollBy(0, delta);
 }
 document.addEventListener("focusout", () => setTimeout(() => requestAnimationFrame(updateRealVh), 50));
 updateRealVh();
@@ -9290,7 +9291,7 @@ function renderPlayerScreen(gameId){
       ${(cashedOut || (notStarted && !armed) || !canEndNightFor(g, pid)) ? "" : `<fieldset class="leave-frame lv-frame${armed?' lv-frame-top':''}">${leaveHtml}</fieldset>`}
       ${(notStarted && !cashedOut) ? `<button type="button" class="btn btn-primary btn-block gs-start" data-start-game="${g.id}">${icon('check')} תחילת משחק</button>` : ""}
       ${adminPlayerActions}
-      ${(showClosedToggle && !notStarted) ? `<div style="display:flex;justify-content:center;margin-top:12px;flex-shrink:0;"><label class="night-closed-toggle" data-toggle-end-night="${g.id}"><input type="checkbox" ${g.closed?'checked':''} onclick="return false;"><span>ערב סגור</span></label></div>` : ""}
+      ${(showClosedToggle && !notStarted) ? `<div class="night-closed-row" style="display:flex;justify-content:center;margin-top:12px;flex-shrink:0;"><label class="night-closed-toggle" data-toggle-end-night="${g.id}"><input type="checkbox" ${g.closed?'checked':''} onclick="return false;"><span>ערב סגור</span></label></div>` : ""}
       ${cashedOut ? `<fieldset class="leave-frame night-recap" style="margin-top:16px;text-align:right;font-size:18px;"><legend>סיכום הערב</legend><div class="night-recap-body">${nightSummaryHtml(g, pid,
         (g.buyins||[]).filter(b => b.playerId === pid),
         (g.events||[]).filter(e => e.type === "buyin_deleted" && e.playerId === pid).map(e => ({ts: e.ts, amount: e.amount, actorName: e.actorName})),
@@ -13143,7 +13144,11 @@ function attachHandlers(){
     render();
   });
   app.querySelectorAll("[data-rb-cancel-toggle]").forEach(el => el.onclick = () => { const k = nav.gameId + ":" + viewedPid(); rebuyCancelOpen[k] = !rebuyCancelOpen[k]; render(); });
-  app.querySelectorAll("[data-leave-arm]").forEach(el => el.onchange = () => { leaveArmed[nav.gameId + ":" + viewedPid()] = el.checked; render(); });
+  // ticking "סיימתי את הערב" puts the cursor in the amount, so the keyboard comes up right away
+  app.querySelectorAll("[data-leave-arm]").forEach(el => el.onchange = () => {
+    leaveArmed[nav.gameId + ":" + viewedPid()] = el.checked; render();
+    if (el.checked) { const amt = document.getElementById("lv-amount"); if (amt && !amt.disabled) { try { amt.focus({preventScroll: true}); } catch(e) { amt.focus(); } } }
+  });
   app.querySelectorAll("#lv-amount").forEach(el => el.oninput = () => { leaveAmountDraft[nav.gameId + ":" + viewedPid()] = el.value; });
   app.querySelectorAll("#lv-chips").forEach(el => el.oninput = () => {
     const key = nav.gameId + ":" + viewedPid();
