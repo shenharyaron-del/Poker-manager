@@ -1779,14 +1779,10 @@ html.theme-light .reg-row.me{background:rgba(242,193,78,.25);}
 .pay-note{display:flex;align-items:center;justify-content:center;gap:4px;font-size:13px;color:var(--muted);margin:0 0 6px;} .pay-list b{text-align:left;font-weight:800;direction:ltr;}
 .tf-sub{display:block;font-size:13px;font-weight:400;color:var(--muted);}
 .fold-lg{cursor:pointer;}
-/* the player carousel's "הסתר / הצג שיצאו" (on the frame's top line, left) */
-.pp-car{position:relative;}
-.out-tg{position:absolute;left:16px;top:-13px;z-index:3;display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:999px;border:1.5px solid var(--frame-c,var(--gold));background:var(--frame-c,var(--gold));color:#1a1a1a;font:inherit;font-size:13.5px;font-weight:800;line-height:1.3;white-space:nowrap;cursor:pointer;}
-.out-tg.hiding{background:#fff3cf;color:#7a4a12;}
-html.theme-light.theme-sand .out-tg:not(.hiding){color:#fff6e3;}
-/* on a player's own (pink) page: soft, not the strong burgundy */
-.lux-page.pp-other .out-tg{background:#f6d9d9;border-color:#c98a8a;color:#7a2424;}
-.lux-page.pp-other .out-tg.hiding{background:#fff8f6;}
+/* the player carousel's "הסתר / הצג שיצאו": a link centered under the players and their dots,
+   like "טבלה מלאה" under a table */
+.out-tg{display:flex;align-items:center;gap:5px;margin:8px auto 0;padding:2px 6px;background:none;border:none;font:inherit;font-size:14.5px;font-weight:700;color:var(--frame-c,var(--gold));text-decoration:underline;text-underline-offset:3px;white-space:nowrap;cursor:pointer;}
+.out-tg svg{flex-shrink:0;}
 .has-me{position:relative;}
 .me-jump{position:absolute;left:18px;top:-13px;z-index:3;padding:2px 12px;border-radius:999px;border:none;background:var(--frame-c,var(--gold));color:#1a1a1a;font:inherit;font-size:14px;font-weight:800;line-height:1.5;cursor:pointer;}
 html.theme-light.theme-sand .me-jump{color:#fff6e3;}
@@ -9338,14 +9334,14 @@ function renderPlayerScreen(gameId){
   const carouselHtml = (() => {
     const totals = {};
     (g.buyins || []).forEach(b => { totals[b.playerId] = (totals[b.playerId] || 0) + (b.amount || 0); });
-    // "הסתר / הצג שיצאו" on the frame's top line: who's left the table can be hidden - but not
-    // the one being looked at (they stay, and aren't counted)
+    // "הסתר / הצג שיצאו" under the players (and their dots), centered: who's left the table can
+    // be hidden - but not the one being looked at (they stay, and aren't counted)
     const hideable = othersTonight.filter(id => id in (g.cashouts || {}) && id !== pid);
     const n = hideable.length, hiding = hideOutPlayers && n > 0;
-    const corner = !n ? "" : `<button type="button" class="out-tg${hiding ? " hiding" : ""}" data-toggle-out-players>${hiding ? EYE_SVG : EYE_OFF_SVG} ${
+    const footer = !n ? "" : `<button type="button" class="out-tg${hiding ? " hiding" : ""}" data-toggle-out-players>${hiding ? EYE_SVG : EYE_OFF_SVG} ${
       n === 1 ? (hiding ? "הצג את מי שיצא" : "הסתר את מי שיצא") : `${hiding ? "הצג" : "הסתר"} ${n} שיצאו`}</button>`;
     const shownIds = hiding ? othersTonight.filter(id => !hideable.includes(id)) : othersTonight;
-    return playersCarouselHtml("player:" + g.id, g, c, tableSeatOrder(g, shownIds, myPlayerId), { corner,
+    return playersCarouselHtml("player:" + g.id, g, c, tableSeatOrder(g, shownIds, myPlayerId), { footer,
       onId: pid, attr: canActForOthers(g) ? "data-pp-view" : "data-pp-noview",
       // The table's admins (and tonight's treasurer) act for someone else - for them the frame says so.
       legend: canActForOthers(g) && (isAdminView || iAmTreasurer(g)) ? g2("בחר שחקן כדי לפעול בשמו", "בחרי שחקן כדי לפעול בשמו") : "",
@@ -9876,7 +9872,7 @@ const RETURN_ICON = `<svg class="ret-ic" viewBox="0 0 24 24" aria-hidden="true">
 let hideOutPlayers = (() => { try { return localStorage.getItem("poker-hide-out-players") === "1"; } catch(e) { return false; } })();
 const EYE_SVG = `<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/></svg>`;
 const EYE_OFF_SVG = `<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/><path d="M4 20L20 4" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`;
-function playersCarouselHtml(key, g, c, ids, {onId = null, meId = null, attr, under = null, legend = "", corner = ""}){
+function playersCarouselHtml(key, g, c, ids, {onId = null, meId = null, attr, under = null, legend = "", footer = ""}){
   if (!ids.length) return "";
   const items = ids.map(id => {
     const out = id in (g.cashouts || {});
@@ -9889,11 +9885,11 @@ function playersCarouselHtml(key, g, c, ids, {onId = null, meId = null, attr, un
   const many = ids.length > 4;   // trimmed in setupPlayerCarousel to what fits
   // A fieldset, so a legend (when there is one) sits on the frame itself.
   return `<fieldset class="pp-car${many ? " many" : ""}${under ? "" : " names-only"}${legend ? " has-legend" : ""}" data-pp-car="${key}">
-    ${legend ? `<legend class="pp-car-legend">${esc(legend)}</legend>` : ""}${corner}
+    ${legend ? `<legend class="pp-car-legend">${esc(legend)}</legend>` : ""}
     ${many ? `<button type="button" class="pp-car-arrow prev" data-pp-car-step="1" aria-label="הקודם"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>` : ""}
     <div class="pp-car-track" data-pp-car-track>${items}</div>
     ${many ? `<button type="button" class="pp-car-arrow next" data-pp-car-step="-1" aria-label="הבא"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
-    <div class="pp-car-dots"></div>` : ""}
+    <div class="pp-car-dots"></div>` : ""}${footer}
   </fieldset>`;
 }
 // The player screen's carousel (see carouselHtml): keeps the player it was showing in the
@@ -12320,11 +12316,8 @@ function attachHandlers(){
     tip.style.left = Math.max(8, Math.min(window.innerWidth - tip.offsetWidth - 8, r.left + r.width / 2 - tip.offsetWidth / 2)) + "px";
     setTimeout(() => { tip.classList.add("out"); setTimeout(() => tip.remove(), 300); }, Number(el.dataset.tipMs) || 3000);
   });
-  // "הסתר / הצג שיצאו": level with the carousel frame's title (or its top line)
+  // "הסתר / הצג שיצאו" under the carousel
   app.querySelectorAll("[data-toggle-out-players]").forEach(el => {
-    const fs = el.closest("fieldset"), lg = fs && fs.querySelector("legend");
-    if (lg) { const l = lg.getBoundingClientRect(), b = el.getBoundingClientRect(); el.style.top = Math.round(el.offsetTop + (l.top + l.height / 2) - (b.top + b.height / 2)) + "px"; }
-    else if (fs) { const f = fs.getBoundingClientRect(), b = el.getBoundingClientRect(); el.style.top = Math.round(el.offsetTop + f.top - (b.top + b.height / 2)) + "px"; }
     el.onclick = (e) => { e.stopPropagation(); hideOutPlayers = !hideOutPlayers; try { localStorage.setItem("poker-hide-out-players", hideOutPlayers ? "1" : "0"); } catch(err) {} render(); };
   });
   // "👤 אני": on the frame's top line, level with its title; opens the frame, scrolls to my row
