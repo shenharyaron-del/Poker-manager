@@ -5148,17 +5148,9 @@ function seatPlayerIfRoom(g, playerId, p){
 // If this device is remembered as a specific roster player in this game's community,
 // and that player isn't seated yet in this game, seat them automatically - so returning
 // players don't have to pick their name every night.
-// "צפייה בלבד": games the super admin chose to watch without sitting down -
-// autoSeatSelf leaves them out of these. Per device, kept in localStorage.
-let watchOnlyGameIds;
-try { watchOnlyGameIds = new Set(JSON.parse(localStorage.getItem("poker-watch-only-games")) || []); }
-catch(e) { watchOnlyGameIds = new Set(); }
-function setWatchOnly(gameId, on){
-  if (on) watchOnlyGameIds.add(gameId); else watchOnlyGameIds.delete(gameId);
-  try { localStorage.setItem("poker-watch-only-games", JSON.stringify(Array.from(watchOnlyGameIds))); } catch(e) {}
-}
-// Opening an open game you're not seated in, as the super admin, asks whether to join it
-// or just watch - everyone else (group admins included) is still seated automatically.
+// There's no "watch only" any more: opening an open game seats you like everyone else.
+// (the old per-device list of watched games is dropped)
+try { localStorage.removeItem("poker-watch-only-games"); } catch(e) {}
 // Whether autoSeatSelf could seat this device at all - a super admin who isn't in the
 // group's roster can only ever watch, so there's nothing to ask them.
 function canSelfSeat(g){
@@ -5226,14 +5218,9 @@ async function takeSeatAt(g, idx){
     render();
   } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); }
 }
-function shouldAskWatchOrJoin(g){
-  // a tournament has no seats to take - it opens straight into its lobby / registration / clock
-  if (!g || g.gameType === "tournament" || g.closed || watchOnlyGameIds.has(g.id) || isSeatedInGame(g) || !canSelfSeat(g)) return false;
-  return isSuperAdmin();
-}
 function autoSeatSelf(gameId){
   const g = getGame(gameId);
-  if (!g || g.gameType === "tournament" || g.closed || watchOnlyGameIds.has(gameId)) return;
+  if (!g || g.gameType === "tournament" || g.closed) return;
   const c = getCommunity(g.communityId);
   if (!c) return;
   const playerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
@@ -9500,23 +9487,16 @@ function renderPotFix(gameId){
 
   return potFixHtml || `<div class="empty" style="padding:14px 0;font-size:18px;">הקופה מאוזנת ✓</div>`;
 }
-// Super admin watching a table they don't sit at: "שולחן" / "פעילות בשולחן" switch (the
-// feed page is the activity feed alone, full height), plus the watch-only join button
-// when they could actually be seated (see shouldAskWatchOrJoin).
+// Super admin on a table they don't sit at (a club they aren't a player in): "שולחן" /
+// "פעילות בשולחן" switch - the feed page is the activity feed alone, full height.
 let watchView = "table";
 function watchStripHtml(g){
   const watching = !isSeatedInGame(g);
-  const showTabs = watching && isSuperAdmin();
-  const showJoin = watchOnlyGameIds.has(g.id) && watching && !g.closed && canSelfSeat(g);
-  if (!showTabs && !showJoin) return "";
+  if (!(watching && isSuperAdmin())) return "";
   const tab = (key, label) => `<button class="btn ${watchView===key?'btn-primary':'btn-ghost'}" style="padding:5px 10px;font-size:12px;" data-watch-view="${key}">${label}</button>`;
   return `
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:-6px 20px 10px;padding:6px 10px;border:1px solid rgba(212,175,55,.45);border-radius:12px;flex-wrap:wrap;">
-      <span style="color:var(--gold);font-size:12px;font-weight:700;">👁 צפייה בלבד</span>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        ${showTabs ? tab("table", "שולחן") + tab("feed", "פעילות בשולחן") : ""}
-        ${showJoin ? `<button class="btn btn-ghost" style="padding:5px 10px;font-size:12px;" data-stop-watch-only="${g.id}">הצטרפות לשולחן</button>` : ""}
-      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">${tab("table", "שולחן") + tab("feed", "פעילות בשולחן")}</div>
     </div>`;
 }
 function renderWatchFeed(gameId){
@@ -11140,14 +11120,6 @@ function renderModal(m){
       <p style="color:#6ee7b7;font-size:17px;">לבטל את התשלום של <b>${esc(p.name)}</b> על סך <b>₪${b?b.amount:""}</b>? התשלום יימחק לגמרי מהרישום.</p>
       <button class="btn btn-block" style="background:#be123c;color:#fff;margin-top:8px;" data-confirm-delete-buyin>בטל תשלום</button>
     `;
-  } else if (m.type === "watchOrJoin") {
-    const g = getGame(m.gameId);
-    title = esc(g ? (g.name || ilDate(g.date)) : "משחק");
-    body = `
-      <p style="margin-top:0;line-height:1.6;">${g2("אתה לא יושב", "את לא יושבת")} בשולחן הזה. איך להיכנס?</p>
-      <button class="btn btn-primary btn-block" style="margin-bottom:10px;" data-watch-or-join="join">הצטרפות לשולחן</button>
-      <button class="btn btn-ghost btn-block" data-watch-or-join="watch">צפייה בלבד</button>
-    `;
   } else if (m.type === "potFix") {
     title = "סידור קופה";
     body = renderPotFix(m.gameId);
@@ -12638,7 +12610,6 @@ function attachHandlers(){
         else await mutateAndSave(() => { getGame(gameId).closed = false; });
       } catch(e) { /* best-effort - the night just stays closed */ }
     }
-    if (shouldAskWatchOrJoin(getGame(gameId))) { openModal({type: "watchOrJoin", gameId}); return; }
     go("table", {gameId, communityId});
     if (USE_RELATIONAL_API) { await ensureGameLoadedForView(gameId); render(); }
   });
@@ -14960,22 +14931,6 @@ function attachHandlers(){
 
 
   app.querySelectorAll("[data-watch-view]").forEach(el => el.onclick = () => { watchView = el.dataset.watchView; render(); });
-  app.querySelectorAll("[data-stop-watch-only]").forEach(el => el.onclick = () => {
-    setWatchOnly(el.dataset.stopWatchOnly, false);
-    autoSeatSelf(el.dataset.stopWatchOnly);
-    render();
-  });
-  if (modal && modal.type === "watchOrJoin") {
-    app.querySelectorAll("[data-watch-or-join]").forEach(el => el.onclick = async () => {
-      const gameId = modal.gameId;
-      const g = getGame(gameId);
-      if (!g) { closeModal(); return; }
-      if (el.dataset.watchOrJoin === "watch") setWatchOnly(gameId, true);
-      closeModal();
-      go("table", {gameId, communityId: g.communityId});
-      if (USE_RELATIONAL_API) { await ensureGameLoadedForView(gameId); render(); }
-    });
-  }
 
   if (modal && modal.type === "installViaChrome") {
     const btn = app.querySelector("[data-confirm-install-chrome]");
