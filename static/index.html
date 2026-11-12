@@ -3187,6 +3187,11 @@ async function v2LoadGameSummary(gameId){
 // needs the full admin screen's pot-fix tools, not the simple read-only results screen).
 function isGameSettled(g){
   if (!g.closed) return false;
+  // everyone who bought in has entered what they left with - a closed night whose sums happen
+  // to balance while someone hasn't yet (the last one still at the table) isn't final
+  const cashouts0 = g.cashouts || {};
+  const boughtIn = g.buyinTotals ? g.buyinTotals.map(bt => bt.playerId) : (g.buyins || []).map(b => b.playerId);
+  if (boughtIn.some(pid => !(pid in cashouts0))) return false;
   const buyinTotal = g.buyinTotals
     ? g.buyinTotals.reduce((s,bt)=>s+bt.amount, 0)
     : (g.buyins||[]).reduce((s,b)=>s+b.amount, 0);
