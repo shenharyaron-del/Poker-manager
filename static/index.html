@@ -1953,6 +1953,14 @@ html.theme-light .felt-odds .odds-label{color:#5b3708!important;text-shadow:0 0 
 html.theme-light .ttl-chips .pp-ci.on{background:#dbeafe;}
 html.theme-light .ttl-chips .pp-ci.on .pp-ci-name{color:#1d4ed8;}
 html.theme-light .pp-ci.me .pp-ci-name{color:#0e8a66;}
+/* blue theme, on the blue page (not a player's own burgundy page): the green rings, dots, arrow
+   and "me" name don't read on blue - white rings, light gold for the rest */
+html.theme-light.theme-blue .lux-page:not(.pp-other) .pp-ci-av{border-color:rgba(255,255,255,.85);}
+html.theme-light.theme-blue .lux-page:not(.pp-other) .pp-ci.on .pp-ci-av{border-color:#ffe39a;}
+html.theme-light.theme-blue .lux-page:not(.pp-other) .pp-car-arrow{color:#ffe39a;}
+html.theme-light.theme-blue .lux-page:not(.pp-other) .pp-car-dots span{background:rgba(255,227,154,.4);}
+html.theme-light.theme-blue .lux-page:not(.pp-other) .pp-car-dots span.on{background:#ffe39a;}
+html.theme-light.theme-blue .lux-page:not(.pp-other) .pp-ci.me .pp-ci-name{color:#ffe39a;}
 .ttl-chip{font-family:inherit;font-size:inherit;padding:8px 6px;text-align:center;border-radius:999px;border:1px solid var(--card-b);background:transparent;color:var(--muted);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .ttl-chip.me{border-color:var(--gold);color:var(--gold);font-weight:700;}
 .ttl-chip.sel{border-color:#3b82f6;color:#3b82f6;font-weight:700;}
