@@ -7700,7 +7700,6 @@ const EXTRA_SEAT = 9;
 function tableSeatsFull(g){ return (g.seats || []).slice(0, 9).filter(Boolean).length >= 9; }
 function extraSeatOpen(g){ return !!g && !g.closed && tableSeatsFull(g) && !(g.seats || [])[EXTRA_SEAT]; }
 function hasFreeSeat(g){ return !!g && !g.closed && (!tableSeatsFull(g) || !(g.seats || [])[EXTRA_SEAT]); }
-function seatsLeftCount(g){ return 10 - (g.seats || []).slice(0, 10).filter(Boolean).length; }
 function isSeatedInGame(g){
   if (!g) return false;
   const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
@@ -7755,10 +7754,9 @@ function renderUnseatedGameTab(g){
 // a QR code others scan to land on this table (the same link either way).
 function renderInviteTab(g, c){
   const url = gameInviteUrl(g, c);
-  const seatsLeft = seatsLeftCount(g);
   return `
     <div class="invite-tab">
-      <p class="invite-tab-lead">הזמנת שחקנים ל<b>${esc(g.name || ilDate(g.date))}</b> · ${seatsLeft === 1 ? "נשאר מקום אחד" : `נשארו ${seatsLeft} מקומות`}</p>
+      <p class="invite-tab-lead">הזמנת שחקנים ל<b>${esc(g.name || ilDate(g.date))}</b></p>
       <button class="btn btn-block" data-invite-whatsapp-tab="${g.id}" style="background:#25D366;color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;gap:8px;">${icon('share')} שליחה בוואטסאפ</button>
       <div class="invite-tab-or">או סריקת QR מהטלפון שלהם</div>
       <div class="invite-tab-qr"><img src="/api/qr?text=${encodeURIComponent(url)}" alt="QR"></div>
