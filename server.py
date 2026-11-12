@@ -286,6 +286,9 @@ _INIT_STATEMENTS = (
     # so changing the club's profile later never rewrites a night already played.
     "ALTER TABLE games ADD COLUMN IF NOT EXISTS game_type TEXT NOT NULL DEFAULT 'cash'",
     "ALTER TABLE games ADD COLUMN IF NOT EXISTS tournament_settings JSONB",
+    # A finished night is locked (no edits, no delete) - see _game_locked; a club admin can
+    # unlock it (unlocked = true), and closing the night again locks it again.
+    "ALTER TABLE games ADD COLUMN IF NOT EXISTS unlocked BOOLEAN NOT NULL DEFAULT FALSE",
     # The blind clock of a started tournament: {startedAt, pausedAt, pausedTotal, offset,
     # pauseReason} in server ms - every phone works the level and time left out of these
     # and the blind structure, so nothing ticks on the server.
@@ -1235,11 +1238,46 @@ def _guard(community_id=None, game_id=None, need="member", players=None):
         conn.commit()
     if not r["member"]:
         return _forbidden()
-    if need == "member" or r.get(need):
-        return None
-    if players and all(pid in r["my_players"] for pid in players):
-        return None
-    return _forbidden()
+    ok = need == "member" or r.get(need) or (players and all(pid in r["my_players"] for pid in players))
+    if not ok:
+        return _forbidden()
+    if game_id and _locked_write(game_id):
+        return jsonify({"error": "locked", "locked": True}), 423
+    return None
+
+
+# Writes a locked night still takes: marking transfers paid (player / PayBox payments), the
+# night's activity log, and the lock itself.
+_LOCK_EXEMPT = ("/player-payments", "/paybox-payments", "/payments/", "/events", "/lock")
+
+
+def _locked_write(game_id):
+    """True when this request would change a locked (finished) night - see _game_locked."""
+    if request.method not in ("POST", "PUT", "PATCH", "DELETE") or any(s in request.path for s in _LOCK_EXEMPT):
+        return False
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            locked = _game_locked(cur, game_id)
+        conn.commit()
+    return locked
+
+
+def _game_locked(cur, game_id):
+    """A finished night is locked: closed and not unlocked by a club admin - a cash night once
+    its pot balances (an unbalanced one still needs its pot fixed), a tournament once closed."""
+    cur.execute(
+        "SELECT closed, unlocked, game_type, "
+        "(SELECT COALESCE(SUM(amount), 0) FROM buyins WHERE game_id = games.id), "
+        "(SELECT COALESCE(SUM(amount), 0) FROM cashouts WHERE game_id = games.id) "
+        "FROM games WHERE id = %s",
+        (game_id,),
+    )
+    row = cur.fetchone()
+    if not row or not row[0] or row[1]:
+        return False
+    if (row[2] or "cash") == "tournament":
+        return True
+    return abs(float(row[4]) - float(row[3])) <= 5
 
 
 def _game_treasurer(game_id):
@@ -1438,7 +1476,7 @@ def v2_list_games(community_id):
 
 _GAME_BASE_COLUMNS = (
     "SELECT id, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at, created_by, created_at, "
-    "treasurer_id, game_type, tournament_settings, tournament_state, tournament_results FROM games"
+    "treasurer_id, game_type, tournament_settings, tournament_state, tournament_results, unlocked FROM games"
 )
 
 
@@ -1457,7 +1495,7 @@ def _games_full(cur, base_rows):
     that don't otherwise touch the games row at all."""
     games = {}
     for (gid, community_id, name, date, created_by_name, closed, seats, live_chips, updated_at, created_by, created_at,
-         treasurer_id, game_type, tournament_settings, tournament_state, tournament_results) in base_rows:
+         treasurer_id, game_type, tournament_settings, tournament_state, tournament_results, unlocked) in base_rows:
         games[gid] = {
             "id": gid, "communityId": community_id, "name": name,
             "date": date.isoformat() if date else None,
@@ -1465,6 +1503,7 @@ def _games_full(cur, base_rows):
             "treasurerId": treasurer_id,
             "gameType": game_type or "cash", "tournamentSettings": tournament_settings,
             "tournamentState": tournament_state, "tournamentResults": tournament_results,
+            "unlocked": bool(unlocked),
             "serverNow": int(time.time() * 1000),
             "updatedAt": updated_at.isoformat() if updated_at else None,
             "createdAt": created_at.isoformat() if created_at else None,
@@ -1581,14 +1620,14 @@ def v2_get_game_summary(game_id):
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, community_id, name, date, created_by_name, closed, updated_at, created_by, created_at "
+                "SELECT id, community_id, name, date, created_by_name, closed, updated_at, created_by, created_at, unlocked "
                 "FROM games WHERE id = %s",
                 (game_id,),
             )
             row = cur.fetchone()
             if not row:
                 return jsonify({"error": "not found"}), 404
-            gid, community_id, name, date, created_by_name, closed, updated_at, created_by, created_at = row
+            gid, community_id, name, date, created_by_name, closed, updated_at, created_by, created_at, unlocked = row
             if not _can_see_community(cur, caller, community_id):
                 return jsonify({"error": "not found"}), 404
 
@@ -1635,6 +1674,7 @@ def v2_get_game_summary(game_id):
         "id": gid, "communityId": community_id, "name": name,
         "date": date.isoformat() if date else None,
         "createdByName": created_by_name, "createdBy": _pub(created_by), "closed": closed,
+        "unlocked": bool(unlocked),
         "updatedAt": updated_at.isoformat() if updated_at else None,
         "createdAt": created_at.isoformat() if created_at else None,
         "players": players, "buyinTotals": buyin_totals, "cashouts": cashouts,
@@ -2363,6 +2403,7 @@ _REG_COUNTS_SQL = (
     ", tournament_state"
     # the result without its full places list - the card only shows the winner and the count
     ", tournament_results - 'places'"
+    ", unlocked"
 )
 
 
@@ -2381,6 +2422,7 @@ def _row_to_game_summary(row):
         "regApproved": row[13] if len(row) > 13 else 0,
         "tournamentState": row[14] if len(row) > 14 else None,
         "tournamentResults": row[15] if len(row) > 15 else None,
+        "unlocked": bool(row[16]) if len(row) > 16 else False,
     }
 
 
@@ -2458,6 +2500,8 @@ def v2_update_game(game_id):
         fields.append("tournament_settings = %s"); params.append(Json(body["tournamentSettings"]))
     if "closed" in body:
         fields.append("closed = %s"); params.append(bool(body["closed"]))
+        if body["closed"]:
+            fields.append("unlocked = FALSE")   # a night closed again is locked again
     if not fields:
         return jsonify({"error": "no fields to update"}), 400
     fields.append("updated_at = now()")
@@ -2475,6 +2519,25 @@ def v2_update_game(game_id):
                 conn.commit()
                 return jsonify({"conflict": True}), 409
         conn.commit()
+    return jsonify({"ok": True, "updatedAt": row[0].isoformat()})
+
+
+@app.route("/api/v2/games/<game_id>/lock", methods=["POST"])
+def v2_lock_game(game_id):
+    """{locked: false} unlocks a finished night for edits, {locked: true} locks it back -
+    club admins (and the super admin) only."""
+    body = request.get_json(silent=True) or {}
+    denied = _guard(game_id=game_id, need="community_admin")
+    if denied:
+        return denied
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE games SET unlocked = %s, updated_at = now() WHERE id = %s RETURNING updated_at",
+                        (not bool(body.get("locked", True)), game_id))
+            row = cur.fetchone()
+        conn.commit()
+    if not row:
+        return jsonify({"error": "not found"}), 404
     return jsonify({"ok": True, "updatedAt": row[0].isoformat()})
 
 
@@ -3067,7 +3130,7 @@ def v2_tournament_finish(game_id):
             st.pop("deal", None)
             if st.get("startedAt") and not st.get("pausedAt"):
                 st["pausedAt"], st["pauseReason"] = now, "finished"
-            cur.execute("UPDATE games SET tournament_results = %s, tournament_state = %s, closed = true, updated_at = now() WHERE id = %s",
+            cur.execute("UPDATE games SET tournament_results = %s, tournament_state = %s, closed = true, unlocked = false, updated_at = now() WHERE id = %s",
                         (Json(results), Json(st), game_id))
         conn.commit()
     return jsonify({"ok": True})
