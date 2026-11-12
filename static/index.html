@@ -974,6 +974,7 @@ html.theme-light.theme-blue .profit-win{color:#b9f5d0!important;text-shadow:0 1p
 html.theme-light.theme-blue .profit-loss{color:#ffc2cc!important;text-shadow:0 1px 3px rgba(0,0,0,.35);}
 /* "נשאר בקופה" under the profit / loss: the amount as big as they are, in gold */
 .pot-left{margin:12px 0 4px;text-align:center;}
+.co-who{margin-top:10px;font-size:22px;font-weight:800;color:var(--text);}
 .pot-left .l{font-size:15px;font-weight:700;color:var(--muted);}
 .pot-left .n{font-size:34px;font-weight:800;line-height:1.1;color:#f2c14e;}
 .pot-left .s{font-size:14px;color:var(--muted);}
@@ -8982,7 +8983,9 @@ function renderPlayerScreen(gameId){
     const profitLine = profitForInfo >= 0
       ? `<div class="profit-win" style="font-weight:800;font-size:34px;color:#6ee7b7;margin-top:6px;">רווח ${profitForInfo} שח</div>`
       : `<div class="profit-loss" style="font-weight:800;font-size:34px;color:#fda4af;margin-top:6px;">הפסד ${Math.abs(profitForInfo)} שח</div>`;
+    // acting for someone else: whose numbers these are, right above them
     const breakdownHtml = `
+      ${viewingOther && p ? `<div class="co-who"><bdi>${esc(p.name)}</bdi></div>` : ""}
       <div style="font-size:14px;color:var(--muted);line-height:1.6;margin-top:6px;">
         <div>קניה: ${Math.round(buyinTotal)} שח</div>
         <div>ז'יטונים בסוף הערב: ${Math.round(finalChipsForInfo)} שח</div>
@@ -9288,7 +9291,7 @@ function renderPlayerScreen(gameId){
   // .player-screen-scroll) - only the active .player-history-feed-body pane scrolls internally.
   return `
     <div class="player-screen-scroll">
-      <div style="text-align:center;padding:6px 0 ${cashedOut?16:4}px;flex-shrink:0;">
+      <div style="text-align:center;padding:6px 0 4px;flex-shrink:0;">
         ${(() => {
           // גיזבר הערב - a strip over the players: nobody yet - a seated player ticks "אני גיזבר
           // הערב" (the same box as "סיימתי את הערב"); I am - the box ticked, untick to let it
@@ -9324,7 +9327,7 @@ function renderPlayerScreen(gameId){
       ${(notStarted && !cashedOut) ? `<button type="button" class="btn btn-primary btn-block gs-start" data-start-game="${g.id}">${icon('check')} תחילת משחק</button>` : ""}
       ${adminPlayerActions}
       ${(showClosedToggle && !notStarted) ? `<div class="night-closed-row" style="display:flex;justify-content:center;margin-top:12px;flex-shrink:0;"><label class="night-closed-toggle" data-toggle-end-night="${g.id}"><input type="checkbox" ${g.closed?'checked':''} onclick="return false;"><span>ערב סגור</span></label></div>` : ""}
-      ${cashedOut ? `<fieldset class="leave-frame night-recap" style="margin-top:16px;text-align:right;font-size:18px;"><legend>סיכום הערב</legend><div class="night-recap-body">${nightSummaryHtml(g, pid,
+      ${cashedOut ? `<fieldset class="leave-frame night-recap" style="margin-top:6px;text-align:right;font-size:18px;"><legend>סיכום הערב</legend><div class="night-recap-body">${nightSummaryHtml(g, pid,
         (g.buyins||[]).filter(b => b.playerId === pid),
         (g.events||[]).filter(e => e.type === "buyin_deleted" && e.playerId === pid).map(e => ({ts: e.ts, amount: e.amount, actorName: e.actorName})),
         false)}</div></fieldset>` : ""}
