@@ -1430,6 +1430,9 @@ html.theme-light .ng-prev-link{color:#9a5f12;} html.theme-light.theme-blue .ng-p
 .ng-prev-club{display:block;width:100%;padding:8px;border:none;border-top:1px solid rgba(255,255,255,.12);background:none;font:inherit;font-size:14px;color:var(--muted);text-decoration:underline;cursor:pointer;}
 .ts-template{display:flex;align-items:center;justify-content:center;gap:8px;font-size:15.5px;font-weight:700;cursor:pointer;}
 .ts-template input{width:20px;height:20px;accent-color:#e9b949;}
+/* the lock on a finished night's card (club screen) */
+.gc-lock{flex-shrink:0;width:38px;height:38px;margin-inline-start:6px;border-radius:50%;border:1.5px solid var(--frame-c,var(--gold));background:rgba(0,0,0,.15);font-size:18px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.gc-lock.open{border-style:dashed;opacity:.85;}
 .ng-tour{border:1px solid rgba(212,175,55,.5);border-radius:12px;padding:10px 12px;margin:4px 0 12px;font-size:15.5px;line-height:1.75;}
 .ng-tour .h{display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:800;color:var(--gold);margin-bottom:2px;}
 html.theme-light .ng-tour .h{color:#9a5f12;}
@@ -2946,12 +2949,14 @@ async function v2Fetch(method, path, body, opts){
       if (res.status === 409) return {conflict: true};
       const err = new Error(data.error || `${method} ${path} failed (${res.status})`);
       err.status = res.status;
+      // a finished, locked night (see gameLocked) - say so instead of "the save failed"
+      if (res.status === 423) { err.locked = true; showAlert("המשחק נעול 🔒\nכדי לשנות או למחוק אותו, מנהל המועדון צריך לפתוח את המנעול במסך המועדון."); }
       throw err;
     }
     return data;
   } catch(e) {
     const err = e.name === "AbortError" ? new Error(`${method} ${path} timed out`) : e;
-    if (isWrite && !(opts && opts.report === false)) reportSaveFailure(method, path, err, 1);
+    if (isWrite && !err.locked && !(opts && opts.report === false)) reportSaveFailure(method, path, err, 1);
     throw err;
   } finally {
     clearTimeout(timeoutId);
@@ -3239,6 +3244,15 @@ async function v2TourRemoveReg(gameId, playerId){
   return v2LoadGameFull(gameId);
 }
 
+// A finished night is locked: closed and not unlocked by a club admin - a cash night once its
+// pot balances, a tournament once closed (the server's _game_locked). Locked = no edits and no
+// delete; marking transfers paid still works.
+function gameEnded(g){ return !!g && !!g.closed && (g.gameType === "tournament" || isGameSettled(g)); }
+function gameLocked(g){ return gameEnded(g) && !g.unlocked; }
+async function v2LockGame(gameId, locked){
+  await v2Fetch("POST", `/games/${gameId}/lock`, {locked: !!locked});
+  const g = getGame(gameId); if (g) g.unlocked = !locked;
+}
 async function v2DeleteGame(gameId){
   try { await v2Fetch("DELETE", `/games/${gameId}`); }
   catch(e) {
@@ -8495,6 +8509,7 @@ function renderCommunity(communityId){
     const front = `
     <div class="card club-front ${g.closed?"":"card-open"}" data-open-game="${g.id}">
       <div class="row flex1"><div class="flex1"><div class="name serif">${isTour ? `<span class="gc-trophy">🏆</span>` : ""}${esc(g.name || ilDate(g.date))}</div>${g.name ? `<div style="font-size:15px;color:var(--muted);margin-top:2px;">${esc(ilDate(g.date))}</div>` : ""}${isTour ? `<div class="gc-tour-sub">${tourSub}</div>` : ""}${gameAlert ? `<div class="game-alert-line">${gameAlert.text}</div>` : ""}</div><div class="game-status-col">${gameStatusBadge(g)}${treasurerFirstName(g) ? `<div class="game-treasurer">גיזבר: <bdi>${esc(treasurerFirstName(g))}</bdi></div>` : ""}</div></div>
+      ${gameEnded(g) ? `<button type="button" class="gc-lock${gameLocked(g) ? "" : " open"}" data-game-lock="${g.id}" aria-label="${gameLocked(g) ? "משחק נעול" : "משחק פתוח לעריכה"}">${gameLocked(g) ? "🔒" : "🔓"}</button>` : ""}
       <div class="chev">${icon('chev')}</div>
     </div>`;
     if (!canInvite && !canDelete) return front.replace('class="card club-front ', 'class="card ');
@@ -12702,7 +12717,24 @@ function attachHandlers(){
     } catch(e) { showAlert(saveFailedText(e)); }
     render();
   });
-  app.querySelectorAll("[data-delete-game]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type:"deleteGame", gameId: el.dataset.deleteGame}); });
+  app.querySelectorAll("[data-delete-game]").forEach(el => el.onclick = (e) => {
+    e.stopPropagation();
+    if (gameLocked(getGame(el.dataset.deleteGame))) { showAlert("המשחק נעול 🔒\nכדי למחוק אותו צריך קודם לפתוח את המנעול."); return; }
+    openModal({type:"deleteGame", gameId: el.dataset.deleteGame});
+  });
+  // the lock on a finished night's card: a club admin opens it (to edit or delete) or locks it back
+  app.querySelectorAll("[data-game-lock]").forEach(el => el.onclick = async (e) => {
+    e.stopPropagation();
+    const g = getGame(el.dataset.gameLock), c = g && getCommunity(g.communityId);
+    if (!g) return;
+    const locked = gameLocked(g);
+    if (!(c && isCommunityAdmin(c)) && !isSuperAdmin()) { showAlert(locked ? "המשחק נעול 🔒\nרק מנהל המועדון יכול לפתוח את הנעילה." : "המשחק פתוח לעריכה 🔓"); return; }
+    const ok = await showConfirm(locked ? "המשחק נעול 🔒\nלפתוח את הנעילה? אחרי הפתיחה אפשר לשנות ולמחוק את המשחק." : "לנעול שוב את המשחק? 🔒",
+      {okLabel: locked ? "🔓 פתח נעילה" : "🔒 נעל", cancelLabel: "ביטול"});
+    if (!ok) return;
+    try { await v2LockGame(g.id, !locked); } catch(err) { if (!err.locked) showAlert("לא הצלחנו לשנות את הנעילה - נסו שוב."); }
+    render();
+  });
   app.querySelectorAll("[data-invite-club]").forEach(el => el.onclick = (e) => { e.stopPropagation(); inviteToClub(el.dataset.inviteClub); });
   app.querySelectorAll("[data-invite-game]").forEach(el => el.onclick = (e) => { e.stopPropagation(); openModal({type: "inviteOptions", gameId: el.dataset.inviteGame}); });
   if (modal && modal.type === "inviteOptions") {
