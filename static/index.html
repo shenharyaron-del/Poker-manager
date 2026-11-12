@@ -1685,6 +1685,13 @@ html.theme-light .rp-go{border-color:#9a5f12;color:#9a5f12;}
 .rp-new{border:1.5px dashed var(--gold);border-radius:14px;padding:10px 12px;margin:8px 0 4px;background:rgba(242,193,78,.1);}
 html.theme-light .rp-new{border-color:#9a5f12;}
 .rp-new .t{font-size:16.5px;font-weight:800;} .rp-new .t b{color:var(--gold);} html.theme-light .rp-new .t b{color:#9a5f12;}
+/* blue theme, the picker under the clock (on the blue page, not in a light window): the browns
+   don't read there - light gold like the frame titles */
+html.theme-light.theme-blue .ck-panel :is(.rp-sec,.rp-new .t b){color:#ffe39a;}
+html.theme-light.theme-blue .ck-panel .rp-go{border-color:#ffe39a;color:#ffe39a;}
+html.theme-light.theme-blue .ck-panel .rp-new{border-color:#ffe39a;background:rgba(255,227,154,.1);}
+/* the ז/נ switch: its unselected side is a light field - dark letter on it (it was white on white) */
+html.theme-light.theme-blue .gender-seg button:not(.on){color:#3b6b80;}
 .rp-new .r{display:flex;gap:8px;margin-top:8px;align-items:center;} .rp-new .r .gender-seg{flex:0 0 auto;}
 .rp-new.soft{background:transparent;padding:7px 12px;}
 /* "הוסף ורשום" without a last name: the button stays off - its first line faded, a second
