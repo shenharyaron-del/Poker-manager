@@ -143,8 +143,9 @@ body.page-bg-lifted .swipe-page.lux-page{background:transparent!important;}
 .card:active{transform:scale(0.98);}
 .card .name{font-weight:700;font-size:16px;}
 .club-front .name,.card[data-new-community] .name,.card[data-new-game] .name{font-size:24px;}
-/* the club screen's game cards: a bigger name and date */
-.club-front[data-open-game] .name{font-size:28px;line-height:1.2;}
+/* the club screen's game cards: a bigger name and date (a card with nothing behind it to swipe -
+   a locked night, a player's view - loses "club-front", so the card itself is matched) */
+.card[data-open-game] .name{font-size:28px;line-height:1.2;}
 .gc-date{font-size:18px;color:var(--muted);margin-top:3px;}
 .card.club-front .meta,.card[data-new-community] .meta,.card[data-new-game] .meta{font-size:16px;}
 .card .meta{color:var(--muted);font-size:12px;margin-top:4px;display:flex;align-items:center;gap:5px;}
