@@ -9335,8 +9335,9 @@ function renderPlayerScreen(gameId){
     const totals = {};
     (g.buyins || []).forEach(b => { totals[b.playerId] = (totals[b.playerId] || 0) + (b.amount || 0); });
     // "הסתר / הצג שיצאו" under the players (and their dots), centered: who's left the table can
-    // be hidden - but not the one being looked at (they stay, and aren't counted)
-    const hideable = othersTonight.filter(id => id in (g.cashouts || {}) && id !== pid);
+    // be hidden - the one being looked at too (the screen stays on their numbers - their name is
+    // above them - there's nothing left to do for them, and "הצג" brings the tile back for "החזר")
+    const hideable = othersTonight.filter(id => id in (g.cashouts || {}));
     const n = hideable.length, hiding = hideOutPlayers && n > 0;
     const footer = !n ? "" : `<button type="button" class="out-tg${hiding ? " hiding" : ""}" data-toggle-out-players>${hiding ? EYE_SVG : EYE_OFF_SVG} ${
       n === 1 ? (hiding ? "הצג את מי שיצא" : "הסתר את מי שיצא") : `${hiding ? "הצג" : "הסתר"} ${n} שיצאו`}</button>`;
