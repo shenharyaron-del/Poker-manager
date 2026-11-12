@@ -193,8 +193,10 @@ body.table-screen #app{height:100vh;height:100dvh;height:var(--real-vh, 100dvh);
 body.table-screen.kb-open{overflow:visible;}
 body.kb-open .overlay{top:var(--kb-top,0px);bottom:var(--kb-h,0px);}
 body.kb-open .overlay .modal{max-height:100%;}
-/* room under the page to scroll its bottom (the end-of-night frame) above the keyboard */
-body.kb-open .lux-page{padding-bottom:calc(var(--kb-h,0px) + 16px);}
+/* room under the player page to scroll its bottom (the end-of-night frame) above the keyboard */
+body.table-screen.kb-open .player-screen-scroll{padding-bottom:calc(var(--kb-h,0px) + 20px);}
+/* ...and the frame a little shorter meanwhile: the field shows what it is for */
+body.kb-open .lv-body .lv-amount-label{display:none;}
 /* Wraps whichever face of the table screen is showing (see render()) - re-establishes
    the column layout #app used to give its children directly, now one level removed.
    touch-action:pan-y lets native vertical scroll work everywhere inside (the felt, the
@@ -8069,25 +8071,28 @@ function updateRealVh(){
   // down to "בקופה נשארו / נשארו X שחקנים"
   else if (kb && !wasKb && ae.closest && ae.closest(".lv-body")) setTimeout(() => fitLeaveFrame(ae), 80);
 }
-// Scrolls so the end-of-night frame - from its "סיים את הערב" line to the pot summary - sits
-// in the part of the screen the keyboard leaves visible (its top first if it doesn't fit).
+// Scrolls so the end-of-night frame sits in the part of the screen the keyboard leaves
+// visible, down to its pot summary ("בקופה נשארו / נשארו X שחקנים"). The "סיים את הערב"
+// line above it may go out of view; the amount row never does.
 function fitLeaveFrame(ae){
   const body = ae.closest(".lv-body"); if (!body) return;
-  const head = body.previousElementSibling && body.previousElementSibling.matches(".lv-arm") ? body.previousElementSibling : body;
-  const vv = window.visualViewport, visTop = vv ? vv.offsetTop : 0, visBottom = visTop + (vv ? vv.height : window.innerHeight);
-  const top = head.getBoundingClientRect().top - 8, bottom = body.getBoundingClientRect().bottom + 8;
-  let delta = bottom - visBottom;                       // > 0: the frame's bottom is behind the keyboard
-  if (top - delta < visTop) delta = top - visTop;       // too tall: keep its top line in view instead
-  if (Math.abs(delta) < 2) return;
-  // the nearest scrolling box that can move, else the page itself
+  // the nearest box that scrolls (the player page), else the page itself
   let sc = body.parentElement;
   while (sc && sc !== document.body) {
     const oy = getComputedStyle(sc).overflowY;
-    if ((oy === "auto" || oy === "scroll") && sc.scrollHeight > sc.clientHeight) break;
+    if (oy === "auto" || oy === "scroll") break;
     sc = sc.parentElement;
   }
-  if (sc && sc !== document.body) sc.scrollBy({top: delta, behavior: "smooth"});
-  else window.scrollBy({top: delta, behavior: "smooth"});
+  if (sc === document.body) sc = null;
+  const vv = window.visualViewport;
+  const visBottom = (vv ? vv.offsetTop + vv.height : window.innerHeight) - 6;
+  const visTop = Math.max(vv ? vv.offsetTop : 0, sc ? sc.getBoundingClientRect().top : 0) + 6;   // under the tabs
+  const row = body.querySelector(".lv-row") || body;
+  const top = row.getBoundingClientRect().top - 4, bottom = body.getBoundingClientRect().bottom;
+  let delta = bottom - visBottom;                       // > 0: the frame's bottom is behind the keyboard
+  if (top - delta < visTop) delta = top - visTop;       // too tall even so: keep the amount row in view
+  if (Math.abs(delta) < 2) return;
+  if (sc) sc.scrollBy({top: delta, behavior: "smooth"}); else window.scrollBy({top: delta, behavior: "smooth"});
 }
 document.addEventListener("focusout", () => setTimeout(() => requestAnimationFrame(updateRealVh), 50));
 updateRealVh();
@@ -9097,7 +9102,7 @@ function renderPlayerScreen(gameId){
         <div style="flex:1;min-width:0;">
           <div class="lv-amount-label" style="color:var(--muted);font-size:16px;margin-bottom:4px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">סכום הז'יטונים שנשארו</div>
           <div style="position:relative;">
-            <input type="number" inputmode="decimal" id="lv-amount" placeholder="0" value="${esc(leaveAmountDraft[pickKey] || '')}" ${armed?'':'disabled'} style="width:100%;box-sizing:border-box;padding:7px 30px 7px 8px;font-size:22px;border-radius:12px;border:1px solid var(--gold);background:var(--input);color:var(--text);">
+            <input type="number" inputmode="decimal" autocomplete="off" id="lv-amount" placeholder="0" value="${esc(leaveAmountDraft[pickKey] || '')}" ${armed?'':'disabled'} style="width:100%;box-sizing:border-box;padding:7px 30px 7px 8px;font-size:22px;border-radius:12px;border:1px solid var(--gold);background:var(--input);color:var(--text);">
             <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--gold);font-size:20px;">₪</span>
           </div>
         </div>
@@ -9111,7 +9116,7 @@ function renderPlayerScreen(gameId){
         return `
         <div class="lv-calc">
           <span>מחשבון:</span>
-          <input type="number" inputmode="decimal" id="lv-chips" placeholder="0" value="${esc(leaveChipsDraft[pickKey] || '')}" ${armed?'':'disabled'}>
+          <input type="number" inputmode="decimal" autocomplete="off" id="lv-chips" placeholder="0" value="${esc(leaveChipsDraft[pickKey] || '')}" ${armed?'':'disabled'}>
           <span>ז'יטונים =</span>
           <b id="lv-chips-result">₪${leaveChipsDraft[pickKey] ? Math.round((parseFloat(leaveChipsDraft[pickKey]) / ratio) * 100) / 100 : 0}</b>
         </div>
@@ -9144,7 +9149,7 @@ function renderPlayerScreen(gameId){
         <div class="lv-types-sep">או ספרו לפי סוג</div>
         <div class="lv-types${many ? " many" : ""}" style="grid-template-columns:repeat(${cvs.length},1fr);">
           ${cvs.map(cv => cv.image ? `<img src="${esc(cv.image)}" alt="" draggable="false">` : `<span class="lv-type-noimg">₪${esc(String(cv.value))}</span>`).join("")}
-          ${cvs.map(cv => `<input type="number" inputmode="numeric" min="0" placeholder="0" data-lv-type="${cv.id}" data-lv-type-value="${esc(String(cv.value))}" value="${esc(String(counts[cv.id] ?? ""))}" ${armed?'':'disabled'} onfocus="this.select()">`).join("")}
+          ${cvs.map(cv => `<input type="number" inputmode="numeric" autocomplete="off" min="0" placeholder="0" data-lv-type="${cv.id}" data-lv-type-value="${esc(String(cv.value))}" value="${esc(String(counts[cv.id] ?? ""))}" ${armed?'':'disabled'} onfocus="this.select()">`).join("")}
           ${cvs.map(cv => `<div class="lv-type-x" data-lv-type-x="${cv.id}">${line(cv)}</div>`).join("")}
         </div>`;
       })()}
