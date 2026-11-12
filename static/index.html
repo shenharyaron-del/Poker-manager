@@ -1469,8 +1469,13 @@ html.theme-light .ck-acts button{background:rgba(255,255,255,.45);border-color:#
 .ck-panel{border:1px solid rgba(212,175,55,.45);border-radius:14px;padding:8px 10px;margin:0 0 10px;text-align:right;}
 .ck-panel-h{display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:15px;margin-bottom:6px;}
 .ck-qr{background:#fff;border-radius:14px;padding:10px;margin:0 auto;max-width:230px;}
-/* "QR": the whole page under the clock is the code (the controls come back with "סגור") */
-.ck-qr-page .ck-panel{margin:0;padding:10px 12px 14px;} .ck-qr-page .ck-qr{max-width:min(320px,78vw);margin-top:8px;} .ck-qr img{display:block;width:100%;height:auto;}
+/* an action under the clock (QR, הוספת שחקן, לובי, ריביי, הדחה) takes the whole page there -
+   the controls make way, and a clear "✕ סגור" brings them back */
+.ck-panel-page .ck-panel{margin:0;padding:10px 12px 14px;} .ck-panel-page .ck-qr{max-width:min(320px,78vw);margin-top:8px;}
+.ck-panel-page .ck-panel-h{font-size:17px;margin-bottom:10px;gap:10px;}
+.ck-panel-page .ck-panel-h .lb-cancel{flex-shrink:0;margin:0;padding:6px 14px;border-radius:999px;border:1.5px solid var(--frame-c,var(--gold));background:var(--frame-c,var(--gold));color:#1a1a1a;font-size:15px;font-weight:800;text-decoration:none;}
+.ck-panel-page .ck-panel-h .lb-cancel::before{content:"✕ ";}
+html.theme-light.theme-sand .ck-panel-page .ck-panel-h .lb-cancel{color:#fff6e3;} .ck-qr img{display:block;width:100%;height:auto;}
 .ck-reg{background:rgba(242,193,78,.14);border:1px solid #f2c14e;border-radius:999px;padding:4px 12px;font:inherit;font-size:14px;font-weight:700;color:var(--text);cursor:pointer;}
 .ck-reg b{display:inline-block;min-width:18px;padding:0 5px;border-radius:9px;background:#f59e0b;color:#1c1917;margin-inline-start:2px;}
 .ck-ctl{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin:8px 0 2px;}
@@ -6453,7 +6458,7 @@ function renderTourClock(g, c, isAdmin){
       <div class="ck-sticky">${card}
         <div class="ck-dots"><button type="button" class="${tourClockPage ? "" : "on"}" data-ck-page="0">שעון</button><button type="button" class="${tourClockPage ? "on" : ""}" data-ck-page="1">${tourHasCounts(P) ? "דירוג ומבנה" : "שחקנים ומבנה"}</button></div></div>
       <div class="ck-pages" data-ck-pages>
-        ${tourPanel === "qr" && isAdmin ? `<div class="ck-page ck-qr-page">${panel}</div>` : `<div class="ck-page">${admin}${chips ? `<div class="ck-chips">${chips}</div>` : ""}${acts}${panel || `<div class="ck-lower">${endPrompt}${dealHtml}${adminAlerts}${me}${stats}${tourPrizesHtml(t, approved.length, tourPot(g, t))}</div>`}${tools}</div>`}
+        ${panel && isAdmin ? `<div class="ck-page ck-panel-page">${panel}</div>` : `<div class="ck-page">${admin}${chips ? `<div class="ck-chips">${chips}</div>` : ""}${acts}${panel || `<div class="ck-lower">${endPrompt}${dealHtml}${adminAlerts}${me}${stats}${tourPrizesHtml(t, approved.length, tourPot(g, t))}</div>`}${tools}</div>`}
         <div class="ck-page">${meOut}${tourStandingsHtml(P, myPid, true, true)}${tourClockBlindsHtml(k)}<div style="text-align:right">${payFinal ? tourPayFinalHtml(t, approved.length, tourPot(g, t)) : tourPayReadHtml(t, approved.length, true, tourPot(g, t))}</div></div>
       </div>
     </div>`;
