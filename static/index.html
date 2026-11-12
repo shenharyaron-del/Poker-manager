@@ -7941,10 +7941,30 @@ function render(){
   const tourScrollEl = app.querySelector("[data-tour-scroll]");
   const tourScroll = tourScrollEl && tourScrollEl.dataset.tourScroll === String(nav.gameId) ? tourScrollEl.scrollTop : 0;
   const winScroll = window.scrollY;
+  // A field being typed in (the keyboard up) keeps its focus across the redraw - a refresh
+  // tick used to rebuild it unfocused, which closed the keyboard a few seconds in.
+  const typing = (() => {
+    const ae = document.activeElement;
+    if (!isTypingField(ae) || !app.contains(ae)) return null;
+    const attr = ae.id ? null : [...ae.attributes].find(a => a.name.startsWith("data-"));
+    const sel = ae.id ? "#" + CSS.escape(ae.id) : attr ? `[${attr.name}="${CSS.escape(attr.value)}"]` : null;
+    if (!sel) return null;
+    let s = null, e = null; try { s = ae.selectionStart; e = ae.selectionEnd; } catch(err) {}
+    return {sel, s, e};
+  })();
   app.innerHTML = html;
   { const el = app.querySelector(".player-screen-scroll"); if (el) { el.dataset.key = gameScrollKey; if (gameScrollTop) el.scrollTop = gameScrollTop; } }
   { const el = app.querySelector("[data-tour-scroll]"); if (el && el.dataset.tourScroll === String(nav.gameId)) { if (tourScroll) el.scrollTop = tourScroll; if (winScroll) window.scrollTo(0, winScroll); } }
   attachHandlers();
+  if (typing) {
+    const el = app.querySelector(typing.sel);
+    if (el && !el.disabled) {
+      try { el.focus({preventScroll: true}); } catch(err) { el.focus(); }
+      try { if (typing.s != null) el.setSelectionRange(typing.s, typing.e); } catch(err) {}
+      // a number field has no caret position to read: put the caret back at the end
+      if (typing.s == null && el.value) { const v = el.value; el.value = ""; el.value = v; }
+    }
+  }
   if (nav.screen === "community") fitClubGamesScroll();
   liftGamePageBackground();
   // Runs whenever .poker-table-wrap exists at all now, not just when it's the visible
