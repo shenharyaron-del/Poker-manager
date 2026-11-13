@@ -1813,12 +1813,13 @@ html:not(.theme-light) .pp-car:not(.names-only) .pp-ci.on .pp-ci-amt{color:#3a26
 /* who I'm acting for, over the players (same height either way) */
 .act-strip{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:40px;box-sizing:border-box;margin:0 0 10px;padding:5px 12px;border-radius:12px;background:transparent;border:1px solid var(--frame-c,var(--gold));color:var(--text);font-weight:700;font-size:16px;text-align:right;}
 .act-strip b{color:inherit;font-weight:900;}   /* the whole line one colour */
-.act-strip span{display:flex;align-items:center;gap:8px;}
+.act-strip span{display:flex;align-items:center;gap:8px;min-width:0;white-space:nowrap;overflow:hidden;}
+.act-strip span em{font-style:normal;min-width:0;}
 .act-ic{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;flex-shrink:0;background:var(--frame-c,var(--gold));color:#1a1a1a;font-style:normal;font-weight:900;font-size:15px;line-height:1;}
 html.theme-light.theme-sand .act-ic{color:#fff6e3;}
 .act-strip.other .act-ic{background:#1a1a1a;color:#fde68a;}
 .act-strip.other{background:#f59e0b;border-color:#f59e0b;color:#1a1a1a;box-shadow:0 3px 8px rgba(0,0,0,.25);} .act-strip.other b{color:#1a1a1a;}
-.act-strip button{flex-shrink:0;padding:3px 12px;border-radius:999px;border:none;background:#1a1a1a;color:#fde68a;font:inherit;font-size:14px;font-weight:800;cursor:pointer;}
+.act-strip button{flex-shrink:0;padding:3px .75em;border-radius:999px;border:none;background:#1a1a1a;color:#fde68a;font:inherit;font-size:.875em;font-weight:800;cursor:pointer;}
 .sel-note{text-align:center;font-size:13.5px;margin:8px 0 -4px;opacity:.85;} .sel-note b{font-weight:800;}
 .has-me{position:relative;}
 .me-jump{position:absolute;left:18px;top:-13px;z-index:3;padding:2px 12px;border-radius:999px;border:none;background:var(--frame-c,var(--gold));color:#1a1a1a;font:inherit;font-size:14px;font-weight:800;line-height:1.5;cursor:pointer;}
@@ -7911,6 +7912,17 @@ function fixNegativeNumbers(root){
     if (out !== v) n.nodeValue = out;
   });
 }
+// "ריביי / יציאה יירשמו על X" on one line: a smaller font (down to 12px), then the first name only
+function fitActStrip(){
+  const s = document.querySelector(".act-strip"), span = s && s.querySelector("span");
+  if (!span) return;
+  const cut = () => span.scrollWidth > span.clientWidth + 1;
+  s.style.fontSize = "";
+  let size = parseFloat(getComputedStyle(s).fontSize);
+  while (cut() && size > 12) { size -= 1; s.style.fontSize = size + "px"; }
+  const b = span.querySelector("b bdi");
+  if (cut() && b && /\s/.test(b.textContent.trim())) b.textContent = b.textContent.trim().split(/\s+/)[0];
+}
 // "מי יושב במקום X?": the window may take the whole screen height, and the players list gives
 // up whatever it takes for "הוסף לשולחן" to show without scrolling
 function fitPickSeat(){
@@ -8147,6 +8159,7 @@ function render(){
   }
   if (nav.screen === "community") { fitClubGamesScroll(); fitGameNames(); }
   if (modal && modal.type === "pickSeat") fitPickSeat();
+  fitActStrip();
   liftGamePageBackground();
   // Runs whenever .poker-table-wrap exists at all now, not just when it's the visible
   // face - with both panes always mounted while seated, the circles view's own DOM (and
@@ -9454,8 +9467,8 @@ function renderPlayerScreen(gameId){
   // may record for a friend without a phone); with one, only on the treasurer's. Always there
   // when shown (the screen doesn't move when switching), orange while acting for someone else
   const actStrip = !(canActForOthers(g)) ? "" : viewingOther && p
-    ? `<div class="act-strip other"><span><i class="act-ic">!</i>ריביי / יציאה יירשמו על <b><bdi>${esc(tableShortName(g, pid))}</bdi></b></span><button type="button" data-pp-back-me>חזרה ${g2("אליי", "אליי")}</button></div>`
-    : `<div class="act-strip"><span><i class="act-ic">!</i>ריביי / יציאה יירשמו <b>עליי</b></span></div>`;
+    ? `<div class="act-strip other"><span><i class="act-ic">!</i><em>ריביי / יציאה יירשמו על <b><bdi>${esc(tableShortName(g, pid))}</bdi></b></em></span><button type="button" data-pp-back-me>חזרה ${g2("אליי", "אליי")}</button></div>`
+    : `<div class="act-strip"><span><i class="act-ic">!</i><em>ריביי / יציאה יירשמו <b>עליי</b></em></span></div>`;
   const carouselHtml = (() => {
     const totals = {};
     (g.buyins || []).forEach(b => { totals[b.playerId] = (totals[b.playerId] || 0) + (b.amount || 0); });
