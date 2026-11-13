@@ -1684,7 +1684,7 @@ html.theme-light.theme-blue .ck-blinds-wrap tr.cur td{background:rgba(255,227,15
 .reg-av-pen{position:absolute;bottom:-3px;left:-3px;width:17px;height:17px;border-radius:50%;background:#f2c14e;color:#2a1d05;font-size:11px;line-height:17px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.4);}
 .reg-row .nm-l{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding-inline-end:6px;}
 .reg-row .nm-chips{font-size:14px;font-weight:600;color:var(--muted);white-space:nowrap;}
-/* registering a player: search, rows with "＋ רשום", a new player, the last one registered */
+/* registering a player: search, rows with "רשום", a new player, the last one registered */
 .rp-search{position:relative;margin:2px 0 6px;}
 .rp-search input{width:100%;box-sizing:border-box;padding:12px 44px 12px 14px;font-size:18px;border-radius:14px;}
 .rp-search .ic{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:18px;opacity:.6;pointer-events:none;}
@@ -6295,7 +6295,7 @@ let tourDealMethod = "guarantee";   // the deal proposal shown: "guarantee" (def
 let tourCcAdmin = false;   // the admin's "enter a player's count" list
 let tourCcFor = null;      // ...and the player picked there
 // Registering a player (the lobby's window and the clock's panel): one search field over the
-// club's players - who played lately first, then everyone - with "＋ רשום" by each name; a
+// club's players - who played lately first, then everyone - with "רשום" by each name; a
 // name the club doesn't have yet offers "הוסף ורשום" (with ז / נ) right there; after a
 // registration a line says so, with "ביטול".
 let tourRegLast = null;   // {pid, name, gameId, at} - the last one registered here
@@ -6322,7 +6322,7 @@ function tourRegPickerHtml(g, c, t){
   const recent = roster.filter(p2 => last[p2.id] && last[p2.id] >= monthAgo).sort((a, b) => last[b.id] - last[a.id]).slice(0, 5);
   const recentIds = new Set(recent.map(p2 => p2.id));
   const total = tourEntryTotal(t), nn2 = v => Number(v || 0).toLocaleString("en-US");
-  const row = (p2, i, sub) => `<div class="rp-row" data-rp-row data-name="${esc(String(p2.name || "").toLowerCase())}">${tourAvatar(p2.name, i, p2.id, c && c.id)}<div class="nm"><span data-rp-nm>${esc(p2.name)}</span>${sub ? `<small>${sub}</small>` : ""}</div><button type="button" class="rp-go" data-reg-pick="${esc(p2.id)}">＋ רשום</button></div>`;
+  const row = (p2, i, sub) => `<div class="rp-row" data-rp-row data-name="${esc(String(p2.name || "").toLowerCase())}">${tourAvatar(p2.name, i, p2.id, c && c.id)}<div class="nm"><span data-rp-nm>${esc(p2.name)}</span>${sub ? `<small>${sub}</small>` : ""}</div><button type="button" class="rp-go" data-reg-pick="${esc(p2.id)}">רשום</button></div>`;
   const played = p2 => `${p2.gender === "female" ? "שיחקה" : "שיחק"} ${tourAgoText(last[p2.id])}`;
   const lastOk = tourRegLast && tourRegLast.gameId === g.id && Date.now() - tourRegLast.at < 15000 && taken.has(tourRegLast.pid);
   return `<div class="rp">
@@ -6676,7 +6676,7 @@ function renderTourGame(g, c){
         const myPid = tourMyPid(g);
         return myPid && approved.some(r => r.playerId === myPid) ? "" : `<div style="text-align:center;margin:0 0 10px;"><button type="button" class="reg-me" data-reg-me>רשום אותי</button></div>`;
       })()}
-      <div class="ad-btns"><button type="button" class="btn btn-ghost" data-reg-add>＋ רישום שחקן</button><button type="button" class="btn btn-ghost" data-invite-game="${g.id}">📤 הזמנת שחקנים</button></div>
+      <div class="ad-btns"><button type="button" class="btn btn-ghost" data-reg-add>רישום שחקן</button><button type="button" class="btn btn-ghost" data-invite-game="${g.id}">📤 הזמנת שחקנים</button></div>
       <button type="button" class="btn btn-ghost btn-block tour-start-btn" data-tour-start ${approved.length >= 2 ? "" : "disabled"}>▶ התחל טורניר</button>
       ${approved.length >= 2 ? "" : `<div class="lb-note" style="margin-top:0">אפשר להתחיל כשיש לפחות 2 רשומים</div>`}
       ${tourRegListHtml(g, approved, r => `<button type="button" class="reg-rm" data-reg-remove="${esc(r.playerId)}">הסר</button>`)}
@@ -8444,7 +8444,7 @@ function renderHome(){
     <div class="card" data-new-community style="border-style:dashed;border-color:var(--gold);background:rgba(251,191,36,.06);">
       <div class="flex1">
         <div class="name serif">מועדון חדש</div>
-        <div class="meta">${icon('plus')} ${myCommunities.length ? "הקישו ליצירת מועדון חדש" : "עדיין אין לך מועדונים משויכים - הקישו כדי ליצור אחד"}</div>
+        <div class="meta">${myCommunities.length ? "הקישו ליצירת מועדון חדש" : "עדיין אין לך מועדונים משויכים - הקישו כדי ליצור אחד"}</div>
       </div>
       <div class="chev">${icon('chev')}</div>
     </div>`;
@@ -10531,8 +10531,8 @@ function renderModal(m){
     title = "תמונת פרופיל";
     body = `
       <div style="display:flex;gap:8px;margin-bottom:14px;">
-        <button class="btn btn-primary btn-block" data-photo-camera>${icon('plus')} צלם</button>
-        <button class="btn btn-ghost btn-block" data-photo-gallery>${icon('plus')} בחר מהגלריה</button>
+        <button class="btn btn-primary btn-block" data-photo-camera>צלם</button>
+        <button class="btn btn-ghost btn-block" data-photo-gallery>בחר מהגלריה</button>
       </div>
     ` + getAvatarGroups().map(grp => `
       <div class="section-title" style="padding:0;margin:10px 0 6px;">${esc(grp.label)}</div>
@@ -10609,7 +10609,7 @@ function renderModal(m){
 
       <div class="section-title" style="padding:0;margin:0 0 8px;">אווטרים</div>
       <div style="display:flex;gap:8px;margin-bottom:18px;">
-        <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-open-avatar-creator>${icon('plus')} יצירת אווטרים חדשים</button>
+        <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-open-avatar-creator>יצירת אווטרים חדשים</button>
         <button class="btn btn-ghost btn-block" style="display:flex;align-items:center;justify-content:center;gap:6px;" data-open-avatar-manage>${icon('pencil')} ניהול</button>
       </div>
       <div class="section-title" style="padding:0;margin:0 0 8px;">שחקנים גלובליים</div>
@@ -10741,7 +10741,7 @@ function renderModal(m){
     title = "יצירת אווטרים";
     const pickButtons = `
       <div style="position:relative;margin-bottom:10px;">
-        <button type="button" class="btn btn-primary btn-block" style="pointer-events:none;">${icon('plus')} העלה תמונה</button>
+        <button type="button" class="btn btn-primary btn-block" style="pointer-events:none;">העלה תמונה</button>
         <input type="file" accept="image/*" id="avatar-upload-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
       </div>
     `;
@@ -10796,7 +10796,7 @@ function renderModal(m){
         </div>
         <p style="color:var(--muted);font-size:16px;margin-top:0;">הקישו על אווטר בתמונה כדי לסמן עיגול - גררו למקם במדויק ואת הנקודה כדי לשנות גודל. תנו שם וקטגוריה לכל אווטר.</p>
         ${editableList}
-        <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-retake-avatar-photo>${icon('plus')} תמונה אחרת</button>
+        <button class="btn btn-ghost btn-block" style="margin-bottom:10px;" data-retake-avatar-photo>תמונה אחרת</button>
         <button class="btn btn-primary btn-block" data-save-avatars ${m.points.length===0?"disabled":""}>שמור אווטרים</button>
       `;
     }
@@ -10812,7 +10812,7 @@ function renderModal(m){
           ? "צלמו תמונה של השולחן עם 4 קלפים לכל שחקן (רביעייה) וכל 5 קלפי הקהילה גלויים, ממבט על - ונחשב את חלוקת הקופה בין השחקנים."
           : "צלמו תמונה של מצב האול-אין על השולחן, ונחשב לכם את הסיכויים של כל יד."}</p>
         <div style="position:relative;">
-          <button type="button" class="btn btn-primary btn-block" style="pointer-events:none;">${icon('plus')} צלם תמונה</button>
+          <button type="button" class="btn btn-primary btn-block" style="pointer-events:none;">צלם תמונה</button>
           <input type="file" accept="image/*" capture="environment" id="odds-camera-input" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;">
         </div>
       `;
@@ -11059,7 +11059,7 @@ function renderModal(m){
         </div>
         <p style="color:var(--muted);font-size:16px;margin-top:0;">${m.analyzingChips ? "מזהה ז'יטונים אוטומטית..." : "הקישו על ז'יטון בתמונה כדי להוסיף מסגרת דוגמה - אפשר לגרור אותה למיקום מדויק, ולגרור את הנקודה הלבנה כדי לשנות את הגודל שיקיף בדיוק את הז'יטון. התמונה בטבלה מתעדכנת תוך כדי הגרירה."}</p>
         ${editableList}
-        <button class="btn btn-ghost btn-block" data-retake-photo>${icon('plus')} תמונה אחרת</button>
+        <button class="btn btn-ghost btn-block" data-retake-photo>תמונה אחרת</button>
         </fieldset>
         ${sa ? SETUP_FOOTER_HTML : ""}
       `;
@@ -11945,10 +11945,10 @@ function renderModal(m){
         <p style="color:var(--muted);font-size:16px;margin:0 0 10px;">${m.analyzingChipCount ? "סופר ז'יטונים אוטומטית..." : "טעות בזיהוי? הקישו על המסגרת כדי לשנות את סוג הז'יטון, ועל העיגול שבצד כדי לשנות את הכמות בשורה. ז'יטונים של מישהו אחר בתמונה? בחרו \"לא שלי\"."}</p>
         ${chipPhotos.length < 2 ? `
         <div style="position:relative;margin-bottom:8px;">
-          <button type="button" class="btn btn-ghost btn-block" style="font-size:18px;pointer-events:none;display:flex;align-items:center;justify-content:center;gap:6px;" ${m.analyzingChipCount?"disabled":""}>${icon('plus')} עוד תמונה (ערמות שלא נכנסו לפריים)</button>
+          <button type="button" class="btn btn-ghost btn-block" style="font-size:18px;pointer-events:none;display:flex;align-items:center;justify-content:center;gap:6px;" ${m.analyzingChipCount?"disabled":""}>עוד תמונה (ערמות שלא נכנסו לפריים)</button>
           <input type="file" accept="image/*" capture="environment" id="chip-count-camera-input-add" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;" ${m.analyzingChipCount?"disabled":""}>
         </div>` : ""}
-        <button class="btn btn-ghost btn-block" style="font-size:18px;margin-bottom:10px;" data-retake-chip-count-photo ${m.analyzingChipCount?"disabled":""}>${icon('plus')} התחל מחדש</button>
+        <button class="btn btn-ghost btn-block" style="font-size:18px;margin-bottom:10px;" data-retake-chip-count-photo ${m.analyzingChipCount?"disabled":""}>התחל מחדש</button>
       ` : `
         <div style="position:relative;width:78%;margin:0 auto 10px;">
           <button type="button" class="btn btn-ghost btn-block" style="font-size:18px;pointer-events:none;display:flex;align-items:center;justify-content:center;gap:8px;">${icon('camera')} פתח מצלמה לספירה</button>
