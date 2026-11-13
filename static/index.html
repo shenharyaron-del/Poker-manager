@@ -9450,8 +9450,8 @@ function renderPlayerScreen(gameId){
   // "פועל בשמך" / "פועל בשם X · חזרה אליי": always there for whoever acts for others (the
   // screen doesn't move when switching), orange while acting for someone else
   const actStrip = !(canActForOthers(g) && (isAdminView || iAmTreasurer(g))) ? "" : viewingOther && p
-    ? `<div class="act-strip other"><span><i class="act-ic">!</i>ריביי / יציאה של <b><bdi>${esc(tableShortName(g, pid))}</bdi></b></span><button type="button" data-pp-back-me>חזרה ${g2("אליי", "אליי")}</button></div>`
-    : `<div class="act-strip"><span><i class="act-ic">!</i>ריביי / יציאה <b>שלי</b></span></div>`;
+    ? `<div class="act-strip other"><span><i class="act-ic">!</i>ריביי / יציאה יירשמו על <b><bdi>${esc(tableShortName(g, pid))}</bdi></b></span><button type="button" data-pp-back-me>חזרה ${g2("אליי", "אליי")}</button></div>`
+    : `<div class="act-strip"><span><i class="act-ic">!</i>ריביי / יציאה יירשמו <b>עליי</b></span></div>`;
   const carouselHtml = (() => {
     const totals = {};
     (g.buyins || []).forEach(b => { totals[b.playerId] = (totals[b.playerId] || 0) + (b.amount || 0); });
