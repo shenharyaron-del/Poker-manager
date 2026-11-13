@@ -13426,15 +13426,26 @@ function attachHandlers(){
       if (!(await showConfirm(`${g2("האם אתה בטוח", "האם את בטוחה")} שברצונך להתחיל משחק עם ${seatedNow === 1 ? "שחקן אחד בלבד" : `${seatedNow} יושבים`}?`, {okLabel: "כן, התחל משחק", cancelLabel: "ביטול"}))) return;
     }
     el.disabled = true;
-    showButtonLoading(el);
     const ev = {id: uid(), type: "game_started", actorName: myIdentity.name};
+    if (USE_RELATIONAL_API) {
+      // the screen moves on at once - the save goes in the background (no money in it, and
+      // its fixed id makes a repeat harmless); a failed save takes the start back
+      const g = getGame(gameId);
+      if (!g.events) g.events = [];
+      const local = {...ev, ts: Date.now()};
+      if (!gameStartEvent(g)) g.events.push(local);
+      render();
+      v2FetchWithRetry("POST", `/games/${gameId}/events`, ev).catch(() => {
+        const g2 = getGame(gameId);
+        if (g2 && g2.events) g2.events = g2.events.filter(e => e !== local);
+        showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ולחצו שוב על \"תחילת משחק\".");
+        render();
+      });
+      return;
+    }
+    showButtonLoading(el);
     try {
-      if (USE_RELATIONAL_API) {
-        await v2FetchWithRetry("POST", `/games/${gameId}/events`, ev);
-        const g = getGame(gameId);
-        if (!g.events) g.events = [];
-        if (!gameStartEvent(g)) g.events.push({...ev, ts: Date.now()});
-      } else {
+      {
         await mutateAndSave(() => { const g = getGame(gameId); if (!gameStartEvent(g)) logGameEvent(g, "game_started", undefined, myIdentity.name); });
       }
     } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); el.disabled = false; render(); return; }
