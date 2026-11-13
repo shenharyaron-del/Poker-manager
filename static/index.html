@@ -2452,9 +2452,9 @@ async function loadState(){
 // All game summaries in one request (GET /game-summaries) instead of one request per
 // community on every refresh tick; only games of communities we actually loaded are kept,
 // same as the old per-community fetch produced.
-async function fetchGameSummaries(communities, markGameIds){
+async function fetchGameSummaries(communities, markGameIds, preloaded){
   const ids = new Set(communities.map(c => c.id));
-  allGameSummaries = (await v2Fetch("GET", "/game-summaries")).filter(gs => ids.has(gs.communityId));
+  allGameSummaries = (preloaded || await v2Fetch("GET", "/game-summaries")).filter(gs => ids.has(gs.communityId));
   // A table about to be opened (invite link, the page before a refresh) - its club's games
   // load now even for the super admin (see clubGamesWanted).
   (markGameIds || []).forEach(gid => { const gs = allGameSummaries.find(x => x.id === gid); if (gs) lazyLoadedClubIds.add(gs.communityId); });
@@ -3870,15 +3870,24 @@ async function saveIdentity(){
     lastPushedMyPlayers = mp;
     updateAccount({myPlayers: myIdentity.myPlayers});
   }
-  try {
-    await fetch("/api/identity?clientId=" + encodeURIComponent(getClientId()), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(myIdentity)
-    });
-  }
-  catch(e){ console.error("identity save failed", e); }
+  // the same identity already on its way (two callers a moment apart): one request
+  const body = JSON.stringify(myIdentity);
+  if (identitySaving && identitySaving.body === body) return identitySaving.p;
+  const p = (async () => {
+    try {
+      await fetch("/api/identity?clientId=" + encodeURIComponent(getClientId()), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body
+      });
+    }
+    catch(e){ console.error("identity save failed", e); }
+    finally { if (identitySaving && identitySaving.p === p) identitySaving = null; }
+  })();
+  identitySaving = {body, p};
+  return p;
 }
+let identitySaving = null;
 
 // ---------- Email + code login (optional, additive - see server.py's /api/auth/*) ----------
 // A real account, keyed by email, that can be recovered on a brand new device instead of
@@ -15902,6 +15911,16 @@ window.addEventListener("popstate", async () => {
   document.getElementById("app").innerHTML =
     '<div style="padding:60px 20px;text-align:center;color:#a8a29e;font-size:14px;">טוען נתונים משותפים...</div>';
   let hasVerifiedSession = false;
+  // The clubs, the game list and (an invite / a refresh on a table) that night - asked for
+  // right away, alongside the identity / version / session requests below, instead of one
+  // after another once those are back (they need nothing from them). Used by the first
+  // load attempt; a failure just falls back to asking again there.
+  const openGameAtLoad = new URLSearchParams(location.search).get("game") || (SAVED_NAV_AT_LOAD && SAVED_NAV_AT_LOAD.screen === "table" && SAVED_NAV_AT_LOAD.gameId) || null;
+  const early = {
+    communities: v2Fetch("GET", "/communities").catch(() => null),
+    summaries: v2Fetch("GET", "/game-summaries").catch(() => null),
+    focusGame: openGameAtLoad ? fetchGamesFull([openGameAtLoad]).then(gs => gs[0] || null).catch(() => null) : Promise.resolve(null),
+  };
   {
     const [stateResult, identityResult, versionResult, sessionResult, authSettingsResult] = await Promise.allSettled([loadState(), loadIdentity(), loadVersion(), checkLoginSession(), loadAuthSettings()]);
     // A failed initial load must never be treated as "no data yet" - only fall back to
@@ -15930,21 +15949,22 @@ window.addEventListener("popstate", async () => {
       for (let attempt = 0; attempt < 3 && !v2Loaded; attempt++) {
       if (attempt > 0) await new Promise(r => setTimeout(r, 1500 * attempt));
       try {
-        state.communities = await v2Fetch("GET", "/communities");
+        state.communities = (attempt === 0 && await early.communities) || await v2Fetch("GET", "/communities");
         // Super admin: only their own clubs' games up front, plus the club of whatever this
         // open is headed to (an invite link, or the page before a refresh).
         startupAccount = sessionResult.status === "fulfilled" ? sessionResult.value : null;
         lazyClubGames = !!(startupAccount && startupAccount.role === "superAdmin");
         const openParams = new URLSearchParams(location.search);
         [openParams.get("community"), SAVED_NAV_AT_LOAD && SAVED_NAV_AT_LOAD.communityId].forEach(cid => { if (cid) lazyLoadedClubIds.add(cid); });
-        const gameSummaries = await fetchGameSummaries(state.communities, [openParams.get("game"), SAVED_NAV_AT_LOAD && SAVED_NAV_AT_LOAD.gameId]);
+        const gameSummaries = await fetchGameSummaries(state.communities, [openParams.get("game"), SAVED_NAV_AT_LOAD && SAVED_NAV_AT_LOAD.gameId], attempt === 0 ? await early.summaries : null);
         // Opening a table (an invite, or a refresh on one): that game alone first, so its
         // screen shows right away - every other game follows in the background once the
         // app is up (see backgroundGameIds below).
         const focusId = openParams.get("game") || (SAVED_NAV_AT_LOAD && SAVED_NAV_AT_LOAD.screen === "table" && SAVED_NAV_AT_LOAD.gameId);
         const focus = focusId && gameSummaries.find(gs => gs.id === focusId);
         backgroundGameIds = focus ? gameSummaries.filter(gs => gs.id !== focus.id).map(gs => gs.id) : [];
-        state.games = await fetchGamesFull(focus ? [focus.id] : gameSummaries.map(g => g.id));
+        const earlyFocus = attempt === 0 && focus ? await early.focusGame : null;
+        state.games = earlyFocus && earlyFocus.id === focus.id ? [earlyFocus] : await fetchGamesFull(focus ? [focus.id] : gameSummaries.map(g => g.id));
         v2Loaded = true;
         // Every buy-in that already existed the moment the app opened counts as "already
         // seen" from the start - an independent backstop alongside hasAppliedFreshStateOnce
@@ -16087,8 +16107,8 @@ window.addEventListener("popstate", async () => {
   if (backgroundGameIds.length) loadBackgroundGames();
   scheduleAutoRefresh();
   // every 4s without the live channel; every 30s with it (it announces join requests itself)
-  (function joinLoop(){ joinRequestsTick(); setTimeout(joinLoop, liveSyncUp ? 30000 : 4000); })();
-  joinRequestsTick();
+  joinRequestsTick();   // once now, then the loop (it used to run twice at once here)
+  setTimeout(function joinLoop(){ joinRequestsTick(); setTimeout(joinLoop, liveSyncUp ? 30000 : 4000); }, 4000);
   connectLiveSync();
   prefetchAvatars();
   maybeOfferInstall();
