@@ -7029,7 +7029,7 @@ function showAlert(message, durationMs){
     <span>${esc(String(message))}</span>
     <button class="custom-alert-close" aria-label="סגור">${icon('x')}</button>
   </div>`;
-  document.body.appendChild(el);
+  document.body.appendChild(el); fixNegativeNumbers(el);
   const remove = () => el.remove();
   el.onclick = (e) => { if (e.target === el) remove(); };
   el.querySelector(".custom-alert-close").onclick = remove;
@@ -7053,7 +7053,7 @@ function showConfirm(message, opts){
         <button class="btn btn-ghost btn-block" data-confirm-cancel>${esc(o.cancelLabel)}</button>
       </div>
     </div>`;
-    document.body.appendChild(el);
+    document.body.appendChild(el); fixNegativeNumbers(el);
     const finish = (result) => { el.remove(); resolve(result); };
     el.querySelector("[data-confirm-ok]").onclick = () => finish(true);
     el.querySelector("[data-confirm-cancel]").onclick = () => finish(false);
@@ -7882,6 +7882,24 @@ function rememberNav(){
 // table or home) - the invite steps along the way used to paint the home screen for a few
 // seconds before the login or the table replaced it. Until then the loading text stays.
 let appReady = false;
+// Negative amounts read the same everywhere: "₪-10" (the shekel sign, then the minus right
+// against the number), kept left-to-right so the Hebrew around it can't flip it into "10-₪" -
+// "-₪10", "₪ - 10" and a bare "-40" all become that. Runs over the screen's text after each
+// redraw (not inside the charts' SVG).
+const NEG_RE = /(^|[^\d\w.,\u2066])(?:-\s?₪\s?|₪\s?-\s?|-)(\d[\d,]*(?:\.\d+)?)/g;
+function fixNegativeNumbers(root){
+  const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {acceptNode: n =>
+    n.nodeValue.includes("-") && !(n.parentElement && n.parentElement.closest("svg, script, style, input, textarea")) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT});
+  const nodes = []; for (let n; (n = walk.nextNode());) nodes.push(n);
+  nodes.forEach(n => {
+    const v = n.nodeValue;
+    const out = v.replace(NEG_RE, (m, pre, num, off) => {
+      const had = m.includes("₪");
+      return pre + "\u2066" + (had ? "₪" : "") + "-" + num + "\u2069";
+    });
+    if (out !== v) n.nodeValue = out;
+  });
+}
 // A scrolled box's identity across redraws: its tag, classes and data-* attributes, and its
 // parents' (see render's keptScrolls)
 let lastScrollCtx = null;
@@ -8079,6 +8097,7 @@ function render(){
   { const el = app.querySelector(".player-screen-scroll"); if (el) { el.dataset.key = gameScrollKey; if (gameScrollTop) el.scrollTop = gameScrollTop; } }
   { const el = app.querySelector("[data-tour-scroll]"); if (el && el.dataset.tourScroll === String(nav.gameId)) { if (tourScroll) el.scrollTop = tourScroll; if (winScroll) window.scrollTo(0, winScroll); } }
   attachHandlers();
+  fixNegativeNumbers(app);
   if (keptScrolls && keptScrolls.size) {
     app.querySelectorAll("*").forEach(el => {
       if (el.scrollHeight <= el.clientHeight || el.scrollTop > 0) return;   // nothing to scroll, or already placed
