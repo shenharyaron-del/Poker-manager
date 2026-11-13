@@ -145,7 +145,8 @@ body.page-bg-lifted .swipe-page.lux-page{background:transparent!important;}
 .club-front .name,.card[data-new-community] .name,.card[data-new-game] .name{font-size:24px;}
 /* the club screen's game cards: a bigger name and date (a card with nothing behind it to swipe -
    a locked night, a player's view - loses "club-front", so the card itself is matched) */
-.card[data-open-game] .name{font-size:28px;line-height:1.2;}
+.card[data-open-game] .name{font-size:28px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.card[data-open-game] .flex1{min-width:0;}
 .gc-date{font-size:18px;color:var(--muted);margin-top:3px;}
 .card.club-front .meta,.card[data-new-community] .meta,.card[data-new-game] .meta{font-size:16px;}
 .card .meta{color:var(--muted);font-size:12px;margin-top:4px;display:flex;align-items:center;gap:5px;}
@@ -7903,6 +7904,15 @@ function fixNegativeNumbers(root){
     if (out !== v) n.nodeValue = out;
   });
 }
+// The club screen's game cards: a name too long for one line gets a smaller font (that card only),
+// down to 16px - past that it's cut with "…"
+function fitGameNames(){
+  document.querySelectorAll(".card[data-open-game] .name").forEach(el => {
+    el.style.fontSize = "";
+    let size = parseFloat(getComputedStyle(el).fontSize);
+    while (el.scrollWidth > el.clientWidth + 1 && size > 16) { size -= 1; el.style.fontSize = size + "px"; }
+  });
+}
 // A scrolled box's identity across redraws: its tag, classes and data-* attributes, and its
 // parents' (see render's keptScrolls)
 let lastScrollCtx = null;
@@ -8118,7 +8128,7 @@ function render(){
       if (typing.s == null && el.value) { const v = el.value; el.value = ""; el.value = v; }
     }
   }
-  if (nav.screen === "community") fitClubGamesScroll();
+  if (nav.screen === "community") { fitClubGamesScroll(); fitGameNames(); }
   liftGamePageBackground();
   // Runs whenever .poker-table-wrap exists at all now, not just when it's the visible
   // face - with both panes always mounted while seated, the circles view's own DOM (and
