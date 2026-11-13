@@ -106,12 +106,15 @@ _broadcast_last = 0.0
 _broadcast_pending = False
 
 
-def _broadcast_state_changed():
+def _broadcast_state_changed(origin=""):
     global _broadcast_last, _broadcast_pending
     with _subscribers_lock:
         busy = len(_subscribers) >= _BUSY_SUBSCRIBERS
     if not busy:
-        _send_changed()
+        # "changed <origin>": the app tab that saved (X-Origin) skips its own echo - it already
+        # has the change, and refetching everything right after each of its saves only
+        # crowded the server while that tab's next tap was waiting
+        _send_changed(f"changed {origin}" if origin else "changed")
         return
     with _broadcast_lock:
         now = time.time()
@@ -475,6 +478,9 @@ _db_pool_lock = threading.Lock()
 # semaphore makes callers wait briefly for a free connection instead, and only fail after
 # a real timeout.
 _pool_slots = threading.BoundedSemaphore(_MAX_POOL_CONNS)
+# Reads (every phone's refresh after each save) may use all but 3 of the connections - a
+# save (a buy-in, an exit) never waits behind a refresh storm for a free one.
+_read_slots = threading.BoundedSemaphore(max(1, _MAX_POOL_CONNS - 3))
 _POOL_WAIT_SECONDS = 15
 
 
@@ -592,12 +598,20 @@ def _teardown_req_db(exc):
 @contextmanager
 def _get_db_fresh(keep):
     pool = _get_pool()
+    # an API read (a refresh) waits for a read slot first - 3 connections stay for saves
+    is_read = has_request_context() and request.method == "GET" and request.path.startswith("/api/")
+    if is_read and not _read_slots.acquire(timeout=_POOL_WAIT_SECONDS):
+        raise DbBusyError("database connection pool exhausted")
     if not _pool_slots.acquire(timeout=_POOL_WAIT_SECONDS):
+        if is_read:
+            _read_slots.release()
         raise DbBusyError("database connection pool exhausted")
     try:
         conn = _healthy_conn(pool)
     except Exception:
         _pool_slots.release()
+        if is_read:
+            _read_slots.release()
         raise
     if keep:
         _rg._req_db = conn
@@ -622,6 +636,8 @@ def _get_db_fresh(keep):
         _conn_last_used[id(conn)] = time.time()
         pool.putconn(conn, close=close_bad)
         _pool_slots.release()
+        if is_read:
+            _read_slots.release()
 
 
 @app.before_request
@@ -648,7 +664,7 @@ def _after_api_request(response):
     # other phones to notice on their next 6-second poll.
     if (request.path.startswith("/api/v2/") and request.method in ("POST", "PUT", "PATCH", "DELETE")
             and 200 <= response.status_code < 300):
-        _broadcast_state_changed()
+        _broadcast_state_changed(re.sub(r"[^A-Za-z0-9]", "", request.headers.get("X-Origin", ""))[:24])
     # Compress the bigger JSON answers (clubs, games) - phones on a mobile network.
     if (response.mimetype == "application/json" and response.status_code == 200 and not response.direct_passthrough
             and "gzip" in request.headers.get("Accept-Encoding", "") and "Content-Encoding" not in response.headers):
