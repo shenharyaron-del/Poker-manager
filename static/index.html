@@ -7887,16 +7887,19 @@ let appReady = false;
 // "-₪10", "₪ - 10" and a bare "-40" all become that. Runs over the screen's text after each
 // redraw (not inside the charts' SVG).
 const NEG_RE = /(^|[^\d\w.,\u2066])(?:-\s?₪\s?|₪\s?-\s?|-)(\d[\d,]*(?:\.\d+)?)/g;
+// ...and a positive amount carries no "+" ("+₪50" / "₪+50" / "+50" -> "₪50" / "50") - but a
+// time step ("+1 דק'") keeps it, and so does "+2" more re-buys on a seat's bar
+const POS_RE = /(^|[^\d\w+])(?:\+\s?(₪?)\s?|(₪)\+)(\d[\d,]*(?:\.\d+)?)(?!\d|\s?דק)/g;
 function fixNegativeNumbers(root){
   const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {acceptNode: n =>
-    n.nodeValue.includes("-") && !(n.parentElement && n.parentElement.closest("svg, script, style, input, textarea")) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT});
+    /[-+]/.test(n.nodeValue) && !(n.parentElement && n.parentElement.closest("svg, script, style, input, textarea, .buyin-bar")) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT});
   const nodes = []; for (let n; (n = walk.nextNode());) nodes.push(n);
   nodes.forEach(n => {
     const v = n.nodeValue;
     const out = v.replace(NEG_RE, (m, pre, num, off) => {
       const had = m.includes("₪");
       return pre + "\u2066" + (had ? "₪" : "") + "-" + num + "\u2069";
-    });
+    }).replace(POS_RE, (m, pre, cur1, cur2, num) => pre + (cur1 || cur2 || "") + num);
     if (out !== v) n.nodeValue = out;
   });
 }
