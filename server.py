@@ -106,6 +106,18 @@ _broadcast_last = 0.0
 _broadcast_pending = False
 
 
+# Club-level data (clubs, their players, admins, chips, payment links, settings) changes only
+# through saves outside /api/v2/games/ - this counter moves with each such save (one server
+# process, see __main__), so a phone can ask "anything new since version X?" and a refresh
+# skips re-reading every club when nothing changed; it also keys the rights cache below.
+_CLUB_VER = [0]
+_PROC_START = str(int(time.time()))
+
+
+def _club_ver():
+    return f"{_PROC_START}.{_CLUB_VER[0]}"
+
+
 def _broadcast_state_changed(origin=""):
     global _broadcast_last, _broadcast_pending
     with _subscribers_lock:
@@ -114,7 +126,8 @@ def _broadcast_state_changed(origin=""):
         # "changed <origin>": the app tab that saved (X-Origin) skips its own echo - it already
         # has the change, and refetching everything right after each of its saves only
         # crowded the server while that tab's next tap was waiting
-        _send_changed(f"changed {origin}" if origin else "changed")
+        jr = " jr" if "/join-requests" in (request.path if has_request_context() else "") else ""
+        _send_changed((f"changed {origin}" if origin else "changed") + jr)
         return
     with _broadcast_lock:
         now = time.time()
@@ -664,6 +677,8 @@ def _after_api_request(response):
     # other phones to notice on their next 6-second poll.
     if (request.path.startswith("/api/v2/") and request.method in ("POST", "PUT", "PATCH", "DELETE")
             and 200 <= response.status_code < 300):
+        if not request.path.startswith("/api/v2/games/"):
+            _CLUB_VER[0] += 1   # a club-level save: clubs / rights may have changed
         _broadcast_state_changed(re.sub(r"[^A-Za-z0-9]", "", request.headers.get("X-Origin", ""))[:24])
     # Compress the bigger JSON answers (clubs, games) - phones on a mobile network.
     if (response.mimetype == "application/json" and response.status_code == 200 and not response.direct_passthrough
@@ -1274,7 +1289,31 @@ def _my_rows_params(caller):
     return (caller["ids"], caller["roster_ids"], caller.get("device_ids") or [])
 
 
+# Who may do what in a club barely ever changes mid-night, yet every save looked it up again
+# (4-5 queries) - kept for a few seconds, and dropped the moment any club-level save happens.
+_RIGHTS_TTL = 20
+_rights_cache = {}
+_rights_cache_lock = threading.Lock()
+
+
 def _rights(cur, caller, community_id, game_id=None):
+    key = (tuple(sorted(caller["ids"])), tuple(sorted(caller.get("device_ids") or [])), tuple(sorted(caller.get("roster_ids") or [])),
+           bool(caller["is_super"]), caller.get("name"), caller.get("invite_game"), caller.get("invite_community"), community_id, game_id)
+    now = time.time()
+    with _rights_cache_lock:
+        hit = _rights_cache.get(key)
+    if hit and hit[0] == _club_ver() and now - hit[1] < _RIGHTS_TTL:
+        r = hit[2]
+        return {**r, "my_players": set(r["my_players"])}
+    r = _rights_uncached(cur, caller, community_id, game_id)
+    with _rights_cache_lock:
+        if len(_rights_cache) > 5000:
+            _rights_cache.clear()
+        _rights_cache[key] = (_club_ver(), now, {**r, "my_players": set(r["my_players"])})
+    return r
+
+
+def _rights_uncached(cur, caller, community_id, game_id=None):
     r = {"member": False, "community_admin": False, "table_admin": False, "my_players": set()}
     if not community_id:
         return r
@@ -1311,9 +1350,18 @@ def _rights(cur, caller, community_id, game_id=None):
     return r
 
 
+_game_club = {}   # a night never moves to another club
+
+
 def _game_community(cur, game_id):
+    if game_id in _game_club:
+        return _game_club[game_id]
     cur.execute("SELECT community_id FROM games WHERE id = %s", (game_id,))
     row = cur.fetchone()
+    if row:
+        if len(_game_club) > 20000:
+            _game_club.clear()
+        _game_club[game_id] = row[0]
     return row[0] if row else None
 
 
@@ -1484,6 +1532,16 @@ def v2_list_communities():
     # DB, so this was the main reason a normal page load/refresh took several seconds
     # (measured live: ~10 sequential round trips for just 3 communities).
     caller = _caller()
+    # "?ver=<what I have>": nothing changed since (same clubs version, same asker) -> just say so
+    # (in the body: Render's edge strips ETag headers - see get_state_hash)
+    asked = request.args.get("ver")
+    ver = None
+    if asked is not None:
+        who = hashlib.sha256(json.dumps([sorted(caller["ids"]), sorted(caller.get("roster_ids") or []), caller["is_super"],
+                                         caller.get("invite_game"), caller.get("invite_community")]).encode()).hexdigest()[:10]
+        ver = f"{_club_ver()}.{who}"
+        if asked == ver:
+            return jsonify({"ver": ver, "notModified": True})
     with get_db() as conn:
         with conn.cursor() as cur:
             visible = _visible_community_ids(cur, caller)
@@ -1539,6 +1597,8 @@ def v2_list_communities():
                         entry["isAdmin"] = True
                     by_id[community_id]["roster"].append(entry)
         conn.commit()
+    if ver is not None:
+        return jsonify({"ver": ver, "communities": communities})
     return jsonify(communities)
 
 
