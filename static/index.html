@@ -9384,9 +9384,11 @@ function renderPlayerScreen(gameId){
     };
     if (viewingOther && me) {
       // framed with "הקש לחזור אליך" on its border, so it's clear how to get back
-      // I've left the table myself: my card stays (it's the way back to my screen), faded like
-      // the tiles of the others who left - "הסתר שיצאו" doesn't hide it
-      return `<button type="button" class="pp-me-card${mineOut ? " out" : ""}" data-pp-back-me dir="rtl" title="חזרה למסך שלי">${meAv(myPlayerId)}<span class="pp-me-txt"><span class="pp-me-name"><bdi>${esc(me.name)}</bdi></span>${mineOut ? "" : `<span class="pp-total" data-player-total>₪${myTotal}</span>`}</span></button>`;
+      // I've left the table myself: my card stays, faded like the tiles of the others who left
+      // ("הסתר שיצאו" doesn't hide it), and can't be picked - the strip's "חזרה אליי" still
+      // leads back to my screen
+      if (mineOut) return `<div class="pp-me-card out" dir="rtl">${meAv(myPlayerId)}<span class="pp-me-txt"><span class="pp-me-name"><bdi>${esc(me.name)}</bdi></span></span></div>`;
+      return `<button type="button" class="pp-me-card" data-pp-back-me dir="rtl" title="חזרה למסך שלי">${meAv(myPlayerId)}<span class="pp-me-txt"><span class="pp-me-name"><bdi>${esc(me.name)}</bdi></span>${mineOut ? "" : `<span class="pp-total" data-player-total>₪${myTotal}</span>`}</span></button>`;
     }
     return `<div class="pp-me-card${canActForOthers(g) && (isAdminView || iAmTreasurer(g)) ? " sel" : ""}" dir="rtl">${meAv(pid)}<span class="pp-me-txt"><span class="pp-me-name"${font ? ` style="font-size:${Math.min(font + 3, 23)}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut && !selfReturn ? ' · יצא' : ''}</span>${cashedOut ? (selfReturn ? `<button type="button" class="pp-self-return" data-self-return="${pid}">${RETURN_ICON}<span class="ret-txt">חזור למשחק</span></button>` : "") : `<span class="pp-total" data-player-total>₪${buyinTotal}</span>`}</span></div>`;
   })();
