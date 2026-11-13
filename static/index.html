@@ -11203,7 +11203,7 @@ function renderModal(m){
             <div class="box"><div class="l">אחוז הפסדים</div><div class="v stats-loss">${pct(losses.length)}%</div></div>
           </div>
           ${rankHtml}
-          <div class="roster-row"><span>ממוצע כללי למשחק</span><span style="font-weight:700;">${avgOverall>=0?"+":""}₪${Math.round(avgOverall)}</span></div>
+          <div class="roster-row"><span>ממוצע כללי למשחק</span><span class="${Math.round(avgOverall) > 0 ? "stats-win" : Math.round(avgOverall) < 0 ? "stats-loss" : ""}" style="font-weight:700;">${Math.round(avgOverall) > 0 ? "+" : ""}₪${Math.round(avgOverall)}</span></div>
           ${best?`<div class="roster-row"><span style="color:#059669;font-size:16px;">הערב הכי טוב</span><span class="${best.profit >= 0 ? "stats-win" : "stats-loss"}" style="font-weight:700;">${best.profit > 0 ? "+" : ""}₪${Math.round(best.profit)}</span></div>`:""}
           ${worst?`<div class="roster-row"><span style="color:#059669;font-size:16px;">הערב הכי גרוע</span><span class="stats-loss" style="font-weight:700;">₪${Math.round(worst.profit)}</span></div>`:""}
           ${renderBarChart(computeProfitBuckets(profits))}
