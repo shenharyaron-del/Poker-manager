@@ -9439,7 +9439,7 @@ function renderPlayerScreen(gameId){
       if (mineOut) return `<div class="pp-me-card out" dir="rtl">${meAv(myPlayerId)}<span class="pp-me-txt"><span class="pp-me-name"><bdi>${esc(me.name)}</bdi></span></span></div>`;
       return `<button type="button" class="pp-me-card" data-pp-back-me dir="rtl" title="חזרה למסך שלי">${meAv(myPlayerId)}<span class="pp-me-txt"><span class="pp-me-name"><bdi>${esc(me.name)}</bdi></span>${mineOut ? "" : `<span class="pp-total" data-player-total>₪${myTotal}</span>`}</span></button>`;
     }
-    return `<div class="pp-me-card${canActForOthers(g) && (isAdminView || iAmTreasurer(g)) ? " sel" : ""}" dir="rtl">${meAv(pid)}<span class="pp-me-txt"><span class="pp-me-name"${font ? ` style="font-size:${Math.min(font + 3, 23)}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut && !selfReturn ? ' · יצא' : ''}</span>${cashedOut ? (selfReturn ? `<button type="button" class="pp-self-return" data-self-return="${pid}">${RETURN_ICON}<span class="ret-txt">חזור למשחק</span></button>` : "") : `<span class="pp-total" data-player-total>₪${buyinTotal}</span>`}</span></div>`;
+    return `<div class="pp-me-card${canActForOthers(g) ? " sel" : ""}" dir="rtl">${meAv(pid)}<span class="pp-me-txt"><span class="pp-me-name"${font ? ` style="font-size:${Math.min(font + 3, 23)}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut && !selfReturn ? ' · יצא' : ''}</span>${cashedOut ? (selfReturn ? `<button type="button" class="pp-self-return" data-self-return="${pid}">${RETURN_ICON}<span class="ret-txt">חזור למשחק</span></button>` : "") : `<span class="pp-total" data-player-total>₪${buyinTotal}</span>`}</span></div>`;
   })();
   // Tiles above the name: everyone who entered tonight, in order, then a "הזמן שחקן" tile
   // in the next free spot (it replaces the header's invite button here).
@@ -9447,9 +9447,10 @@ function renderPlayerScreen(gameId){
   // A carousel of everyone else tonight (in table order - see tableSeatOrder): avatar, name and what they bought
   // in - or, once they've left, "החזר" (an admin sends them back to the table) / "יצא".
   // The one being looked at is highlighted. Arrows and dots under it when it doesn't fit.
-  // "פועל בשמך" / "פועל בשם X · חזרה אליי": always there for whoever acts for others (the
-  // screen doesn't move when switching), orange while acting for someone else
-  const actStrip = !(canActForOthers(g) && (isAdminView || iAmTreasurer(g))) ? "" : viewingOther && p
+  // "ריביי / יציאה יירשמו עליי / על X": with no treasurer tonight, on everyone's screen (anyone
+  // may record for a friend without a phone); with one, only on the treasurer's. Always there
+  // when shown (the screen doesn't move when switching), orange while acting for someone else
+  const actStrip = !(canActForOthers(g)) ? "" : viewingOther && p
     ? `<div class="act-strip other"><span><i class="act-ic">!</i>ריביי / יציאה יירשמו על <b><bdi>${esc(tableShortName(g, pid))}</bdi></b></span><button type="button" data-pp-back-me>חזרה ${g2("אליי", "אליי")}</button></div>`
     : `<div class="act-strip"><span><i class="act-ic">!</i>ריביי / יציאה יירשמו <b>עליי</b></span></div>`;
   const carouselHtml = (() => {
@@ -9468,7 +9469,7 @@ function renderPlayerScreen(gameId){
     return playersCarouselHtml("player:" + g.id, g, c, tableSeatOrder(g, shownIds, myPlayerId), { footer, top: nameHtml,
       onId: pid, attr: canActForOthers(g) ? "data-pp-view" : "data-pp-noview",
       // The table's admins (and tonight's treasurer) act for someone else - for them the frame says so.
-      legend: canActForOthers(g) && (isAdminView || iAmTreasurer(g)) ? g2("בחר שחקן כדי לפעול בשמו", "בחרי שחקן כדי לפעול בשמו") : "",
+      legend: canActForOthers(g) ? g2("בחר שחקן כדי לפעול בשמו", "בחרי שחקן כדי לפעול בשמו") : "",
       under: id => !(id in (g.cashouts || {})) ? `<span class="pp-ci-amt">₪${Math.round((totals[id] || 0) * 100) / 100}</span>`
         : (gameTreasurer(g) ? iAmTreasurer(g) : isAdminView) ? `<span class="pp-ci-return" role="button" data-admin-return-to-game="${id}">${RETURN_ICON}<span class="ret-txt">החזר</span></span>`
         : `<span class="pp-ci-out">יצא</span>`,
