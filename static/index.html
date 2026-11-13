@@ -2969,6 +2969,8 @@ async function flushErrorReports(){
   flushingErrorReports = false;
 }
 let serverSkewMs = 0;
+// This tab's mark on its saves (X-Origin), echoed back in the server's "changed" message.
+const TAB_ORIGIN = Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
 async function v2Fetch(method, path, body, opts){
   // Only a save counts as "in flight" (doRefreshNow waits for those and drops a GET that
   // raced one) - counting reads too, like the 4-second join-request poll, made refreshes
@@ -2985,6 +2987,7 @@ async function v2Fetch(method, path, body, opts){
     // Who's asking (see _caller in server.py): the server only returns communities this
     // device's person belongs to, plus the one an invite link in the URL points at.
     const headers = {"X-Client-Id": getClientId()};
+    if (isWrite) headers["X-Origin"] = TAB_ORIGIN;   // so this tab can skip the echo of its own save
     const urlParams = new URLSearchParams(location.search);
     if (urlParams.get("game")) headers["X-Invite-Game"] = urlParams.get("game");
     if (urlParams.get("community")) headers["X-Invite-Community"] = urlParams.get("community");
@@ -3740,7 +3743,11 @@ function connectLiveSync(){
     // tournament) swamps the server. Otherwise refetch right away.
     let sseTimer = null;
     es.onmessage = e => {
-      if (!String(e.data || "").includes("busy")) { doRefreshNow("sse"); return; }
+      const msg = String(e.data || "");
+      // the echo of this tab's own save: it already has the change (polling still catches
+      // anything else that landed at the same moment)
+      if (msg === "changed " + TAB_ORIGIN) return;
+      if (!msg.includes("busy")) { doRefreshNow("sse"); return; }
       if (!sseTimer) sseTimer = setTimeout(() => { sseTimer = null; doRefreshNow("sse"); }, 200 + Math.random() * 1300);
     };
   } catch(e) { /* SSE unsupported/blocked - periodic polling still covers us */ }
