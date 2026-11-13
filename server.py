@@ -2565,7 +2565,16 @@ def v2_create_game():
                     (gid, creator_player_id, creator_player_name),
                 )
         conn.commit()
-    return jsonify({"id": gid}), 201
+        # the new night in full, in this same answer - the app used to ask for it right after
+        # (one more trip from the phone before the table could open)
+        try:
+            with conn.cursor() as cur:
+                cur.execute(_GAME_BASE_COLUMNS + " WHERE id = %s", (gid,))
+                row = cur.fetchone()
+                game = _games_full(cur, [row])[0] if row else None
+        except Exception:
+            game = None
+    return jsonify({"id": gid, **({"game": game} if game else {})}), 201
 
 
 @app.route("/api/v2/games/<game_id>", methods=["PATCH"])

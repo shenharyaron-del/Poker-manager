@@ -3252,8 +3252,13 @@ async function ensureGameLoadedForView(gameId){
 }
 
 async function v2CreateGame(id, communityId, name, date, createdByName, creatorPlayerId, creatorPlayerName, createdBy, extra){
-  await v2Fetch("POST", "/games", {id, communityId, name, date, createdByName, createdBy, creatorPlayerId, creatorPlayerName, ...(extra || {})});
-  return v2LoadGameFull(id);
+  const res = await v2Fetch("POST", "/games", {id, communityId, name, date, createdByName, createdBy, creatorPlayerId, creatorPlayerName, ...(extra || {})});
+  // the server answers with the new night in full - no second trip for it
+  const g = res && res.game && res.game.id === id ? res.game : null;
+  if (!g) return v2LoadGameFull(id);
+  const idx = state.games.findIndex(x => x.id === id);
+  if (idx === -1) state.games.push(g); else state.games[idx] = g;
+  return g;
 }
 
 // Returns the fresh updatedAt on success, null on a 409 (same shape as v2UpdateCommunity).
@@ -14632,7 +14637,8 @@ function attachHandlers(){
               creatorPlayer = {id: uid(), name: myIdentity.name};
               await v2AddRosterPlayer(c.id, creatorPlayer.id, creatorPlayer.name);
             }
-            await v2LinkRosterPlayer(c.id, creatorPlayer.id, myIdentity.id);
+            // already linked to me (the usual case): no need to say it again
+            if (creatorPlayer.clientId !== myIdentity.id) await v2LinkRosterPlayer(c.id, creatorPlayer.id, myIdentity.id);
             // The creator isn't seated up front either - like everyone else they land on
             // the table and tap a free seat, which opens the entry-amount window.
             await v2CreateGame(gid, c.id, name || null, modal.date, myIdentity.name, null, null, myIdentity.id, tourExtra);
