@@ -2072,6 +2072,8 @@ html.theme-light.theme-sand :is(.leave-frame,.pp-car,.pp-name-box){border-color:
 :root{--frame-c:#e9b949;}
 html.theme-light{--frame-c:#a86a12;}
 html.theme-light.theme-blue{--frame-c:#ffe39a;}
+/* ...but the windows are light: their frames and titles in brown there */
+html.theme-light.theme-blue .modal{--frame-c:#a86a12;}
 html.theme-light.theme-sand{--frame-c:#7a4a1a;}
 .lux-page.pp-other{--frame-c:#f2c14e;}
 html.theme-light .lux-page.pp-other{--frame-c:#9b2c2c;}
@@ -11202,12 +11204,14 @@ function renderModal(m){
           </div>
           ${rankHtml}
           <div class="roster-row"><span>ממוצע כללי למשחק</span><span style="font-weight:700;">${avgOverall>=0?"+":""}₪${Math.round(avgOverall)}</span></div>
-          ${best?`<div class="roster-row"><span style="color:#059669;font-size:16px;">הערב הכי טוב</span><span class="stats-win" style="font-weight:700;">+₪${Math.round(best.profit)}</span></div>`:""}
+          ${best?`<div class="roster-row"><span style="color:#059669;font-size:16px;">הערב הכי טוב</span><span class="${best.profit >= 0 ? "stats-win" : "stats-loss"}" style="font-weight:700;">${best.profit > 0 ? "+" : ""}₪${Math.round(best.profit)}</span></div>`:""}
           ${worst?`<div class="roster-row"><span style="color:#059669;font-size:16px;">הערב הכי גרוע</span><span class="stats-loss" style="font-weight:700;">₪${Math.round(worst.profit)}</span></div>`:""}
           ${renderBarChart(computeProfitBuckets(profits))}
           <fieldset class="leave-frame stats-frame"><legend>רווח/הפסד לפי תאריך</legend>
           ${renderProfitTimeline(timeline.sort((a,b)=> a.date < b.date ? -1 : a.date > b.date ? 1 : 0), "bar", false)}
           </fieldset>
+          ${(() => { const sc = selected !== "all" && myCommunities.find(c => c.id === selected), pl = sc && statsPlayerOf(sc);
+            return pl && (!viewingOtherStats || isSuperAdmin()) ? `<button type="button" class="btn btn-ghost btn-block" data-share-club-stats="${esc(sc.id)}" data-share-club-player="${esc(pl.id)}" style="margin-top:12px">📤 שליחת סטטיסטיקה בוואטסאפ</button>` : ""; })()}
         `;
       }
     }
@@ -12021,7 +12025,7 @@ function renderModal(m){
       body = `<p style="color:var(--muted);text-align:center;">טוען...</p>`;
     } else {
       body = nightSummaryHtml(g, m.playerId, m.data.buyins, m.data.deleted, true)
-        + (isSuperAdmin() && g.gameType !== "tournament" && g.communityId
+        + ((isSuperAdmin() || m.playerId === (myIdentity.myPlayers && myIdentity.myPlayers[g.communityId])) && g.gameType !== "tournament" && g.communityId
           ? `<button type="button" class="btn btn-ghost btn-block" data-share-player-stats="${esc(m.playerId)}" style="margin-top:12px">📤 שליחת סטטיסטיקה בוואטסאפ</button>` : "");
     }
   } else if (m.type === "returnToGamePayment") {
@@ -12852,7 +12856,14 @@ function attachHandlers(){
     const qrBtn = app.querySelector("[data-invite-qr]");
     if (qrBtn) qrBtn.onclick = () => updateModal({showQr: true});
   }
-  // the super admin sends a player's club stats (cash) - see playerClubStatsText
+  // the stats screen's "שליחת סטטיסטיקה": my own (or, for the super admin, anyone's) club stats
+  app.querySelectorAll("[data-share-club-stats]").forEach(el => el.onclick = async () => {
+    const text = playerClubStatsText(el.dataset.shareClubStats, el.dataset.shareClubPlayer);
+    if (!text) { showAlert("אין עדיין נתונים לשחקן הזה."); return; }
+    if (navigator.share) { try { await navigator.share({text}); } catch (e) { /* cancelled */ } }
+    else window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank", "noopener");
+  });
+  // a player's own night window (or the super admin's for anyone): their club stats (cash)
   app.querySelectorAll("[data-share-player-stats]").forEach(el => el.onclick = async () => {
     const g = getGame(modal && modal.gameId), text = g && playerClubStatsText(g.communityId, el.dataset.sharePlayerStats);
     if (!text) { showAlert("אין עדיין נתונים לשחקן הזה."); return; }
@@ -12928,7 +12939,7 @@ function attachHandlers(){
     if (to === "home") go("home");
     else if (to === "club" && g) go("community", {communityId: g.communityId});
     else if (to === "profile") openModal({type: "identityName", forced: false});
-    else if (to === "stats") openModal({type: "stats", clientId: myIdentity.id});
+    else if (to === "stats") openModal({type: "stats", clientId: myIdentity.id, selectedCommunityId: nav.communityId || (nav.gameId && getGame(nav.gameId) && getGame(nav.gameId).communityId) || null});
     else if (to === "theme") openModal({type: "themePicker"});
     else if (to === "report") {
       const cid = g ? g.communityId : (nav.screen === "community" && nav.communityId);
@@ -12962,7 +12973,9 @@ function attachHandlers(){
     if (!modal || modal.type !== "roster") return;
     openModal({type: "stats", playerId: el.dataset.playerStats, communityId: modal.communityId, back: modal});
   });
-  app.querySelectorAll("[data-open-my-stats]").forEach(el => el.onclick = () => openModal({type:"stats", clientId: myIdentity.id}));
+  // my stats open on the club I'm in now (the club screen, or this table's club)
+  const statsHere = () => nav.communityId || (nav.gameId && getGame(nav.gameId) && getGame(nav.gameId).communityId) || null;
+  app.querySelectorAll("[data-open-my-stats]").forEach(el => el.onclick = () => openModal({type:"stats", clientId: myIdentity.id, selectedCommunityId: statsHere()}));
   if (modal && modal.type === "entryBuyin") {
     const {gameId, playerId} = modal;
     // Another device (the player's own, or whoever seated them) may have entered it
@@ -13914,7 +13927,7 @@ function attachHandlers(){
     const changeAvatarBtn = app.querySelector("[data-change-avatar]");
     if (changeAvatarBtn) changeAvatarBtn.onclick = () => openModal({type:"photoSource"});
     const myStatsBtn = app.querySelector("[data-my-stats]");
-    if (myStatsBtn) myStatsBtn.onclick = () => openModal({type:"stats", clientId: myIdentity.id});
+    if (myStatsBtn) myStatsBtn.onclick = () => openModal({type:"stats", clientId: myIdentity.id, selectedCommunityId: nav.communityId || (nav.gameId && getGame(nav.gameId) && getGame(nav.gameId).communityId) || null});
     app.querySelectorAll("[data-pick-seat-position]").forEach(el => el.onclick = async () => {
       // Preserve an unsaved name edit across the re-render below - render() rebuilds
       // this whole screen from myIdentity.name, which would otherwise silently discard
