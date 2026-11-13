@@ -1370,6 +1370,9 @@ html.theme-light.theme-sand .pp-me-card{border-color:rgba(110,65,25,.65);}
 .tr-strip{display:flex;align-items:center;gap:8px;margin:0 0 10px;padding:9px 14px;border-radius:12px;border:1px solid var(--frame-c,var(--gold));
   background:transparent;font-size:15px;color:var(--text);flex-shrink:0;text-align:right;}
 .tr-strip.info{justify-content:center;padding-top:7px;padding-bottom:7px;}
+/* over the acting strip ("ריביי / יציאה יירשמו…"): as low as it, close above it - one pair */
+.tr-strip:has(+ .act-strip){min-height:40px;box-sizing:border-box;padding:5px 12px;margin-bottom:4px;}
+.tr-strip:has(+ .act-strip) .tr-pick{font-size:16px;} .tr-strip:has(+ .act-strip) .tr-pick input{width:20px;height:20px;}
 /* nobody yet: a line over the box suggesting one */
 .tr-strip.has-hint{flex-direction:column;align-items:flex-start;gap:5px;}
 .tr-hint{font-size:14px;line-height:1.35;color:var(--muted);}
