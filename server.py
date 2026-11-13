@@ -21,7 +21,7 @@ import anthropic
 import psycopg2
 import psycopg2.pool
 from psycopg2.extras import Json
-from flask import Flask, Response, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory, g as _rg, has_request_context
 
 # Passkeys ("כניסה עם טביעת אצבע") - optional: if the library is missing the rest of the
 # app still runs, the passkey endpoints just answer 503.
@@ -526,8 +526,71 @@ def _healthy_conn(pool):
     return pool.getconn()
 
 
-@contextmanager
+def _reuse_conn_here():
+    """A save (POST/PUT/PATCH/DELETE on the API) keeps ONE pooled connection for the whole
+    request: its rights check, lock check, money check and the write itself used to take a
+    connection each - with the database far away (Supabase), every extra checkout, idle
+    ping and commit was another round trip, and a buy-in took seconds to confirm."""
+    return (has_request_context() and request.method in ("POST", "PUT", "PATCH", "DELETE")
+            and request.path.startswith("/api/v2/"))
+
+
 def get_db():
+    if _reuse_conn_here():
+        held = getattr(_rg, "_req_db", None)
+        if held is None:
+            return _get_db_fresh(keep=True)
+        return _get_db_held(held)
+    return _get_db_fresh(keep=False)
+
+
+@contextmanager
+def _get_db_held(conn):
+    # nested uses (a helper that opens its own block inside another one) share the outer
+    # block's transaction - only the outermost block ends it
+    depth = getattr(_rg, "_db_depth", 0)
+    _rg._db_depth = depth + 1
+    try:
+        yield conn
+    except psycopg2.Error as e:
+        if isinstance(e, (psycopg2.DataError, psycopg2.IntegrityError)) and not conn.closed:
+            conn.rollback()
+        else:
+            _release_req_db(close=True)
+        raise
+    finally:
+        _rg._db_depth = depth   # the transaction stays open until a block commits / the request ends
+
+
+def _done_reading(conn):
+    """End of a read-only check (rights, lock, treasurer): on the request's own connection the
+    read just stays in the transaction the write commits - a COMMIT here was one more round
+    trip to the database for nothing. Anything left over is rolled back when the request
+    hands the connection back."""
+    if has_request_context() and getattr(_rg, "_req_db", None) is conn:
+        return
+    conn.commit()
+
+
+def _release_req_db(close=False):
+    conn = getattr(_rg, "_req_db", None)
+    if conn is None:
+        return
+    _rg._req_db = None
+    _conn_last_used[id(conn)] = time.time()
+    try:
+        _get_pool().putconn(conn, close=close or conn.closed)
+    finally:
+        _pool_slots.release()
+
+
+@app.teardown_request
+def _teardown_req_db(exc):
+    _release_req_db()
+
+
+@contextmanager
+def _get_db_fresh(keep):
     pool = _get_pool()
     if not _pool_slots.acquire(timeout=_POOL_WAIT_SECONDS):
         raise DbBusyError("database connection pool exhausted")
@@ -536,6 +599,12 @@ def get_db():
     except Exception:
         _pool_slots.release()
         raise
+    if keep:
+        _rg._req_db = conn
+        _rg._db_checkouts = getattr(_rg, "_db_checkouts", 0) + 1
+        with _get_db_held(conn) as c:
+            yield c
+        return
     close_bad = False
     try:
         yield conn
@@ -553,6 +622,24 @@ def get_db():
         _conn_last_used[id(conn)] = time.time()
         pool.putconn(conn, close=close_bad)
         _pool_slots.release()
+
+
+@app.before_request
+def _start_req_timer():
+    _rg._t0 = time.time()
+
+
+@app.after_request
+def _time_api_request(response):
+    # how long the server spent on a save - in the response (Server-Timing) and, when slow,
+    # in the log, so a "the buy-in took ages" can be told apart: the server, or the phone's line
+    t0 = getattr(_rg, "_t0", None)
+    if t0 is not None and request.path.startswith("/api/v2/"):
+        ms = int((time.time() - t0) * 1000)
+        response.headers["Server-Timing"] = f"app;dur={ms}"
+        if ms > 700 and request.method in ("POST", "PUT", "PATCH", "DELETE"):
+            print(f"slow save: {request.method} {request.path} {ms}ms", flush=True)
+    return response
 
 
 @app.after_request
@@ -1232,10 +1319,10 @@ def _guard(community_id=None, game_id=None, need="member", players=None):
             if game_id and not community_id:
                 community_id = _game_community(cur, game_id)
             if not community_id:
-                conn.commit()
+                _done_reading(conn)
                 return None
             r = _rights(cur, caller, community_id, game_id)
-        conn.commit()
+        _done_reading(conn)
     if not r["member"]:
         return _forbidden()
     ok = need == "member" or r.get(need) or (players and all(pid in r["my_players"] for pid in players))
@@ -1258,7 +1345,7 @@ def _locked_write(game_id):
     with get_db() as conn:
         with conn.cursor() as cur:
             locked = _game_locked(cur, game_id)
-        conn.commit()
+        _done_reading(conn)
     return locked
 
 
@@ -1308,7 +1395,7 @@ def _money_denied(game_id, self_players=None, entry_for=None):
             cur.execute("SELECT community_id, treasurer_id FROM games WHERE id = %s", (game_id,))
             row = cur.fetchone()
             if not row or not row[1]:
-                conn.commit()
+                _done_reading(conn)
                 return None
             community_id, treasurer = row
             r = _rights(cur, caller, community_id, game_id)
@@ -1316,7 +1403,7 @@ def _money_denied(game_id, self_players=None, entry_for=None):
             if entry_for and (entry_for in r["my_players"] or r["table_admin"]):
                 cur.execute("SELECT 1 FROM buyins WHERE game_id = %s AND player_id = %s LIMIT 1", (game_id, entry_for))
                 entry_ok = cur.fetchone() is None
-        conn.commit()
+        _done_reading(conn)
     if treasurer in r["my_players"] or entry_ok:   # nobody bypasses a treasurer, the super admin included
         return None
     if self_players and all(pid in r["my_players"] for pid in self_players):
