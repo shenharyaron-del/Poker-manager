@@ -9614,7 +9614,7 @@ function renderPotFix(gameId){
           .map(b => `<span class="pf-buy"><bdi>${b.ts ? fmtTime(b.ts) : ""}</bdi> <bdi>₪${b.amount}</bdi></span>`).join(" · ");
         return `<label class="checkbox-row pf-row">
           <input type="checkbox" data-admin-balance-fix-toggle="${pid}" ${adminBalanceFixSelected[pid]?'checked':''}>
-          <b class="pf-name"><bdi>${esc(nameOf(pid))}</bdi>${change ? ` <span class="pf-change ${change > 0 ? "up" : "down"}"><bdi dir="ltr">₪${change>0?'+':'-'}${Math.abs(Math.round(change*100)/100)}</bdi></span>` : ''}</b>
+          <b class="pf-name" data-pf-short="${esc(tableShortName(g, pid))}"><bdi>${esc(nameOf(pid))}</bdi>${change ? ` <span class="pf-change ${change > 0 ? "up" : "down"}"><bdi dir="ltr">₪${change>0?'+':'-'}${Math.abs(Math.round(change*100)/100)}</bdi></span>` : ''}</b>
           <span class="pf-num">₪${Math.round(buyinTotals[pid]||0)}</span>
           <span class="pf-num">₪${Math.round(liveChips[pid]||0)}</span>
           <span class="pf-num" style="color:${profitColor(playerProfit)};font-weight:700;"><bdi>${playerProfit>0?'+':''}${Math.round(playerProfit)}</bdi></span>
@@ -13508,6 +13508,15 @@ function attachHandlers(){
     adminBalanceFixSelected = {};
     if (el.checked) group.forEach(pid => { adminBalanceFixSelected[pid] = true; });
     render();
+  });
+  // the pot-fix table: a name that doesn't fit beside its planned change shows the first name only
+  // (or, when two at the table share it, the first name and the last name's initial)
+  app.querySelectorAll(".pf-name[data-pf-short]").forEach(el => {
+    const b = el.querySelector("bdi"), cut = () => el.scrollWidth > el.clientWidth + 1;
+    if (!b || !cut()) return;
+    const parts = b.textContent.trim().split(/\s+/);
+    b.textContent = el.dataset.pfShort;
+    if (cut() && parts.length > 1) b.textContent = `${parts[0]} ${parts[parts.length - 1][0]}.`;
   });
   app.querySelectorAll("[data-admin-balance-fix-toggle]").forEach(el => el.onchange = () => {
     adminBalanceFixSelected[el.dataset.adminBalanceFixToggle] = el.checked;
