@@ -1810,6 +1810,10 @@ html:not(.theme-light) .pp-car:not(.names-only) .pp-ci.on .pp-ci-amt{color:#3a26
 /* who I'm acting for, over the players (same height either way) */
 .act-strip{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:40px;box-sizing:border-box;margin:0 0 10px;padding:5px 12px;border-radius:12px;background:transparent;border:1px solid var(--frame-c,var(--gold));color:var(--text);font-weight:700;font-size:16px;text-align:right;}
 .act-strip b{color:var(--frame-c,var(--gold));font-weight:900;}
+.act-strip span{display:flex;align-items:center;gap:8px;}
+.act-ic{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;flex-shrink:0;background:var(--frame-c,var(--gold));color:#1a1a1a;font-style:normal;font-weight:900;font-size:15px;line-height:1;}
+html.theme-light.theme-sand .act-ic{color:#fff6e3;}
+.act-strip.other .act-ic{background:#1a1a1a;color:#fde68a;}
 .act-strip.other{background:#f59e0b;border-color:#f59e0b;color:#1a1a1a;box-shadow:0 3px 8px rgba(0,0,0,.25);} .act-strip.other b{color:#1a1a1a;}
 .act-strip button{flex-shrink:0;padding:3px 12px;border-radius:999px;border:none;background:#1a1a1a;color:#fde68a;font:inherit;font-size:14px;font-weight:800;cursor:pointer;}
 .sel-note{text-align:center;font-size:13.5px;margin:8px 0 -4px;opacity:.85;} .sel-note b{font-weight:800;}
@@ -9446,8 +9450,8 @@ function renderPlayerScreen(gameId){
   // "פועל בשמך" / "פועל בשם X · חזרה אליי": always there for whoever acts for others (the
   // screen doesn't move when switching), orange while acting for someone else
   const actStrip = !(canActForOthers(g) && (isAdminView || iAmTreasurer(g))) ? "" : viewingOther && p
-    ? `<div class="act-strip other"><span>👤 פועל בשם <b><bdi>${esc(tableShortName(g, pid))}</bdi></b></span><button type="button" data-pp-back-me>חזרה ${g2("אליי", "אליי")}</button></div>`
-    : `<div class="act-strip"><span>👤 פועל <b>${g2("בשמך", "בשמך")}</b></span></div>`;
+    ? `<div class="act-strip other"><span><i class="act-ic">!</i>ריביי / יציאה של <b><bdi>${esc(tableShortName(g, pid))}</bdi></b></span><button type="button" data-pp-back-me>חזרה ${g2("אליי", "אליי")}</button></div>`
+    : `<div class="act-strip"><span><i class="act-ic">!</i>ריביי / יציאה <b>שלי</b></span></div>`;
   const carouselHtml = (() => {
     const totals = {};
     (g.buyins || []).forEach(b => { totals[b.playerId] = (totals[b.playerId] || 0) + (b.amount || 0); });
