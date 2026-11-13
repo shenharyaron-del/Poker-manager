@@ -13311,7 +13311,8 @@ function attachHandlers(){
   app.querySelectorAll("[data-treasurer-clear]").forEach(el => el.onclick = async () => {
     const g = getGame(nav.gameId); if (!g) return;
     const trName = gameTreasurer(g) ? tableShortName(g, gameTreasurer(g)) : "";
-    if (!(await showConfirm(iAmTreasurer(g) ? "לוותר על תפקיד גיזבר הערב? כל שחקן יוכל שוב לעשות ריביי בעצמו." : `להסיר את ${trName} מגיזברות הערב? כל שחקן יוכל שוב לעשות ריביי בעצמו.`))) return;
+    if (!(await showConfirm(iAmTreasurer(g) ? "לוותר על תפקיד גיזבר הערב? כל שחקן יוכל שוב לעשות ריביי בעצמו." : `להסיר את ${trName} מגיזברות הערב? כל שחקן יוכל שוב לעשות ריביי בעצמו.`,
+      {okLabel: iAmTreasurer(g) ? "ויתור" : "הסר", cancelLabel: "ביטול"}))) return;
     el.disabled = true;
     try { await v2SetTreasurer(g.id, null); }
     catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); }
