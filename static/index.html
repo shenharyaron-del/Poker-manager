@@ -7857,6 +7857,15 @@ function rememberNav(){
 // table or home) - the invite steps along the way used to paint the home screen for a few
 // seconds before the login or the table replaced it. Until then the loading text stays.
 let appReady = false;
+// A scrolled box's identity across redraws: its tag, classes and data-* attributes, and its
+// parents' (see render's keptScrolls)
+let lastScrollCtx = null;
+function scrollKey(el){
+  const part = e => e.tagName + "." + [...e.classList].sort().join(".") + [...e.attributes].filter(a => a.name.startsWith("data-")).map(a => `[${a.name}=${a.value}]`).join("");
+  const out = [];
+  for (let e = el, i = 0; e && e.id !== "app" && i < 6; e = e.parentElement, i++) out.push(part(e));
+  return out.join("<");
+}
 function render(){
   if (!appReady) return;
   rememberNav();
@@ -8020,6 +8029,16 @@ function render(){
   const tourScrollEl = app.querySelector("[data-tour-scroll]");
   const tourScroll = tourScrollEl && tourScrollEl.dataset.tourScroll === String(nav.gameId) ? tourScrollEl.scrollTop : 0;
   const winScroll = window.scrollY;
+  // Every scrolled box on screen (a window's list, the pot-fix table, a panel's list...) keeps
+  // its place across the redraw - app.innerHTML rebuilds them at the top otherwise, which made
+  // a list jump back to its first row a moment after tapping further down. Only while the
+  // screen itself is the same one (same page, player, tab and window).
+  const scrollCtx = [nav.screen, nav.gameId, nav.communityId, playerViewTarget, tableSubView, modal && modal.type, modal && (modal.gameId || modal.communityId)].join("|");
+  const keptScrolls = scrollCtx === lastScrollCtx ? (() => {
+    const m = new Map();
+    app.querySelectorAll("*").forEach(el => { if (el.scrollTop > 0) m.set(scrollKey(el), el.scrollTop); });
+    return m;
+  })() : null;
   // A field being typed in (the keyboard up) keeps its focus across the redraw - a refresh
   // tick used to rebuild it unfocused, which closed the keyboard a few seconds in.
   const typing = (() => {
@@ -8035,6 +8054,14 @@ function render(){
   { const el = app.querySelector(".player-screen-scroll"); if (el) { el.dataset.key = gameScrollKey; if (gameScrollTop) el.scrollTop = gameScrollTop; } }
   { const el = app.querySelector("[data-tour-scroll]"); if (el && el.dataset.tourScroll === String(nav.gameId)) { if (tourScroll) el.scrollTop = tourScroll; if (winScroll) window.scrollTo(0, winScroll); } }
   attachHandlers();
+  if (keptScrolls && keptScrolls.size) {
+    app.querySelectorAll("*").forEach(el => {
+      if (el.scrollHeight <= el.clientHeight || el.scrollTop > 0) return;   // nothing to scroll, or already placed
+      const top = keptScrolls.get(scrollKey(el));
+      if (top) el.scrollTop = top;
+    });
+  }
+  lastScrollCtx = scrollCtx;
   if (typing) {
     const el = app.querySelector(typing.sel);
     if (el && !el.disabled) {
