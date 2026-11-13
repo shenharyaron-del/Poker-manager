@@ -1797,6 +1797,11 @@ html.theme-light .reg-row.me{background:rgba(242,193,78,.25);}
 .pp-car .pp-me-card .pp-me-name{font-size:19px;}
 .player-page .pp-car .pp-me-card .pp-total{font-size:32px;}
 .pp-car .pp-me-card.sel{background:#fff3cf;border-radius:14px;box-shadow:0 0 0 2px #f2c14e!important;}
+/* the picked player's tile looks the same in every theme - the dark one too (it was a faint
+   gold tint there): cream, a gold ring, dark text */
+html:not(.theme-light) .pp-car:not(.names-only) .pp-ci.on{background:#fff3cf;box-shadow:0 0 0 2px #f2c14e;}
+html:not(.theme-light) .pp-car:not(.names-only) .pp-ci.on .pp-ci-name,html:not(.theme-light) .pp-car:not(.names-only) .pp-ci.on .pp-ci-return{color:#9a5f12;}
+html:not(.theme-light) .pp-car:not(.names-only) .pp-ci.on .pp-ci-amt{color:#3a2614;}
 .pp-car .pp-me-card.sel .pp-me-name{color:#3a2614;}
 .player-page .pp-car .pp-me-card.sel .pp-total{background:linear-gradient(180deg,#c9861c 0%,#a86a12 50%,#7a4a08 100%);-webkit-background-clip:text;background-clip:text;}
 /* who I'm acting for, over the players (same height either way) */
