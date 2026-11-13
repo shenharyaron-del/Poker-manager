@@ -2603,8 +2603,19 @@ async function fetchGamesFull(ids){
   }
   return ids.map(id => byId[id]).filter(Boolean);
 }
+// The clubs version this phone last read (see v2_list_communities' ?ver): a refresh asks
+// "anything new since?" and keeps its clubs when nothing changed - re-reading every club,
+// player and chip on every refresh was most of a refresh's cost.
+let communitiesVer = null;
+async function fetchCommunitiesIfChanged(){
+  const have = communitiesVer && state.communities && state.communities.length ? communitiesVer : "";
+  const res = await v2Fetch("GET", `/communities?ver=${encodeURIComponent(have)}`);
+  if (Array.isArray(res)) { communitiesVer = null; return res; }   // an older server
+  communitiesVer = res.ver || null;
+  return res.notModified ? state.communities : res.communities;
+}
 async function loadStateV2(){
-  const [communities, allSummaries] = await Promise.all([v2Fetch("GET", "/communities"), v2Fetch("GET", "/game-summaries")]);
+  const [communities, allSummaries] = await Promise.all([fetchCommunitiesIfChanged(), v2Fetch("GET", "/game-summaries")]);
   const communityIds = new Set(communities.map(c => c.id));
   allGameSummaries = allSummaries.filter(gs => communityIds.has(gs.communityId));
   const gameSummaries = allGameSummaries.filter(gs => clubGamesWanted(gs.communityId));
@@ -3724,8 +3735,12 @@ async function doRefreshNow(source){
 }
 // Interval itself lives in shared state (refreshIntervalSec) so Super Admin can change it
 // from any device and every other device picks up the new cadence on its next tick.
+// Is the live channel (/api/events) open? Then the server announces every change itself, and
+// the periodic refresh / join-request check are only a safety net - much less often.
+let liveSyncUp = false;
 function scheduleAutoRefresh(){
-  const sec = (state.refreshIntervalSec > 0) ? state.refreshIntervalSec : 6;
+  const base = (state.refreshIntervalSec > 0) ? state.refreshIntervalSec : 6;
+  const sec = liveSyncUp ? Math.max(base, 30) : base;
   setTimeout(tickAutoRefresh, sec * 1000);
 }
 async function tickAutoRefresh(){
@@ -3738,6 +3753,8 @@ async function tickAutoRefresh(){
 function connectLiveSync(){
   try {
     const es = new EventSource("/api/events");
+    es.onopen = () => { liveSyncUp = true; };
+    es.onerror = () => { liveSyncUp = false; };
     // "changed busy" (the server has many phones open): a short random wait first - every
     // phone gets the same message at the same moment, and refetching all at once (200 at a
     // tournament) swamps the server. Otherwise refetch right away.
@@ -3746,7 +3763,9 @@ function connectLiveSync(){
       const msg = String(e.data || "");
       // the echo of this tab's own save: it already has the change (polling still catches
       // anything else that landed at the same moment)
-      if (msg === "changed " + TAB_ORIGIN) return;
+      // a join request asked / decided: check it now (not on the slow safety-net timer)
+      if (msg.endsWith(" jr")) joinRequestsTick();
+      if (msg === "changed " + TAB_ORIGIN || msg === "changed " + TAB_ORIGIN + " jr") return;
       if (!msg.includes("busy")) { doRefreshNow("sse"); return; }
       if (!sseTimer) sseTimer = setTimeout(() => { sseTimer = null; doRefreshNow("sse"); }, 200 + Math.random() * 1300);
     };
@@ -16067,7 +16086,8 @@ window.addEventListener("popstate", async () => {
   render();
   if (backgroundGameIds.length) loadBackgroundGames();
   scheduleAutoRefresh();
-  setInterval(joinRequestsTick, 4000);
+  // every 4s without the live channel; every 30s with it (it announces join requests itself)
+  (function joinLoop(){ joinRequestsTick(); setTimeout(joinLoop, liveSyncUp ? 30000 : 4000); })();
   joinRequestsTick();
   connectLiveSync();
   prefetchAvatars();
