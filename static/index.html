@@ -1790,6 +1790,20 @@ html.theme-light .reg-row.me{background:rgba(242,193,78,.25);}
    like "טבלה מלאה" under a table */
 .out-tg{display:flex;align-items:center;gap:5px;margin:8px auto 0;padding:2px 6px;background:none;border:none;font:inherit;font-size:14.5px;font-weight:700;color:var(--frame-c,var(--gold));text-decoration:underline;text-underline-offset:3px;white-space:nowrap;cursor:pointer;}
 .out-tg svg{flex-shrink:0;}
+/* my card at the top of the players frame - medium, no box of its own; highlighted (like a picked
+   tile) while I'm the one being acted for */
+.pp-car .pp-me-card{border:none!important;box-shadow:none!important;background:none;margin:2px auto 8px;padding:4px 14px;min-width:0;gap:12px;}
+.pp-car .pp-me-av{width:46px;height:46px;border-radius:10px;}
+.pp-car .pp-me-card .pp-me-name{font-size:19px;}
+.player-page .pp-car .pp-me-card .pp-total{font-size:32px;}
+.pp-car .pp-me-card.sel{background:#fff3cf;border-radius:14px;box-shadow:0 0 0 2px #f2c14e!important;}
+.pp-car .pp-me-card.sel .pp-me-name{color:#3a2614;}
+.player-page .pp-car .pp-me-card.sel .pp-total{background:linear-gradient(180deg,#c9861c 0%,#a86a12 50%,#7a4a08 100%);-webkit-background-clip:text;background-clip:text;}
+/* who I'm acting for, over the players (same height either way) */
+.act-strip{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:40px;box-sizing:border-box;margin:0 0 10px;padding:5px 12px;border-radius:12px;background:rgba(0,0,0,.14);border:1px solid var(--frame-c,var(--gold));color:var(--text);font-weight:700;font-size:16px;text-align:right;}
+.act-strip b{color:var(--frame-c,var(--gold));font-weight:900;}
+.act-strip.other{background:#f59e0b;border-color:#f59e0b;color:#1a1a1a;box-shadow:0 3px 8px rgba(0,0,0,.25);} .act-strip.other b{color:#1a1a1a;}
+.act-strip button{flex-shrink:0;padding:3px 12px;border-radius:999px;border:none;background:#1a1a1a;color:#fde68a;font:inherit;font-size:14px;font-weight:800;cursor:pointer;}
 .sel-note{text-align:center;font-size:13.5px;margin:8px 0 -4px;opacity:.85;} .sel-note b{font-weight:800;}
 .has-me{position:relative;}
 .me-jump{position:absolute;left:18px;top:-13px;z-index:3;padding:2px 12px;border-radius:999px;border:none;background:var(--frame-c,var(--gold));color:#1a1a1a;font:inherit;font-size:14px;font-weight:800;line-height:1.5;cursor:pointer;}
@@ -7811,7 +7825,9 @@ function gameTabsScreen(g, c, seated){
     </div>`;
   const content = tab === "game" ? (seated ? renderPlayerScreen(g.id) : renderUnseatedGameTab(g))
     : tab === "invite" ? renderInviteTab(g, c) : renderTable(g.id);
-  const pageCls = tab === "game" ? ` player-page${playerScreenViewingOther() ? " pp-other" : ""}` : "";
+  // acting for someone else no longer turns the page red - the strip at its top and the
+  // highlighted player say it (see the player screen)
+  const pageCls = tab === "game" ? " player-page" : "";
   // The tabs row stays put; only the page under it slides (see attachTabSwipe).
   return `<div class="table-swipe-root">
     ${row}
@@ -9361,9 +9377,9 @@ function renderPlayerScreen(gameId){
     };
     if (viewingOther && me) {
       // framed with "הקש לחזור אליך" on its border, so it's clear how to get back
-      return `<fieldset class="leave-frame pp-me-frame" data-pp-back-me><legend>${g2("הקש לחזור אליך", "הקישי לחזור אלייך")}</legend><button type="button" class="pp-me-card" dir="rtl" title="חזרה למסך שלי">${meAv(myPlayerId)}<span class="pp-me-txt"><span class="pp-me-name"><bdi>${esc(me.name)}</bdi></span>${mineOut ? "" : `<span class="pp-total" data-player-total>₪${myTotal}</span>`}</span></button></fieldset>`;
+      return `<button type="button" class="pp-me-card" data-pp-back-me dir="rtl" title="חזרה למסך שלי">${meAv(myPlayerId)}<span class="pp-me-txt"><span class="pp-me-name"><bdi>${esc(me.name)}</bdi></span>${mineOut ? "" : `<span class="pp-total" data-player-total>₪${myTotal}</span>`}</span></button>`;
     }
-    return `<div class="pp-me-card" dir="rtl">${meAv(pid)}<span class="pp-me-txt"><span class="pp-me-name"${font ? ` style="font-size:${Math.min(font + 3, 23)}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut && !selfReturn ? ' · יצא' : ''}</span>${cashedOut ? (selfReturn ? `<button type="button" class="pp-self-return" data-self-return="${pid}">${RETURN_ICON}<span class="ret-txt">חזור למשחק</span></button>` : "") : `<span class="pp-total" data-player-total>₪${buyinTotal}</span>`}</span></div>`;
+    return `<div class="pp-me-card${canActForOthers(g) && (isAdminView || iAmTreasurer(g)) ? " sel" : ""}" dir="rtl">${meAv(pid)}<span class="pp-me-txt"><span class="pp-me-name"${font ? ` style="font-size:${Math.min(font + 3, 23)}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut && !selfReturn ? ' · יצא' : ''}</span>${cashedOut ? (selfReturn ? `<button type="button" class="pp-self-return" data-self-return="${pid}">${RETURN_ICON}<span class="ret-txt">חזור למשחק</span></button>` : "") : `<span class="pp-total" data-player-total>₪${buyinTotal}</span>`}</span></div>`;
   })();
   // Tiles above the name: everyone who entered tonight, in order, then a "הזמן שחקן" tile
   // in the next free spot (it replaces the header's invite button here).
@@ -9371,6 +9387,11 @@ function renderPlayerScreen(gameId){
   // A carousel of everyone else tonight (in table order - see tableSeatOrder): avatar, name and what they bought
   // in - or, once they've left, "החזר" (an admin sends them back to the table) / "יצא".
   // The one being looked at is highlighted. Arrows and dots under it when it doesn't fit.
+  // "פועל בשמך" / "פועל בשם X · חזרה אליי": always there for whoever acts for others (the
+  // screen doesn't move when switching), orange while acting for someone else
+  const actStrip = !(canActForOthers(g) && (isAdminView || iAmTreasurer(g))) ? "" : viewingOther && p
+    ? `<div class="act-strip other"><span>👤 פועל בשם <b><bdi>${esc(tableShortName(g, pid))}</bdi></b></span><button type="button" data-pp-back-me>חזרה ${g2("אליי", "אליי")}</button></div>`
+    : `<div class="act-strip"><span>👤 פועל <b>${g2("בשמך", "בשמך")}</b></span></div>`;
   const carouselHtml = (() => {
     const totals = {};
     (g.buyins || []).forEach(b => { totals[b.playerId] = (totals[b.playerId] || 0) + (b.amount || 0); });
@@ -9384,7 +9405,7 @@ function renderPlayerScreen(gameId){
     const footer = !n ? "" : selNote + `<button type="button" class="out-tg${hiding ? " hiding" : ""}" data-toggle-out-players>${hiding ? EYE_SVG : EYE_OFF_SVG} ${
       n === 1 ? (hiding ? "הצג את מי שיצא" : "הסתר את מי שיצא") : `${hiding ? "הצג" : "הסתר"} ${n} שיצאו`}</button>`;
     const shownIds = hiding ? othersTonight.filter(id => !hideable.includes(id)) : othersTonight;
-    return playersCarouselHtml("player:" + g.id, g, c, tableSeatOrder(g, shownIds, myPlayerId), { footer,
+    return playersCarouselHtml("player:" + g.id, g, c, tableSeatOrder(g, shownIds, myPlayerId), { footer, top: nameHtml,
       onId: pid, attr: canActForOthers(g) ? "data-pp-view" : "data-pp-noview",
       // The table's admins (and tonight's treasurer) act for someone else - for them the frame says so.
       legend: canActForOthers(g) && (isAdminView || iAmTreasurer(g)) ? g2("בחר שחקן כדי לפעול בשמו", "בחרי שחקן כדי לפעול בשמו") : "",
@@ -9418,8 +9439,9 @@ function renderPlayerScreen(gameId){
           if (tr) return `<div class="tr-strip info">${TREASURER_ICON}<span>${playerIsFemale(g, c, tr) ? "גיזברית" : "גיזבר"} הערב: <b><bdi>${esc(tableShortName(g, tr))}</bdi></b></span>${isAdminView ? `<button type="button" class="tr-clear" data-treasurer-clear>הסר מגיזברות</button>` : ""}</div>`;
           return "";
         })()}
+        ${actStrip}
         ${carouselHtml}
-        ${nameHtml}
+        ${carouselHtml ? "" : nameHtml}
         ${viewingOther || cashedOut ? "" : paymentNotesHtml}
         ${(() => {
           // Direct-settlement arrangement(s) involving this player (either side - see
@@ -9915,7 +9937,7 @@ const RETURN_ICON = `<svg class="ret-ic" viewBox="0 0 24 24" aria-hidden="true">
 let hideOutPlayers = (() => { try { return localStorage.getItem("poker-hide-out-players") === "1"; } catch(e) { return false; } })();
 const EYE_SVG = `<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/></svg>`;
 const EYE_OFF_SVG = `<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/><path d="M4 20L20 4" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`;
-function playersCarouselHtml(key, g, c, ids, {onId = null, meId = null, attr, under = null, legend = "", footer = ""}){
+function playersCarouselHtml(key, g, c, ids, {onId = null, meId = null, attr, under = null, legend = "", footer = "", top = ""}){
   if (!ids.length) return "";
   const items = ids.map(id => {
     const out = id in (g.cashouts || {});
@@ -9928,7 +9950,7 @@ function playersCarouselHtml(key, g, c, ids, {onId = null, meId = null, attr, un
   const many = ids.length > 4;   // trimmed in setupPlayerCarousel to what fits
   // A fieldset, so a legend (when there is one) sits on the frame itself.
   return `<fieldset class="pp-car${many ? " many" : ""}${under ? "" : " names-only"}${legend ? " has-legend" : ""}" data-pp-car="${key}">
-    ${legend ? `<legend class="pp-car-legend">${esc(legend)}</legend>` : ""}
+    ${legend ? `<legend class="pp-car-legend">${esc(legend)}</legend>` : ""}${top}
     ${many ? `<button type="button" class="pp-car-arrow prev" data-pp-car-step="1" aria-label="הקודם"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>` : ""}
     <div class="pp-car-track" data-pp-car-track>${items}</div>
     ${many ? `<button type="button" class="pp-car-arrow next" data-pp-car-step="-1" aria-label="הבא"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
