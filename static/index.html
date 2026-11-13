@@ -7904,6 +7904,16 @@ function fixNegativeNumbers(root){
     if (out !== v) n.nodeValue = out;
   });
 }
+// "מי יושב במקום X?": the window may take the whole screen height, and the players list gives
+// up whatever it takes for "הוסף לשולחן" to show without scrolling
+function fitPickSeat(){
+  const list = document.querySelector("[data-pick-seat-list]"), m = list && list.closest(".modal");
+  if (!m) return;
+  m.style.maxHeight = "calc(var(--real-vh, 100dvh) - 8px)";
+  list.style.maxHeight = "none";
+  const over = m.scrollHeight - m.clientHeight;
+  if (over > 0) list.style.maxHeight = Math.max(120, list.offsetHeight - over - 2) + "px";
+}
 // The club screen's game cards: a name too long for one line gets a smaller font (that card only),
 // down to 16px - past that it's cut with "…"
 function fitGameNames(){
@@ -8129,6 +8139,7 @@ function render(){
     }
   }
   if (nav.screen === "community") { fitClubGamesScroll(); fitGameNames(); }
+  if (modal && modal.type === "pickSeat") fitPickSeat();
   liftGamePageBackground();
   // Runs whenever .poker-table-wrap exists at all now, not just when it's the visible
   // face - with both panes always mounted while seated, the circles view's own DOM (and
@@ -11685,7 +11696,7 @@ function renderModal(m){
     title = `מי יושב במקום ${m.seatIndex+1}?`;
     body = `
       ${avail.length ? `
-        <div class="scroll-list">
+        <div class="scroll-list" data-pick-seat-list>
           ${avail.map(p => `<div class="checkbox-row" data-pick-player="${p.id}"><span class="flex1">${esc(p.name)}</span></div>`).join("")}
         </div>
       ` : `<div class="empty" style="padding:12px 0;">כל השחקנים במועדון כבר יושבים בשולחן.</div>`}
@@ -11699,7 +11710,7 @@ function renderModal(m){
         <div class="gender-seg new-kind-seg" role="group" aria-label="סוג שחקן" style="flex:1;"><button type="button" class="on" data-new-kind="temp">זמני - לערב הזה</button><button type="button" data-new-kind="perm">קבוע במועדון</button></div>
       </div>
       <p style="color:var(--muted);font-size:15px;margin:0 0 10px;" data-new-kind-note>${"שחקן לערב הזה בלבד - לא נכנס לרשימת השחקנים של המועדון."}</p>
-      <button class="btn btn-primary btn-block" data-add-new-seat>${icon('plus')} הוסף לשולחן</button>
+      <button class="btn btn-primary btn-block" data-add-new-seat>הוסף לשולחן</button>
     `;
   } else if (m.type === "seatChips") {
     const g = getGame(m.gameId);
