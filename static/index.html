@@ -763,6 +763,7 @@ html.theme-light .menu-sec{color:#9a5f12;}
 .checkbox-row{display:flex;align-items:center;gap:10px;background:var(--input);border:1px solid var(--card-b);border-radius:12px;padding:10px 14px;margin-bottom:6px;}
 .checkbox-row input{width:17px;height:17px;accent-color:var(--gold);}
 .entry-group-names{margin:-4px 0 12px;text-align:center;color:var(--muted);font-size:16px;line-height:1.5;}
+.reg-empty{text-align:center;color:var(--muted);font-size:15px;padding:10px 4px 6px;}
 .pick-row{cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;}
 .pick-box{width:22px;height:22px;border-radius:6px;border:2px solid var(--frame-c,var(--gold));flex-shrink:0;display:flex;align-items:center;justify-content:center;}
 .pick-row.sel{border-color:var(--frame-c,var(--gold));background:color-mix(in srgb,var(--gold) 14%,var(--input));}
@@ -5154,6 +5155,7 @@ function go(screen, extra){
     if (cid && !clubGamesWanted(cid)) setTimeout(() => ensureClubGames(cid), 0);
   }
   if ((extra||{}).gameId !== nav.gameId) playerViewTarget = null; // admin's dropdown pick is per game
+  if (screen === "table") tourLobbyOpen.reg = null;   // the tournament's registered list: open each time the night is opened
   nav = Object.assign({screen}, extra||{});
   modal = null;
   openHistorySeatPlayerId = null;
@@ -6121,7 +6123,7 @@ let tourLobbyFull = {blinds: false, pay: false, payOpen: 0};
 // The lobby's three tables (registered / blinds / prizes) start folded to their title: ▾ opens
 // the short list, ▴ in the title folds it back. A regular player's screen opens with the
 // registered list showing (null = not toggled yet: that default).
-let tourLobbyOpen = {reg: null, blinds: null, pay: null};
+var tourLobbyOpen = {reg: null, blinds: null, pay: null};
 // meJump: a "👤 אני" button on the frame's top line (only for a registered player) - it opens
 // the frame and scrolls to my own row
 function tourFoldFrame(key, legend, body, def, meJump){
@@ -6746,14 +6748,16 @@ function tourRegNameHtml(g, t, r, showNew){
 // The registered list (4 rows, scroll, "רשימה מלאה"); actions only on the admin's screen.
 function tourRegListHtml(g, approved, rowTail){
   const t = Object.assign({}, TOUR_DEFAULTS, g.tournamentSettings || {}), me = tourMyPid(g);
-  return !approved.length ? "" : tourFoldFrame("reg", `✓ רשומים (${approved.length})`, `
+  // Shown (and open) from the start, empty too - the players appear as they're registered.
+  return tourFoldFrame("reg", `✓ רשומים (${approved.length})`, `
+    ${approved.length ? "" : `<div class="reg-empty">עדיין אין רשומים - מי שיירשם יופיע כאן</div>`}
     <div class="reg-list${approved.length > 4 && !tourRegFull ? " capped" : ""}">
     ${approved.map((r, i) => `<div class="reg-row${r.bustedAt ? " out" : ""}${r.playerId === me ? " me" : ""}">${r.playerId === me
         // my own picture: tap to change it (the profile window, with the avatar picker)
         ? `<button type="button" class="reg-av-edit" data-tour-avatar title="החלפת תמונה">${tourAvatar(r.name, i, r.playerId, g.communityId)}<span class="reg-av-pen">✎</span></button>`
         : tourAvatar(r.name, i, r.playerId, g.communityId)}${tourRegNameHtml(g, t, r, !!rowTail)}${rowTail ? rowTail(r) : ""}</div>`).join("")}
     </div>
-    ${approved.length > 4 ? `<button type="button" class="tour-full-link" data-reg-full>${tourRegFull ? "הסתר ▴" : `רשימה מלאה (${approved.length})`}</button>` : ""}`, !rowTail, !!me && approved.some(r => r.playerId === me));   // open by default on a regular player's screen (rowTail = the admin's actions)
+    ${approved.length > 4 ? `<button type="button" class="tour-full-link" data-reg-full>${tourRegFull ? "הסתר ▴" : `רשימה מלאה (${approved.length})`}</button>` : ""}`, true, !!me && approved.some(r => r.playerId === me));   // open by default - the admin's screen too
 }
 let tourAdminView = null;
 let tourRegFull = false;   // the registered list opened in full
