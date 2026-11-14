@@ -6655,7 +6655,8 @@ function renderTourClock(g, c, isAdmin){
     lateOpen && ["qr", "QR", 0],
     lateOpen && ["add", "הוספת שחקן", 0],
     (lateOpen || pending.length) && ["lobby", "לובי", pending.length],
-    (lateOpen || aoNow || reqs.length) && ["rebuy", lateOpen && t.addOn ? "ריביי / Add-on" : lateOpen ? "ריביי" : "Add-on", reqs.length],
+    // one thing at a time: ריביי while re-buys are open, Add-on once its break is on
+    (lateOpen || aoNow || reqs.length) && ["rebuy", aoNow ? "Add-on" : lateOpen ? "ריביי" : reqs.some(r => r.pendingAction === "addon") ? "Add-on" : "ריביי", reqs.length],
     ["out", "הדחה", 0],
     // a deal once few are left and re-buys are over: 4 or fewer - 5 when more than 20
     // started, 6 when more than 30. (There's no ending it early: it ends with a deal, or
@@ -6681,16 +6682,17 @@ function renderTourClock(g, c, isAdmin){
     : (() => {
         // requests first, then any registered player - for whoever has no phone
         const aoOpen = t.addOn && k.row.brk && k.row.addOn;
-        const rbOk = r => lateOpen && (!t.rebuys || (r.rebuys || []).length < t.rebuys);
+        // the add-on break: only Add-on buttons; before it, only ריביי
+        const rbOk = r => lateOpen && !aoOpen && (!t.rebuys || (r.rebuys || []).length < t.rebuys);
         const direct = P.approved.filter(r => rbOk(r) || (aoOpen && !r.addOnAt && !r.bustedAt));
-        return `<div class="ck-panel"><div class="ck-panel-h">ריביי ו-Add-on<button type="button" class="lb-cancel" data-ck-panel="">סגור</button></div>
+        return `<div class="ck-panel"><div class="ck-panel-h">${aoOpen ? "Add-on" : "ריביי"}<button type="button" class="lb-cancel" data-ck-panel="">סגור</button></div>
         ${reqs.length ? `<div class="pn-sub">בקשות (${reqs.length})</div>${reqs.map((r, i) => `<div class="reg-row">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}<small>${r.pendingAction === "addon" ? "Add-on" : "ריביי"} · ₪${nn((r.pendingAction === "addon" ? t.addOnPrice : t.rebuyPrice) ?? total)}</small></div><button type="button" class="reg-no" data-ra="decline" data-pid="${esc(r.playerId)}">✕</button><button type="button" class="reg-ok" data-ra="${r.pendingAction}" data-pid="${esc(r.playerId)}">✓ שולם</button></div>`).join("")}` : ""}
         <div class="pn-sub">רישום לשחקן (גם בלי בקשה)</div>
         ${direct.length ? `<div class="tf-in"><input type="text" data-find placeholder="חיפוש שחקן" autocomplete="off"></div>
         <div class="cc-find-list" data-find-list>${direct.map((r, i) => `<div class="reg-row${r.bustedAt ? " out" : ""}" data-name="${esc(String(r.name || "").toLowerCase())}">${tourAvatar(r.name, i, r.playerId, g.communityId)}<div class="nm">${esc(r.name || "")}<small>${r.bustedAt ? (P.fem(r.playerId) ? "יצאה" : "יצא") : `${(r.rebuys || []).length} ריביי`}${r.addOnAt ? " · Add-on ✓" : ""}</small></div>
           ${aoOpen && !r.addOnAt && !r.bustedAt ? `<button type="button" class="reg-ok" data-ra="addon" data-pid="${esc(r.playerId)}" data-confirm="לרשום Add-on ל${esc(r.name || "")} (שולם ₪${nn(t.addOnPrice ?? total)})?">Add-on</button>` : ""}
           ${rbOk(r) ? `<button type="button" class="reg-ok" data-ra="rebuy" data-pid="${esc(r.playerId)}" data-confirm="לרשום ריביי ל${esc(r.name || "")} (שולם ₪${nn(t.rebuyPrice ?? total)})?">ריביי</button>` : ""}</div>`).join("")}</div>`
-          : `<p class="lb-note">${lateOpen ? "" : "זמן הריביי נגמר"}${t.addOn && !aoOpen ? `${lateOpen ? "" : " · "}Add-on נפתח בהפסקה שבסוף זמן הריביי` : ""}</p>`}</div>`;
+          : `<p class="lb-note">${aoOpen ? "כל השחקנים כבר קנו Add-on" : `${lateOpen ? "" : "זמן הריביי נגמר"}${t.addOn ? `${lateOpen ? "" : " · "}Add-on נפתח בהפסקה שבסוף זמן הריביי` : ""}`}</p>`}</div>`;
       })();
   const playedMin = Math.floor(k.cs.elapsed / 60000);
   const join = !isAdmin && lateOpen && !mine ? `<button type="button" class="btn btn-primary btn-block lb-req" data-tour-register style="margin:0 0 10px">רישום מאוחר · ₪${tourEntryTotal(t).toLocaleString("en-US")}</button>`
