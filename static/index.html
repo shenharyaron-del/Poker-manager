@@ -6445,10 +6445,10 @@ function tourCcWidget(c, t, box, initial, key, level, isAdmin){
 }
 function tourChipCountHtml(g, c, t, mine, key, level, isAdmin){
   const done = mine.chipsKey === key;
-  if (done && !tourCcEdit) return "";   // reported: the frame goes (the count shows in the standings)
+  // reported: a short line with the count and "תקן" (the count can be fixed all break long)
   return `<fieldset class="leave-frame setup-frame cc-frame"><legend>${String(key).startsWith("d") ? "🤝 דיל · כמה ז'יטונים נשארו לך" : `ספירת ז'יטונים · סוף שלב ${level}`}</legend>
-    ${done && !tourCcEdit ? `<div class="cc-done">✓ דיווחת <b>${Number(mine.chips).toLocaleString("en-US")}</b> ז'יטונים <button type="button" class="lb-cancel" data-cc-edit>עדכן</button></div>`
-      : tourCcWidget(c, t, mine.playerId, done ? mine.chips : null, key, level, isAdmin)}
+    ${done && !tourCcEdit ? `<div class="cc-done">✓ דיווחת <b>${Number(mine.chips).toLocaleString("en-US")}</b> ז'יטונים <button type="button" class="lb-cancel" data-cc-edit>תקן</button></div>`
+      : tourCcWidget(c, t, mine.playerId, done ? mine.chips : null, key, level, isAdmin) + (done ? `<div style="text-align:center;margin-top:6px"><button type="button" class="lb-cancel" data-cc-edit-cancel>ביטול</button></div>` : "")}
   </fieldset>`;
 }
 // The clock card keeps the tallest height it has had, so the controls under it never jump
@@ -6583,12 +6583,12 @@ function renderTourClock(g, c, isAdmin){
         ${!missing.length ? (diff ? `<div class="big">⚠ הספירה לא מתאימה - הפרש ${diff > 0 ? "+" : ""}${diff.toLocaleString("en-US")}</div>` : `<div class="big">✓ הספירה מתאימה</div>`)
           : diff === 0 ? `<div class="big">הסכום מתאים - ${missing.length === 1 ? "שחקן אחד לא דיווח" : `${missing.length} שחקנים לא דיווחו`} (${missing.map(r => esc(r.name)).join(", ")})</div><button type="button" class="btn btn-ghost btn-block" data-mark-rest style="margin-top:6px">סמן אותם כפרשו</button>`
           : ""}
-        <button type="button" class="lb-cancel" data-cc-admin-toggle style="margin-top:6px">${tourCcAdmin ? "סגור" : "הזנת ספירה לשחקן"}</button>
+        <button type="button" class="lb-cancel" data-cc-admin-toggle style="margin-top:6px">${tourCcAdmin ? "סגור" : "הזנה / תיקון ספירה לשחקן"}</button>
         ${!tourCcAdmin ? "" : (() => {
           const sel = tourCcFor && P.alive.find(r => r.playerId === tourCcFor);
           if (sel) return `<div class="cc-admin"><div class="cc-for-h"><b>${esc(sel.name || "")}</b>${sel.chipsKey === P.key ? ` · דווח ${Number(sel.chips).toLocaleString("en-US")}` : ""} <button type="button" class="lb-cancel" data-cc-pick="">שחקן אחר</button></div>${tourCcWidget(c, t, sel.playerId, sel.chipsKey === P.key ? sel.chips : null, P.key, level, true)}</div>`;
           return `<div class="cc-admin"><div class="tf-in"><input type="text" data-cc-find placeholder="חיפוש שחקן" autocomplete="off"></div>
-            <div class="cc-find-list">${P.alive.filter(r => r.chipsKey !== P.key).map(r => `<button type="button" class="reg-pick" data-cc-pick="${esc(r.playerId)}" data-name="${esc(String(r.name || "").toLowerCase())}">${tourAvatar(r.name, 0, r.playerId, g.communityId)}<span>${esc(r.name || "")}</span><small>${P.fem(r.playerId) ? "לא דיווחה" : "לא דיווח"}</small></button>`).join("") || `<p class="lb-note">כולם כבר דיווחו</p>`}</div></div>`;
+            <div class="cc-find-list">${P.alive.slice().sort((a, b) => (a.chipsKey === P.key) - (b.chipsKey === P.key)).map(r => `<button type="button" class="reg-pick" data-cc-pick="${esc(r.playerId)}" data-name="${esc(String(r.name || "").toLowerCase())}">${tourAvatar(r.name, 0, r.playerId, g.communityId)}<span>${esc(r.name || "")}</span><small>${r.chipsKey === P.key ? `${P.fem(r.playerId) ? "דיווחה" : "דיווח"} ${Number(r.chips).toLocaleString("en-US")} · תיקון` : P.fem(r.playerId) ? "לא דיווחה" : "לא דיווח"}</small></button>`).join("")}</div></div>`;
         })()}</div>`;
     }
   }
@@ -12839,6 +12839,7 @@ function attachHandlers(){
     if (x) x.innerHTML = x.innerHTML.includes("<br>") ? `×${pt.toLocaleString("en-US")}<br>${tot}` : `×${pt.toLocaleString("en-US")} = ${tot}`;
   });
   app.querySelectorAll("[data-cc-edit]").forEach(el => el.onclick = () => { tourCcEdit = true; render(); });
+  app.querySelectorAll("[data-cc-edit-cancel]").forEach(el => el.onclick = () => { tourCcEdit = false; render(); });
   app.querySelectorAll("[data-cc-send]").forEach(el => el.onclick = () => {
     const box = el.closest("[data-cc-box]"), pid = el.dataset.ccSend;
     const sumEl = box.querySelector("[data-cc-sum]");
