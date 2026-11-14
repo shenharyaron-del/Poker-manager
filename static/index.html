@@ -1176,6 +1176,8 @@ html.theme-light .game-alert-line{color:#9a3412;}
 .club-swipe .club-front.club-hint-peek{animation:club-peek 1.4s ease-in-out 1;}
 html.theme-light .tp-row{border-color:var(--card-b)!important;}
 /* Cashed-out view action buttons - one shared size (סידור קופה / הביצועים שלי) */
+.pay-group{margin:12px auto 0;display:flex;align-items:center;justify-content:center;gap:6px;width:fit-content;max-width:100%;padding:10px 22px;font-size:16px;text-decoration:none;}
+.pay-pair{display:flex;gap:8px;margin:8px auto 0;width:260px;max-width:100%;}
 .co-act{margin:12px auto 0;display:flex;align-items:center;justify-content:center;gap:6px;width:210px;max-width:80%;padding:10px 14px;font-size:14px;}
 /* the pot-fix window's player table: name / bought / took out / profit, the buy-ins under the name */
 .pf-head,.pf-row{display:grid!important;grid-template-columns:24px minmax(0,1fr) 54px 54px 50px;gap:2px 4px;align-items:center;}
@@ -9324,19 +9326,19 @@ function renderPlayerScreen(gameId){
       statusHtml = profitForInfo >= 0
         ? `<div style="font-size:17px;color:var(--muted);margin-top:10px;">הרווח יחולק אחרי שכולם ישלמו לקבוצה</div>`
         : (activePayboxLink
-            ? `<a href="${esc(activePayboxLink)}" class="btn btn-blue btn-block" style="margin-top:10px;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> העברה לקבוצת פייבוקס</a>`
+            ? `<a href="${esc(activePayboxLink)}" class="btn btn-blue pay-group"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> העברה לקבוצת פייבוקס</a>`
             : `<div style="font-size:16px;color:var(--muted);margin-top:10px;">לא הוגדרה קבוצת פייבוקס</div>`);
     } else if (c.settlementDefault === 'bit') {
       statusHtml = profitForInfo >= 0
         ? `<div style="font-size:17px;color:var(--muted);margin-top:10px;">הרווח יחולק אחרי שכולם ישלמו לקבוצה</div>`
         : (activeBitLink
-            ? `<a href="${esc(activeBitLink)}" class="btn btn-block" style="margin-top:10px;background:#0070E0;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;"> העברה לביט הקבוצתי</a>`
+            ? `<a href="${esc(activeBitLink)}" class="btn pay-group" style="background:#0070E0;color:#fff;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;"> העברה לביט הקבוצתי</a>`
             : `<div style="font-size:16px;color:var(--muted);margin-top:10px;">לא הוגדרה קבוצת ביט</div>`);
     } else if (allCashedOutForSettlement && potBalancedForSettlement) {
       statusHtml = mySettlementTxns.map(t => t.from === pid ? `
         <div style="margin-top:10px;">
           <div style="font-weight:700;color:#fda4af;">${t.amount} שח מעביר ל-${esc(t.toName)}</div>
-          <div style="display:flex;gap:8px;margin-top:8px;">
+          <div class="pay-pair">
             <button class="btn flex1" data-open-bit-generic style="background:#0070E0;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;"> ביט</button>
             <a href="https://links.payboxapp.com" class="btn btn-blue flex1" style="display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</a>
           </div>
