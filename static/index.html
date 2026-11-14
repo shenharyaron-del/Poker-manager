@@ -1790,6 +1790,8 @@ html.theme-light .reg-row.me{background:rgba(242,193,78,.25);}
 .pay-note{display:flex;align-items:center;justify-content:center;gap:4px;font-size:13px;color:var(--muted);margin:0 0 6px;} .pay-list b{text-align:left;font-weight:800;direction:ltr;}
 .tf-sub{display:block;font-size:13px;font-weight:400;color:var(--muted);}
 .fold-lg{cursor:pointer;}
+/* "סגור משחק" at the end of the game screen: plain and quiet, not a yellow button */
+.close-night-link{display:block;margin:22px auto 6px;padding:8px 18px;border-radius:999px;border:1px solid var(--muted);background:transparent;color:var(--muted);font:inherit;font-size:15px;font-weight:600;cursor:pointer;}
 /* the player carousel's "הסתר / הצג שיצאו": a link centered under the players and their dots,
    like "טבלה מלאה" under a table */
 .out-tg{display:flex;align-items:center;gap:5px;margin:8px auto 0;padding:2px 6px;background:none;border:none;font:inherit;font-size:14.5px;font-weight:700;color:var(--frame-c,var(--gold));text-decoration:underline;text-underline-offset:3px;white-space:nowrap;cursor:pointer;}
@@ -1911,8 +1913,13 @@ html.theme-light.theme-blue :is(.tf-in input,.tf-sum,.tf-seg button:not(.on)){co
 .tr-note b{color:var(--gold);}
 html.theme-light .tr-note b{color:#9a5f12;}
 /* Game screen spacing - room between the sections now that there's less on it */
-.player-screen-scroll .pp-car{margin-bottom:18px;}
-.player-screen-scroll .rb-frame{margin-top:4px;margin-bottom:22px;padding-top:6px;}   /* under the name card: the same gap as the rest of the screen */
+.player-screen-scroll .pp-car{margin-bottom:16px;}
+.player-screen-scroll .rb-frame{margin-top:0;margin-bottom:16px;padding-top:6px;}
+/* the game screen's frames: one gap everywhere (16px between frame edges) */
+.player-screen-scroll .act-strip,.player-screen-scroll .tr-note{margin-bottom:16px;}
+.player-screen-scroll .pp-car{margin-bottom:12px;}   /* + the header block's own 4px */
+.player-screen-scroll .lv-frame{margin-top:0;margin-bottom:16px;}
+.player-screen-scroll .night-recap{margin-top:0!important;}
 .rb-frame > legend{letter-spacing:.03em;}
 .rb-frame .rb-chips{margin:6px 0 4px;}
 .rb-frame .rb-undo-last{margin-top:12px;}
@@ -9319,8 +9326,8 @@ function renderPlayerScreen(gameId){
     </div>
     ${picked === 'other' ? `
     <div class="rb-other-row" style="display:flex;gap:8px;margin-top:12px;">
-      <input type="number" inputmode="decimal" id="rb-other-amount" placeholder="סכום ₪" ${rebuyLocked?'disabled':''} style="flex:1;padding:12px 8px;font-size:18px;text-align:center;border-radius:12px;border:1px solid var(--gold);background:var(--input);color:var(--text);">
-      <button class="rb-confirm fit-line" style="flex:1.4;margin-top:0;white-space:nowrap;overflow:hidden;" data-rb-confirm ${rebuyLocked?'disabled':''}>בצע ריביי${forName}</button>
+      <input type="number" inputmode="decimal" id="rb-other-amount" placeholder="סכום ₪" ${rebuyLocked?'disabled':''} style="flex:1;min-width:0;box-sizing:border-box;height:43px;padding:7px 8px;font-size:20px;text-align:center;border-radius:12px;border:1px solid var(--gold);background:var(--input);color:var(--text);">
+      <button class="rb-confirm fit-line" style="flex:1.4;margin-top:0;height:43px;box-sizing:border-box;padding:6px 12px;font-size:20px;border-radius:12px;white-space:nowrap;overflow:hidden;" data-rb-confirm ${rebuyLocked?'disabled':''}>בצע ריביי${forName}</button>
     </div>` : ""}
     ${(() => {
       // One cancel line: right after a rebuy (a double tap, the wrong player), for 10 seconds,
@@ -9439,7 +9446,7 @@ function renderPlayerScreen(gameId){
   // buy-in alone. Once they've rebought it's a real player (a cancelled rebuy is gone from
   // the buy-ins, so the link comes back).
   const adminPlayerActions = ((isAdminView || iAmTreasurer(g)) && pid) ? (cashedOut ? ""
-    : ((viewingOther && !armed && myBuyins.length <= 1) ? `<div class="terms-link" style="margin:10px 0 4px;flex-shrink:0;font-size:16px;color:var(--text);opacity:.85;"><bdi>${esc(p ? tableShortName(g, pid) : "השחקן")}</bdi> ${playerIsFemale(g, c, pid) ? "נכנסה" : "נכנס"} בטעות? <button type="button" data-admin-remove-seat="${pid}">הסר מהשולחן</button></div>` : "")) : "";
+    : ((viewingOther && !armed && myBuyins.length <= 1) ? `<div class="terms-link" style="margin:0 0 4px;flex-shrink:0;font-size:16px;color:var(--text);opacity:.85;"><bdi>${esc(p ? tableShortName(g, pid) : "השחקן")}</bdi> ${playerIsFemale(g, c, pid) ? "נכנסה" : "נכנס"} בטעות? <button type="button" data-admin-remove-seat="${pid}">הסר מהשולחן</button></div>` : "")) : "";
   // Everyone but me who entered tonight (tonight's entry order), each a tile that opens
   // their screen - the one being looked at is highlighted. With 10 at the table, one of
   // them sits in a box right of the name instead (the 10th seat's player, or - when the
@@ -9574,11 +9581,12 @@ function renderPlayerScreen(gameId){
       ${(cashedOut || (notStarted && !armed) || !canEndNightFor(g, pid)) ? "" : `<fieldset class="leave-frame lv-frame${armed?' lv-frame-top':''}">${leaveHtml}</fieldset>`}
       ${(notStarted && !cashedOut) ? `<button type="button" class="btn btn-primary btn-block gs-start" data-start-game="${g.id}">${icon('check')} תחילת משחק</button>` : ""}
       ${adminPlayerActions}
-      ${(showClosedToggle && !notStarted) ? `<div class="night-closed-row" style="display:flex;justify-content:center;margin-top:12px;flex-shrink:0;"><label class="night-closed-toggle" data-toggle-end-night="${g.id}"><input type="checkbox" ${g.closed?'checked':''} onclick="return false;"><span>ערב סגור</span></label></div>` : ""}
+      ${(showClosedToggle && !notStarted) ? `<div class="night-closed-row" style="display:flex;justify-content:center;margin-top:0;flex-shrink:0;"><label class="night-closed-toggle" data-toggle-end-night="${g.id}"><input type="checkbox" ${g.closed?'checked':''} onclick="return false;"><span>ערב סגור</span></label></div>` : ""}
       ${cashedOut ? `<fieldset class="leave-frame night-recap" style="margin-top:6px;text-align:right;font-size:18px;"><legend>סיכום הערב</legend><div class="night-recap-body">${nightSummaryHtml(g, pid,
         (g.buyins||[]).filter(b => b.playerId === pid),
         (g.events||[]).filter(e => e.type === "buyin_deleted" && e.playerId === pid).map(e => ({ts: e.ts, amount: e.amount, actorName: e.actorName})),
         false)}</div></fieldset>` : ""}
+      ${(isAdminView && !showClosedToggle && !notStarted && !g.closed) ? `<button type="button" class="close-night-link" data-close-night="${g.id}">סגור משחק</button>` : ""}
     </div>
   `;
 }
@@ -11462,7 +11470,10 @@ function renderModal(m){
     const groups = [
       ["הערב הזה", [
         canTakeTreasurerFromMenu && tile('data-treasurer-take', '<img class="menu-tr-ic" src="/static/treasurer.webp" alt="" draggable="false">', "אני גיזבר הערב"),
-        canCloseNight && (g.closed ? tile('data-game-menu-go="reopen"', "🔓", "ביטול סגירת ערב") : tile('data-game-menu-go="close"', "🔒", "סגור משחק")),
+        // paying through a PayBox / Bit group: closing is at the bottom of the game screen;
+        // the menu keeps reopening a closed table
+        canCloseNight && (g.closed ? tile('data-game-menu-go="reopen"', "🔓", "פתיחת שולחן סגור")
+          : (club.settlementDefault === "paybox" || club.settlementDefault === "bit") ? false : tile('data-game-menu-go="close"', "🔒", "סגור משחק")),
         g && club && g.gameType === "tournament" && !g.closed && !(g.tournamentState && g.tournamentState.startedAt) && (isTableAdmin(g, club) || isSuperAdmin()) && tile(`data-open-game-tour="${g.id}"`, "🏆", "הגדרות טורניר"),
       ]],
       ["המועדון", [
@@ -13671,6 +13682,8 @@ function attachHandlers(){
     } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); return; }
     render();
   };
+  // "סגור משחק" at the bottom of the game screen (PayBox / Bit nights) - asks first
+  app.querySelectorAll("[data-close-night]").forEach(el => el.onclick = () => setNightClosed(el.dataset.closeNight, true));
   app.querySelectorAll("[data-toggle-end-night]").forEach(el => el.onclick = async () => {
     const gameId = el.dataset.toggleEndNight;
     const g = getGame(gameId);
