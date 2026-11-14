@@ -1059,12 +1059,10 @@ html.theme-light .rb-chip.on,html.theme-light.theme-sand .rb-chip.on,html.theme-
 /* The rebuy chips are an illustrated chip (gold rim, gem inserts, engraved center) - its
    center tinted to the theme: green on dark, brown on sand, blue on blue. The picked one
    lifts and glows gold. Replaces the drawn chip styling above. */
-.rb-chip,html.theme-light .rb-chip,html.theme-light.theme-sand .rb-chip,html.theme-light.theme-blue .rb-chip{border:none;background:url(/static/rebuy-chip-green.webp) center/100% 100% no-repeat;color:#f6efdc;font-weight:900;font-size:19px;
+.rb-chip,html.theme-light .rb-chip,html.theme-light.theme-sand .rb-chip,html.theme-light.theme-blue .rb-chip{border:none;background:url(/static/chip-red.webp) center/100% 100% no-repeat;color:#f6efdc;font-weight:900;font-size:19px;
   text-shadow:0 1px 0 rgba(0,0,0,.5),0 2px 4px rgba(0,0,0,.7);box-shadow:0 6px 12px rgba(0,0,0,.45);transform:none;}
-html.theme-light.theme-sand .rb-chip{background-image:url(/static/rebuy-chip-brown.webp);}
-html.theme-light.theme-blue .rb-chip{background-image:url(/static/rebuy-chip-blue.webp);}
 .rb-chip::before{display:none;}
-.rb-chip.on,html.theme-light .rb-chip.on,html.theme-light.theme-sand .rb-chip.on,html.theme-light.theme-blue .rb-chip.on{border:none;background:url(/static/rebuy-chip-green.webp) center/100% 100% no-repeat;color:#fff6d6;transform:translateY(-5px) scale(1.08);box-shadow:0 0 22px 5px rgba(255,200,80,.85),0 12px 16px rgba(0,0,0,.4);}
+.rb-chip.on,html.theme-light .rb-chip.on,html.theme-light.theme-sand .rb-chip.on,html.theme-light.theme-blue .rb-chip.on{border:none;background:url(/static/chip-red.webp) center/100% 100% no-repeat;color:#fff6d6;transform:translateY(-5px) scale(1.08);box-shadow:0 0 22px 5px rgba(255,200,80,.85),0 12px 16px rgba(0,0,0,.4);}
 /* A tap buys in now (no picking first), so every chip is the same size - 10% bigger than
    before - and a tap plays a press: down, a gold flash, back up. */
 .rb-chip,html.theme-light .rb-chip{width:75px;height:75px;font-size:19px;transform:none;flex-shrink:1;min-width:0;}
@@ -1082,8 +1080,6 @@ html.theme-light.theme-blue .rb-chip{background-image:url(/static/rebuy-chip-blu
   60%{transform:scale(1.14);filter:brightness(1.15);box-shadow:0 0 0 18px rgba(255,215,90,0),0 0 26px 10px rgba(255,215,90,.35),0 8px 14px rgba(0,0,0,.45);}
   100%{transform:scale(1);filter:brightness(1);}
 }
-html.theme-light.theme-sand .rb-chip.on{background-image:url(/static/rebuy-chip-brown.webp);}
-html.theme-light.theme-blue .rb-chip.on{background-image:url(/static/rebuy-chip-blue.webp);}
 .rb-chip:active:not(:disabled){translate:0 3px;}
 /* Popups on the light themes: confirm / alert / game welcome take the page's card color
    instead of the dark-green boxes built for the dark theme. */
@@ -1924,6 +1920,12 @@ html.theme-light .tr-note b{color:#9a5f12;}
 .player-screen-scroll .night-recap{margin-top:0!important;}
 .rb-frame > legend{letter-spacing:.03em;}
 .rb-frame .rb-chips{margin:6px 0 4px;}
+/* rebuy chips: red / green / black by amount order, white for "אחר"; the amount looks engraved */
+.rb-chip,.rb-chip.on{box-shadow:none!important;filter:drop-shadow(0 4px 5px rgba(0,0,0,.4));color:rgba(240,232,214,.92)!important;text-shadow:0 -1px 0 rgba(0,0,0,.75),0 1px 0 rgba(255,255,255,.28);}
+.rb-chip.on{filter:drop-shadow(0 0 10px rgba(255,200,80,.95)) drop-shadow(0 4px 5px rgba(0,0,0,.35));}
+.rb-chip.rb-c1{background-image:url(/static/chip-green.webp)!important;}
+.rb-chip.rb-c2{background-image:url(/static/chip-black.webp)!important;color:#f6eedc!important;text-shadow:0 -1px 0 #000,0 1px 0 rgba(255,255,255,.55),0 0 1px rgba(255,255,255,.4);}
+.rb-chip[data-rb-pick=other]{background-image:url(/static/chip-white.webp)!important;color:#14303d!important;text-shadow:0 1px 0 rgba(255,255,255,.7);}
 .rb-frame .rb-undo-last{margin-top:12px;}
 .rb-frame .rb-cancel{background:none;border:none;box-shadow:none;padding:0;margin-top:12px;text-align:center;}
 .rb-frame .rb-cancel-chev{display:none;}
@@ -7962,6 +7964,14 @@ function fixNegativeNumbers(root){
   });
 }
 // "ריביי / יציאה יירשמו על X" on one line: a smaller font (down to 12px), then the first name only
+// Rebuy chip amounts shrink until they fit inside the chip's inner circle (₪100, ₪1000...)
+function fitRebuyChips(){
+  document.querySelectorAll('.rb-chip>span').forEach(sp => {
+    const w = sp.parentElement.clientWidth * 0.6; if (!w) return;
+    let f = 19; sp.style.fontSize = '';
+    while (sp.offsetWidth > w && f > 11) { f--; sp.style.fontSize = f + 'px'; }
+  });
+}
 function fitActStrip(){
   const s = document.querySelector(".act-strip"), span = s && s.querySelector("span");
   if (!span) return;
@@ -8209,6 +8219,7 @@ function render(){
   if (nav.screen === "community") { fitClubGamesScroll(); fitGameNames(); }
   if (modal && modal.type === "pickSeat") fitPickSeat();
   fitActStrip();
+  fitRebuyChips();
   liftGamePageBackground();
   // Runs whenever .poker-table-wrap exists at all now, not just when it's the visible
   // face - with both panes always mounted while seated, the circles view's own DOM (and
@@ -9323,7 +9334,7 @@ function renderPlayerScreen(gameId){
   const rebuyLocked = buyinPending || notStarted;
   const rebuyHtml = `
     <div class="rb-chips">
-      ${amounts.map(v => `<button class="rb-chip" data-rb-pick="${v}" ${rebuyLocked?'disabled':''}><span>₪${v}</span></button>`).join("")}
+      ${amounts.map((v, i) => `<button class="rb-chip rb-c${i}" data-rb-pick="${v}" ${rebuyLocked?'disabled':''}><span>₪${v}</span></button>`).join("")}
       <button class="rb-chip${picked==='other'?' on':''}" data-rb-pick="other" ${rebuyLocked?'disabled':''}><span>אחר</span></button>
     </div>
     ${picked === 'other' ? `
