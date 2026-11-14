@@ -1074,8 +1074,9 @@ html.theme-light .rb-chip.on,html.theme-light.theme-sand .rb-chip.on,html.theme-
 .rb-chip,.pp-ci,.pp-car-arrow,.pp-me-card{-webkit-tap-highlight-color:transparent;}
 .rb-chip{-webkit-touch-callout:none;user-select:none;-webkit-user-select:none;touch-action:manipulation;}
 .rb-chip:focus,.pp-ci:focus,.pp-car-arrow:focus,.pp-me-card:focus{outline:none;}
+.rb-chip.down:not(:disabled){transform:scale(.86) translateY(4px)!important;filter:brightness(1.25) drop-shadow(0 1px 2px rgba(0,0,0,.5))!important;transition:transform .06s ease-out,filter .06s ease-out;}
 @keyframes rbPress{
-  0%{transform:scale(1);filter:brightness(1);}
+  0%{transform:scale(.86) translateY(4px);filter:brightness(1.25);}
   25%{transform:scale(.74) translateY(5px);filter:brightness(1.35);box-shadow:0 0 0 0 rgba(255,215,90,1),0 0 18px 6px rgba(255,215,90,.8),0 1px 2px rgba(0,0,0,.6);}
   60%{transform:scale(1.14);filter:brightness(1.15);box-shadow:0 0 0 18px rgba(255,215,90,0),0 0 26px 10px rgba(255,215,90,.35),0 8px 14px rgba(0,0,0,.45);}
   100%{transform:scale(1);filter:brightness(1);}
@@ -13437,9 +13438,13 @@ function attachHandlers(){
   app.querySelectorAll("[data-rb-pick]").forEach(el => {
     let start = null;
     el.addEventListener("contextmenu", e => e.preventDefault());
-    el.addEventListener("pointerdown", e => { start = {x: e.clientX, y: e.clientY, t: Date.now()}; });
-    el.addEventListener("pointercancel", () => { start = null; });
+    // The chip goes down the moment the finger touches it (not only on release).
+    const up = () => el.classList.remove("down");
+    el.addEventListener("pointerdown", e => { start = {x: e.clientX, y: e.clientY, t: Date.now()}; if (!el.disabled) el.classList.add("down"); });
+    el.addEventListener("pointercancel", () => { start = null; up(); });
+    el.addEventListener("pointerleave", up);
     el.addEventListener("pointerup", e => {
+      up();
       if (!start) return;
       const moved = Math.hypot(e.clientX - start.x, e.clientY - start.y) > 12;
       const held = Date.now() - start.t;
