@@ -1928,6 +1928,9 @@ html.theme-light .tr-note b{color:#9a5f12;}
 .rb-chip.rb-c2{background-image:url(/static/chip-black.webp)!important;color:#f6eedc!important;text-shadow:0 -1px 0 #000,0 1px 0 rgba(255,255,255,.55),0 0 1px rgba(255,255,255,.4);}
 .rb-chip[data-rb-pick=other]{background-image:url(/static/chip-white.webp)!important;color:#14303d!important;text-shadow:0 1px 0 rgba(255,255,255,.7);}
 .rb-frame .rb-undo-last{margin-top:12px;}
+/* "ביטול ריביי" and its open list: no fill of their own - the page shows through, every theme */
+.rb-frame .rb-cancel-head,.rb-frame .rb-cancel-list{background:transparent!important;}
+.rb-frame .rb-cancel-list{border:1px solid var(--frame-c,rgba(212,175,55,.45));border-radius:10px;margin-top:6px;}
 .rb-frame .rb-cancel{background:none;border:none;box-shadow:none;padding:0;margin-top:12px;text-align:center;}
 .rb-frame .rb-cancel-chev{display:none;}
 .rb-frame .rb-cancel-head{background:none;border:none;box-shadow:none;width:auto;margin:0 auto;padding:2px 6px;font-size:15px;color:var(--muted);text-decoration:underline;text-underline-offset:3px;display:inline-flex;align-items:center;gap:4px;}
