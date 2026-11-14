@@ -1234,6 +1234,8 @@ html.theme-light.theme-sand .pp-ci-amt,html.theme-light.theme-sand .pp-ci-out{co
 .pp-car-track{padding:8px 4px 0;margin:0 -4px;}
 .pp-ci.on{padding-top:12px;margin-top:-6px;align-self:flex-start;margin-inline:-4px;padding-inline:6px;flex-basis:calc((100% - (var(--pp-per,4) - 1) * 2px) / var(--pp-per,4) + 8px);position:relative;z-index:1;}
 .pp-ci.on .pp-ci-name{margin-top:7px;}
+/* selected player: slightly bigger avatar growing upward; name/amount stay on the same line as the others */
+.pp-car .pp-ci.on{padding-top:14px!important;margin-top:-8px!important;align-self:auto!important}.pp-car .pp-ci.on .pp-ci-av{transform:scale(1.17)!important;transform-origin:50% 100%}.pp-car .pp-ci.on .pp-ci-name,.pp-car .pp-ci.on .pp-ci-amt,.pp-car .pp-ci.on .pp-ci-out,.pp-car .pp-ci.on .pp-ci-return{transform:none!important}.pp-car .pp-ci.on .pp-ci-name{margin-top:2px!important}
 .pp-ci.out .pp-ci-av{filter:grayscale(1);opacity:.55;}
 .pp-ci-name{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px;font-weight:800;line-height:1.2;margin-top:2px;}
 .pp-ci.on .pp-ci-name{color:var(--gold);}
