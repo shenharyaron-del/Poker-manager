@@ -762,6 +762,11 @@ html.theme-light .menu-sec{color:#9a5f12;}
 .scroll-list{max-height:50vh;overflow-y:auto;padding-left:2px;}
 .checkbox-row{display:flex;align-items:center;gap:10px;background:var(--input);border:1px solid var(--card-b);border-radius:12px;padding:10px 14px;margin-bottom:6px;}
 .checkbox-row input{width:17px;height:17px;accent-color:var(--gold);}
+.pick-row{cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;}
+.pick-box{width:22px;height:22px;border-radius:6px;border:2px solid var(--frame-c,var(--gold));flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.pick-row.sel{border-color:var(--frame-c,var(--gold));background:color-mix(in srgb,var(--gold) 14%,var(--input));}
+.pick-row.sel .pick-box{background:var(--frame-c,var(--gold));}
+.pick-row.sel .pick-box::after{content:"";width:6px;height:11px;border:solid #fff;border-width:0 2.5px 2.5px 0;transform:rotate(45deg) translate(-1px,-1px);}
 .coin{border-radius:50%;border:2px solid #78716c;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;background:#022c22;}
 .coin.sm{width:36px;height:36px;font-size:11px;}
 .coin.pos{border-color:#34d399;color:#6ee7b7;}
@@ -3394,7 +3399,7 @@ async function v2AddGamePlayer(gameId, id, name){
 // Returns true on success, false if the seat was already taken (caller re-syncs that one
 // seat and lets the user pick another - see the section comment on the server side for
 // why this is a single atomic DB check rather than a read-modify-write).
-async function v2ClaimSeat(gameId, seatIndex, playerId, name, gender){
+async function v2ClaimSeat(gameId, seatIndex, playerId, name, gender, opts){
   let result = await v2FetchWithRetry("POST", `/games/${gameId}/seats/${seatIndex}`, {playerId, name, ...(gender ? {gender} : {})});
   if (result.conflict) {
     // A retry after an attempt that did land (a dropped answer) comes back "taken" - by me.
@@ -3421,7 +3426,7 @@ async function v2ClaimSeat(gameId, seatIndex, playerId, name, gender){
   // outright - a player seated before actually buying in used to get a ₪100 entry they
   // never paid. Deferred a tick: every caller closes its own modal right after this
   // returns, which would otherwise close this one too.
-  if (!g.buyins.some(b => b.playerId === playerId) && !pendingBuyinRequest) {
+  if (!(opts && opts.noEntryPrompt) && !g.buyins.some(b => b.playerId === playerId) && !pendingBuyinRequest) {
     setTimeout(() => openModal({type: "entryBuyin", gameId, playerId}), 0);
   }
   return true;
@@ -7888,6 +7893,21 @@ const SCREEN_NAMES = {
 // right of the main name - and they keep that seat all night (nobody moves when someone
 // leaves).
 const EXTRA_SEAT = 9;
+// The seats a multi-pick fills, in order: the tapped seat, then the next free table seats
+// going around from it, then the 10th seat (it opens once the 9 are taken).
+function freeSeatsFrom(g, start){
+  const seats = g.seats || [], out = [];
+  if (start === EXTRA_SEAT) return seats[EXTRA_SEAT] ? [] : [EXTRA_SEAT];
+  for (let k = 0; k < 9; k++) { const i = (start + k) % 9; if (!seats[i]) out.push(i); }
+  if (!seats[EXTRA_SEAT]) out.push(EXTRA_SEAT);
+  return out;
+}
+// Entry amounts for several just-seated players, one window after the other.
+function openNextEntry(gameId, queue){
+  const g = getGame(gameId);
+  const q = (queue || []).filter(pid => g && (g.seats || []).includes(pid) && !(g.buyins || []).some(b => b.playerId === pid));
+  if (q.length) setTimeout(() => openModal({type: "entryBuyin", gameId, playerId: q[0], queue: q.slice(1)}), 0);
+}
 function tableSeatsFull(g){ return (g.seats || []).slice(0, 9).filter(Boolean).length >= 9; }
 function extraSeatOpen(g){ return !!g && !g.closed && tableSeatsFull(g) && !(g.seats || [])[EXTRA_SEAT]; }
 function hasFreeSeat(g){ return !!g && !g.closed && (!tableSeatsFull(g) || !(g.seats || [])[EXTRA_SEAT]); }
@@ -8008,6 +8028,7 @@ function fitActStrip(){
 }
 // "מי יושב במקום X?": the window may take the whole screen height, and the players list gives
 // up whatever it takes for "הוסף לשולחן" to show without scrolling
+function pickSeatBtnLabel(n){ return n > 1 ? `הושב ${n} שחקנים` : n === 1 ? "הושב שחקן אחד" : "בחרו שחקנים להושבה"; }
 function fitPickSeat(){
   const list = document.querySelector("[data-pick-seat-list]"), m = list && list.closest(".modal");
   if (!m) return;
@@ -11806,8 +11827,9 @@ function renderModal(m){
     body = `
       ${avail.length ? `
         <div class="scroll-list" data-pick-seat-list>
-          ${avail.map(p => `<div class="checkbox-row" data-pick-player="${p.id}"><span class="flex1">${esc(p.name)}</span></div>`).join("")}
+          ${avail.map(p => `<div class="checkbox-row pick-row${(m.sel||[]).includes(p.id)?' sel':''}" data-pick-player="${p.id}"><span class="pick-box"></span><span class="flex1">${esc(p.name)}</span></div>`).join("")}
         </div>
+        <button class="btn btn-primary btn-block" data-seat-picked style="margin-top:8px;" ${(m.sel||[]).length?'':'disabled'}>${pickSeatBtnLabel((m.sel||[]).length)}</button>
       ` : `<div class="empty" style="padding:12px 0;">כל השחקנים במועדון כבר יושבים בשולחן.</div>`}
       <div class="section-title" style="padding:0;margin:10px 0 8px;">או הוסיפו שחקן חדש</div>
       <div class="name-pair" style="margin-bottom:8px;">
@@ -13130,6 +13152,7 @@ function attachHandlers(){
   app.querySelectorAll("[data-open-my-stats]").forEach(el => el.onclick = () => openModal({type:"stats", clientId: myIdentity.id, selectedCommunityId: statsHere()}));
   if (modal && modal.type === "entryBuyin") {
     const {gameId, playerId} = modal;
+    const entryQueue = modal.queue || [];
     // Another device (the player's own, or whoever seated them) may have entered it
     // meanwhile - never record a second entry.
     const alreadyIn = () => ((getGame(gameId) || {}).buyins || []).some(b => b.playerId === playerId);
@@ -13149,6 +13172,7 @@ function attachHandlers(){
       if (playerId === mine && othersSeated) tableSubView = "player";
       else { tableSubView = "table"; setTableView("table"); }
       performBuyin(gameId, playerId, Math.round(amt * 100) / 100, {isEntry: true, actorName: myIdentity.name});
+      openNextEntry(gameId, entryQueue);
     };
     app.querySelectorAll("[data-entry-amount]").forEach(el => el.onclick = () => enter(Number(el.dataset.entryAmount)));
     // ביטול: nothing was bought, so just take the player off the seat again. My own seat
@@ -13178,6 +13202,7 @@ function attachHandlers(){
       // Back on the table either way - its free seats are right there to pick another.
       if (playerId === mine) { tableSubView = "table"; setTableView("table"); }
       closeModal();
+      openNextEntry(gameId, entryQueue);
     };
     const otherBtn = app.querySelector("[data-entry-other]");
     const otherInput = app.querySelector("#entry-other-amount");
@@ -15417,42 +15442,66 @@ function attachHandlers(){
   }
 
   if (modal && modal.type === "pickSeat") {
-    app.querySelectorAll("[data-pick-player]").forEach(el => el.onclick = async () => {
-      el.style.pointerEvents = "none";
-      showButtonLoading(el);
-      if (USE_RELATIONAL_API) {
-        const g = getGame(modal.gameId);
-        const c = getCommunity(g.communityId);
-        const p = c.roster.find(pl => pl.id === el.dataset.pickPlayer);
-        if (p) {
-          try {
-            const ok = await v2ClaimSeat(modal.gameId, modal.seatIndex, p.id, p.name);
-            if (!ok) showAlert("המושב הזה כבר תפוס - בחרו מושב אחר.");
-          } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); }
-        }
-        closeModal();
-        return;
+    // Tap players to pick several (toggled in place - a re-render would lose the list's
+    // scroll); "הושב" seats them in the free seats, starting at the one that was tapped.
+    const seatBtn = app.querySelector("[data-seat-picked]");
+    const syncSeatBtn = () => {
+      const n = (modal.sel || []).length;
+      if (seatBtn) { seatBtn.disabled = !n; seatBtn.textContent = pickSeatBtnLabel(n); }
+    };
+    app.querySelectorAll("[data-pick-player]").forEach(el => el.onclick = () => {
+      const id = el.dataset.pickPlayer, sel = modal.sel || (modal.sel = []);
+      const i = sel.indexOf(id);
+      if (i !== -1) sel.splice(i, 1);
+      else {
+        const room = freeSeatsFrom(getGame(modal.gameId), modal.seatIndex).length;
+        if (sel.length >= room) { showAlert(room === 1 ? "נשאר מקום פנוי אחד בשולחן." : `נשארו ${room} מקומות פנויים בשולחן.`); return; }
+        sel.push(id);
       }
-      await mutateAndSave(() => {
-        const g = getGame(modal.gameId);
-        const c = getCommunity(g.communityId);
-        const p = c.roster.find(pl => pl.id === el.dataset.pickPlayer);
-        if (!p) return;
-        if (!g.seats) g.seats = new Array(9).fill(null);
-        g.seats[modal.seatIndex] = p.id;
-        if (!g.players.some(gp => gp.id === p.id)) g.players.push({id:p.id, name:p.name});
-        if (!g.liveChips) g.liveChips = {};
-        if (g.liveChips[p.id] === undefined) g.liveChips[p.id] = 0;
-        // Deliberately not touching myIdentity.myPlayers here - picking a seat for someone
-        // doesn't mean this device belongs to them. Whoever's actually running the app
-        // often seats several different people from their own phone while setting up the
-        // table, and each assignment used to overwrite this device's own "remembered
-        // player," so the next game they opened auto-seated whoever they'd most recently
-        // assigned to a seat instead of themselves. That mapping should only come from
-        // genuinely self-identifying (via an invite link, or creating the community).
-      });
-      closeModal();
+      el.classList.toggle("sel", i === -1);
+      syncSeatBtn();
     });
+    if (seatBtn) seatBtn.onclick = async () => {
+      const gameId = modal.gameId, start = modal.seatIndex, sel = [...(modal.sel || [])];
+      if (!sel.length) return;
+      seatBtn.disabled = true;
+      showButtonLoading(seatBtn);
+      const g = getGame(gameId), c = getCommunity(g.communityId);
+      const seated = [];
+      if (USE_RELATIONAL_API) {
+        let full = false, failed = false;
+        for (const pid of sel) {
+          const p = c.roster.find(pl => pl.id === pid);
+          if (!p || (getGame(gameId).seats || []).includes(pid)) continue;
+          let done = false;
+          // A seat someone else took meanwhile: on to the next free one.
+          for (const idx of freeSeatsFrom(getGame(gameId), start)) {
+            try { if (await v2ClaimSeat(gameId, idx, p.id, p.name, undefined, {noEntryPrompt: true})) { done = true; break; } }
+            catch(e) { failed = true; break; }
+          }
+          if (failed) break;
+          if (done) seated.push(pid); else { full = true; break; }
+        }
+        if (failed) showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב.");
+        else if (full) showAlert("השולחן התמלא - לא כל השחקנים הושבו.");
+      } else {
+        await mutateAndSave(() => {
+          const g2 = getGame(gameId), c2 = getCommunity(g2.communityId);
+          if (!g2.seats) g2.seats = new Array(9).fill(null);
+          if (!g2.liveChips) g2.liveChips = {};
+          for (const pid of sel) {
+            const p = c2.roster.find(pl => pl.id === pid);
+            const idx = freeSeatsFrom(g2, start)[0];
+            if (!p || idx === undefined || g2.seats.includes(pid)) continue;
+            g2.seats[idx] = p.id;
+            if (!g2.players.some(gp => gp.id === p.id)) g2.players.push({id: p.id, name: p.name});
+            if (g2.liveChips[p.id] === undefined) g2.liveChips[p.id] = 0;
+          }
+        });
+      }
+      closeModal();
+      if (USE_RELATIONAL_API) openNextEntry(gameId, seated);
+    };
     // ז / נ and זמני / קבוע - toggled in place (a re-render would wipe what's typed).
     app.querySelectorAll("[data-new-gender]").forEach(el => el.onclick = () => {
       app.querySelectorAll("[data-new-gender]").forEach(b => b.classList.toggle("on", b === el));
