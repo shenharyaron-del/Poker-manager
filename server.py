@@ -2807,6 +2807,91 @@ def v2_claim_seat(game_id, seat_index):
     return jsonify({"ok": True, "seats": row[0], "updatedAt": row[1].isoformat()})
 
 
+@app.route("/api/v2/games/<game_id>/seats/batch", methods=["POST"])
+def v2_claim_seats_batch(game_id):
+    """Seat several players at once (the seat picker's multi-pick), each with the same entry
+    buy-in - one request, one transaction. Seats are filled from `start` going around the 9
+    table seats, then the 10th. Body: {start, players: [{playerId, name, gender?}],
+    entry: {amount, actorName, ids: {playerId: buyinId}}?}. Answers the new seats and who
+    got which seat; players already seated, or past the free seats, are left out."""
+    denied = _guard(game_id=game_id, need="table_admin")
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    players = body.get("players")
+    start = body.get("start")
+    entry = body.get("entry") or None
+    if not isinstance(players, list) or not players or len(players) > _MAX_SEATS or not isinstance(start, int) or not 0 <= start < _MAX_SEATS:
+        return jsonify({"error": "start and players required"}), 400
+    for pl in players:
+        if not isinstance(pl, dict) or not _valid_id(pl.get("playerId")):
+            return jsonify({"error": "each player needs a playerId"}), 400
+    if entry is not None:
+        ids = entry.get("ids") if isinstance(entry, dict) else None
+        if not _valid_amount(entry.get("amount")) or not isinstance(ids, dict) or not all(_valid_id(ids.get(pl["playerId"])) for pl in players):
+            return jsonify({"error": "entry needs a positive amount and a buy-in id per player"}), 400
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT seats, treasurer_id, community_id FROM games WHERE id = %s FOR UPDATE", (game_id,))
+            row = cur.fetchone()
+            if not row:
+                conn.rollback()
+                return jsonify({"error": "not found"}), 404
+            seats = list(row[0] or [])
+            seats += [None] * (_MAX_SEATS - len(seats))
+            table = _MAX_SEATS - 1
+            if start == table:
+                order = [table] if all(seats[:table]) and not seats[table] else []
+            else:
+                order = [(start + k) % table for k in range(table) if not seats[(start + k) % table]]
+                if not seats[table]:
+                    order.append(table)
+            seated = []
+            for pl in players:
+                pid = pl["playerId"]
+                if pid in seats or not order:
+                    continue
+                idx = order.pop(0)
+                seats[idx] = pid
+                seated.append({"playerId": pid, "seatIndex": idx})
+                gender = pl.get("gender") if pl.get("gender") in ("male", "female") else None
+                cur.execute(
+                    "INSERT INTO game_players (game_id, player_id, name, gender) VALUES (%s,%s,%s,%s) "
+                    "ON CONFLICT (game_id, player_id) DO NOTHING",
+                    (game_id, pid, pl.get("name"), gender),
+                )
+            # The stored array keeps its length unless the 10th seat is now taken.
+            while len(seats) > len(row[0] or []) and seats[-1] is None:
+                seats.pop()
+            entered = []
+            if seated:
+                cur.execute(
+                    "UPDATE games SET seats = %s::jsonb, live_chips = %s::jsonb || live_chips, updated_at = now() WHERE id = %s RETURNING updated_at",
+                    (json.dumps(seats), json.dumps({s["playerId"]: 0 for s in seated}), game_id),
+                )
+                updated_at = cur.fetchone()[0]
+                if entry is not None:
+                    # An entry is only a first buy-in - a player who already bought in tonight
+                    # (seated again after leaving) gets no second one. With a treasurer, a table
+                    # admin may still record entries (see _money_denied).
+                    for s in seated:
+                        cur.execute("SELECT 1 FROM buyins WHERE game_id = %s AND player_id = %s LIMIT 1", (game_id, s["playerId"]))
+                        if cur.fetchone():
+                            continue
+                        bid = entry["ids"][s["playerId"]]
+                        cur.execute(
+                            "INSERT INTO buyins (id, game_id, player_id, amount, ts, actor_name) VALUES (%s,%s,%s,%s,now(),%s) "
+                            "ON CONFLICT (id) DO NOTHING",
+                            (bid, game_id, s["playerId"], entry["amount"], entry.get("actorName")),
+                        )
+                        entered.append({"playerId": s["playerId"], "id": bid})
+            else:
+                cur.execute("SELECT updated_at FROM games WHERE id = %s", (game_id,))
+                updated_at = cur.fetchone()[0]
+        conn.commit()
+    return jsonify({"ok": True, "seats": seats, "seated": seated, "entered": entered, "updatedAt": updated_at.isoformat()})
+
+
 @app.route("/api/v2/games/<game_id>/seats/<int:seat_index>", methods=["DELETE"])
 def v2_clear_seat(game_id, seat_index):
     # Clearing a seat: a table admin, or the player in it (cancelling a mistaken join).
