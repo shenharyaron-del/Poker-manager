@@ -1253,6 +1253,12 @@ html.theme-light.theme-sand .pp-ci-amt,html.theme-light.theme-sand .pp-ci-out{co
 .pp-car-arrow{position:absolute;top:38%;transform:translateY(-50%);width:20px;height:40px;display:flex;align-items:center;justify-content:center;background:none;border:none;padding:0;cursor:pointer;color:#5fd3b0;}
 .pp-car-arrow svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;}
 .pp-car-arrow.prev{right:0;}
+/* The arrows sit level with the players' pictures (track top padding + card padding + half a
+   46px picture), not in the middle of the whole frame. */
+.pp-car-row{position:relative;}
+.pp-car-row>.pp-car-arrow{top:37px;}
+.pp-car-row>.pp-car-arrow.prev{right:calc(-1 * var(--pp-car-pad, 20px));}
+.pp-car-row>.pp-car-arrow.next{left:calc(-1 * var(--pp-car-pad, 20px));}
 .pp-car-arrow.next{left:0;}
 .pp-car-dots{display:flex;justify-content:center;gap:7px;margin-top:6px;}
 .pp-car-dots span{width:8px;height:8px;border-radius:50%;background:rgba(95,211,176,.35);cursor:pointer;transition:background .2s,transform .2s;}
@@ -10153,10 +10159,12 @@ function playersCarouselHtml(key, g, c, ids, {onId = null, meId = null, attr, un
   // A fieldset, so a legend (when there is one) sits on the frame itself.
   return `<fieldset class="pp-car${many ? " many" : ""}${under ? "" : " names-only"}${legend ? " has-legend" : ""}" data-pp-car="${key}">
     ${legend ? `<legend class="pp-car-legend">${esc(legend)}</legend>` : ""}${top}
+    <div class="pp-car-row">
     ${many ? `<button type="button" class="pp-car-arrow prev" data-pp-car-step="1" aria-label="הקודם"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>` : ""}
     <div class="pp-car-track" data-pp-car-track>${items}</div>
-    ${many ? `<button type="button" class="pp-car-arrow next" data-pp-car-step="-1" aria-label="הבא"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
-    <div class="pp-car-dots"></div>` : ""}${footer}
+    ${many ? `<button type="button" class="pp-car-arrow next" data-pp-car-step="-1" aria-label="הבא"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>` : ""}
+    </div>
+    ${many ? `<div class="pp-car-dots"></div>` : ""}${footer}
   </fieldset>`;
 }
 // The player screen's carousel (see carouselHtml): keeps the player it was showing in the
