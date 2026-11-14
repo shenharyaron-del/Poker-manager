@@ -2243,6 +2243,12 @@ html:not(.theme-light) .act-strip.other{background:rgba(0,0,0,.28);border:1.5px 
 html:not(.theme-light) .act-strip.other b{color:#fde68a;}
 html:not(.theme-light) .act-strip.other .act-ic{background:#f2c14e;color:#1a1a1a;}
 html:not(.theme-light) .act-strip.other button{background:transparent;color:#fde68a;border:1px solid #f2c14e;}
+/* "צור שולחן חדש" like "מועדון חדש": the theme's color with a dashed frame (light / blue) */
+html.theme-light.theme-sand .card.new-game-card{background:linear-gradient(135deg,#f9e7bd,#f1d595)!important;border:2px dashed #9a5f12!important;box-shadow:none!important;}
+html.theme-light.theme-sand .new-game-card .ngc-title{color:#3a2614;} html.theme-light.theme-sand .new-game-card .ngc-sub{color:#6b4a2a;}
+html.theme-light.theme-blue .card.new-game-card{background:linear-gradient(135deg,#eaf5fb,#d3eaf6)!important;border:2px dashed #2f7fa8!important;box-shadow:none!important;}
+html.theme-light.theme-blue .new-game-card .ngc-title{color:#0e2633;} html.theme-light.theme-blue .new-game-card .ngc-sub{color:#3d6a80;}
+.ncc-art{flex-shrink:0;width:96px;height:auto;-webkit-user-drag:none;}
 </style>
 </head>
 <body>
@@ -8657,6 +8663,7 @@ function renderHome(){
   }).join("");
   const newCommunityCard = `
     <div class="card" data-new-community style="border-style:dashed;border-color:var(--gold);background:rgba(251,191,36,.06);">
+      <img class="ncc-art" src="/static/new-club.webp" width="96" height="41" alt="" draggable="false">
       <div class="flex1">
         <div class="name serif">מועדון חדש</div>
         <div class="meta">${myCommunities.length ? "הקישו ליצירת מועדון חדש" : "עדיין אין לך מועדונים משויכים - הקישו כדי ליצור אחד"}</div>
