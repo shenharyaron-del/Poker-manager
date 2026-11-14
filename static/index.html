@@ -12,7 +12,7 @@
      own light and dark colors - otherwise they "auto-darken" it, and the sand / blue
      themes came out very dark when opened from an invite link. -->
 <meta name="color-scheme" content="dark light">
-<script>try{var t=localStorage.getItem("poker-theme");if(t==="light")t="blue";if(t==="blue"||t==="sand"){document.documentElement.classList.add("theme-light","theme-"+t);document.querySelector('meta[name="theme-color"]').content=t==="blue"?"#4d89a8":"#dfcaa9";}}catch(e){}</script>
+<script>try{var t=localStorage.getItem("poker-theme");if(t==="light")t="blue";if(t==="blue"||t==="sand"){document.documentElement.classList.add("theme-light","theme-"+t);document.querySelector('meta[name="theme-color"]').content=t==="blue"?"#4d89a8":"#fcfaf6";}}catch(e){}</script>
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -2151,6 +2151,19 @@ body.on-behalf .menu-drop .btn-ghost svg{color:#9b2c2c;}
    the darker gold of the other light theme, and dark text. */
 html.theme-light.theme-blue .lux-page.pp-other .pp-total{background:linear-gradient(180deg,#c9861c 0%,#a86a12 50%,#7a4a08 100%);-webkit-background-clip:text;background-clip:text;}
 html.theme-light.theme-blue .lux-page.pp-other .lv-arm,html.theme-light.theme-blue .lux-page.pp-other .terms-link{color:#3a1616!important;}
+/* ===== Sand theme, light version: near-white page, white frames with brown edges ===== */
+html.theme-light.theme-sand{--bg1:#fbf8f3;--bg2:#f3ede4;--card:#ffffff;--card-b:#e6d8c3;--input:#ffffff;--input-b:#d9c4a3;--text:#2b1d10;--muted:#7a5a3a;--muted2:#7a5a3a;--gold:#9a5f12;--frame-c:#a87b45;}
+html.theme-light.theme-sand body,html.theme-light.theme-sand .lux-page{background:linear-gradient(#fcfaf6,#f6f1e9)!important;}
+html.theme-light.theme-sand .nav-bar{background:#efe8dd;}
+html.theme-light.theme-sand :is(.pp-car,.rb-frame,.lv-frame,.leave-frame,.stats-frame){background:#fff;box-shadow:0 2px 10px rgba(90,55,20,.08);}
+html.theme-light.theme-sand .icon-btn,html.theme-light.theme-sand .icon-btn.ok{background:#fff;}
+html.theme-light.theme-sand .modal{background:#fffdf9;}
+html.theme-light.theme-sand .mode-panel{background:#fff;}
+/* acting-for-someone strip: soft peach instead of loud orange */
+html.theme-light.theme-sand .act-strip.other{background:#fdeccf;border-color:#f1c98a;color:#5a3a12;box-shadow:none;}
+html.theme-light.theme-sand .act-strip.other b{color:#5a3a12;}
+html.theme-light.theme-sand .act-strip.other .act-ic{background:#d98a1f;color:#fff;}
+html.theme-light.theme-sand .act-strip.other button{background:#8a5a1a;color:#fff6e3;}
 </style>
 </head>
 <body>
@@ -6985,13 +6998,13 @@ function installMode(){
 const THEMES = [
   {key: "dark", label: "כהה", swatch: "linear-gradient(135deg,#0d3b2b,#082419)"},
   {key: "blue", label: "כחול", swatch: "linear-gradient(135deg,#5f9ab8,#3d7595)"},
-  {key: "sand", label: "חול", swatch: "linear-gradient(135deg,#eadcc4,#d2b993)"},
+  {key: "sand", label: "חול", swatch: "linear-gradient(135deg,#fdfbf7,#efe6d8)"},
 ];
 function currentTheme(){
   const cl = document.documentElement.classList;
   return cl.contains("theme-blue") ? "blue" : cl.contains("theme-sand") ? "sand" : "dark";
 }
-const THEME_BAR_COLORS = {dark: "#3d8a6c", blue: "#4d89a8", sand: "#dfcaa9"};
+const THEME_BAR_COLORS = {dark: "#3d8a6c", blue: "#4d89a8", sand: "#fcfaf6"};
 function setTheme(key, noRender){
   const cl = document.documentElement.classList;
   cl.remove("theme-light", "theme-blue", "theme-sand");
