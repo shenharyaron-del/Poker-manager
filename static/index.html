@@ -2248,6 +2248,8 @@ html.theme-light.theme-sand .card.new-game-card{background:linear-gradient(135de
 html.theme-light.theme-sand .new-game-card .ngc-title{color:#3a2614;} html.theme-light.theme-sand .new-game-card .ngc-sub{color:#6b4a2a;}
 html.theme-light.theme-blue .card.new-game-card{background:linear-gradient(135deg,#eaf5fb,#d3eaf6)!important;border:2px dashed #2f7fa8!important;box-shadow:none!important;}
 html.theme-light.theme-blue .new-game-card .ngc-title{color:#0e2633;} html.theme-light.theme-blue .new-game-card .ngc-sub{color:#3d6a80;}
+.card[data-new-community] .name.ncc-title{font-size:21px;font-weight:800;line-height:1.2;}
+.card[data-new-community] .meta{font-size:15px;margin-top:3px;}
 .ncc-art{flex-shrink:0;width:77px;height:auto;-webkit-user-drag:none;}
 </style>
 </head>
@@ -8665,10 +8667,9 @@ function renderHome(){
     <div class="card" data-new-community style="border-style:dashed;border-color:var(--gold);background:rgba(251,191,36,.06);">
       <img class="ncc-art" src="/static/new-club.webp" width="77" height="41" alt="" draggable="false">
       <div class="flex1">
-        <div class="name serif">מועדון חדש</div>
+        <div class="name ncc-title">צור מועדון חדש</div>
         <div class="meta">${myCommunities.length ? "הקישו ליצירת מועדון חדש" : "עדיין אין לך מועדונים משויכים - הקישו כדי ליצור אחד"}</div>
       </div>
-      <div class="chev">${icon('chev')}</div>
     </div>`;
   cards = newCommunityCard + cards;
   return `
