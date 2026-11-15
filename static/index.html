@@ -13856,7 +13856,22 @@ function attachHandlers(){
     leaveArmed[nav.gameId + ":" + viewedPid()] = el.checked; render();
     if (el.checked) { const amt = document.getElementById("lv-amount"); if (amt && !amt.disabled) { try { amt.focus({preventScroll: true}); } catch(e) { amt.focus(); } } }
   });
-  app.querySelectorAll("#lv-amount").forEach(el => el.oninput = () => { leaveAmountDraft[nav.gameId + ":" + viewedPid()] = el.value; });
+  // typing the amount itself: the counts by type (and the chips calculator) no longer describe
+  // it - they're cleared
+  app.querySelectorAll("#lv-amount").forEach(el => el.oninput = () => {
+    const key = nav.gameId + ":" + viewedPid();
+    leaveAmountDraft[key] = el.value;
+    delete leaveTypeCounts[key]; delete leaveChipsDraft[key];
+    const box = el.closest(".lv-body") || app;
+    box.querySelectorAll("[data-lv-type]").forEach(i => {
+      i.value = ""; delete i.dataset.was;
+      const v = i.dataset.lvTypeValue, x = box.querySelector(`[data-lv-type-x="${i.dataset.lvType}"]`);
+      if (x) x.innerHTML = x.innerHTML.includes("<br>") ? `×${v}<br>₪0` : `×${v} = ₪0`;
+    });
+    const ch = box.querySelector("#lv-chips"), chr = box.querySelector("#lv-chips-result");
+    if (ch) { ch.value = ""; delete ch.dataset.was; }
+    if (chr) chr.textContent = "₪0";
+  });
   app.querySelectorAll("#lv-chips").forEach(el => el.oninput = () => {
     const key = nav.gameId + ":" + viewedPid();
     leaveChipsDraft[key] = el.value;
