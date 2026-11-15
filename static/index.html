@@ -9630,7 +9630,7 @@ function renderPlayerScreen(gameId){
   // buy-in alone. Once they've rebought it's a real player (a cancelled rebuy is gone from
   // the buy-ins, so the link comes back).
   const adminPlayerActions = ((isAdminView || iAmTreasurer(g)) && pid) ? (cashedOut ? ""
-    : ((viewingOther && !armed && myBuyins.length <= 1) ? `<div class="terms-link" style="margin:0 0 4px;flex-shrink:0;font-size:16px;color:var(--text);opacity:.85;"><bdi>${esc(p ? tableShortName(g, pid) : "השחקן")}</bdi> ${playerIsFemale(g, c, pid) ? "נכנסה" : "נכנס"} בטעות? <button type="button" data-admin-remove-seat="${pid}">הסר מהשולחן</button></div>` : "")) : "";
+    : "") : "";   // taking someone off the table is in the ☰ menu ("הוצאת שחקן")
   // Everyone but me who entered tonight (tonight's entry order), each a tile that opens
   // their screen - the one being looked at is highlighted. With 10 at the table, one of
   // them sits in a box right of the name instead (the 10th seat's player, or - when the
@@ -11679,6 +11679,9 @@ function renderModal(m){
         canTakeTreasurerFromMenu && tile('data-treasurer-take', '<img class="menu-tr-ic" src="/static/treasurer.webp" alt="" draggable="false">', "אני גיזבר הערב"),
         canCloseNight && (g.closed ? tile('data-game-menu-go="reopen"', "🔓", "פתיחת שולחן סגור")
           : tile('data-game-menu-go="close"', "🔒", "סגור משחק")),
+        // taking someone off the table (sat down by mistake) - only from here
+        g && club && !g.closed && g.gameType !== "tournament" && (isTableAdmin(g, club) || iAmTreasurer(g))
+          && (g.seats || []).some(s => s && !(s in (g.cashouts || {}))) && tile('data-game-menu-go="removeplayer"', "🚪", "הוצאת שחקן"),
         g && club && g.gameType === "tournament" && !g.closed && !(g.tournamentState && g.tournamentState.startedAt) && (isTableAdmin(g, club) || isSuperAdmin()) && tile(`data-open-game-tour="${g.id}"`, "🏆", "הגדרות טורניר"),
       ]],
       ["המועדון", [
@@ -12268,6 +12271,15 @@ function renderModal(m){
         <button class="icon-btn lux-gold" style="width:100%;display:flex;align-items:center;justify-content:center;gap:4px;padding:11px 1px;font-size:16px;font-weight:700;border-radius:10px;white-space:nowrap;${byColorUnavailable?'opacity:.4;cursor:not-allowed;':''}" data-quick-end="${m.playerId}" ${byColorUnavailable?'disabled':''}>${icon('out')}סיום ערב</button>
       `}
     `;
+  } else if (m.type === "removePick") {
+    const g = getGame(m.gameId), c = getCommunity(g.communityId);
+    const at = (g.seats || []).filter(s => s && !(s in (g.cashouts || {})));
+    title = "הוצאת שחקן מהשולחן";
+    body = `<p style="color:var(--muted);font-size:15px;margin:0 0 10px;">למי שהתיישב בטעות - הקניות שלו יימחקו, כאילו לא ישב.</p>
+      <div class="scroll-list">${at.map(id => {
+        const bs = (g.buyins || []).filter(b => b.playerId === id), sum = bs.reduce((s, b) => s + (b.amount || 0), 0);
+        return `<button type="button" class="checkbox-row pick-row" data-admin-remove-seat="${id}" style="width:100%;font:inherit;text-align:right;"><span class="flex1"><bdi>${esc(tableShortName(g, id))}</bdi></span><small style="color:var(--muted)">${bs.length <= 1 ? `כניסה ₪${sum}` : `${bs.length} קניות · ₪${sum}`}</small></button>`;
+      }).join("") || `<div class="empty">אין שחקנים בשולחן</div>`}</div>`;
   } else if (m.type === "removeSeat") {
     const g = getGame(m.gameId);
     const p = g.players.find(pl=>pl.id===m.playerId);
@@ -13270,6 +13282,7 @@ function attachHandlers(){
       if (cid) openModal({type: "monthlyReport", communityId: cid});
     }
     else if ((to === "close" || to === "reopen") && g) { closeModal(); setNightClosed(g.id, to === "close"); }
+    else if (to === "removeplayer" && g) openModal({type: "removePick", gameId: g.id});
   }));
   // Super admin: rename a player (closing returns to the list).
   app.querySelectorAll("[data-rename-player]").forEach(el => el.onclick = () => {
