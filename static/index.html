@@ -9807,13 +9807,15 @@ function renderPlayerScreen(gameId){
     // be hidden - the one being looked at too (the screen stays on their numbers - their name is
     // above them - there's nothing left to do for them, and "הצג" brings the tile back for "החזר")
     const hideable = othersTonight.filter(id => id in (g.cashouts || {}));
-    const n = hideable.length, hiding = hideOutPlayers && n > 0;
+    // my own card (at the top of the frame) counts too once I've left - and goes with the others
+    const meOut = !!myPlayerId && myPlayerId in (g.cashouts || {});
+    const n = hideable.length + (meOut ? 1 : 0), hiding = hideOutPlayers && n > 0;
     // the one being looked at is among the hidden: say so, over the link
-    const selNote = hiding && hideable.includes(pid) ? `<div class="sel-note">נבחר: <b><bdi>${esc(tableShortName(g, pid))}</bdi></b> · ${playerIsFemale(g, c, pid) ? "יצאה" : "יצא"} מהשולחן</div>` : "";
+    const selNote = hiding && (hideable.includes(pid) || (meOut && pid === myPlayerId)) ? `<div class="sel-note">נבחר: <b><bdi>${esc(tableShortName(g, pid))}</bdi></b> · ${playerIsFemale(g, c, pid) ? "יצאה" : "יצא"} מהשולחן</div>` : "";
     const footer = !n ? "" : selNote + `<button type="button" class="out-tg${hiding ? " hiding" : ""}" data-toggle-out-players>${hiding ? EYE_SVG : EYE_OFF_SVG} ${
       n === 1 ? (hiding ? "הצג את מי שיצא" : "הסתר את מי שיצא") : `${hiding ? "הצג" : "הסתר"} ${n} שיצאו`}</button>`;
     const shownIds = hiding ? othersTonight.filter(id => !hideable.includes(id)) : othersTonight;
-    return playersCarouselHtml("player:" + g.id, g, c, tableSeatOrder(g, shownIds, myPlayerId), { footer, top: nameHtml,
+    return playersCarouselHtml("player:" + g.id, g, c, tableSeatOrder(g, shownIds, myPlayerId), { footer, top: hiding && meOut ? "" : nameHtml,
       // before "תחילת משחק" it's only who's at the table (nobody to pick yet - no rebuys)
       onId: notStarted ? null : pid, attr: canActForOthers(g) && !notStarted ? "data-pp-view" : "data-pp-noview",
       // The table's admins (and tonight's treasurer) act for someone else - for them the frame says so.
@@ -10347,7 +10349,7 @@ let hideOutPlayers = (() => { try { return localStorage.getItem("poker-hide-out-
 const EYE_SVG = `<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/></svg>`;
 const EYE_OFF_SVG = `<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/><path d="M4 20L20 4" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`;
 function playersCarouselHtml(key, g, c, ids, {onId = null, meId = null, attr, under = null, legend = "", footer = "", top = ""}){
-  if (!ids.length) return "";
+  if (!ids.length && !footer) return "";   // everyone hidden still keeps the frame for "הצג"
   const items = ids.map(id => {
     const out = id in (g.cashouts || {});
     const rp = c.roster.find(r => r.id === id);
