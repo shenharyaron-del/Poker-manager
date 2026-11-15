@@ -2923,7 +2923,7 @@ async function syncLegacyOnlyFields(){
 async function refreshLegacyOnlyFields(){
   if (!USE_RELATIONAL_API) return; // loadState() already refreshes these every tick
   const changed = await syncLegacyOnlyFields();
-  if (changed && !modal && !playerScreenCustomOpen && !seatDragInProgress && !shouldShowGameWelcome()) render();
+  if (changed && !modal && !playerScreenCustomOpen && !coEditFor && !seatDragInProgress && !shouldShowGameWelcome()) render();
 }
 
 // Temporary diagnostic overlay for tracking down a reported sync-flicker bug.
@@ -3812,7 +3812,7 @@ let refreshQueued = false;
 async function doRefreshNow(source){
   const callId = DEBUG_SYNC ? Math.random().toString(36).slice(2,6) : "";
   logSync(`refresh[${callId}] triggered by ${source}, modal=${!!modal}`);
-  if (modal || playerScreenCustomOpen || seatDragInProgress) { logSync(`refresh[${callId}] SKIPPED - modal or custom-amount input open`); return; }
+  if (modal || playerScreenCustomOpen || coEditFor || seatDragInProgress) { logSync(`refresh[${callId}] SKIPPED - modal or custom-amount input open`); return; }
   if (refreshInProgress) {
     // Another refresh is already running its own GET - don't start a second one
     // concurrently (two in-flight GETs can resolve out of order, and the one that
@@ -3901,7 +3901,7 @@ async function doRefreshNow(source){
         // next attempt once the refresh had already finished. The fetched state is still
         // applied either way - only the render is skipped - so the next render (the modal
         // closing, or the next refresh with neither open) already reflects it.
-        if (modal || playerScreenCustomOpen || seatDragInProgress || clubSwipeDragging || shouldShowGameWelcome()) {
+        if (modal || playerScreenCustomOpen || coEditFor || seatDragInProgress || clubSwipeDragging || shouldShowGameWelcome()) {
           logSync(`refresh[${callId}] applied but SKIPPED render - modal, custom-amount input, or game-welcome screen open`);
         } else {
           const scrollY = window.scrollY;
@@ -9458,10 +9458,10 @@ function renderPlayerScreen(gameId){
       const cvs = c.chipValues || [], many = cvs.length >= 5;
       const line = cv => { const n = parseInt(editCounts[cv.id], 10) || 0, v = parseFloat(cv.value), tt = Math.round(n * v * 100) / 100; return many ? `×${v}<br>₪${tt}` : `×${v} = ₪${tt}`; };
       return `<fieldset class="leave-frame co-frame"><legend>ז'יטונים בסוף הערב</legend>
-        <div class="co-amt"><input type="number" inputmode="decimal" min="0" id="co-edit-amount" data-co-buyin="${buyinTotal}" value="${esc(String(editAmount))}" onfocus="this.select()"><span>שח</span></div>
+        <div class="co-amt"><input type="number" inputmode="decimal" min="0" id="co-edit-amount" data-co-buyin="${buyinTotal}" value="${esc(String(editAmount))}"><span>שח</span></div>
         ${cvs.length ? `<div class="lv-types-sep">או ספרו לפי סוג</div><div class="lv-types co-types${many ? " many" : ""}" style="grid-template-columns:repeat(${cvs.length},1fr);">
           ${cvs.map(cv => cv.image ? `<img src="${esc(cv.image)}" alt="" draggable="false">` : `<span class="lv-type-noimg">₪${esc(String(cv.value))}</span>`).join("")}
-          ${cvs.map(cv => `<input type="number" inputmode="numeric" min="0" placeholder="0" data-co-type="${cv.id}" data-co-type-value="${esc(String(cv.value))}" value="${esc(String(editCounts[cv.id] ?? ""))}" onfocus="this.select()">`).join("")}
+          ${cvs.map(cv => `<input type="number" inputmode="numeric" min="0" placeholder="0" data-co-type="${cv.id}" data-co-type-value="${esc(String(cv.value))}" value="${esc(String(editCounts[cv.id] ?? ""))}">`).join("")}
           ${cvs.map(cv => `<div class="lv-type-x" data-co-type-x="${cv.id}">${line(cv)}</div>`).join("")}</div>` : ""}
         <div class="co-btns"><button type="button" class="co-edit-save" data-co-edit-save="${pid}">שמור</button><button type="button" class="co-edit-cancel" data-co-edit-cancel>ביטול</button></div>
       </fieldset>`;
@@ -13888,12 +13888,25 @@ function attachHandlers(){
   };
   // with the keyboard up, the result line (under the frame) sits right above it
   const coRevealProfit = () => { if (document.body.classList.contains("kb-open")) fitCoFrame(document.activeElement); };
-  app.querySelectorAll(".co-frame input").forEach(i => i.addEventListener("focus", () => setTimeout(() => fitCoFrame(i), 80)));
+  app.querySelectorAll(".co-frame input").forEach(i => {
+    // typing replaces the value without selecting it (a selection brings up the phone's
+    // cut / copy bar): the field empties on focus and shows its value as a faint hint;
+    // left empty, it gets that value back
+    i.addEventListener("focus", () => {
+      if (i.value !== "") { i.dataset.was = i.value; i.placeholder = i.value; i.value = ""; }
+      setTimeout(() => fitCoFrame(i), 80);
+    });
+    i.addEventListener("blur", () => {
+      if (i.value === "" && i.dataset.was != null) i.value = i.dataset.was;
+      delete i.dataset.was;
+      if (i.id !== "co-edit-amount") i.placeholder = "0";
+    });
+  });
   app.querySelectorAll("[data-co-edit]").forEach(el => el.onclick = () => {
     coEditFor = nav.gameId + ":" + el.dataset.coEdit; coEditDraft[coEditFor] = {};
     render();
     const i = document.getElementById("co-edit-amount");
-    if (i) { i.focus({preventScroll: true}); i.select(); }
+    if (i) i.focus({preventScroll: true});
     setTimeout(coRevealProfit, 450);
   });
   app.querySelectorAll("[data-co-edit-cancel]").forEach(el => el.onclick = () => { delete coEditDraft[coEditFor]; coEditFor = null; render(); });
@@ -13927,6 +13940,7 @@ function attachHandlers(){
   });
   app.querySelectorAll("[data-co-edit-save]").forEach(el => el.onclick = async () => {
     const gameId = nav.gameId, pid = el.dataset.coEditSave, g = getGame(gameId);
+    if (document.activeElement && document.activeElement.closest && document.activeElement.closest(".co-frame")) document.activeElement.blur();
     const amount = parseFloat((document.getElementById("co-edit-amount") || {}).value);
     if (isNaN(amount) || amount < 0) { showAlert("הזינו את סכום הז'יטונים (0 אם לא נשאר כלום)."); return; }
     const rounded = Math.round(amount * 100) / 100, co = g.cashouts[pid];
