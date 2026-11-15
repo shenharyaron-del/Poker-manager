@@ -2263,6 +2263,19 @@ html:not(.theme-light) .pp-car:not(.names-only) .pp-ci.on .pp-ci-amt{color:#f5f5
 html:not(.theme-light) .pp-car .pp-me-card.sel{background:rgba(201,162,74,.16)!important;box-shadow:0 0 0 1.5px #c9a24a!important;}
 html:not(.theme-light) .pp-car .pp-me-card.sel .pp-me-name{color:#f1d892!important;}
 html:not(.theme-light) :is(.pp-ci-return,.pp-self-return){color:#c9a24a;}
+/* Dark theme: my own amount stays gold when my card is the chosen one */
+html:not(.theme-light) .player-page .pp-car .pp-me-card.sel .pp-total{background:linear-gradient(180deg,#fff3c4 0%,#fcd34d 35%,#d99a1e 62%,#fbbf24 80%,#fde68a 100%);-webkit-background-clip:text;background-clip:text;}
+/* the ☰ menu and the stats circle: clear gold edges (they had turned faint green) */
+html:not(.theme-light) .theme-toggle,html:not(.theme-light) .game-menu-btn{border:1.5px solid #c9a24a;color:#f1d892;background:rgba(0,0,0,.3);}
+html:not(.theme-light) .game-stats-btn{border-color:#c9a24a;color:#f1d892;}
+/* "צור שולחן חדש" and "צור מועדון חדש": one style - dark felt with a muted-gold dashed frame */
+html:not(.theme-light) .card.new-game-card,html:not(.theme-light) .card[data-new-community]{background:linear-gradient(180deg,#134433,#0a2a1e)!important;border:1.5px dashed rgba(201,162,74,.8)!important;box-shadow:none!important;}
+html:not(.theme-light) .new-game-card .ngc-title,html:not(.theme-light) .card[data-new-community] .name{color:#f1d892!important;}
+html:not(.theme-light) .new-game-card .ngc-sub,html:not(.theme-light) .card[data-new-community] .meta{color:rgba(231,245,238,.85)!important;}
+/* Dark theme: accents (titles, links, edges) in muted gold - only the filled buttons / switches are green */
+html:not(.theme-light){--gold:#c9a24a;--gold-text:#ffffff;}
+html:not(.theme-light) :is(.seg-pill,.badge,.chip-btn.buyin-selected,.gender-seg button.on,.tv-seg button.on){background:#2f8a68!important;border-color:#2f8a68;color:#fff;box-shadow:none;}
+html:not(.theme-light) .game-seg button.on{color:#fff;}
 </style>
 </head>
 <body>
