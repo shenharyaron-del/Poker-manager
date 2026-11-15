@@ -5193,7 +5193,8 @@ function go(screen, extra){
     if (cid && !clubGamesWanted(cid)) setTimeout(() => ensureClubGames(cid), 0);
   }
   if ((extra||{}).gameId !== nav.gameId) playerViewTarget = null; // admin's dropdown pick is per game
-  if (screen === "table") tourLobbyOpen.reg = null;   // the tournament's registered list: open each time the night is opened
+  if (screen === "table") tourLobbyOpen.reg = null;
+  tabBack = {gid: null, stack: []};   // opening a game starts a fresh tab history   // the tournament's registered list: open each time the night is opened
   nav = Object.assign({screen}, extra||{});
   modal = null;
   openHistorySeatPlayerId = null;
@@ -10364,6 +10365,22 @@ function nameInitials(name){
 }
 let timelineHighlight = {}; // gameId -> the player tapped in the chips row (shown in blue)
 function tableTimelineOn(){ try { return localStorage.getItem("poker-table-view") === "timeline"; } catch(e) { return false; } }
+// The game's tabs (משחק / שולחן / ציר זמן / הזמנה): which one is open, and the ones left by a
+// tap or swipe - the phone's Back goes back through them before leaving the game.
+var tabBack = {gid: null, stack: []};
+function curTabKey(){ return tableSubView === "player" ? "game" : tableSubView === "invite" ? "invite" : (tableTimelineOn() ? "timeline" : "table"); }
+function applyTabKey(k){
+  if (k === "game") tableSubView = "player";
+  else if (k === "invite") tableSubView = "invite";
+  else { tableSubView = "table"; setTableView(k); }
+}
+function noteTabLeave(next){
+  if (tabBack.gid !== nav.gameId) tabBack = {gid: nav.gameId, stack: []};
+  const cur = curTabKey();
+  if (cur === next) return;
+  tabBack.stack.push(cur);
+  if (tabBack.stack.length > 10) tabBack.stack.shift();
+}
 function setTableView(v){ try { localStorage.setItem("poker-table-view", v); } catch(e) {} }
 // Opening the app (e.g. straight into a table from an invite link) starts on the seats too.
 setTableView("table");
@@ -13596,9 +13613,8 @@ function attachHandlers(){
   attachTabSwipe(app);
   app.querySelectorAll("[data-game-tab]").forEach(el => el.onclick = () => {
     const t = el.dataset.gameTab;
-    if (t === "game") tableSubView = "player";
-    else if (t === "invite") tableSubView = "invite";
-    else { tableSubView = "table"; setTableView(t); }
+    noteTabLeave(t);
+    applyTabKey(t);
     render();
   });
   app.querySelectorAll("[data-monthly-report]").forEach(el => el.onclick = () => openModal({type: "monthlyReport", communityId: el.dataset.monthlyReport}));
@@ -16135,6 +16151,12 @@ window.addEventListener("popstate", async () => {
   }
   if (shouldShowGameWelcome()) return;
   if (nav.screen === "table") {
+    // back through the tabs first (e.g. שולחן -> משחק, Back -> שולחן again)
+    if (tabBack.gid === nav.gameId) {
+      while (tabBack.stack.length && tabBack.stack[tabBack.stack.length - 1] === curTabKey()) tabBack.stack.pop();
+      const k = tabBack.stack.pop();
+      if (k) { applyTabKey(k); render(); topUpHistory(); return; }
+    }
     const g = nav.gameId && getGame(nav.gameId);
     const communityId = nav.communityId || (g && g.communityId);
     if (communityId && getCommunity(communityId)) go("community", {communityId});
