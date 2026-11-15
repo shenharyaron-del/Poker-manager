@@ -13737,6 +13737,8 @@ function attachHandlers(){
       const local = {...ev, ts: Date.now()};
       if (!gameStartEvent(g)) g.events.push(local);
       render();
+      // nobody took the treasurer's job before the start: it can still be taken from the menu
+      if (!gameTreasurer(g)) showAlert("המשחק התחיל. אפשר לקבוע גיזבר גם עכשיו - דרך התפריט ☰ (\"אני גיזבר הערב\").", 7000);
       v2FetchWithRetry("POST", `/games/${gameId}/events`, ev).catch(() => {
         const g2 = getGame(gameId);
         if (g2 && g2.events) g2.events = g2.events.filter(e => e !== local);
