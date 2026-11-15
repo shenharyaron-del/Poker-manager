@@ -764,6 +764,11 @@ html.theme-light .menu-sec{color:#9a5f12;}
 .checkbox-row input{width:17px;height:17px;accent-color:var(--gold);}
 .entry-group-names{margin:-4px 0 12px;text-align:center;color:var(--muted);font-size:16px;line-height:1.5;}
 .reg-empty{text-align:center;color:var(--muted);font-size:15px;padding:10px 4px 6px;}
+.co-lines{font-size:17px;color:var(--muted);line-height:1.6;margin-top:6px;}
+.co-edit-pen{background:none;border:none;padding:0 4px;font:inherit;font-size:17px;color:var(--frame-c,var(--gold));cursor:pointer;vertical-align:baseline;}
+.co-edit{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;}
+.co-edit input{width:90px;font-size:17px;padding:4px 8px;text-align:center;}
+.co-edit-save{padding:5px 14px;border-radius:999px;border:none;background:var(--gold);color:var(--gold-text);font:inherit;font-size:15px;font-weight:800;cursor:pointer;}
 .pick-row{cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;}
 .pick-box{width:22px;height:22px;border-radius:6px;border:2px solid var(--frame-c,var(--gold));flex-shrink:0;display:flex;align-items:center;justify-content:center;}
 .pick-row.sel{border-color:var(--frame-c,var(--gold));background:color-mix(in srgb,var(--gold) 14%,var(--input));}
@@ -9322,6 +9327,7 @@ let playerViewTarget = null;
 // Per game+player: which rebuy chip is picked (two-step: pick, then confirm), whether the
 // "סיום ערב" box is ticked (unlocks the cash-out controls) and the typed chip count - kept
 // across the periodic re-render.
+let coEditFor = null;   // "gameId:playerId" whose end-of-night amount is being fixed (the ✎ by it)
 const rebuyPick = {}, leaveArmed = {}, leaveAmountDraft = {}, rebuyCancelOpen = {}, leaveChipsDraft = {};
 // Chip pictures already checked for being square (saved before chips were cut round).
 const squareChipImages = {};
@@ -9398,9 +9404,11 @@ function renderPlayerScreen(gameId){
     // acting for someone else: whose numbers these are, right above them
     const breakdownHtml = `
       ${viewingOther && p ? `<div class="co-who"><bdi>${esc(p.name)}</bdi></div>` : ""}
-      <div style="font-size:14px;color:var(--muted);line-height:1.6;margin-top:6px;">
+      <div class="co-lines">
         <div>קניה: ${Math.round(buyinTotal)} שח</div>
-        <div>ז'יטונים בסוף הערב: ${Math.round(finalChipsForInfo)} שח</div>
+        ${coEditFor === g.id + ":" + pid
+          ? `<div class="co-edit">ז'יטונים בסוף הערב: <input type="number" inputmode="decimal" min="0" id="co-edit-amount" value="${Math.round(finalChipsForInfo * 100) / 100}" onfocus="this.select()"> שח <button type="button" class="co-edit-save" data-co-edit-save="${pid}">שמור</button><button type="button" class="lb-cancel" data-co-edit-cancel>ביטול</button></div>`
+          : `<div>ז'יטונים בסוף הערב: ${Math.round(finalChipsForInfo)} שח${canEndNightFor(g, pid) && !gameLocked(g) ? ` <button type="button" class="co-edit-pen" data-co-edit="${pid}" title="עדכון סכום היציאה" aria-label="עדכון סכום היציאה">✎</button>` : ""}</div>`}
       </div>
       ${profitLine}
     `;
@@ -13800,6 +13808,23 @@ function attachHandlers(){
     if (amt) amt.value = total ? String(total) : "";
     leaveAmountDraft[key] = total ? String(total) : "";
   });
+  // ✎ by a left player's end-of-night chips: fix the amount in place
+  app.querySelectorAll("[data-co-edit]").forEach(el => el.onclick = () => { coEditFor = nav.gameId + ":" + el.dataset.coEdit; render(); setTimeout(() => { const i = document.getElementById("co-edit-amount"); if (i) i.focus(); }, 0); });
+  app.querySelectorAll("[data-co-edit-cancel]").forEach(el => el.onclick = () => { coEditFor = null; render(); });
+  app.querySelectorAll("[data-co-edit-save]").forEach(el => el.onclick = async () => {
+    const gameId = nav.gameId, pid = el.dataset.coEditSave, g = getGame(gameId);
+    const amount = parseFloat((document.getElementById("co-edit-amount") || {}).value);
+    if (isNaN(amount) || amount < 0) { showAlert("הזינו את סכום הז'יטונים (0 אם לא נשאר כלום)."); return; }
+    const rounded = Math.round(amount * 100) / 100, co = g.cashouts[pid];
+    if (!co) { coEditFor = null; render(); return; }
+    el.disabled = true; showButtonLoading(el);
+    try {
+      if (USE_RELATIONAL_API) { await v2SetCashout(gameId, pid, rounded, co.arrangedWith || [], rounded); await v2MaybeAutoCloseNight(gameId); }
+      else await mutateAndSave(() => { const fg = getGame(gameId); fg.cashouts[pid] = {...fg.cashouts[pid], amount: rounded}; if (!fg.liveChips) fg.liveChips = {}; fg.liveChips[pid] = rounded; maybeAutoCloseNight(fg); });
+    } catch(e) { showAlert(e && e.status === 423 ? "הערב נעול - צריך לפתוח אותו לעריכה קודם." : "שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); el.disabled = false; render(); return; }
+    coEditFor = null; render();
+  });
+  app.querySelectorAll("[data-co-edit-amount], #co-edit-amount").forEach(i => i.onkeydown = e => { if (e.key === "Enter") { const b = app.querySelector("[data-co-edit-save]"); if (b) b.click(); } });
   app.querySelectorAll("[data-leave-confirm]").forEach(el => el.onclick = async () => {
     const gameId = nav.gameId, pid = viewedPid();
     const key = gameId + ":" + pid;
