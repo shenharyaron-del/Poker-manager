@@ -9417,12 +9417,14 @@ function renderPlayerScreen(gameId){
     } else if (c.settlementDefault === 'paybox') {
       statusHtml = profitForInfo >= 0
         ? `<div style="font-size:17px;color:var(--muted);margin-top:10px;">הרווח יחולק אחרי שכולם ישלמו לקבוצה</div>`
+        : viewingOther ? ""   // working on someone else's screen: the transfer is theirs to make, from their own phone
         : (activePayboxLink
             ? `<a href="${esc(activePayboxLink)}" class="btn btn-blue pay-group"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> העברה לקבוצת פייבוקס</a>`
             : `<div style="font-size:16px;color:var(--muted);margin-top:10px;">לא הוגדרה קבוצת פייבוקס</div>`);
     } else if (c.settlementDefault === 'bit') {
       statusHtml = profitForInfo >= 0
         ? `<div style="font-size:17px;color:var(--muted);margin-top:10px;">הרווח יחולק אחרי שכולם ישלמו לקבוצה</div>`
+        : viewingOther ? ""   // working on someone else's screen: the transfer is theirs to make, from their own phone
         : (activeBitLink
             ? `<a href="${esc(activeBitLink)}" class="btn pay-group" style="background:#0070E0;color:#fff;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;"> העברה לביט הקבוצתי</a>`
             : `<div style="font-size:16px;color:var(--muted);margin-top:10px;">לא הוגדרה קבוצת ביט</div>`);
