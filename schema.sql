@@ -123,6 +123,7 @@ CREATE TABLE cashouts (
   amount NUMERIC,
   ts TIMESTAMPTZ,
   arranged_with JSONB,
+  chip_counts JSONB,  -- chip id -> how many, when the player counted by type
   PRIMARY KEY (game_id, player_id)
 );
 

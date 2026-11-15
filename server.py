@@ -222,6 +222,8 @@ _INIT_STATEMENTS = (
     # A one-off guest's gender (ז / נ in the add-player window) - guests have no roster
     # row to hold it, so it lives on their row for that one game. NULL = not given.
     "ALTER TABLE game_players ADD COLUMN IF NOT EXISTS gender TEXT",
+    # how many of each of the club's chips a player left with, when they counted by type
+    "ALTER TABLE cashouts ADD COLUMN IF NOT EXISTS chip_counts JSONB",
     # One-time, short-lived WebAuthn challenges (register or login), deleted when used.
     "CREATE TABLE IF NOT EXISTS passkey_challenges ("
     "  id TEXT PRIMARY KEY,"
@@ -1688,9 +1690,9 @@ def _games_full(cur, base_rows):
     cur.execute("SELECT game_id, id, player_id, amount, ts, actor_name FROM buyins WHERE game_id = ANY(%s) ORDER BY ts", (ids,))
     for gid, bid, pid, amount, ts, actor_name in cur.fetchall():
         games[gid]["buyins"].append({"id": bid, "playerId": pid, "amount": _num(amount), "ts": _ms(ts), "actorName": actor_name})
-    cur.execute("SELECT game_id, player_id, amount, ts, arranged_with FROM cashouts WHERE game_id = ANY(%s)", (ids,))
-    for gid, pid, amount, ts, arranged_with in cur.fetchall():
-        games[gid]["cashouts"][pid] = {"amount": _num(amount), "ts": _ms(ts), "arrangedWith": arranged_with or []}
+    cur.execute("SELECT game_id, player_id, amount, ts, arranged_with, chip_counts FROM cashouts WHERE game_id = ANY(%s)", (ids,))
+    for gid, pid, amount, ts, arranged_with, chip_counts in cur.fetchall():
+        games[gid]["cashouts"][pid] = {"amount": _num(amount), "ts": _ms(ts), "arrangedWith": arranged_with or [], **({"chipCounts": chip_counts} if chip_counts else {})}
     cur.execute("SELECT game_id, id, player_id, amount, ts FROM paybox_payments WHERE game_id = ANY(%s) ORDER BY ts", (ids,))
     for gid, pay_id, pid, amount, ts in cur.fetchall():
         games[gid]["payboxPayments"].append({"id": pay_id, "playerId": pid, "amount": _num(amount), "ts": _ms(ts)})
@@ -1807,13 +1809,14 @@ def v2_get_game_summary(game_id):
             )
             buyin_totals = [{"playerId": r[0], "amount": _num(r[1])} for r in cur.fetchall()]
 
-            cur.execute("SELECT player_id, amount, ts, arranged_with FROM cashouts WHERE game_id = %s", (gid,))
+            cur.execute("SELECT player_id, amount, ts, arranged_with, chip_counts FROM cashouts WHERE game_id = %s", (gid,))
             cashouts = {}
-            for player_id, amount, ts, arranged_with in cur.fetchall():
+            for player_id, amount, ts, arranged_with, chip_counts in cur.fetchall():
                 cashouts[player_id] = {
                     "amount": _num(amount),
                     "ts": int(ts.timestamp() * 1000) if ts else None,
                     "arrangedWith": arranged_with or [],
+                    **({"chipCounts": chip_counts} if chip_counts else {}),
                 }
 
             cur.execute(
@@ -3688,6 +3691,14 @@ def v2_set_cashout(game_id, player_id):
         return jsonify({"error": "chips must be a number >= 0"}), 400
     if arranged_with is not None and (not isinstance(arranged_with, list) or not all(_valid_id(x) for x in arranged_with)):
         return jsonify({"error": "arrangedWith must be a list of player ids"}), 400
+    # how many of each chip they counted (chip id -> count), when counted by type; any other
+    # change of the amount sends none and clears it
+    chip_counts = body.get("chipCounts")
+    if chip_counts is not None:
+        if (not isinstance(chip_counts, dict) or len(chip_counts) > 30
+                or not all(_valid_id(k) and isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 100000 for k, v in chip_counts.items())):
+            return jsonify({"error": "chipCounts must map chip ids to whole counts"}), 400
+        chip_counts = {k: v for k, v in chip_counts.items() if v} or None
     with get_db() as conn:
         with conn.cursor() as cur:
             # Same "is this playerId actually seated in this game" check as the buy-in
@@ -3698,11 +3709,11 @@ def v2_set_cashout(game_id, player_id):
                 conn.rollback()
                 return jsonify({"error": "player not in this game"}), 400
             cur.execute(
-                "INSERT INTO cashouts (game_id, player_id, amount, ts, arranged_with) "
-                "VALUES (%s,%s,%s,now(),%s) "
+                "INSERT INTO cashouts (game_id, player_id, amount, ts, arranged_with, chip_counts) "
+                "VALUES (%s,%s,%s,now(),%s,%s) "
                 "ON CONFLICT (game_id, player_id) DO UPDATE SET amount = EXCLUDED.amount, "
-                "arranged_with = EXCLUDED.arranged_with RETURNING (xmax = 0)",
-                (game_id, player_id, amount, Json(arranged_with or [])),
+                "arranged_with = EXCLUDED.arranged_with, chip_counts = EXCLUDED.chip_counts RETURNING (xmax = 0)",
+                (game_id, player_id, amount, Json(arranged_with or []), Json(chip_counts) if chip_counts else None),
             )
             fresh = cur.fetchone()[0]
             # Every time someone leaves is kept as an event too: the cashout row itself is
