@@ -769,6 +769,7 @@ html.theme-light .menu-sec{color:#9a5f12;}
 .co-edit{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;}
 .co-types{margin-top:6px;}
 .co-frame{margin:12px 0 0;text-align:center;}
+.co-frame + #co-live-profit{margin-top:10px!important;}
 .co-amt{display:flex;align-items:center;justify-content:center;gap:8px;}
 .co-amt input{width:140px;font-size:22px;padding:6px 10px;text-align:center;}
 .co-amt span{font-size:18px;color:var(--muted);}
@@ -8529,6 +8530,30 @@ function updateRealVh(){
   // ...or in the end-of-night frame ("סיימתי את הערב"): the whole frame above the keyboard,
   // down to "בקופה נשארו / נשארו X שחקנים"
   else if (kb && !wasKb && ae.closest && ae.closest(".lv-body")) { setTimeout(() => fitLeaveFrame(ae), 80); setTimeout(() => fitLeaveFrame(ae), 400); }
+  // ...or in the ✎ frame (ז'יטונים בסוף הערב): the רווח / הפסד line under it right above the keyboard
+  else if (kb && !wasKb && ae.closest && ae.closest(".co-frame")) { setTimeout(() => fitCoFrame(ae), 80); setTimeout(() => fitCoFrame(ae), 400); }
+}
+// Scrolls so the result line under the ✎ frame sits just above the keyboard, the field being
+// typed in still in view.
+function fitCoFrame(ae){
+  const res = document.getElementById("co-live-profit"); if (!res || !ae) return;
+  let sc = res.parentElement;
+  while (sc && sc !== document.body) { const oy = getComputedStyle(sc).overflowY; if (oy === "auto" || oy === "scroll") break; sc = sc.parentElement; }
+  if (sc === document.body) sc = null;
+  const vv = window.visualViewport;
+  const visBottom = (vv ? vv.offsetTop + vv.height : window.innerHeight) - 6;
+  const visTop = Math.max(vv ? vv.offsetTop : 0, sc ? sc.getBoundingClientRect().top : 0) + 6;
+  let delta = res.getBoundingClientRect().bottom - visBottom;
+  const top = ae.getBoundingClientRect().top - 4;
+  if (top - delta < visTop) delta = top - visTop;
+  if (Math.abs(delta) < 2) return;
+  // not enough below to scroll that far (some phones don't report the keyboard's height):
+  // room is added at the bottom for this edit
+  if (sc && delta > 0) {
+    const room = sc.scrollHeight - sc.clientHeight - sc.scrollTop;
+    if (room < delta) sc.style.paddingBottom = (parseFloat(getComputedStyle(sc).paddingBottom) + delta - room + 20) + "px";
+  }
+  if (sc) sc.scrollTop += delta; else window.scrollBy(0, delta);
 }
 // Scrolls so the end-of-night frame sits in the part of the screen the keyboard leaves
 // visible, down to its pot summary ("בקופה נשארו / נשארו X שחקנים"). The "סיים את הערב"
@@ -9449,8 +9474,7 @@ function renderPlayerScreen(gameId){
         <div>קניה: ${Math.round(buyinTotal)} שח</div>
         ${editing ? "" : `<div>ז'יטונים בסוף הערב: ${Math.round(finalChipsForInfo)} שח${canEndNightFor(g, pid) && !gameLocked(g) ? ` <button type="button" class="co-edit-pen" data-co-edit="${pid}" title="עדכון סכום היציאה" aria-label="עדכון סכום היציאה">✎</button>` : ""}</div>`}
       </div>
-      ${shownProfitLine}
-      ${editFrame}
+      ${editing ? editFrame + shownProfitLine : shownProfitLine}
     `;
     const activePayboxLink = getActivePayboxLink(c);
     const activeBitLink = getActiveBitLink(c);
@@ -13860,15 +13884,15 @@ function attachHandlers(){
     el.textContent = pr >= 0 ? `רווח ${pr} שח` : `הפסד ${Math.abs(pr)} שח`;
     fixNegativeNumbers(el);
   };
-  // with the keyboard up, the result line goes to the top of what's still visible
-  const coRevealProfit = () => { const el = document.getElementById("co-live-profit"); if (el) el.scrollIntoView({block: "start", behavior: "smooth"}); };
+  // with the keyboard up, the result line (under the frame) sits right above it
+  const coRevealProfit = () => { if (document.body.classList.contains("kb-open")) fitCoFrame(document.activeElement); };
+  app.querySelectorAll(".co-frame input").forEach(i => i.addEventListener("focus", () => setTimeout(() => fitCoFrame(i), 80)));
   app.querySelectorAll("[data-co-edit]").forEach(el => el.onclick = () => {
     coEditFor = nav.gameId + ":" + el.dataset.coEdit; coEditDraft[coEditFor] = {};
     render();
     const i = document.getElementById("co-edit-amount");
     if (i) { i.focus({preventScroll: true}); i.select(); }
-    setTimeout(coRevealProfit, 350);
-    if (window.visualViewport) { const once = () => { window.visualViewport.removeEventListener("resize", once); setTimeout(coRevealProfit, 50); }; window.visualViewport.addEventListener("resize", once); setTimeout(() => window.visualViewport.removeEventListener("resize", once), 1500); }
+    setTimeout(coRevealProfit, 450);
   });
   app.querySelectorAll("[data-co-edit-cancel]").forEach(el => el.onclick = () => { delete coEditDraft[coEditFor]; coEditFor = null; render(); });
   const coAmt = document.getElementById("co-edit-amount");
