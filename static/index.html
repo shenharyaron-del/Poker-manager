@@ -9373,6 +9373,23 @@ function chipCountsFor(c, counts, amount){
   return Object.keys(out).length && Math.abs(Math.round(sum * 100) / 100 - amount) < 0.01 ? out : null;
 }
 const coEditDraft = {};   // what's typed in the ✎ frame, per "gameId:playerId"
+// Number fields where typing replaces the value without selecting it (a selection brings up
+// the phone's cut / copy bar): the field empties on focus and shows its value as a faint
+// hint; left empty, it gets that value back.
+function hintReplace(i, onFocus){
+  if (i.dataset.hintReplace) return;
+  i.dataset.hintReplace = "1";
+  const ph = i.placeholder;
+  i.addEventListener("focus", () => {
+    if (i.value !== "") { i.dataset.was = i.value; i.placeholder = i.value; i.value = ""; }
+    if (onFocus) onFocus();
+  });
+  i.addEventListener("blur", () => {
+    if (i.value === "" && i.dataset.was != null) i.value = i.dataset.was;
+    delete i.dataset.was;
+    i.placeholder = ph;
+  });
+}
 let coEditFor = null;   // "gameId:playerId" whose end-of-night amount is being fixed (the ✎ by it)
 const rebuyPick = {}, leaveArmed = {}, leaveAmountDraft = {}, rebuyCancelOpen = {}, leaveChipsDraft = {};
 // Chip pictures already checked for being square (saved before chips were cut round).
@@ -9677,7 +9694,7 @@ function renderPlayerScreen(gameId){
         <div class="lv-types-sep">או ספרו לפי סוג</div>
         <div class="lv-types${many ? " many" : ""}" style="grid-template-columns:repeat(${cvs.length},1fr);">
           ${cvs.map(cv => cv.image ? `<img src="${esc(cv.image)}" alt="" draggable="false">` : `<span class="lv-type-noimg">₪${esc(String(cv.value))}</span>`).join("")}
-          ${cvs.map(cv => `<input type="number" inputmode="numeric" autocomplete="off" min="0" placeholder="0" data-lv-type="${cv.id}" data-lv-type-value="${esc(String(cv.value))}" value="${esc(String(counts[cv.id] ?? ""))}" ${armed?'':'disabled'} onfocus="this.select()">`).join("")}
+          ${cvs.map(cv => `<input type="number" inputmode="numeric" autocomplete="off" min="0" placeholder="0" data-lv-type="${cv.id}" data-lv-type-value="${esc(String(cv.value))}" value="${esc(String(counts[cv.id] ?? ""))}" ${armed?'':'disabled'}>`).join("")}
           ${cvs.map(cv => `<div class="lv-type-x" data-lv-type-x="${cv.id}">${line(cv)}</div>`).join("")}
         </div>`;
       })()}
@@ -13888,20 +13905,9 @@ function attachHandlers(){
   };
   // with the keyboard up, the result line (under the frame) sits right above it
   const coRevealProfit = () => { if (document.body.classList.contains("kb-open")) fitCoFrame(document.activeElement); };
-  app.querySelectorAll(".co-frame input").forEach(i => {
-    // typing replaces the value without selecting it (a selection brings up the phone's
-    // cut / copy bar): the field empties on focus and shows its value as a faint hint;
-    // left empty, it gets that value back
-    i.addEventListener("focus", () => {
-      if (i.value !== "") { i.dataset.was = i.value; i.placeholder = i.value; i.value = ""; }
-      setTimeout(() => fitCoFrame(i), 80);
-    });
-    i.addEventListener("blur", () => {
-      if (i.value === "" && i.dataset.was != null) i.value = i.dataset.was;
-      delete i.dataset.was;
-      if (i.id !== "co-edit-amount") i.placeholder = "0";
-    });
-  });
+  app.querySelectorAll(".co-frame input").forEach(i => hintReplace(i, () => setTimeout(() => fitCoFrame(i), 80)));
+  // the end-of-night form ("סיימתי את הערב"): the amount, the chips calculator and the counts by type
+  app.querySelectorAll("#lv-amount, #lv-chips, [data-lv-type]").forEach(i => hintReplace(i));
   app.querySelectorAll("[data-co-edit]").forEach(el => el.onclick = () => {
     coEditFor = nav.gameId + ":" + el.dataset.coEdit; coEditDraft[coEditFor] = {};
     render();
@@ -13955,6 +13961,7 @@ function attachHandlers(){
     delete coEditDraft[coEditFor]; coEditFor = null; render();
   });
   app.querySelectorAll("[data-leave-confirm]").forEach(el => el.onclick = async () => {
+    if (document.activeElement && document.activeElement.dataset && document.activeElement.dataset.hintReplace) document.activeElement.blur();
     const gameId = nav.gameId, pid = viewedPid();
     const key = gameId + ":" + pid;
     // Left empty, the amount is the gray "0" shown in the box - nothing left.
