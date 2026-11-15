@@ -13873,7 +13873,16 @@ function attachHandlers(){
   app.querySelectorAll("[data-co-edit-cancel]").forEach(el => el.onclick = () => { delete coEditDraft[coEditFor]; coEditFor = null; render(); });
   const coAmt = document.getElementById("co-edit-amount");
   if (coAmt) {
-    coAmt.oninput = () => { (coEditDraft[coEditFor] = coEditDraft[coEditFor] || {}).amount = coAmt.value; coShowProfit(); };
+    // typing the amount itself: the counts by type no longer describe it - they're cleared
+    coAmt.oninput = () => {
+      app.querySelectorAll("[data-co-type]").forEach(i => {
+        i.value = "";
+        const v = parseFloat(i.dataset.coTypeValue) || 0, x = app.querySelector(`[data-co-type-x="${i.dataset.coType}"]`);
+        if (x) x.innerHTML = x.innerHTML.includes("<br>") ? `×${v}<br>₪0` : `×${v} = ₪0`;
+      });
+      coEditDraft[coEditFor] = {amount: coAmt.value, counts: {}};
+      coShowProfit();
+    };
     coAmt.onkeydown = e => { if (e.key === "Enter") { const b = app.querySelector("[data-co-edit-save]"); if (b) b.click(); } };
   }
   app.querySelectorAll("[data-co-type]").forEach(inp => inp.oninput = () => {
