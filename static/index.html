@@ -9686,7 +9686,7 @@ function renderPlayerScreen(gameId){
       if (mineOut) return `<div class="pp-me-card out" dir="rtl">${meAv(myPlayerId)}<span class="pp-me-txt"><span class="pp-me-name"><bdi>${esc(me.name)}</bdi></span></span></div>`;
       return `<button type="button" class="pp-me-card" data-pp-back-me dir="rtl" title="חזרה למסך שלי">${meAv(myPlayerId)}<span class="pp-me-txt"><span class="pp-me-name"><bdi>${esc(me.name)}</bdi></span>${mineOut ? "" : `<span class="pp-total" data-player-total>₪${myTotal}</span>`}</span></button>`;
     }
-    return `<div class="pp-me-card${canActForOthers(g) ? " sel" : ""}" dir="rtl">${meAv(pid)}<span class="pp-me-txt"><span class="pp-me-name"${font ? ` style="font-size:${Math.min(font + 3, 23)}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut && !selfReturn ? ' · יצא' : ''}</span>${cashedOut ? (selfReturn ? `<button type="button" class="pp-self-return" data-self-return="${pid}">${RETURN_ICON}<span class="ret-txt">חזור למשחק</span></button>` : "") : `<span class="pp-total" data-player-total>₪${buyinTotal}</span>`}</span></div>`;
+    return `<div class="pp-me-card${canActForOthers(g) && !notStarted ? " sel" : ""}" dir="rtl">${meAv(pid)}<span class="pp-me-txt"><span class="pp-me-name"${font ? ` style="font-size:${Math.min(font + 3, 23)}px;"` : ''}><bdi>${esc(nm)}</bdi>${cashedOut && !selfReturn ? ' · יצא' : ''}</span>${cashedOut ? (selfReturn ? `<button type="button" class="pp-self-return" data-self-return="${pid}">${RETURN_ICON}<span class="ret-txt">חזור למשחק</span></button>` : "") : `<span class="pp-total" data-player-total>₪${buyinTotal}</span>`}</span></div>`;
   })();
   // Tiles above the name: everyone who entered tonight, in order, then a "הזמן שחקן" tile
   // in the next free spot (it replaces the header's invite button here).
@@ -9700,8 +9700,8 @@ function renderPlayerScreen(gameId){
   // Before "תחילת משחק": who may start it (table admins, and tonight's treasurer - a regular
   // player who took it too) is told to press it; everyone else that it hasn't started yet.
   const canStartGame = isAdminView || iAmTreasurer(g);
-  const actStrip = (notStarted && !(viewingOther && p))
-    ? `<div class="act-strip"><span><i class="act-ic">!</i><em>${canStartGame ? "לחצו על 'תחילת משחק' כדי להתחיל את הערב" : "מחכים לתחילת משחק"}</em></span></div>`
+  const actStrip = notStarted
+    ? (canStartGame ? "" : `<div class="act-strip"><span><i class="act-ic">!</i><em>מחכים לתחילת משחק</em></span></div>`)
     : !(canActForOthers(g)) ? "" : viewingOther && p
     ? `<div class="act-strip other"><span><i class="act-ic">!</i><em>ריביי / יציאה יירשמו על <b><bdi>${esc(tableShortName(g, pid))}</bdi></b></em></span><button type="button" data-pp-back-me>חזרה ${g2("אליי", "אליי")}</button></div>`
     : `<div class="act-strip"><span><i class="act-ic">!</i><em>ריביי / יציאה יירשמו <b>עליי</b></em></span></div>`;
@@ -9719,9 +9719,10 @@ function renderPlayerScreen(gameId){
       n === 1 ? (hiding ? "הצג את מי שיצא" : "הסתר את מי שיצא") : `${hiding ? "הצג" : "הסתר"} ${n} שיצאו`}</button>`;
     const shownIds = hiding ? othersTonight.filter(id => !hideable.includes(id)) : othersTonight;
     return playersCarouselHtml("player:" + g.id, g, c, tableSeatOrder(g, shownIds, myPlayerId), { footer, top: nameHtml,
-      onId: pid, attr: canActForOthers(g) ? "data-pp-view" : "data-pp-noview",
+      // before "תחילת משחק" it's only who's at the table (nobody to pick yet - no rebuys)
+      onId: notStarted ? null : pid, attr: canActForOthers(g) && !notStarted ? "data-pp-view" : "data-pp-noview",
       // The table's admins (and tonight's treasurer) act for someone else - for them the frame says so.
-      legend: canActForOthers(g) ? g2("בחר שחקן כדי לפעול בשמו", "בחרי שחקן כדי לפעול בשמו") : "",
+      legend: notStarted ? `יושבים בשולחן (${(g.seats || []).filter(Boolean).length})` : canActForOthers(g) ? g2("בחר שחקן כדי לפעול בשמו", "בחרי שחקן כדי לפעול בשמו") : "",
       under: id => !(id in (g.cashouts || {})) ? `<span class="pp-ci-amt">₪${Math.round((totals[id] || 0) * 100) / 100}</span>`
         : (gameTreasurer(g) ? iAmTreasurer(g) : isAdminView) ? `<span class="pp-ci-return" role="button" data-admin-return-to-game="${id}">${RETURN_ICON}<span class="ret-txt">החזר</span></span>`
         : `<span class="pp-ci-out">יצא</span>`,
@@ -9752,6 +9753,7 @@ function renderPlayerScreen(gameId){
           if (tr) return `<div class="tr-strip info">${TREASURER_ICON}<span>${playerIsFemale(g, c, tr) ? "גיזברית" : "גיזבר"} הערב: <b><bdi>${esc(tableShortName(g, tr))}</bdi></b></span>${isAdminView ? `<button type="button" class="tr-clear" data-treasurer-clear>הסר מגיזברות</button>` : ""}</div>`;
           return "";
         })()}
+        ${(notStarted && !cashedOut && canStartGame) ? `<button type="button" class="btn btn-primary btn-block gs-start" data-start-game="${g.id}">${icon('check')} תחילת משחק</button>` : ""}
         ${actStrip}
         ${carouselHtml}
         ${carouselHtml ? "" : nameHtml}
@@ -9765,10 +9767,9 @@ function renderPlayerScreen(gameId){
         })()}
         ${cashedOutInfoHtml}
       </div>
-      ${(cashedOut || armed) ? "" : canHandleMoney(g) ? `<fieldset class="leave-frame rb-frame"><legend>ריביי${forName}</legend>${rebuyHtml}</fieldset>`
+      ${(cashedOut || armed || notStarted) ? "" : canHandleMoney(g) ? `<fieldset class="leave-frame rb-frame"><legend>ריביי${forName}</legend>${rebuyHtml}</fieldset>`
         : `<div class="tr-note">הריביי אצל <b><bdi>${esc(tableShortName(g, gameTreasurer(g)))}</bdi></b> - ${playerIsFemale(g, c, gameTreasurer(g)) ? "גיזברית" : "גיזבר"} הערב</div>`}
       ${(cashedOut || (notStarted && !armed) || !canEndNightFor(g, pid)) ? "" : `<fieldset class="leave-frame lv-frame${armed?' lv-frame-top':''}">${leaveHtml}</fieldset>`}
-      ${(notStarted && !cashedOut && canStartGame) ? `<button type="button" class="btn btn-primary btn-block gs-start" data-start-game="${g.id}">${icon('check')} תחילת משחק</button>` : ""}
       ${adminPlayerActions}
       ${(showClosedToggle && !notStarted) ? `<div class="night-closed-row" style="display:flex;justify-content:center;margin-top:0;flex-shrink:0;"><label class="night-closed-toggle" data-toggle-end-night="${g.id}"><input type="checkbox" ${g.closed?'checked':''} onclick="return false;"><span>ערב סגור</span></label></div>` : ""}
       ${cashedOut ? `<fieldset class="leave-frame night-recap" style="margin-top:6px;text-align:right;font-size:18px;"><legend>סיכום הערב</legend><div class="night-recap-body">${nightSummaryHtml(g, pid,
