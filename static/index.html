@@ -764,7 +764,6 @@ html.theme-light .menu-sec{color:#9a5f12;}
 .checkbox-row input{width:17px;height:17px;accent-color:var(--gold);}
 .entry-group-names{margin:-4px 0 12px;text-align:center;color:var(--muted);font-size:16px;line-height:1.5;}
 .reg-empty{text-align:center;color:var(--muted);font-size:15px;padding:10px 4px 6px;}
-.seat-history-remove{display:block;width:100%;margin-top:4px;padding:6px 4px 2px;background:none;border:none;border-top:1px solid rgba(0,0,0,.12);color:#be123c;font:inherit;font-size:12px;font-weight:700;text-decoration:underline;text-underline-offset:2px;cursor:pointer;white-space:nowrap;}
 .pick-row{cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;}
 .pick-box{width:22px;height:22px;border-radius:6px;border:2px solid var(--frame-c,var(--gold));flex-shrink:0;display:flex;align-items:center;justify-content:center;}
 .pick-row.sel{border-color:var(--frame-c,var(--gold));background:color-mix(in srgb,var(--gold) 14%,var(--input));}
@@ -10109,9 +10108,6 @@ function renderTable(gameId){
             <span>₪${b.amount}</span>
           </div>`;
         }).join("") || `<div class="seat-history-row" style="border:none;color:#888;">אין קניות עדיין</div>`;
-        // sat down by mistake (only the entry so far): take them off the table from here
-        const removeRow = ((admin || iAmTreasurer(g)) && sortedBuyins.length <= 1)
-          ? `<button type="button" class="seat-history-remove" data-admin-remove-seat="${pid}">${playerIsFemale(g, c, pid) ? "נכנסה" : "נכנס"} בטעות? הסר מהשולחן</button>` : "";
         const hAlign = x > 60 ? 'right:0;' : (x < 40 ? 'left:0;' : 'left:50%;transform:translateX(-50%);');
         // A seat low enough on the table has too little room below it before hitting
         // .poker-table-wrap's own overflow:hidden edge - open upward instead (over the
@@ -10122,7 +10118,7 @@ function renderTable(gameId){
         // continuous card (see infoRadius below) - only when opening downward, since
         // opening upward overlaps the avatar instead of the nameplate.
         const radius = popupBelow ? '0 0 10px 10px' : '10px';
-        historyPopupHtml = `<div class="seat-history-popup" style="${hAlign}${vAlign}border-radius:${radius};" data-seat-history-popup>${rows}${removeRow}</div>`;
+        historyPopupHtml = `<div class="seat-history-popup" style="${hAlign}${vAlign}border-radius:${radius};" data-seat-history-popup>${rows}</div>`;
         if (popupBelow) infoRadius = "border-radius:10px 10px 0 0;";
       }
     }
