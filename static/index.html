@@ -9798,8 +9798,16 @@ function renderPlayerScreen(gameId){
   const actStrip = notStarted
     ? (canStartGame ? "" : `<div class="act-strip"><span><i class="act-ic">!</i><em>מחכים לתחילת משחק</em></span></div>`)
     : !(canActForOthers(g)) ? "" : viewingOther && p
-    ? `<div class="act-strip other"><span><i class="act-ic">!</i><em>ריביי / יציאה יירשמו על <b><bdi>${esc(tableShortName(g, pid))}</bdi></b></em></span><button type="button" data-pp-back-me>חזרה ${g2("אליי", "אליי")}</button></div>`
-    : `<div class="act-strip"><span><i class="act-ic">!</i><em>ריביי / יציאה יירשמו <b>עליי</b></em></span></div>`;
+    ? (() => {
+        // what the screen does right now: rebuys / leaving, only the leaving (the box is
+        // ticked), or nothing (they've left - just their numbers)
+        const nm = `<b><bdi>${esc(tableShortName(g, pid))}</bdi></b>`;
+        const txt = cashedOut ? `צפייה בנתוני ${nm} · ${playerIsFemale(g, c, pid) ? "יצאה" : "יצא"}`
+          : armed ? `היציאה תירשם על ${nm}` : `ריביי / יציאה יירשמו על ${nm}`;
+        return `<div class="act-strip other"><span><i class="act-ic">!</i><em>${txt}</em></span><button type="button" data-pp-back-me>חזרה ${g2("אליי", "אליי")}</button></div>`;
+      })()
+    : cashedOut ? ""   // I've left: nothing is recorded from here
+    : `<div class="act-strip"><span><i class="act-ic">!</i><em>${armed ? "היציאה תירשם <b>עליי</b>" : "ריביי / יציאה יירשמו <b>עליי</b>"}</em></span></div>`;
   const carouselHtml = (() => {
     const totals = {};
     (g.buyins || []).forEach(b => { totals[b.playerId] = (totals[b.playerId] || 0) + (b.amount || 0); });
