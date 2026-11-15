@@ -9696,7 +9696,12 @@ function renderPlayerScreen(gameId){
   // "ריביי / יציאה יירשמו עליי / על X": with no treasurer tonight, on everyone's screen (anyone
   // may record for a friend without a phone); with one, only on the treasurer's. Always there
   // when shown (the screen doesn't move when switching), orange while acting for someone else
-  const actStrip = !(canActForOthers(g)) ? "" : viewingOther && p
+  // Before "תחילת משחק": who may start it (table admins, and tonight's treasurer - a regular
+  // player who took it too) is told to press it; everyone else that it hasn't started yet.
+  const canStartGame = isAdminView || iAmTreasurer(g);
+  const actStrip = (notStarted && !(viewingOther && p))
+    ? `<div class="act-strip"><span><i class="act-ic">!</i><em>${canStartGame ? "לחצו על 'תחילת משחק' כדי להתחיל את הערב" : "מחכים לתחילת משחק"}</em></span></div>`
+    : !(canActForOthers(g)) ? "" : viewingOther && p
     ? `<div class="act-strip other"><span><i class="act-ic">!</i><em>ריביי / יציאה יירשמו על <b><bdi>${esc(tableShortName(g, pid))}</bdi></b></em></span><button type="button" data-pp-back-me>חזרה ${g2("אליי", "אליי")}</button></div>`
     : `<div class="act-strip"><span><i class="act-ic">!</i><em>ריביי / יציאה יירשמו <b>עליי</b></em></span></div>`;
   const carouselHtml = (() => {
@@ -9762,7 +9767,7 @@ function renderPlayerScreen(gameId){
       ${(cashedOut || armed) ? "" : canHandleMoney(g) ? `<fieldset class="leave-frame rb-frame"><legend>ריביי${forName}</legend>${rebuyHtml}</fieldset>`
         : `<div class="tr-note">הריביי אצל <b><bdi>${esc(tableShortName(g, gameTreasurer(g)))}</bdi></b> - ${playerIsFemale(g, c, gameTreasurer(g)) ? "גיזברית" : "גיזבר"} הערב</div>`}
       ${(cashedOut || (notStarted && !armed) || !canEndNightFor(g, pid)) ? "" : `<fieldset class="leave-frame lv-frame${armed?' lv-frame-top':''}">${leaveHtml}</fieldset>`}
-      ${(notStarted && !cashedOut) ? `<button type="button" class="btn btn-primary btn-block gs-start" data-start-game="${g.id}">${icon('check')} תחילת משחק</button>` : ""}
+      ${(notStarted && !cashedOut && canStartGame) ? `<button type="button" class="btn btn-primary btn-block gs-start" data-start-game="${g.id}">${icon('check')} תחילת משחק</button>` : ""}
       ${adminPlayerActions}
       ${(showClosedToggle && !notStarted) ? `<div class="night-closed-row" style="display:flex;justify-content:center;margin-top:0;flex-shrink:0;"><label class="night-closed-toggle" data-toggle-end-night="${g.id}"><input type="checkbox" ${g.closed?'checked':''} onclick="return false;"><span>ערב סגור</span></label></div>` : ""}
       ${cashedOut ? `<fieldset class="leave-frame night-recap" style="margin-top:6px;text-align:right;font-size:18px;"><legend>סיכום הערב</legend><div class="night-recap-body">${nightSummaryHtml(g, pid,
