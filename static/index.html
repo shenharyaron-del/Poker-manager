@@ -780,6 +780,20 @@ html.theme-light .menu-sec{color:#9a5f12;}
 .co-edit-cancel{background:transparent;border:1.5px solid var(--frame-c,var(--gold));color:var(--text);}
 .co-edit input{width:90px;font-size:17px;padding:4px 8px;text-align:center;}
 .co-edit-save{padding:5px 14px;border-radius:999px;border:none;background:var(--gold);color:var(--gold-text);font:inherit;font-size:15px;font-weight:800;cursor:pointer;}
+.leave-screen .ls-scroll{padding-top:10px;}
+.ls-head{display:flex;align-items:center;justify-content:center;gap:12px;margin:4px 0 14px;}
+.ls-av{width:56px;height:56px;border-radius:50%;background-size:cover;background-position:center;border:2.5px solid var(--frame-c,var(--gold));box-shadow:0 2px 8px rgba(0,0,0,.25);flex-shrink:0;}
+.ls-title{font-size:14px;font-weight:700;color:var(--muted);}
+.ls-name{font-size:22px;font-weight:800;color:var(--text);line-height:1.2;}
+.ls-for{font-size:13px;font-weight:600;color:var(--muted);}
+.ls-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 14px;}
+.ls-tile{display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 4px 8px;border-radius:14px;border:1px solid var(--frame-c,var(--gold));background:var(--card);}
+.ls-tile span{font-size:13px;color:var(--muted);font-weight:600;}
+.ls-tile b{font-size:22px;font-weight:800;color:var(--text);direction:ltr;}
+.ls-tile small{font-size:12px;color:var(--muted);}
+.ls-tile.win b,.ls-tile.win small{color:#15803d;} .ls-tile.loss b,.ls-tile.loss small{color:#b91c1c;}
+html:not(.theme-light) .ls-tile.win b,html:not(.theme-light) .ls-tile.win small{color:#6ee7b7;} html:not(.theme-light) .ls-tile.loss b,html:not(.theme-light) .ls-tile.loss small{color:#fda4af;}
+.ls-hint{text-align:center;font-size:13px;color:var(--muted);margin:10px 0 0;}
 .pick-row{cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;}
 .pick-box{width:22px;height:22px;border-radius:6px;border:2px solid var(--frame-c,var(--gold));flex-shrink:0;display:flex;align-items:center;justify-content:center;}
 .pick-row.sel{border-color:var(--frame-c,var(--gold));background:color-mix(in srgb,var(--gold) 14%,var(--input));}
@@ -8072,7 +8086,20 @@ function isSeatedInGame(g){
 // A live table: one row of tabs - "משחק" (my player screen, only while I'm seated),
 // "שולחן" (the seats), "ציר זמן" and "הזמנה" (while there's a free seat). Replaces the
 // old swipe between the player and table pages.
+// "סיים את הערב" ticked (and no amount yet): the end-of-night screen - its own page, no menu
+// and no tabs, left only by unticking or by "אישור" (or once someone else enters the amount).
+// Returns the player it's for, else null.
+function leaveScreenPid(){
+  if (nav.screen !== "table" || tableSubView !== "player") return null;
+  const g = getGame(nav.gameId);
+  if (!g || g.gameType === "tournament" || g.closed) return null;
+  const mine = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
+  const pid = (playerViewTarget && playerViewTarget !== "__tools__" && g.players.some(pl => pl.id === playerViewTarget) && canActForOthers(g)) ? playerViewTarget : mine;
+  if (!pid || pid in (g.cashouts || {}) || !(g.seats || []).includes(pid) || !canEndNightFor(g, pid)) return null;
+  return leaveArmed[g.id + ":" + pid] ? pid : null;
+}
 function gameTabsScreen(g, c, seated){
+  if (seated && leaveScreenPid()) return `<div class="swipe-page lux-page player-page leave-screen">${renderPlayerScreen(g.id)}</div>`;
   const canInvite = hasFreeSeat(g);
   const tab = tableSubView === "invite" && canInvite ? "invite"
     : tableSubView === "player" ? "game" : (tableTimelineOn() ? "timeline" : "table");
@@ -8276,7 +8303,7 @@ function render(){
   // menu has "התקנת האפליקציה" anyway.
   const installChip = menuHead ? "" : installChipHtml();
   document.documentElement.classList.toggle("has-install-chip", !!installChip);
-  const cornerBtn = menuHead ? `<button type="button" class="theme-toggle game-menu-btn" data-game-menu>☰ תפריט</button>` : themeToggleHtml();
+  const cornerBtn = menuHead ? (leaveScreenPid() ? "" : `<button type="button" class="theme-toggle game-menu-btn" data-game-menu>☰ תפריט</button>`) : themeToggleHtml();
   html = screenTag.replace(/^<div class="screen-tag"/, installChip ? '<div class="screen-tag with-install"' : '<div class="screen-tag"').replace(/<\/div>$/, cornerBtn + installChip + '</div>') + html;
   // Away from the table at a game I sat at that's still going - whether I'm still playing
   // or already left it: a bar at the bottom with a quick way back to each of them. Taps go
@@ -9840,6 +9867,25 @@ function renderPlayerScreen(gameId){
         : `<span class="pp-ci-out">יצא</span>`,
     });
   })();
+  if (leaveScreenPid() === pid) {
+    // the end-of-night screen: who, what they bought / end with / the result (filled as the
+    // amount is typed - see the ls-tiles handler), then the same frame as always
+    const rp = (c.roster || []).find(r => r.id === pid);
+    const photo = (rp && getPlayerPhoto(rp)) || "/static/logo-watermark.png";
+    const nmShort = p ? tableShortName(g, pid) : "";
+    return `
+    <div class="player-screen-scroll ls-scroll">
+      <div class="ls-head"><span class="ls-av" style="background-image:url('${photo}')"></span>
+        <div class="ls-txt"><div class="ls-title">סיום ערב</div><div class="ls-name"><bdi>${esc(p ? p.name : "")}</bdi>${viewingOther ? ` <span class="ls-for">· נרשם על ידי <bdi>${esc(myIdentity.name || "")}</bdi></span>` : ""}</div></div></div>
+      <div class="ls-tiles" data-ls-buyin="${buyinTotal}">
+        <div class="ls-tile"><span>קנייה</span><b>₪${Math.round(buyinTotal * 100) / 100}</b><small>${myBuyins.length <= 1 ? "כניסה" : `${myBuyins.length} קניות`}</small></div>
+        <div class="ls-tile"><span>בסוף הערב</span><b data-ls-end>—</b><small>&nbsp;</small></div>
+        <div class="ls-tile ls-res"><span>רווח / הפסד</span><b data-ls-res>—</b><small data-ls-res-l>&nbsp;</small></div>
+      </div>
+      <fieldset class="leave-frame lv-frame lv-frame-top">${leaveHtml}</fieldset>
+      <p class="ls-hint">כדי לצאת מהמסך: לחצו "אישור", או בטלו את הסימון של סיום הערב</p>
+    </div>`;
+  }
   // Order (top to bottom): name/total, ריביי buttons, the shared history/feed panel
   // (.player-history-feed, flex:1 - the one section whose size actually adapts, toggled
   // between the two tabs via playerHistoryTab so the leave-table box after it always stays
@@ -13946,6 +13992,24 @@ function attachHandlers(){
   app.querySelectorAll(".co-frame input").forEach(i => hintReplace(i, () => setTimeout(() => fitCoFrame(i), 80)));
   // the end-of-night form ("סיימתי את הערב"): the amount, the chips calculator and the counts by type
   app.querySelectorAll("#lv-amount, #lv-chips, [data-lv-type]").forEach(i => hintReplace(i));
+  // the end-of-night screen's tiles follow the amount as it's typed / counted
+  const lsScroll = app.querySelector(".ls-scroll");
+  if (lsScroll) {
+    const lsTiles = () => {
+      const box = app.querySelector(".ls-tiles"), a = document.getElementById("lv-amount");
+      if (!box || !a) return;
+      const raw = a.value !== "" ? a.value : (a.dataset.was || "");
+      const endEl = box.querySelector("[data-ls-end]"), resEl = box.querySelector("[data-ls-res]"), resL = box.querySelector("[data-ls-res-l]"), tile = box.querySelector(".ls-res");
+      if (raw === "" || isNaN(parseFloat(raw))) { endEl.textContent = "—"; resEl.textContent = "—"; resL.innerHTML = "&nbsp;"; tile.classList.remove("win", "loss"); return; }
+      const end = Math.round(parseFloat(raw) * 100) / 100, res = Math.round((end - (parseFloat(box.dataset.lsBuyin) || 0)) * 100) / 100;
+      endEl.textContent = "₪" + end;
+      resEl.textContent = "₪" + Math.abs(res);
+      resL.textContent = res > 0 ? "רווח" : res < 0 ? "הפסד" : "מאוזן";
+      tile.classList.toggle("win", res > 0); tile.classList.toggle("loss", res < 0);
+    };
+    ["input", "focusin", "focusout"].forEach(ev => lsScroll.addEventListener(ev, () => setTimeout(lsTiles, 0)));
+    lsTiles();
+  }
   app.querySelectorAll("[data-co-edit]").forEach(el => el.onclick = () => {
     coEditFor = nav.gameId + ":" + el.dataset.coEdit; coEditDraft[coEditFor] = {};
     render();
@@ -16365,6 +16429,8 @@ window.addEventListener("popstate", async () => {
     return;
   }
   if (shouldShowGameWelcome()) return;
+  // the end-of-night screen stays until "אישור" or unticking
+  if (leaveScreenPid()) { topUpHistory(); showAlert("כדי לצאת: לחצו \"אישור\", או בטלו את הסימון של סיום הערב.", 4000); return; }
   if (nav.screen === "table") {
     // back through the tabs first (e.g. שולחן -> משחק, Back -> שולחן again)
     if (tabBack.gid === nav.gameId) {
