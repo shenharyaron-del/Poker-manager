@@ -9563,8 +9563,7 @@ function renderPlayerScreen(gameId){
         // how far off: players took out more than went in = money missing, less = money left over
         const off = Math.round((totalCashedOutForSettlement - totalBuyinsForSettlement) * 100) / 100;
         return off ? ` · ${off > 0 ? "חסרים" : "עודף"} ₪${Math.abs(off)}` : "";
-      })()}</button><span class="pot-fix-hand">👈</span></div>` : "")
-      + (viewingOther ? "" : `<button class="btn btn-ghost co-act" data-open-my-stats>${icon('bar')} הביצועים שלי</button>`);
+      })()}</button><span class="pot-fix-hand">👈</span></div>` : "");   // my stats: the 📊 button by the tabs
   }
   const canDeleteBuyins = canHandleMoney(g); // with a treasurer tonight, only them
   // Carries its own playerId (data-delete-seat-buyin-player) rather than relying on
