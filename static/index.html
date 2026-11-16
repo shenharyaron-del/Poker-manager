@@ -797,6 +797,11 @@ html:not(.theme-light) .ls-tile.win b,html:not(.theme-light) .ls-tile.win small{
 /* keyboard up on the end-of-night screen: everything still fits above it - the table's title
    goes, the name shrinks to one line, the tiles get tighter, the leave hint goes */
 body.kb-open:has(.leave-screen) .screen-tag{display:none!important;}
+/* ...and the screen is pinned to exactly what the keyboard leaves visible - its height follows
+   the keyboard as it grows or shrinks (a phone's autofill row on top of it), the page itself
+   doesn't scroll, and whatever doesn't fit scrolls inside it */
+body.kb-open:has(.leave-screen){overflow:hidden!important;}
+body.kb-open .leave-screen .ls-scroll{position:fixed;top:var(--kb-top,0px);left:0;right:0;max-width:520px;margin:0 auto;height:var(--vv-h,100dvh);box-sizing:border-box;overflow-y:auto;padding-bottom:12px!important;z-index:5;background:inherit;}
 body.kb-open .leave-screen .ls-scroll{padding-top:6px;}
 body.kb-open .ls-head{margin:0 0 6px;gap:8px;}
 body.kb-open .ls-av{width:30px;height:30px;border-width:2px;}
@@ -8575,6 +8580,7 @@ function updateRealVh(){
   root.setProperty("--real-vh", (kb ? preKeyboardVh : h) + "px");
   root.setProperty("--kb-top", (kb && vv ? vv.offsetTop : 0) + "px");
   root.setProperty("--kb-h", (kb && vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0) + "px");
+  root.setProperty("--vv-h", h + "px");   // the height the keyboard leaves visible, kept up to date
   if (!document.body) return;
   const wasKb = document.body.classList.contains("kb-open");
   document.body.classList.toggle("kb-open", kb);
