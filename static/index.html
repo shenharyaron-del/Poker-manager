@@ -812,6 +812,9 @@ body.kb-open .ls-tile{padding:5px 4px;gap:0;}
 body.kb-open .ls-tile b{font-size:19px;}
 body.kb-open .ls-tile small{display:none;}
 body.kb-open .ls-hint{display:none;}
+body.kb-open .leave-screen .lv-types-sep{margin:6px 0 2px;font-size:13px;}
+body.kb-open .leave-screen .lv-types img,body.kb-open .leave-screen .lv-type-noimg{width:34px!important;height:34px!important;}
+body.kb-open .leave-screen .lv-pot{margin-top:6px;padding:5px 10px;}
 .pick-row{cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;}
 .pick-box{width:22px;height:22px;border-radius:6px;border:2px solid var(--frame-c,var(--gold));flex-shrink:0;display:flex;align-items:center;justify-content:center;}
 .pick-row.sel{border-color:var(--frame-c,var(--gold));background:color-mix(in srgb,var(--gold) 14%,var(--input));}
@@ -8584,6 +8587,10 @@ function updateRealVh(){
   if (!document.body) return;
   const wasKb = document.body.classList.contains("kb-open");
   document.body.classList.toggle("kb-open", kb);
+  // the keyboard grew while open (e.g. the phone's autofill row on top of it): the end-of-night
+  // frame scrolls up again so its bottom is back in view
+  if (kb && wasKb && updateRealVh.lastH && h < updateRealVh.lastH - 20 && ae.closest && ae.closest(".lv-body")) { setTimeout(() => fitLeaveFrame(ae), 60); setTimeout(() => fitLeaveFrame(ae), 300); }
+  updateRealVh.lastH = kb ? h : 0;
   // Keyboard just opened inside a modal: bring the field into the (now smaller) view.
   if (kb && !wasKb && ae.closest && ae.closest(".modal")) setTimeout(() => { try { ae.scrollIntoView({block: "center"}); } catch(e) {} }, 60);
   // ...or in the end-of-night frame ("סיימתי את הערב"): the whole frame above the keyboard,
