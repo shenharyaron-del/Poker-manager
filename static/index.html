@@ -2296,6 +2296,13 @@ html:not(.theme-light) .game-seg button.on{color:#fff;}
 html.theme-light.theme-blue .act-strip.other{background:#fff3cf;border:1.5px solid #2f7fa8;color:#0e2633;}
 html.theme-light.theme-blue .act-strip.other b{color:#9a5f12;}
 html.theme-light.theme-blue .act-strip.other button{background:#fff;color:#0e2633;border:1px solid #2f7fa8;}
+/* "יש לך משחק פעיל": a slowly pulsing frame - red on the light themes, gold on the dark green */
+.active-games-bar{animation:agbGlow 1.6s ease-in-out infinite;}
+.active-games-bar .agb-title{font-size:20px;}
+@keyframes agbGlow{0%,100%{box-shadow:0 -4px 14px rgba(239,68,68,.25),0 0 0 2px rgba(239,68,68,.55) inset}50%{box-shadow:0 -6px 26px rgba(239,68,68,.55),0 0 0 3px rgba(239,68,68,.95) inset}}
+html:not(.theme-light) .active-games-bar{border:none;animation-name:agbGlowGold;}
+@keyframes agbGlowGold{0%,100%{box-shadow:0 -6px 18px rgba(253,224,71,.35),0 0 0 3px rgba(253,224,71,.6) inset}50%{box-shadow:0 -10px 34px rgba(253,224,71,.85),0 0 0 4px #fde047 inset}}
+@media (prefers-reduced-motion: reduce){.active-games-bar{animation:none;box-shadow:0 -6px 26px rgba(239,68,68,.45),0 0 0 3px rgba(239,68,68,.9) inset;} html:not(.theme-light) .active-games-bar{box-shadow:0 -10px 30px rgba(253,224,71,.7),0 0 0 4px #fde047 inset;}}
 </style>
 </head>
 <body>
