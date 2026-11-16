@@ -9441,6 +9441,7 @@ function hintReplace(i, onFocus){
     i.placeholder = ph;
   });
 }
+let lsLastField = null;   // the end-of-night screen: the field the keyboard stays on
 let coEditFor = null;   // "gameId:playerId" whose end-of-night amount is being fixed (the ✎ by it)
 const rebuyPick = {}, leaveArmed = {}, leaveAmountDraft = {}, rebuyCancelOpen = {}, leaveChipsDraft = {};
 // Chip pictures already checked for being square (saved before chips were cut round).
@@ -14022,6 +14023,17 @@ function attachHandlers(){
     };
     ["input", "focusin", "focusout"].forEach(ev => lsScroll.addEventListener(ev, () => setTimeout(lsTiles, 0)));
     lsTiles();
+    // the keyboard stays up: leaving the amount / a count for anywhere but another of them puts
+    // the focus straight back on the last one (unticking or "אישור" close the screen anyway)
+    const lsField = i => i.id ? "#" + i.id : i.dataset.lvType ? `[data-lv-type="${i.dataset.lvType}"]` : null;
+    lsScroll.addEventListener("focusin", e => { if (e.target.matches("input[type=number]")) lsLastField = lsField(e.target) || lsLastField; });
+    lsScroll.addEventListener("focusout", () => setTimeout(() => {
+      if (!leaveScreenPid() || modal || document.querySelector(".custom-confirm")) return;
+      const ae = document.activeElement;
+      if (ae && ae.matches && ae.matches("input[type=number]") && app.contains(ae)) return;
+      const el = (lsLastField && app.querySelector(lsLastField)) || document.getElementById("lv-amount");
+      if (el && !el.disabled) { try { el.focus({preventScroll: true}); } catch(e) { el.focus(); } }
+    }, 0));
   }
   app.querySelectorAll("[data-co-edit]").forEach(el => el.onclick = () => {
     coEditFor = nav.gameId + ":" + el.dataset.coEdit; coEditDraft[coEditFor] = {};
