@@ -13729,7 +13729,7 @@ function attachHandlers(){
     const g = getGame(nav.gameId); if (!g) return;
     const trName = gameTreasurer(g) ? tableShortName(g, gameTreasurer(g)) : "";
     // once the game is on, taking the job again is in the ☰ menu (before it, the box is right there)
-    const again = gameStarted(g) ? "\nאפשר להירשם שוב לגיזברות דרך התפריט ☰." : "";
+    const again = gameStarted(g) ? "\nאפשר לחזור לגיזברות מהתפריט\u00A0☰" : "";
     if (!(await showConfirm((iAmTreasurer(g) ? "לוותר על תפקיד גיזבר הערב? כל שחקן יוכל שוב לעשות ריביי בעצמו." : `להסיר את ${trName} מגיזברות הערב? כל שחקן יוכל שוב לעשות ריביי בעצמו.`) + again,
       {okLabel: iAmTreasurer(g) ? "ויתור" : "הסר", cancelLabel: "ביטול"}))) return;
     el.disabled = true;
@@ -13853,7 +13853,7 @@ function attachHandlers(){
       if (!gameStartEvent(g)) g.events.push(local);
       render();
       // nobody took the treasurer's job before the start: it can still be taken from the menu
-      if (!gameTreasurer(g)) showAlert("המשחק התחיל. אפשר לקבוע גיזבר דרך התפריט ☰", 7000);
+      if (!gameTreasurer(g)) showAlert("המשחק התחיל. אפשר לקבוע גיזבר דרך התפריט\u00A0☰", 7000);
       v2FetchWithRetry("POST", `/games/${gameId}/events`, ev).catch(() => {
         const g2 = getGame(gameId);
         if (g2 && g2.events) g2.events = g2.events.filter(e => e !== local);
