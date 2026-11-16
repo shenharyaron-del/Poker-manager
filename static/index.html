@@ -8113,11 +8113,12 @@ function isSeatedInGame(g){
 function leaveScreenPid(){
   if (nav.screen !== "table" || tableSubView !== "player") return null;
   const g = getGame(nav.gameId);
-  if (!g || g.gameType === "tournament" || g.closed) return null;
+  if (!g || g.gameType === "tournament") return null;
   const mine = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
   const pid = (playerViewTarget && playerViewTarget !== "__tools__" && g.players.some(pl => pl.id === playerViewTarget) && canActForOthers(g)) ? playerViewTarget : mine;
   if (!pid || pid in (g.cashouts || {}) || !(g.seats || []).includes(pid) || !canEndNightFor(g, pid)) return null;
-  return leaveArmed[g.id + ":" + pid] ? pid : null;
+  // a closed night ("ערב סגור") ticks the box for everyone still at the table
+  return (leaveArmed[g.id + ":" + pid] || g.closed) ? pid : null;
 }
 function gameTabsScreen(g, c, seated){
   if (seated && leaveScreenPid()) return `<div class="swipe-page lux-page player-page leave-screen">${renderPlayerScreen(g.id)}</div>`;
@@ -9454,6 +9455,7 @@ function hintReplace(i, onFocus){
     i.placeholder = ph;
   });
 }
+let lsOpenedFor = null;   // the end-of-night screen last opened ("gameId:playerId") - see its auto-focus
 let lsLastField = null;   // the end-of-night screen: the field the keyboard stays on
 let coEditFor = null;   // "gameId:playerId" whose end-of-night amount is being fixed (the ✎ by it)
 const rebuyPick = {}, leaveArmed = {}, leaveAmountDraft = {}, rebuyCancelOpen = {}, leaveChipsDraft = {};
@@ -9910,7 +9912,9 @@ function renderPlayerScreen(gameId){
         <div class="ls-tile ls-res"><span>רווח / הפסד</span><b data-ls-res>—</b><small data-ls-res-l>&nbsp;</small></div>
       </div>
       <fieldset class="leave-frame lv-frame lv-frame-top">${leaveHtml}</fieldset>
-      <p class="ls-hint">כדי לצאת מהמסך: לחצו "אישור", או בטלו את הסימון של סיום הערב</p>
+      ${g.closed
+        ? `<p class="ls-hint">הערב נסגר - הזינו את סכום הז'יטונים ולחצו "אישור"</p>${isTableAdmin(g, c) ? `<div style="text-align:center;margin-top:6px"><button type="button" class="lb-cancel ls-reopen" data-ls-reopen="${g.id}">ביטול סגירת הערב</button></div>` : ""}`
+        : `<p class="ls-hint">כדי לצאת מהמסך: לחצו "אישור", או בטלו את הסימון של סיום הערב</p>`}
     </div>`;
   }
   // Order (top to bottom): name/total, ריביי buttons, the shared history/feed panel
@@ -14020,8 +14024,18 @@ function attachHandlers(){
   // the end-of-night form ("סיימתי את הערב"): the amount, the chips calculator and the counts by type
   app.querySelectorAll("#lv-amount, #lv-chips, [data-lv-type]").forEach(i => hintReplace(i));
   // the end-of-night screen's tiles follow the amount as it's typed / counted
+  app.querySelectorAll("[data-ls-reopen]").forEach(el => el.onclick = () => setNightClosed(el.dataset.lsReopen, false));
   const lsScroll = app.querySelector(".ls-scroll");
+  if (!lsScroll) lsOpenedFor = null;
   if (lsScroll) {
+    // opened without a tap on the box (a closed night, or a refresh): the amount gets the focus
+    // - once per opening, so the keyboard comes up (where the phone allows it without a tap)
+    const lsKey = nav.gameId + ":" + leaveScreenPid();
+    if (lsOpenedFor !== lsKey) {
+      lsOpenedFor = lsKey;
+      const ae = document.activeElement;
+      if (!(ae && ae.matches && ae.matches("input[type=number]"))) setTimeout(() => { const a = document.getElementById("lv-amount"); if (a && !a.disabled) { try { a.focus({preventScroll: true}); } catch(e) { a.focus(); } } }, 0);
+    }
     const lsTiles = () => {
       const box = app.querySelector(".ls-tiles"), a = document.getElementById("lv-amount");
       if (!box || !a) return;
@@ -16468,7 +16482,7 @@ window.addEventListener("popstate", async () => {
   }
   if (shouldShowGameWelcome()) return;
   // the end-of-night screen stays until "אישור" or unticking
-  if (leaveScreenPid()) { topUpHistory(); showAlert("כדי לצאת: לחצו \"אישור\", או בטלו את הסימון של סיום הערב.", 4000); return; }
+  if (leaveScreenPid()) { topUpHistory(); showAlert((getGame(nav.gameId) || {}).closed ? "הערב נסגר - הזינו את הסכום ולחצו \"אישור\"." : "כדי לצאת: לחצו \"אישור\", או בטלו את הסימון של סיום הערב.", 4000); return; }
   if (nav.screen === "table") {
     // back through the tabs first (e.g. שולחן -> משחק, Back -> שולחן again)
     if (tabBack.gid === nav.gameId) {
