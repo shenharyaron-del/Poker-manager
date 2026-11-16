@@ -794,6 +794,19 @@ html.theme-light .menu-sec{color:#9a5f12;}
 .ls-tile.win b,.ls-tile.win small{color:#15803d;} .ls-tile.loss b,.ls-tile.loss small{color:#b91c1c;}
 html:not(.theme-light) .ls-tile.win b,html:not(.theme-light) .ls-tile.win small{color:#6ee7b7;} html:not(.theme-light) .ls-tile.loss b,html:not(.theme-light) .ls-tile.loss small{color:#fda4af;}
 .ls-hint{text-align:center;font-size:13px;color:var(--muted);margin:10px 0 0;}
+/* keyboard up on the end-of-night screen: everything still fits above it - the table's title
+   goes, the name shrinks to one line, the tiles get tighter, the leave hint goes */
+body.kb-open:has(.leave-screen) .screen-tag{display:none!important;}
+body.kb-open .leave-screen .ls-scroll{padding-top:6px;}
+body.kb-open .ls-head{margin:0 0 6px;gap:8px;}
+body.kb-open .ls-av{width:30px;height:30px;border-width:2px;}
+body.kb-open .ls-title{display:none;}
+body.kb-open .ls-name{font-size:17px;}
+body.kb-open .ls-tiles{margin:0 0 8px;gap:6px;}
+body.kb-open .ls-tile{padding:5px 4px;gap:0;}
+body.kb-open .ls-tile b{font-size:19px;}
+body.kb-open .ls-tile small{display:none;}
+body.kb-open .ls-hint{display:none;}
 .pick-row{cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;}
 .pick-box{width:22px;height:22px;border-radius:6px;border:2px solid var(--frame-c,var(--gold));flex-shrink:0;display:flex;align-items:center;justify-content:center;}
 .pick-row.sel{border-color:var(--frame-c,var(--gold));background:color-mix(in srgb,var(--gold) 14%,var(--input));}
