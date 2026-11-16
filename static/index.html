@@ -9889,7 +9889,7 @@ function renderPlayerScreen(gameId){
     return `
     <div class="player-screen-scroll ls-scroll">
       <div class="ls-head"><span class="ls-av" style="background-image:url('${photo}')"></span>
-        <div class="ls-txt"><div class="ls-title">סיום ערב</div><div class="ls-name"><bdi>${esc(p ? p.name : "")}</bdi>${viewingOther ? ` <span class="ls-for">· נרשם על ידי <bdi>${esc(myIdentity.name || "")}</bdi></span>` : ""}</div></div></div>
+        <div class="ls-txt"><div class="ls-title">סיום ערב</div><div class="ls-name"><bdi>${esc(p ? p.name : "")}</bdi></div></div></div>
       <div class="ls-tiles" data-ls-buyin="${buyinTotal}">
         <div class="ls-tile"><span>קנייה</span><b>₪${Math.round(buyinTotal * 100) / 100}</b><small>${myBuyins.length <= 1 ? "כניסה" : `${myBuyins.length} קניות`}</small></div>
         <div class="ls-tile"><span>בסוף הערב</span><b data-ls-end>—</b><small>&nbsp;</small></div>
