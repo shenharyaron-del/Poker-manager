@@ -9826,11 +9826,12 @@ function renderPlayerScreen(gameId){
     const meOut = !!myPlayerId && myPlayerId in (g.cashouts || {});
     const n = hideable.length + (meOut ? 1 : 0), hiding = hideOutPlayers && n > 0;
     // the one being looked at is among the hidden: say so, over the link
-    const selNote = hiding && (hideable.includes(pid) || (meOut && pid === myPlayerId)) ? `<div class="sel-note">נבחר: <b><bdi>${esc(tableShortName(g, pid))}</bdi></b> · ${playerIsFemale(g, c, pid) ? "יצאה" : "יצא"} מהשולחן</div>` : "";
+    // the one being looked at stays shown even while hiding (it's the screen's subject)
+    const selNote = "";
     const footer = !n ? "" : selNote + `<button type="button" class="out-tg${hiding ? " hiding" : ""}" data-toggle-out-players>${hiding ? EYE_SVG : EYE_OFF_SVG} ${
       n === 1 ? (hiding ? "הצג את מי שיצא" : "הסתר את מי שיצא") : `${hiding ? "הצג" : "הסתר"} ${n} שיצאו`}</button>`;
-    const shownIds = hiding ? othersTonight.filter(id => !hideable.includes(id)) : othersTonight;
-    return playersCarouselHtml("player:" + g.id, g, c, tableSeatOrder(g, shownIds, myPlayerId), { footer, top: hiding && meOut ? "" : nameHtml,
+    const shownIds = hiding ? othersTonight.filter(id => !hideable.includes(id) || id === pid) : othersTonight;
+    return playersCarouselHtml("player:" + g.id, g, c, tableSeatOrder(g, shownIds, myPlayerId), { footer, top: hiding && meOut && pid !== myPlayerId ? "" : nameHtml,
       // before "תחילת משחק" it's only who's at the table (nobody to pick yet - no rebuys)
       onId: notStarted ? null : pid, attr: canActForOthers(g) && !notStarted ? "data-pp-view" : "data-pp-noview",
       // The table's admins (and tonight's treasurer) act for someone else - for them the frame says so.
@@ -13727,7 +13728,9 @@ function attachHandlers(){
   app.querySelectorAll("[data-treasurer-clear]").forEach(el => el.onclick = async () => {
     const g = getGame(nav.gameId); if (!g) return;
     const trName = gameTreasurer(g) ? tableShortName(g, gameTreasurer(g)) : "";
-    if (!(await showConfirm(iAmTreasurer(g) ? "לוותר על תפקיד גיזבר הערב? כל שחקן יוכל שוב לעשות ריביי בעצמו." : `להסיר את ${trName} מגיזברות הערב? כל שחקן יוכל שוב לעשות ריביי בעצמו.`,
+    // once the game is on, taking the job again is in the ☰ menu (before it, the box is right there)
+    const again = gameStarted(g) ? "\nאפשר להירשם שוב לגיזברות דרך התפריט ☰." : "";
+    if (!(await showConfirm((iAmTreasurer(g) ? "לוותר על תפקיד גיזבר הערב? כל שחקן יוכל שוב לעשות ריביי בעצמו." : `להסיר את ${trName} מגיזברות הערב? כל שחקן יוכל שוב לעשות ריביי בעצמו.`) + again,
       {okLabel: iAmTreasurer(g) ? "ויתור" : "הסר", cancelLabel: "ביטול"}))) return;
     el.disabled = true;
     try { await v2SetTreasurer(g.id, null); }
