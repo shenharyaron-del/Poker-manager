@@ -784,7 +784,7 @@ html.theme-light .menu-sec{color:#9a5f12;}
 .ls-head{display:flex;align-items:center;justify-content:center;gap:12px;margin:4px 0 14px;}
 .ls-av{width:56px;height:56px;border-radius:50%;background-size:cover;background-position:center;border:2.5px solid var(--frame-c,var(--gold));box-shadow:0 2px 8px rgba(0,0,0,.25);flex-shrink:0;}
 .ls-title{font-size:14px;font-weight:700;color:var(--muted);}
-.ls-name{font-size:22px;font-weight:800;color:var(--text);line-height:1.2;}
+.ls-name{font-size:26px;font-weight:800;color:var(--text);line-height:1.2;}
 .ls-for{font-size:13px;font-weight:600;color:var(--muted);}
 .ls-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 14px;}
 .ls-tile{display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 4px 8px;border-radius:14px;border:1px solid var(--frame-c,var(--gold));background:var(--card);}
@@ -793,7 +793,8 @@ html.theme-light .menu-sec{color:#9a5f12;}
 .ls-tile small{font-size:12px;color:var(--muted);}
 .ls-tile.win b,.ls-tile.win small{color:#15803d;} .ls-tile.loss b,.ls-tile.loss small{color:#b91c1c;}
 html:not(.theme-light) .ls-tile.win b,html:not(.theme-light) .ls-tile.win small{color:#6ee7b7;} html:not(.theme-light) .ls-tile.loss b,html:not(.theme-light) .ls-tile.loss small{color:#fda4af;}
-.ls-hint{text-align:center;font-size:13px;color:var(--muted);margin:10px 0 0;}
+.ls-hint{text-align:center;font-size:13px;color:var(--muted);margin:4px 0 0;}
+.leave-screen .ls-scroll > .lv-frame{margin-bottom:6px!important;}
 /* keyboard up on the end-of-night screen: everything still fits above it - the table's title
    goes, the name shrinks to one line, the tiles get tighter, the leave hint goes */
 body.kb-open:has(.leave-screen) .screen-tag{display:none!important;}
@@ -806,7 +807,7 @@ body.kb-open .leave-screen .ls-scroll{padding-top:6px;}
 body.kb-open .ls-head{margin:0 0 6px;gap:8px;}
 body.kb-open .ls-av{width:30px;height:30px;border-width:2px;}
 body.kb-open .ls-title{display:none;}
-body.kb-open .ls-name{font-size:17px;}
+body.kb-open .ls-name{font-size:20px;}
 body.kb-open .ls-tiles{margin:0 0 8px;gap:6px;}
 body.kb-open .ls-tile{padding:5px 4px;gap:0;}
 body.kb-open .ls-tile b{font-size:19px;}
@@ -9913,7 +9914,7 @@ function renderPlayerScreen(gameId){
       </div>
       <fieldset class="leave-frame lv-frame lv-frame-top">${leaveHtml}</fieldset>
       ${g.closed
-        ? `<p class="ls-hint">הערב נסגר - הזינו את סכום הז'יטונים ולחצו "אישור"</p>${isTableAdmin(g, c) ? `<div style="text-align:center;margin-top:6px"><button type="button" class="lb-cancel ls-reopen" data-ls-reopen="${g.id}">ביטול סגירת הערב</button></div>` : ""}`
+        ? `<p class="ls-hint">הערב נסגר - הזינו את סכום הז'יטונים ולחצו "אישור"</p>${isTableAdmin(g, c) && (g.seats || []).filter(s => s && !(s in (g.cashouts || {}))).length > 1 ? `<div style="text-align:center;margin-top:2px"><button type="button" class="lb-cancel ls-reopen" data-ls-reopen="${g.id}">ביטול סגירת הערב</button></div>` : ""}`
         : `<p class="ls-hint">כדי לצאת מהמסך: לחצו "אישור", או בטלו את הסימון של סיום הערב</p>`}
     </div>`;
   }
