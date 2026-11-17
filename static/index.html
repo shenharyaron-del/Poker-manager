@@ -2837,7 +2837,7 @@ async function loadStateV2(){
   // source of the DB connection-pool contention found during the avatar-upload
   // investigation. Keeps the cached object as-is (full buyins/seats/etc, whatever shape
   // it already had) rather than touching it, so nothing downstream needs to change.
-  const isFresh = gs => { const cached = getGame(gs.id); return cached && cached.updatedAt && gs.updatedAt && cached.updatedAt === gs.updatedAt; };
+  const isFresh = gs => { const cached = getGame(gs.id); return cached && !cached._refetch && cached.updatedAt && gs.updatedAt && cached.updatedAt === gs.updatedAt; };
   const fetched = await fetchGamesFull(gameSummaries.filter(gs => !isFresh(gs)).map(gs => gs.id));
   const byId = Object.fromEntries(fetched.map(g => [g.id, g]));
   const games = gameSummaries.map(gs => isFresh(gs) ? getGame(gs.id) : byId[gs.id]).filter(Boolean);
@@ -3485,6 +3485,17 @@ async function v2CreateGame(id, communityId, name, date, createdByName, creatorP
 }
 
 // Returns the fresh updatedAt on success, null on a 409 (same shape as v2UpdateCommunity).
+// After one of my own writes the night's updatedAt comes back from the server - but anything
+// someone else saved between my last read and this write is in that updatedAt too, and not
+// in what I hold (seen live: a player who had just sat down showed as "?" with ₪0, because
+// a seat change of mine brought back the seats with him in them but not his player row, and
+// the next refreshes skipped re-reading the night as "unchanged"). So the night is re-read
+// once on the next refresh - straight away when the seats name someone I don't have.
+function v2AfterOwnWrite(g){
+  if (!g) return;
+  g._refetch = true;
+  if ((g.seats || []).some(s => s && !(g.players || []).some(pl => pl.id === s))) setTimeout(() => doRefreshNow("own-write-missing-player"), 200);
+}
 async function v2UpdateGame(gameId, fields){
   const result = await withConflictRetry(
     () => v2FetchWithRetry("PATCH", `/games/${gameId}`, {...fields, updatedAt: getGame(gameId).updatedAt}),
@@ -3494,6 +3505,7 @@ async function v2UpdateGame(gameId, fields){
   const g = getGame(gameId);
   Object.assign(g, fields);
   g.updatedAt = result.updatedAt;
+  v2AfterOwnWrite(g);
   return result.updatedAt;
 }
 
@@ -3583,6 +3595,7 @@ async function v2SeatGroup(gameId, start, players, amount){
   }
   g.seats = r.seats;
   g.updatedAt = r.updatedAt;
+  v2AfterOwnWrite(g);
   r.seated.forEach(s => {
     const p = players.find(x => x.playerId === s.playerId);
     if (!g.players.some(x => x.id === s.playerId)) g.players.push({id: s.playerId, name: p.name});
@@ -3606,6 +3619,7 @@ async function v2ClaimSeat(gameId, seatIndex, playerId, name, gender){
   g.updatedAt = result.updatedAt;
   if (!g.players.some(p => p.id === playerId)) g.players.push({id: playerId, name, ...(gender ? {gender} : {})});
   if (g.liveChips[playerId] === undefined) g.liveChips[playerId] = 0;
+  v2AfterOwnWrite(g);
   // First time ever seated in this game (not a returning cashed-out player - that path
   // clears their cashout entry directly, never calls claimSeat again) - auto-buy-in with
   // the community's first configured amount instead of leaving them seated with nothing
@@ -3696,6 +3710,7 @@ async function v2ClearSeat(gameId, seatIndex){
   const result = await v2FetchWithRetry("DELETE", `/games/${gameId}/seats/${seatIndex}`);
   g.seats[seatIndex] = null;
   g.updatedAt = result.updatedAt;
+  v2AfterOwnWrite(g);
   if (playerId) {
     g.buyins = g.buyins.filter(b => b.playerId !== playerId);
     delete g.liveChips[playerId];
@@ -3708,6 +3723,7 @@ async function v2SwapSeats(gameId, fromIndex, toIndex){
   const g = getGame(gameId);
   g.seats = result.seats;
   g.updatedAt = result.updatedAt;
+  v2AfterOwnWrite(g);
 }
 
 // Tonight's treasurer (see gameTreasurer): a player id to take it, null for none.
