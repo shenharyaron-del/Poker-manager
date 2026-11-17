@@ -782,6 +782,10 @@ html.theme-light .menu-sec{color:#9a5f12;}
 .co-edit-save{padding:5px 14px;border-radius:999px;border:none;background:var(--gold);color:var(--gold-text);font:inherit;font-size:15px;font-weight:800;cursor:pointer;}
 .leave-screen .ls-scroll{padding-top:10px;}
 .ls-head{display:flex;align-items:center;justify-content:center;gap:12px;margin:4px 0 14px;}
+.ls-head.ls-nav{position:relative;padding:0 44px;}
+.ls-arrow{position:absolute;top:50%;transform:translateY(-50%);width:40px;height:40px;border-radius:50%;border:1.5px solid var(--frame-c,var(--gold));background:var(--card);color:var(--frame-c,var(--gold));font:inherit;font-size:28px;font-weight:800;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0 0 3px;}
+.ls-prev{right:0;} .ls-next{left:0;}
+.ls-arrow svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;}
 .ls-av{width:56px;height:56px;border-radius:50%;background-size:cover;background-position:center;border:2.5px solid var(--frame-c,var(--gold));box-shadow:0 2px 8px rgba(0,0,0,.25);flex-shrink:0;}
 .ls-title{font-size:14px;font-weight:700;color:var(--muted);}
 .ls-name{font-size:26px;font-weight:800;color:var(--text);line-height:1.2;}
@@ -8121,6 +8125,12 @@ function leaveScreenPid(){
   // a closed night ("ערב סגור") ticks the box for everyone still at the table
   return (leaveArmed[g.id + ":" + pid] || g.closed) ? pid : null;
 }
+// A closed night: tonight's treasurer (or, with none, a table admin) steps between everyone
+// still at the table on the end-of-night screen. The players still in, in seat order.
+function lsNavList(g){
+  if (!g || !g.closed || !(iAmTreasurer(g) || (!gameTreasurer(g) && isTableAdmin(g, getCommunity(g.communityId))))) return [];
+  return (g.seats || []).filter(s => s && !(s in (g.cashouts || {})));
+}
 function gameTabsScreen(g, c, seated){
   if (seated && leaveScreenPid()) return `<div class="swipe-page lux-page player-page leave-screen">${renderPlayerScreen(g.id)}</div>`;
   const canInvite = hasFreeSeat(g);
@@ -9905,8 +9915,16 @@ function renderPlayerScreen(gameId){
     const nmShort = p ? tableShortName(g, pid) : "";
     return `
     <div class="player-screen-scroll ls-scroll">
-      <div class="ls-head"><span class="ls-av" style="background-image:url('${photo}')"></span>
-        <div class="ls-txt"><div class="ls-title">סיום ערב</div><div class="ls-name"><bdi>${esc(p ? p.name : "")}</bdi></div></div></div>
+      ${(() => {
+        const list = lsNavList(g), i = list.indexOf(pid), n = list.length;
+        const step = d => list[(i + d + n) % n];
+        const nav = n > 1 && i !== -1;
+        return `<div class="ls-head${nav ? " ls-nav" : ""}">
+        ${nav ? `<button type="button" class="ls-arrow ls-prev" data-ls-go="${esc(step(-1))}" aria-label="השחקן הקודם"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>` : ""}
+        <span class="ls-av" style="background-image:url('${photo}')"></span>
+        <div class="ls-txt"><div class="ls-title">${nav ? `סיום ערב · ${i + 1} מתוך ${n} שעוד בשולחן` : "סיום ערב"}</div><div class="ls-name"><bdi>${esc(p ? p.name : "")}</bdi></div></div>
+        ${nav ? `<button type="button" class="ls-arrow ls-next" data-ls-go="${esc(step(1))}" aria-label="השחקן הבא"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>` : ""}</div>`;
+      })()}
       <div class="ls-tiles" data-ls-buyin="${buyinTotal}">
         <div class="ls-tile"><span>קנייה</span><b>₪${Math.round(buyinTotal * 100) / 100}</b><small>${myBuyins.length <= 1 ? "כניסה" : `${myBuyins.length} קניות`}</small></div>
         <div class="ls-tile"><span>בסוף הערב</span><b data-ls-end>—</b><small>&nbsp;</small></div>
@@ -14026,6 +14044,11 @@ function attachHandlers(){
   app.querySelectorAll("#lv-amount, #lv-chips, [data-lv-type]").forEach(i => hintReplace(i));
   // the end-of-night screen's tiles follow the amount as it's typed / counted
   app.querySelectorAll("[data-ls-reopen]").forEach(el => el.onclick = () => setNightClosed(el.dataset.lsReopen, false));
+  app.querySelectorAll("[data-ls-go]").forEach(el => el.onclick = () => {
+    const g = getGame(nav.gameId), to = el.dataset.lsGo;
+    playerViewTarget = to === (myIdentity.myPlayers || {})[g.communityId] ? null : to;
+    lsLastField = null; render();
+  });
   const lsScroll = app.querySelector(".ls-scroll");
   if (!lsScroll) lsOpenedFor = null;
   if (lsScroll) {
@@ -14141,6 +14164,12 @@ function attachHandlers(){
       });
     }
     delete leaveArmed[key]; delete leaveAmountDraft[key]; delete leaveChipsDraft[key]; delete leaveTypeCounts[key];
+    // a closed night, the treasurer going round the table: on to the next one still in
+    const gNow = getGame(gameId), before = (gNow.seats || []).filter(Boolean), rest = lsNavList(gNow);
+    if (rest.length) {
+      const from = before.indexOf(pid), next = before.slice(from + 1).concat(before.slice(0, from)).find(s => rest.includes(s));
+      if (next) { playerViewTarget = next === (myIdentity.myPlayers || {})[gNow.communityId] ? null : next; lsLastField = null; render(); return; }
+    }
     render();
     maybeOpenDirectPayAfterCashout(gameId, pid, rounded);
   });
