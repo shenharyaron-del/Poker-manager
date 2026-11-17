@@ -8132,6 +8132,15 @@ function lsNavList(g){
   return (g.seats || []).filter(s => s && !(s in (g.cashouts || {})));
 }
 function gameTabsScreen(g, c, seated){
+  // going round a closed night, the player on screen entered theirs from their own phone: on
+  // to the next one still in - or, once everyone has, back to my own screen
+  if (g.closed && playerViewTarget && lsOpenedFor === g.id + ":" + playerViewTarget && playerViewTarget in (g.cashouts || {})) {
+    const order = (g.seats || []).filter(Boolean), rest = lsNavList(g), from = order.indexOf(playerViewTarget);
+    const next = from === -1 ? rest[0] : order.slice(from + 1).concat(order.slice(0, from)).find(s => rest.includes(s));
+    const mine = (myIdentity.myPlayers || {})[g.communityId];
+    playerViewTarget = next && next !== mine ? next : null;
+    lsLastField = null;
+  }
   if (seated && leaveScreenPid()) return `<div class="swipe-page lux-page player-page leave-screen">${renderPlayerScreen(g.id)}</div>`;
   const canInvite = hasFreeSeat(g);
   const tab = tableSubView === "invite" && canInvite ? "invite"
