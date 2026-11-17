@@ -3876,12 +3876,15 @@ function waitAtMost(promise, ms){
     promise.then(finish, finish);
   });
 }
+let refreshMissed = false;   // a refresh was skipped while something was open - see render()
 let refreshInProgress = false;
 let refreshQueued = false;
 async function doRefreshNow(source){
   const callId = DEBUG_SYNC ? Math.random().toString(36).slice(2,6) : "";
   logSync(`refresh[${callId}] triggered by ${source}, modal=${!!modal}`);
-  if (modal || playerScreenCustomOpen || coEditFor || seatDragInProgress) { logSync(`refresh[${callId}] SKIPPED - modal or custom-amount input open`); return; }
+  // something open that a redraw would disturb: skip - but remember, so the refresh happens
+  // as soon as it's closed (the "changed" message that asked for it won't come again)
+  if (modal || playerScreenCustomOpen || coEditFor || seatDragInProgress) { refreshMissed = true; logSync(`refresh[${callId}] SKIPPED - modal or custom-amount input open`); return; }
   if (refreshInProgress) {
     // Another refresh is already running its own GET - don't start a second one
     // concurrently (two in-flight GETs can resolve out of order, and the one that
@@ -8484,6 +8487,8 @@ function render(){
   { const el = app.querySelector("[data-tour-scroll]"); if (el && el.dataset.tourScroll === String(nav.gameId)) { if (tourScroll) el.scrollTop = tourScroll; if (winScroll) window.scrollTo(0, winScroll); } }
   attachHandlers();
   fixNegativeNumbers(app);
+  // a refresh skipped while a window / an edit was open: now that nothing's in the way, catch up
+  if (refreshMissed && !modal && !playerScreenCustomOpen && !coEditFor && !seatDragInProgress) { refreshMissed = false; setTimeout(() => doRefreshNow("missed-while-open"), 50); }
   if (keptScrolls && keptScrolls.size) {
     app.querySelectorAll("*").forEach(el => {
       if (el.scrollHeight <= el.clientHeight || el.scrollTop > 0) return;   // nothing to scroll, or already placed
