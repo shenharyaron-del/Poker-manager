@@ -2304,6 +2304,9 @@ def _rename_roster_rows(cur, rows, name):
             "  ))",
             (name, community_id, pid, old_name or "", community_id),
         )
+        # the club's open nights show the new name on other phones too (they re-read a night
+        # only when its updated_at moves)
+        cur.execute("UPDATE games SET updated_at = now() WHERE community_id = %s AND NOT closed", (community_id,))
 
 
 @app.route("/api/v2/communities/<community_id>/roster/<player_id>/name", methods=["PATCH"])
