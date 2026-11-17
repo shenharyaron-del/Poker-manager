@@ -10135,7 +10135,8 @@ function renderGameResultsScreen(gameId){
         const outTotal = Object.values(synthGame.cashouts).reduce((s, co) => s + (co.amount || 0), 0);
         const gap = Math.round((outTotal - inTotal) * 100) / 100;
         if (Math.abs(gap) < 1) return "";
-        return `<div class="res-gap"><b>${gap > 0 ? `הקופה לא מאוזנת: עודף ₪${gap}` : `הקופה לא מאוזנת: חסרים ₪${Math.abs(gap)}`}</b><small>נכנסו ₪${Math.round(inTotal * 100) / 100} · יצאו ₪${Math.round(outTotal * 100) / 100}</small></div>`;
+        const n = Math.abs(gap) === 1 ? "שקל אחד" : `${Math.abs(gap)} שקלים`;
+        return `<div class="res-gap">${gap > 0 ? `הקופה בעודף של ${n}` : `הקופה בחוסר של ${n}`}</div>`;
       })()}
       ${transfersHtml}
       <button class="btn btn-ghost btn-block" data-open-my-stats style="font-size:22px;margin-top:16px;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('bar')} הביצועים שלי</button>
