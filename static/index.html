@@ -10003,7 +10003,8 @@ function renderPlayerScreen(gameId){
 // at this table (seated or already left tonight) has the same first name - then the full
 // name, so the two can be told apart.
 function tableShortName(g, id){
-  const full = ((g.players.find(x => x.id === id) || {}).name || "").trim();
+  const full = ((g.players.find(x => x.id === id) || {}).name
+    || ((getCommunity(g.communityId) || {roster: []}).roster || []).find(r => r.id === id)?.name || "").trim();
   const first = full.split(/\s+/)[0] || full;
   if (first === full) return full;
   const atTable = new Set([...(g.seats||[]).filter(Boolean), ...Object.keys(g.cashouts||{})]);
@@ -10280,13 +10281,16 @@ function renderTable(gameId){
       return `<div class="seat-wrap seat-vacant${hintCls}" style="left:${x}%;top:${y}%;" data-seat="${i}" data-x="${x}" data-y="${y}"><div class="seat-circle vacant">${(admin || canTakeSeatHere(g))?'+':''}</div></div>`;
     }
     const p = g.players.find(pl => pl.id === pid);
-    const name = p ? p.name : "?";
+    const rosterP = c.roster.find(rp => rp.id === pid);
+    // the seat can arrive a moment before the player's name (a player just joined): the club's
+    // name for them meanwhile
+    const name = (p && p.name) || (rosterP && rosterP.name) || "?";
     const cashedOut = pid in g.cashouts;
     const buyin = buyinTotals[pid] || 0;
     const chips = liveChips[pid] || 0;
-    const rosterP = c.roster.find(rp => rp.id === pid);
     const photo = rosterP && getPlayerPhoto(rosterP);
-    let caption = `קנייה <span data-caption-for="${pid}">₪${buyin}</span>`;
+    // seated but the entry amount isn't in yet (they're still choosing it)
+    let caption = !cashedOut && !buyin ? `<span data-caption-for="${pid}">ממתין לכניסה</span>` : `קנייה <span data-caption-for="${pid}">₪${buyin}</span>`;
     if (cashedOut) {
       const profit = chips - buyin;
       const sign = profit > 0 ? "+" : "";
