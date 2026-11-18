@@ -11746,6 +11746,7 @@ function renderModal(m){
       ` : "";
       let totalCommunityGames = 0;
       const profits = [];
+      const buyinCounts = [];   // how many buy-ins (ריביי) I made each finished night
       let best=null, worst=null;
       const timeline = [];
       activeCommunities.forEach(c => {
@@ -11767,6 +11768,7 @@ function renderModal(m){
           const buyins = g.buyins.filter(b=>b.playerId===player.id).reduce((s,b)=>s+b.amount,0);
           const profit = co.amount - buyins;
           profits.push(profit);
+          buyinCounts.push(g.buyins.filter(b=>b.playerId===player.id).length);
           if (!best || profit > best.profit) best = {date:g.date, profit, communityName: c.name};
           if (!worst || profit < worst.profit) worst = {date:g.date, profit, communityName: c.name};
         });
@@ -11777,6 +11779,7 @@ function renderModal(m){
       const avgWin = wins.length ? wins.reduce((s,p)=>s+p,0)/wins.length : null;
       const avgLoss = losses.length ? losses.reduce((s,p)=>s+p,0)/losses.length : null;
       const avgOverall = profits.length ? net/profits.length : null;
+      const avgBuyins = buyinCounts.length ? Math.round(buyinCounts.reduce((s,n)=>s+n,0)/buyinCounts.length*10)/10 : null;
       const pct = n => profits.length ? Math.round(n / profits.length * 100) : 0;
       // Place in the group (one group selected): everyone in its roster who finished at
       // least one night, ranked by total net profit there.
@@ -11812,6 +11815,7 @@ function renderModal(m){
           </div>
           ${rankHtml}
           <div class="roster-row"><span>ממוצע כללי למשחק</span><span class="${Math.round(avgOverall) > 0 ? "stats-win" : Math.round(avgOverall) < 0 ? "stats-loss" : ""}" style="font-weight:700;">${Math.round(avgOverall) > 0 ? "+" : ""}₪${Math.round(avgOverall)}</span></div>
+          ${avgBuyins!=null?`<div class="roster-row"><span>ממוצע ריביי למשחק</span><span style="font-weight:700;white-space:nowrap;">${avgBuyins === 1 ? "פעם אחת" : `${avgBuyins} פעמים`}</span></div>`:""}
           ${best?`<div class="roster-row"><span style="color:#059669;font-size:16px;">הערב הכי טוב</span><span class="${best.profit >= 0 ? "stats-win" : "stats-loss"}" style="font-weight:700;">${best.profit > 0 ? "+" : ""}₪${Math.round(best.profit)}</span></div>`:""}
           ${worst?`<div class="roster-row"><span style="color:#059669;font-size:16px;">הערב הכי גרוע</span><span class="stats-loss" style="font-weight:700;">₪${Math.round(worst.profit)}</span></div>`:""}
           ${renderBarChart(computeProfitBuckets(profits))}
