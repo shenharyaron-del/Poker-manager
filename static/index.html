@@ -3876,6 +3876,13 @@ function waitAtMost(promise, ms){
     promise.then(finish, finish);
   });
 }
+// The end-of-night screen on a closed night (the treasurer going round, players finishing on
+// their own phones): a refresh every 5 seconds as well, so who's left shows in time even if
+// the live connection is down.
+setInterval(() => {
+  if (document.hidden) return;
+  try { const g = nav.screen === "table" && getGame(nav.gameId); if (g && g.closed && leaveScreenPid()) doRefreshNow("leave-screen-poll"); } catch (e) {}
+}, 5000);
 let refreshMissed = false;   // a refresh was skipped while something was open - see render()
 let refreshInProgress = false;
 let refreshQueued = false;
@@ -8480,7 +8487,9 @@ function render(){
     const sel = ae.id ? "#" + CSS.escape(ae.id) : attr ? `[${attr.name}="${CSS.escape(attr.value)}"]` : null;
     if (!sel) return null;
     let s = null, e = null; try { s = ae.selectionStart; e = ae.selectionEnd; } catch(err) {}
-    return {sel, s, e};
+    // a hint field (see hintReplace) emptied on focus and not typed in yet stays that way;
+    // one being typed in keeps what's typed (its focus handler mustn't empty it again)
+    return {sel, s, e, hintUntouched: ae.dataset.was != null && ae.value === ""};
   })();
   app.innerHTML = html;
   { const el = app.querySelector(".player-screen-scroll"); if (el) { el.dataset.key = gameScrollKey; if (gameScrollTop) el.scrollTop = gameScrollTop; } }
@@ -8500,7 +8509,9 @@ function render(){
   if (typing) {
     const el = app.querySelector(typing.sel);
     if (el && !el.disabled) {
+      if (!typing.hintUntouched) el.dataset.hintKeep = "1";
       try { el.focus({preventScroll: true}); } catch(err) { el.focus(); }
+      delete el.dataset.hintKeep;
       try { if (typing.s != null) el.setSelectionRange(typing.s, typing.e); } catch(err) {}
       // a number field has no caret position to read: put the caret back at the end
       if (typing.s == null && el.value) { const v = el.value; el.value = ""; el.value = v; }
@@ -9489,7 +9500,7 @@ function hintReplace(i, onFocus){
   i.dataset.hintReplace = "1";
   const ph = i.placeholder;
   i.addEventListener("focus", () => {
-    if (i.value !== "") { i.dataset.was = i.value; i.placeholder = i.value; i.value = ""; }
+    if (i.value !== "" && !i.dataset.hintKeep) { i.dataset.was = i.value; i.placeholder = i.value; i.value = ""; }
     if (onFocus) onFocus();
   });
   i.addEventListener("blur", () => {
