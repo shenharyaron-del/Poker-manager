@@ -822,6 +822,8 @@ body.kb-open .leave-screen .lv-types img,body.kb-open .leave-screen .lv-type-noi
 body.kb-open .leave-screen .lv-pot{margin-top:6px;padding:5px 10px;}
 .res-gap{margin:8px 0 4px;padding:8px 12px;border-radius:12px;border:1px dashed var(--frame-c,var(--gold));text-align:center;font-size:17px;color:var(--text);display:flex;flex-direction:column;gap:2px;}
 .res-gap small{font-size:14px;color:var(--muted);}
+/* a number field "all selected" (hintReplace): the value highlighted like a selection */
+input.hr-armed{background:rgba(59,130,246,.25)!important;caret-color:transparent;}
 .pick-row{cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;}
 .pick-box{width:22px;height:22px;border-radius:6px;border:2px solid var(--frame-c,var(--gold));flex-shrink:0;display:flex;align-items:center;justify-content:center;}
 .pick-row.sel{border-color:var(--frame-c,var(--gold));background:color-mix(in srgb,var(--gold) 14%,var(--input));}
@@ -8489,7 +8491,7 @@ function render(){
     let s = null, e = null; try { s = ae.selectionStart; e = ae.selectionEnd; } catch(err) {}
     // a hint field (see hintReplace) emptied on focus and not typed in yet stays that way;
     // one being typed in keeps what's typed (its focus handler mustn't empty it again)
-    return {sel, s, e, hintUntouched: ae.dataset.was != null && ae.value === ""};
+    return {sel, s, e, hintUntouched: !!ae.dataset.armed};
   })();
   app.innerHTML = html;
   { const el = app.querySelector(".player-screen-scroll"); if (el) { el.dataset.key = gameScrollKey; if (gameScrollTop) el.scrollTop = gameScrollTop; } }
@@ -9492,22 +9494,29 @@ function chipCountsFor(c, counts, amount){
   return Object.keys(out).length && Math.abs(Math.round(sum * 100) / 100 - amount) < 0.01 ? out : null;
 }
 const coEditDraft = {};   // what's typed in the ✎ frame, per "gameId:playerId"
-// Number fields where typing replaces the value without selecting it (a selection brings up
-// the phone's cut / copy bar): the field empties on focus and shows its value as a faint
-// hint; left empty, it gets that value back.
+// Number fields that act "all selected" on focus: the value stays, highlighted, and the first
+// key typed replaces it (a backspace clears it) - without a real selection, which brings up
+// the phone's cut / copy bar. Leaving it untouched keeps the value.
 function hintReplace(i, onFocus){
   if (i.dataset.hintReplace) return;
   i.dataset.hintReplace = "1";
-  const ph = i.placeholder;
+  const disarm = () => { delete i.dataset.armed; i.classList.remove("hr-armed"); };
   i.addEventListener("focus", () => {
-    if (i.value !== "" && !i.dataset.hintKeep) { i.dataset.was = i.value; i.placeholder = i.value; i.value = ""; }
+    if (i.value !== "" && !i.dataset.hintKeep) { i.dataset.armed = "1"; i.classList.add("hr-armed"); }
     if (onFocus) onFocus();
   });
-  i.addEventListener("blur", () => {
-    if (i.value === "" && i.dataset.was != null) i.value = i.dataset.was;
-    delete i.dataset.was;
-    i.placeholder = ph;
+  // the first key: out with the old value, the key goes in instead
+  i.addEventListener("beforeinput", e => {
+    if (!i.dataset.armed) return;
+    i.value = ""; disarm();
+    // a backspace just clears it - say so (nothing's left for the key itself to delete)
+    if (e.inputType && e.inputType.startsWith("delete")) { e.preventDefault(); i.dispatchEvent(new Event("input", {bubbles: true})); }
   });
+  i.addEventListener("input", e => { if (i.dataset.armed) { i.value = e.data && /^[0-9.]$/.test(e.data) ? e.data : ""; disarm(); } }, true);
+  // tapping inside it (to move the caret, say) means editing it, not replacing it
+  i.addEventListener("pointerup", () => { if (i.dataset.armed && document.activeElement === i && i.dataset.armedAt && Date.now() - +i.dataset.armedAt > 400) disarm(); });
+  i.addEventListener("focus", () => { i.dataset.armedAt = String(Date.now()); });
+  i.addEventListener("blur", disarm);
 }
 let lsOpenedFor = null;   // the end-of-night screen last opened ("gameId:playerId") - see its auto-focus
 let lsLastField = null;   // the end-of-night screen: the field the keyboard stays on
@@ -14035,12 +14044,12 @@ function attachHandlers(){
     delete leaveTypeCounts[key]; delete leaveChipsDraft[key];
     const box = el.closest(".lv-body") || app;
     box.querySelectorAll("[data-lv-type]").forEach(i => {
-      i.value = ""; delete i.dataset.was;
+      i.value = ""; delete i.dataset.armed; i.classList.remove("hr-armed");
       const v = i.dataset.lvTypeValue, x = box.querySelector(`[data-lv-type-x="${i.dataset.lvType}"]`);
       if (x) x.innerHTML = x.innerHTML.includes("<br>") ? `×${v}<br>₪0` : `×${v} = ₪0`;
     });
     const ch = box.querySelector("#lv-chips"), chr = box.querySelector("#lv-chips-result");
-    if (ch) { ch.value = ""; delete ch.dataset.was; }
+    if (ch) { ch.value = ""; delete ch.dataset.armed; ch.classList.remove("hr-armed"); }
     if (chr) chr.textContent = "₪0";
   });
   app.querySelectorAll("#lv-chips").forEach(el => el.oninput = () => {
@@ -14119,7 +14128,7 @@ function attachHandlers(){
     const lsTiles = () => {
       const box = app.querySelector(".ls-tiles"), a = document.getElementById("lv-amount");
       if (!box || !a) return;
-      const raw = a.value !== "" ? a.value : (a.dataset.was || "");
+      const raw = a.value;
       const endEl = box.querySelector("[data-ls-end]"), resEl = box.querySelector("[data-ls-res]"), resL = box.querySelector("[data-ls-res-l]"), tile = box.querySelector(".ls-res");
       if (raw === "" || isNaN(parseFloat(raw))) { endEl.textContent = "—"; resEl.textContent = "—"; resL.innerHTML = "&nbsp;"; tile.classList.remove("win", "loss"); return; }
       const end = Math.round(parseFloat(raw) * 100) / 100, res = Math.round((end - (parseFloat(box.dataset.lsBuyin) || 0)) * 100) / 100;
