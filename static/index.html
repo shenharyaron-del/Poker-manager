@@ -286,7 +286,7 @@ body.table-screen .player-screen-scroll > *{flex-shrink:0;}
 .night-recap legend{font-size:17px;}
 /* The recap takes whatever height is left at the bottom of the (non-scrolling) player
    screen and scrolls inside itself, so the whole box always stays on screen. */
-.night-recap{flex:1 1 auto;min-height:110px;display:flex;flex-direction:column;}
+.night-recap{flex:0 1 auto;min-height:110px;display:flex;flex-direction:column;}
 .night-recap-body{flex:1;min-height:0;overflow-y:auto;touch-action:pan-y;padding-left:4px;}
 /* Club setup > payments: the how-the-night-settles radio sits on each frame's title. */
 .settle-pick{display:flex;align-items:center;gap:6px;cursor:pointer;}
@@ -2346,6 +2346,18 @@ html.theme-light.theme-blue .act-strip.other button{background:#fff;color:#0e263
 @keyframes agbGlow{0%,100%{box-shadow:0 -4px 14px rgba(239,68,68,.25),0 0 0 2px rgba(239,68,68,.55) inset}50%{box-shadow:0 -6px 26px rgba(239,68,68,.55),0 0 0 3px rgba(239,68,68,.95) inset}}
 html:not(.theme-light) .active-games-bar{border:none;animation-name:agbGlowGold;}
 @keyframes agbGlowGold{0%,100%{box-shadow:0 -6px 18px rgba(253,224,71,.35),0 0 0 3px rgba(253,224,71,.6) inset}50%{box-shadow:0 -10px 34px rgba(253,224,71,.85),0 0 0 4px #fde047 inset}}
+/* A button that must be pressed now (סידור קופה when the pot is off, תחילת משחק with 4+
+   seated): the same pulsing frame as the "יש לך משחק פעיל" bar - red on the light themes,
+   gold on the dark green. */
+.cta-glow{animation:ctaGlow 1.6s ease-in-out infinite;}
+@keyframes ctaGlow{0%,100%{box-shadow:0 0 12px rgba(239,68,68,.3),0 0 0 2px rgba(239,68,68,.55)}50%{box-shadow:0 0 26px rgba(239,68,68,.65),0 0 0 4px rgba(239,68,68,.95)}}
+html:not(.theme-light) .cta-glow{animation-name:ctaGlowGold;}
+@keyframes ctaGlowGold{0%,100%{box-shadow:0 0 12px rgba(253,224,71,.3),0 0 0 2px rgba(253,224,71,.55)}50%{box-shadow:0 0 26px rgba(253,224,71,.8),0 0 0 4px #fde047}}
+/* Everyone out, the pot doesn't add up - told plainly to the players who can't fix it. */
+.pot-off-note{margin:14px auto 0;max-width:340px;padding:10px 14px;border-radius:14px;border:2px solid #dc2626;background:rgba(254,226,226,.9);color:#7f1d1d;font-size:17px;font-weight:700;line-height:1.4;text-align:center;}
+.pot-off-note small{display:block;font-size:15px;font-weight:600;opacity:.85;}
+html:not(.theme-light) .pot-off-note{border-color:#fde047;background:rgba(0,0,0,.25);color:#fde68a;}
+@media (prefers-reduced-motion: reduce){.cta-glow{animation:none;box-shadow:0 0 22px rgba(239,68,68,.55),0 0 0 3px rgba(239,68,68,.9);} html:not(.theme-light) .cta-glow{box-shadow:0 0 22px rgba(253,224,71,.7),0 0 0 3px #fde047;}}
 @media (prefers-reduced-motion: reduce){.active-games-bar{animation:none;box-shadow:0 -6px 26px rgba(239,68,68,.45),0 0 0 3px rgba(239,68,68,.9) inset;} html:not(.theme-light) .active-games-bar{box-shadow:0 -10px 30px rgba(253,224,71,.7),0 0 0 4px #fde047 inset;}}
 </style>
 </head>
@@ -9641,6 +9653,12 @@ function renderPlayerScreen(gameId){
       </div>
       ${editing ? editFrame + shownProfitLine : shownProfitLine}
     `;
+    // Everyone is out but the counted chips don't match what went in: the treasurer (or,
+    // with none, an admin) gets the glowing סידור קופה button, everyone else a clear note.
+    const potOff = allCashedOutForSettlement && !potBalancedForSettlement;
+    const canFixPot = gameTreasurer(g) ? iAmTreasurer(g) : isAdminView;
+    // how far off: players took out more than went in = money missing, less = money left over
+    const potOffAmount = Math.round((totalCashedOutForSettlement - totalBuyinsForSettlement) * 100) / 100;
     const activePayboxLink = getActivePayboxLink(c);
     const activeBitLink = getActiveBitLink(c);
     let statusHtml = "";
@@ -9676,6 +9694,8 @@ function renderPlayerScreen(gameId){
           </div>
         </div>
       ` : `<div style="margin-top:10px;font-weight:700;color:#6ee7b7;">מקבל מ-${esc(t.fromName)} ${t.amount} שח</div>`).join("");
+    } else if (potOff) {
+      statusHtml = "";   // the pot-off note / button below says it
     } else if (g.closed) {
       statusHtml = `<div style="font-size:17px;color:var(--muted);margin-top:10px;">ממתין/ה שכולם יצאו מהשולחן</div>`;
     } else if (stillOpenForInfo >= -0.5) {
@@ -9694,11 +9714,8 @@ function renderPlayerScreen(gameId){
     // The nice facts about my recent nights were in the end-of-night popup ("nightResult") -
     // not repeated here.
     cashedOutInfoHtml = breakdownHtml + paymentNotesHtml + statusHtml + stillPlayingHtml
-      + (((gameTreasurer(g) ? iAmTreasurer(g) : isAdminView) && allCashedOutForSettlement && !potBalancedForSettlement) ? `<div class="pot-fix-cta"><button class="btn btn-blue co-act" data-open-pot-fix>${icon('coins')} סידור קופה${(() => {
-        // how far off: players took out more than went in = money missing, less = money left over
-        const off = Math.round((totalCashedOutForSettlement - totalBuyinsForSettlement) * 100) / 100;
-        return off ? ` · ${off > 0 ? "חסרים" : "עודף"} ₪${Math.abs(off)}` : "";
-      })()}</button><span class="pot-fix-hand">👈</span></div>` : "");   // my stats: the 📊 button by the tabs
+      + ((canFixPot && potOff) ? `<div class="pot-fix-cta"><button class="btn btn-blue co-act cta-glow" data-open-pot-fix>${icon('coins')} סידור קופה${potOffAmount ? ` · ${potOffAmount > 0 ? "חסרים" : "עודף"} ₪${Math.abs(potOffAmount)}` : ""}</button><span class="pot-fix-hand">👈</span></div>` : "")
+      + ((!canFixPot && potOff) ? `<div class="pot-off-note">⚠️ הקופה לא מאוזנת${potOffAmount ? ` · ${potOffAmount > 0 ? "חסרים" : "עודף"} ₪${Math.abs(potOffAmount)}` : ""}<small>${gameTreasurer(g) ? `ממתינים ש${playerIsFemale(g, c, gameTreasurer(g)) ? "הגיזברית" : "הגיזבר"} <bdi>${esc(tableShortName(g, gameTreasurer(g)))}</bdi> ${playerIsFemale(g, c, gameTreasurer(g)) ? "תסדר" : "יסדר"} את הקופה` : "ממתינים לסידור קופה"} - הסכומים עוד עשויים להשתנות</small></div>` : "");   // my stats: the 📊 button by the tabs
   }
   const canDeleteBuyins = canHandleMoney(g); // with a treasurer tonight, only them
   // Carries its own playerId (data-delete-seat-buyin-player) rather than relying on
@@ -10029,7 +10046,7 @@ function renderPlayerScreen(gameId){
           if (tr) return `<div class="tr-strip info">${TREASURER_ICON}<span>${playerIsFemale(g, c, tr) ? "גיזברית" : "גיזבר"} הערב: <b><bdi>${esc(tableShortName(g, tr))}</bdi></b></span>${isAdminView ? `<button type="button" class="tr-clear" data-treasurer-clear>הסר מגיזברות</button>` : ""}</div>`;
           return "";
         })()}
-        ${(notStarted && !cashedOut && canStartGame) ? `<button type="button" class="btn btn-primary btn-block gs-start" data-start-game="${g.id}">${icon('check')} תחילת משחק</button>` : ""}
+        ${(notStarted && !cashedOut && canStartGame) ? `<button type="button" class="btn btn-primary btn-block gs-start${(g.seats || []).filter(Boolean).length >= 4 ? " cta-glow" : ""}" data-start-game="${g.id}">${icon('check')} תחילת משחק</button>` : ""}
         ${actStrip}
         ${carouselHtml}
         ${carouselHtml ? "" : nameHtml}
