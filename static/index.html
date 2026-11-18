@@ -3607,6 +3607,22 @@ async function v2SeatGroup(gameId, start, players, amount){
   r.entered.forEach(e => g.buyins.push({id: e.id, playerId: e.playerId, amount, ts, actorName}));
   return r;
 }
+// Sit down at seatIndex - and if someone took it a moment before (two people tapping the same
+// free seat at once), at the next free one instead (around the table, then the 10th).
+// Returns the seat taken, or -1 when the table is full.
+async function v2ClaimFreeSeat(gameId, seatIndex, playerId, name, gender){
+  if (await v2ClaimSeat(gameId, seatIndex, playerId, name, gender)) return seatIndex;
+  await v2LoadGameFull(gameId);
+  for (let tries = 0; tries < 10; tries++) {
+    const g = getGame(gameId);
+    if ((g.seats || []).includes(playerId)) return g.seats.indexOf(playerId);
+    const idx = freeSeatsFrom(g, seatIndex)[0];
+    if (idx === undefined) return -1;
+    if (await v2ClaimSeat(gameId, idx, playerId, name, gender)) return idx;
+    await v2LoadGameFull(gameId);
+  }
+  return -1;
+}
 async function v2ClaimSeat(gameId, seatIndex, playerId, name, gender){
   let result = await v2FetchWithRetry("POST", `/games/${gameId}/seats/${seatIndex}`, {playerId, name, ...(gender ? {gender} : {})});
   if (result.conflict) {
@@ -5632,8 +5648,8 @@ async function takeSeatAt(g, idx){
     // The first one to sit down stays on the table view (the others still have to come
     // and sit); anyone joining a table that already has players moves to the game tab.
     const firstAtTable = !((getGame(g.id) || g).seats || []).some(s => s && s !== p.id);
-    const ok = await v2ClaimSeat(g.id, idx, p.id, p.name);
-    if (!ok) { showAlert("המושב הזה כבר תפוס - בחרו מושב אחר."); return; }
+    const took = await v2ClaimFreeSeat(g.id, idx, p.id, p.name);
+    if (took === -1) { showAlert("השולחן התמלא - אין כרגע כיסא פנוי."); return; }
     tableSubView = firstAtTable ? "table" : "player";
     if (firstAtTable) setTableView("table");
     render();
@@ -12246,7 +12262,7 @@ function renderModal(m){
     const c = getCommunity(g.communityId);
     const seated = new Set((g.seats||[]).filter(Boolean));
     const avail = c.roster.filter(p => !seated.has(p.id)).sort((a,b) => a.name.localeCompare(b.name, 'he'));
-    title = `מי יושב במקום ${m.seatIndex+1}?`;
+    title = "מי מתיישב?";
     body = `
       ${avail.length ? `
         <div class="scroll-list" data-pick-seat-list>
@@ -16118,8 +16134,8 @@ function attachHandlers(){
         const playerId = uid();
         try {
           if (permanent) await v2AddRosterPlayer(getGame(modal.gameId).communityId, playerId, name, gender);
-          const ok = await v2ClaimSeat(modal.gameId, modal.seatIndex, playerId, name, gender);
-          if (!ok) showAlert("המושב הזה כבר תפוס - בחרו מושב אחר.");
+          const took = await v2ClaimFreeSeat(modal.gameId, modal.seatIndex, playerId, name, gender);
+          if (took === -1) showAlert("השולחן התמלא - אין כרגע כיסא פנוי.");
         } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); }
         closeModal();
         return;
