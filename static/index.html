@@ -11815,7 +11815,7 @@ function renderModal(m){
           </div>
           ${rankHtml}
           <div class="roster-row"><span>ממוצע כללי למשחק</span><span class="${Math.round(avgOverall) > 0 ? "stats-win" : Math.round(avgOverall) < 0 ? "stats-loss" : ""}" style="font-weight:700;">${Math.round(avgOverall) > 0 ? "+" : ""}₪${Math.round(avgOverall)}</span></div>
-          ${avgBuyins!=null?`<div class="roster-row"><span>ממוצע ריביי למשחק <span class="stats-n" style="font-size:.85em">(ללא קניית כניסה)</span></span><span style="font-weight:700;white-space:nowrap;">${avgBuyins === 0 ? "אף פעם" : avgBuyins === 1 ? "פעם אחת" : `${avgBuyins} פעמים`}</span></div>`:""}
+          ${avgBuyins!=null?`<div class="roster-row"><span>ממוצע ריביי <span class="stats-n" style="font-size:.85em">(ללא קניית כניסה)</span></span><span style="font-weight:700;white-space:nowrap;">${avgBuyins === 0 ? "אף פעם" : avgBuyins === 1 ? "פעם אחת" : `${avgBuyins} פעמים`}</span></div>`:""}
           ${best?`<div class="roster-row"><span style="color:#059669;font-size:16px;">הערב הכי טוב</span><span class="${best.profit >= 0 ? "stats-win" : "stats-loss"}" style="font-weight:700;">${best.profit > 0 ? "+" : ""}₪${Math.round(best.profit)}</span></div>`:""}
           ${worst?`<div class="roster-row"><span style="color:#059669;font-size:16px;">הערב הכי גרוע</span><span class="stats-loss" style="font-weight:700;">₪${Math.round(worst.profit)}</span></div>`:""}
           ${renderBarChart(computeProfitBuckets(profits))}
