@@ -9990,7 +9990,7 @@ function renderPlayerScreen(gameId){
         return `<div class="ls-head${nav ? " ls-nav" : ""}">
         ${nav ? `<button type="button" class="ls-arrow ls-prev" data-ls-go="${esc(step(-1))}" aria-label="השחקן הקודם"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>` : ""}
         <span class="ls-av" style="background-image:url('${photo}')"></span>
-        <div class="ls-txt"><div class="ls-title">${nav ? `סיום ערב · ${i + 1} מתוך ${n} שעוד בשולחן` : "סיום ערב"}</div><div class="ls-name"><bdi>${esc(p ? p.name : "")}</bdi></div></div>
+        <div class="ls-txt"><div class="ls-title">סיום ערב</div><div class="ls-name"><bdi>${esc(p ? p.name : "")}</bdi></div></div>
         ${nav ? `<button type="button" class="ls-arrow ls-next" data-ls-go="${esc(step(1))}" aria-label="השחקן הבא"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>` : ""}</div>`;
       })()}
       <div class="ls-tiles" data-ls-buyin="${buyinTotal}">
