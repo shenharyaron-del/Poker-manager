@@ -2313,7 +2313,9 @@ html.theme-light.theme-blue .new-game-card .ngc-title{color:#0e2633;} html.theme
 .ncc-art{flex-shrink:0;width:77px;height:auto;-webkit-user-drag:none;}
 /* Dark theme, quieter: green buttons instead of bright yellow; the chosen player in a muted gold */
 html:not(.theme-light){--gold:#2f8a68;--gold-text:#ffffff;}
-html:not(.theme-light) :is(.btn-primary,.rb-confirm,.tm-switch button.on,.modal .gender-seg button.on){background:#2f8a68!important;color:#fff!important;border:1px solid #3fa57e!important;box-shadow:none!important;text-shadow:none!important;}
+html:not(.theme-light) :is(.btn-primary:not(.cta-glow),.rb-confirm,.tm-switch button.on,.modal .gender-seg button.on){background:#2f8a68!important;color:#fff!important;border:1px solid #3fa57e!important;box-shadow:none!important;text-shadow:none!important;}
+/* the glowing start button: same green, but its pulsing frame isn't wiped by box-shadow:none */
+html:not(.theme-light) .btn-primary.cta-glow{background:#2f8a68!important;color:#fff!important;border:1px solid #3fa57e!important;text-shadow:none!important;}
 html:not(.theme-light) .card.new-game-card{border-color:#3fa57e!important;box-shadow:none!important;}
 html:not(.theme-light) .new-game-card .ngc-title{color:#e7f5ee!important;}
 html:not(.theme-light) .pp-car:not(.names-only) .pp-ci.on,html:not(.theme-light) .lux-page.pp-other .pp-ci.on{background:rgba(201,162,74,.16)!important;box-shadow:0 0 0 1.5px #c9a24a!important;border-color:#c9a24a!important;}
