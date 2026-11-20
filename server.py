@@ -517,6 +517,13 @@ def _get_pool():
     return _db_pool
 
 
+def _warm_pool():
+    try:
+        _get_pool()
+    except Exception as e:
+        print(f"[startup] DB pool not opened yet ({type(e).__name__}: {e}) - will open on the first request", flush=True)
+
+
 class DbBusyError(Exception):
     pass
 
@@ -5130,7 +5137,11 @@ if __name__ == "__main__":
                     # The pool is opened in the worker, not here before the fork - a
                     # connection inherited across a fork is shared by two processes, and a
                     # restarted worker would inherit the previous one's mid-use sockets.
-                    "post_worker_init": lambda worker: _get_pool(),
+                    # Best effort: if Supabase can't be reached at this moment (a network
+                    # blip, a deploy overlapping the old instance), a crash here made
+                    # gunicorn halt the whole server ("Worker failed to boot", exit status
+                    # 3). The pool is opened on the first request instead.
+                    "post_worker_init": lambda worker: _warm_pool(),
                 }.items():
                     self.cfg.set(key, value)
 
