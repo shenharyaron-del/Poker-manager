@@ -7690,12 +7690,7 @@ function playerClubStatsText(communityId, playerId){
   const rebuyOf = (g, id) => g.buyins ? Math.max(0, g.buyins.filter(b => b.playerId === id).length - 1) : null;
   // minutes played: from the first buy-in (or the game's start, if later) to finishing - like
   // the night's own "זמן משחק" (only where each buy-in's time is known)
-  const minutesOf = (g, id) => { if (!g.buyins) return null; const bs = g.buyins.filter(b => b.playerId === id && b.ts).sort((a, b) => a.ts - b.ts);
-    const st = gameStartEvent(g), from = Math.max((bs[0] && bs[0].ts) || 0, (st && st.ts) || 0), end = (g.cashouts[id] || {}).ts;
-    // a night's finish saved long after it (the amount fixed days later, a night closed late)
-    // isn't a real length - over 12 hours (or under 5 minutes) is left out of the times
-    const min = from && end && end > from ? Math.round((end - from) / 60000) : null;
-    return min !== null && min >= 5 && min <= 12 * 60 ? min : null; };
+  const minutesOf = playedMinutes;
   const resultsFor = id => nights.map(g => { const pid = pidIn(g, id); return pid ? {g, profit: (g.cashouts[pid].amount || 0) - bought(g, pid), rebuy: rebuyOf(g, pid), min: minutesOf(g, pid)} : null; });
   const mine = resultsFor(playerId), played = mine.filter(Boolean);
   if (!played.length) return null;
@@ -10828,6 +10823,18 @@ function defaultGameName(communityId){
 // results screen's per-player window (fetched rows) and the cashed-out player's own screen
 // (rows already in g); withTotals adds total bought + profit/loss, which the window needs
 // and the player screen already shows big above.
+// Minutes a player played a night: from the first buy-in (or the game's start, if later) to
+// finishing - like the night's own "זמן משחק" (only where each buy-in's time is known).
+// A finish saved long after the night (the amount fixed days later, a night closed late)
+// isn't a real length - over 12 hours (or under 5 minutes) is left out (null).
+function playedMinutes(g, id){
+  if (!g.buyins) return null;
+  const bs = g.buyins.filter(b => b.playerId === id && b.ts).sort((a, b) => a.ts - b.ts);
+  const st = gameStartEvent(g), from = Math.max((bs[0] && bs[0].ts) || 0, (st && st.ts) || 0), end = ((g.cashouts || {})[id] || {}).ts;
+  const min = from && end && end > from ? Math.round((end - from) / 60000) : null;
+  return min !== null && min >= 5 && min <= 12 * 60 ? min : null;
+}
+
 function nightSummaryHtml(g, playerId, buyins, deleted, withTotals){
   const p = (g.players||[]).find(pl => pl.id === playerId);
   const shekel = v => `${v == null ? "" : v} ש"ח`;
@@ -11765,6 +11772,7 @@ function renderModal(m){
       ` : "";
       let totalCommunityGames = 0;
       const profits = [];
+      let timedProfit = 0, timedMinutes = 0;   // nights with a known length: their profit and minutes
       const buyinCounts = [];   // how many rebuys (beyond the entry buy-in) I made each finished night
       let best=null, worst=null;
       const timeline = [];
@@ -11788,6 +11796,8 @@ function renderModal(m){
           const profit = co.amount - buyins;
           profits.push(profit);
           buyinCounts.push(Math.max(0, g.buyins.filter(b=>b.playerId===player.id).length - 1));   // rebuys: not the entry buy-in
+          const min = playedMinutes(g, player.id);
+          if (min !== null) { timedProfit += profit; timedMinutes += min; }
           if (!best || profit > best.profit) best = {date:g.date, profit, communityName: c.name};
           if (!worst || profit < worst.profit) worst = {date:g.date, profit, communityName: c.name};
         });
@@ -11798,6 +11808,8 @@ function renderModal(m){
       const avgWin = wins.length ? wins.reduce((s,p)=>s+p,0)/wins.length : null;
       const avgLoss = losses.length ? losses.reduce((s,p)=>s+p,0)/losses.length : null;
       const avgOverall = profits.length ? net/profits.length : null;
+      // profit per hour over the nights whose length is known (at least an hour of play in all)
+      const perHour = timedMinutes >= 60 ? Math.round(timedProfit / (timedMinutes / 60)) : null;
       const avgBuyins = buyinCounts.length ? Math.round(buyinCounts.reduce((s,n)=>s+n,0)/buyinCounts.length*10)/10 : null;
       const pct = n => profits.length ? Math.round(n / profits.length * 100) : 0;
       // Place in the group (one group selected): everyone in its roster who finished at
@@ -11834,6 +11846,7 @@ function renderModal(m){
           </div>
           ${rankHtml}
           <div class="roster-row"><span>ממוצע כללי למשחק</span><span class="${Math.round(avgOverall) > 0 ? "stats-win" : Math.round(avgOverall) < 0 ? "stats-loss" : ""}" style="font-weight:700;">${Math.round(avgOverall) > 0 ? "+" : ""}₪${Math.round(avgOverall)}</span></div>
+          ${perHour!=null?`<div class="roster-row"><span>ממוצע לשעה</span><span class="${perHour > 0 ? "stats-win" : perHour < 0 ? "stats-loss" : ""}" style="font-weight:700;white-space:nowrap;">${perHour > 0 ? "+" : ""}₪${perHour}</span></div>`:""}
           ${avgBuyins!=null?`<div class="roster-row"><span>ממוצע ריביי <span class="stats-n" style="font-size:.85em">(ללא קניית כניסה)</span></span><span style="font-weight:700;white-space:nowrap;">${avgBuyins === 0 ? "אף פעם" : avgBuyins === 1 ? "פעם אחת" : `${avgBuyins} פעמים`}</span></div>`:""}
           ${best?`<div class="roster-row"><span style="color:#059669;font-size:16px;">הערב הכי טוב</span><span class="${best.profit >= 0 ? "stats-win" : "stats-loss"}" style="font-weight:700;">${best.profit > 0 ? "+" : ""}₪${Math.round(best.profit)}</span></div>`:""}
           ${worst?`<div class="roster-row"><span style="color:#059669;font-size:16px;">הערב הכי גרוע</span><span class="stats-loss" style="font-weight:700;">₪${Math.round(worst.profit)}</span></div>`:""}
