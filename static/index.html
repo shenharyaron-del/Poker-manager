@@ -10210,7 +10210,7 @@ function renderPlayerScreen(gameId){
         ${nav ? `<button type="button" class="ls-arrow ls-next" data-ls-go="${esc(step(1))}" aria-label="השחקן הבא"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>` : ""}</div>`;
       })()}
       <div class="ls-tiles" data-ls-buyin="${buyinTotal}">
-        <div class="ls-tile"><span>קנייה</span><div class="ls-amt">${canFixBuyins(g, pid) ? `<button type="button" class="co-edit-pen" data-fix-buyins="${pid}" title="תיקון סכום הקנייה" aria-label="תיקון סכום הקנייה">✎</button>` : ""}<b>₪${Math.round(buyinTotal * 100) / 100}</b></div><small>${myBuyins.length <= 1 ? "כניסה" : `${myBuyins.length} קניות`}</small></div>
+        <div class="ls-tile"><span>קנייה</span><div class="ls-amt">${canFixBuyins(g, pid) ? `<button type="button" class="co-edit-pen" data-fix-buyins="${pid}" title="תיקון סכום הקנייה" aria-label="תיקון סכום הקנייה">✎</button>` : ""}<b>₪${Math.round(buyinTotal * 100) / 100}</b></div><small>&nbsp;</small></div>
         <div class="ls-tile"><span>בסוף הערב</span><b data-ls-end>—</b><small>&nbsp;</small></div>
         <div class="ls-tile ls-res"><span>רווח / הפסד</span><b data-ls-res>—</b><small data-ls-res-l>&nbsp;</small></div>
       </div>
