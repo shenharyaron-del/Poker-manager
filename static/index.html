@@ -5489,11 +5489,17 @@ function bitSetupStepsHtml(opts){
     <ol class="bit-steps">
       <li><a href="bit://" class="bit-open-link">כנסו לביט</a> ולחצו על <b>עוד</b> <span class="bit-more-ic" aria-hidden="true"><i></i><i></i><i></i></span></li>
       <li>בחרו <b>קוד ה-QR הקבוע שלי לקבלת כסף</b></li>
-      <li>צלמו צילום מסך של ה-QR ושמרו</li>
-      <li>חזרו לכאן והעלו את תמונת ה-QR</li>
     </ol>
     ${o.collapseImage ? `<details class="bit-steps-more"><summary>איך זה נראה בביט?</summary>${img}</details>` : img}
-    <button class="btn btn-primary btn-block" style="margin:10px 0 6px;" data-bit-link-scan>📷 העלאת צילום QR</button>
+    <ol class="bit-steps" start="3">
+      <li>לחיצה על קוד ה-QR למשך שנייה מעתיקה את הקישור לטלפון, ואז:</li>
+    </ol>
+    <button class="btn btn-primary btn-block" style="margin:2px 0 6px;" data-bit-link-paste>📋 הדבקת הקישור</button>
+    ${bitPasteField ? `<div style="display:flex;gap:8px;margin:0 0 8px;"><input type="url" id="bit-link-input" dir="ltr" placeholder="לחיצה ארוכה כאן ← הדבק" style="flex:1;min-width:0;"><button class="btn btn-ghost btn-sm" data-bit-link-save>שמור</button></div>` : ""}
+    <ol class="bit-steps" start="4">
+      <li>או צלמו מסך של הקוד והעלו אותו:</li>
+    </ol>
+    <button class="btn btn-ghost btn-block" style="margin:2px 0 6px;" data-bit-link-scan>📷 העלאת צילום QR</button>
     <input type="file" accept="image/*" id="bit-qr-file" style="display:none;">`;
 }
 // The scan / paste / edit / remove handlers - the profile and the window share them;
@@ -5507,6 +5513,25 @@ function attachBitLinkHandlers(onSaved){
     bitLinkEditing = false;
     if (link && onSaved) onSaved(); else render();
     try { await saveState(); } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); }
+  };
+  // 📋 הדבקת הקישור: reads what Bit copied (a long press on the QR). Where the browser won't
+  // let the page read the clipboard, a field opens to paste into by hand.
+  const pasteBtn = app.querySelector("[data-bit-link-paste]");
+  if (pasteBtn) pasteBtn.onclick = async () => {
+    let text = null;
+    try { if (navigator.clipboard && navigator.clipboard.readText) text = await navigator.clipboard.readText(); } catch(e) { text = null; }
+    if (text === null) { keepNameEdit(); bitPasteField = true; render(); const f = document.getElementById("bit-link-input"); if (f) f.focus(); return; }
+    const link = parseBitLink(text);
+    if (link) { bitPasteField = false; saveBitLink(link); return; }
+    showAlert("בזיכרון אין קישור של ביט. בביט לחצו על קוד ה-QR למשך שנייה, וחזרו ללחוץ על הדבקה.");
+  };
+  const bitSaveBtn = app.querySelector("[data-bit-link-save]");
+  if (bitSaveBtn) bitSaveBtn.onclick = () => {
+    const raw = (document.getElementById("bit-link-input") || {}).value || "";
+    const link = parseBitLink(raw);
+    if (!link) { showAlert(raw.trim() ? "זה לא נראה כמו קישור של ביט - הוא צריך להתחיל ב-https://www.bitpay.co.il" : "לחצו לחיצה ארוכה בשדה ובחרו הדבק."); return; }
+    bitPasteField = false;
+    saveBitLink(link);
   };
   const bitScanBtn = app.querySelector("[data-bit-link-scan]"), bitFile = app.querySelector("#bit-qr-file");
   if (bitScanBtn && bitFile) {
@@ -5531,6 +5556,7 @@ function attachBitLinkHandlers(onSaved){
   if (bitRemove) bitRemove.onclick = async () => { if (await showConfirm("להסיר את קישור הביט?", {okLabel: "הסר", cancelLabel: "ביטול"})) saveBitLink(null); };
 }
 let bitLinkEditing = false;
+let bitPasteField = false;   // reading the clipboard wasn't allowed - a field to paste into by hand instead
 // The bitSetup window opens once per night per device (closing it with "אחר כך" or the X counts).
 const bitSetupAskedMem = new Set();
 function bitSetupAsked(gameId){ if (bitSetupAskedMem.has(gameId)) return true; try { return localStorage.getItem("bit-setup-asked:" + gameId) === "1"; } catch(e) { return false; } }
