@@ -12424,7 +12424,17 @@ function renderModal(m){
     // acting on someone else's behalf isn't the one paying).
     const g = getGame(m.gameId);
     const fromP = g.players.find(pl => pl.id === m.fromPlayerId);
-    const otherPlayers = g.players.filter(p => p.id !== m.fromPlayerId);
+    // Someone who already left is a recipient only while what they still have to get
+    // (their result, plus what they paid, minus what they already got) covers this amount;
+    // a player still at the table stays (their final amount isn't known yet).
+    const payAmt = parseFloat(m.amount) || 0;
+    const otherPlayers = g.players.filter(p => {
+      if (p.id === m.fromPlayerId) return false;
+      if (!(p.id in (g.cashouts || {}))) return true;
+      const bought = (g.buyins || []).filter(b => b.playerId === p.id).reduce((t, b) => t + (b.amount || 0), 0);
+      const toGet = (g.cashouts[p.id].amount || 0) - bought + directPaidNet(g, p.id);
+      return toGet >= payAmt - 0.005;
+    });
     const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
     const isForSelf = myPlayerId === m.fromPlayerId;
     // Always one recipient picked - "__auto__" (the default): close the night for everyone
