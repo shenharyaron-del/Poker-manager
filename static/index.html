@@ -10441,7 +10441,7 @@ function renderGameResultsScreen(gameId){
     return `
       <div class="res-st-row${isMe ? " me" : ""}" data-player-night="${r.id}" data-game-id="${g.id}">
         ${crownHtml}
-        <span class="nm">${esc(r.name)}${isMe ? ` <small>(${g2("אתה", "את")})</small>` : ""}${playerBitLink(g, r.id) ? ` ${bitTapIcon(13)}` : ""}</span>
+        <span class="nm">${esc(r.name)}${isMe ? ` <small>(${g2("אתה", "את")})</small>` : ""}</span>
         <span class="amt" style="color:${profitColor(r.profit)};">₪${Math.abs(r.profit)}</span>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" class="chev"><path d="M15 18l-6-6 6-6"/></svg>
       </div>`;
