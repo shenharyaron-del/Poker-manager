@@ -12386,7 +12386,10 @@ function renderModal(m){
     // Falls back to the first candidate so there's always a valid selection even before
     // the viewer taps a row, same as a native <select> always having SOME option active -
     // data-confirm-direct-pay's handler reads the exact same fallback.
-    const selectedToPlayerId = m.toPlayerId || (otherPlayers[0] && otherPlayers[0].id);
+    // "__auto__" (the default): close the night for everyone and let the app work out who
+    // pays whom - the close-all button is the action then, the per-recipient one is off.
+    const selectedToPlayerId = m.toPlayerId || "__auto__";
+    const autoSel = selectedToPlayerId === "__auto__";
     title = `${esc(fromP ? fromP.name : "")} מעביר כסף`;
     body = `
       <p style="color:var(--muted);font-size:16px;margin-top:0;">בחרו למי ${g2("אתה מעביר", "את מעבירה")} את הכסף במזומן${isForSelf ? ', או פתחו ביט/פייבוקס לתשלום' : ''}.</p>
@@ -12395,6 +12398,10 @@ function renderModal(m){
           <div class="checkbox-row" data-select-direct-pay-to="__group__" style="cursor:pointer;">
             <input type="radio" name="direct-pay-to" ${selectedToPlayerId==="__group__"?"checked":""} style="pointer-events:none;">
             <span class="flex1" style="display:flex;align-items:center;gap:6px;"><span style="display:inline-flex;background:#0891b2;border-radius:5px;padding:2px;"><img src="/static/paybox-icon.png" style="height:16px;width:auto;display:block;"></span><img src="/static/bit-icon.png" style="height:20px;width:auto;"> פייבוקס / ביט קבוצתי</span>
+          </div>
+          <div class="checkbox-row" data-select-direct-pay-to="__auto__" style="cursor:pointer;">
+            <input type="radio" name="direct-pay-to" ${autoSel?"checked":""} style="pointer-events:none;">
+            <span class="flex1"><b>סיום ערב לכולם</b> · חישוב העברות אוטומטי</span>
           </div>
           ${otherPlayers.map(p => `<div class="checkbox-row" data-select-direct-pay-to="${p.id}" style="cursor:pointer;">
             <input type="radio" name="direct-pay-to" ${selectedToPlayerId===p.id?"checked":""} style="pointer-events:none;">
@@ -12409,8 +12416,8 @@ function renderModal(m){
         const canSetup = isSuperAdmin() || isClubCreator(gc);
         return `<p style="color:var(--muted);font-size:15px;margin:-6px 0 12px;">מומלץ להגדיר את פרטי הקבוצה בהגדרות המועדון${canSetup ? ` - <a href="#" data-direct-pay-open-group-setup="${g.communityId}" style="color:var(--gold);font-weight:700;">להגדרות התשלומים</a>` : ' (מנהל המועדון יכול להגדיר)'}.</p>`;
       })() : ""}
-      <p style="font-weight:700;margin:0 0 14px;">סכום העברה: ${m.amount||0} שח</p>
-      ${isForSelf ? `
+      ${autoSel ? "" : `<p style="font-weight:700;margin:0 0 14px;">סכום העברה: ${m.amount||0} שח</p>`}
+      ${isForSelf && !autoSel ? `
       <div style="margin-bottom:14px;">${payAppButtonsHtml(g, selectedToPlayerId, m.amount)}</div>` : ""}
       ${(() => {
         // Spells out exactly what confirming will record (who it's for, who the money
@@ -12421,9 +12428,11 @@ function renderModal(m){
         const toName = selectedToPlayerId === "__group__" ? "קבוצה" : esc(toP ? toP.name : "");
         const amt = m.amount || "0";
         const forWhom = isForSelf ? "" : ` ל${esc(fromP ? fromP.name : "")}`;
-        return `<button class="btn btn-primary btn-block" data-confirm-direct-pay>סיים ערב${forWhom}, הועבר ל${toName} ₪${amt}</button>`;
+        return autoSel
+          ? `<button class="btn btn-ghost btn-block" data-confirm-direct-pay disabled>סיים ערב${forWhom} - בחרו למי הועבר</button>`
+          : `<button class="btn btn-primary btn-block" data-confirm-direct-pay>סיים ערב${forWhom}, הועבר ל${toName} ₪${amt}</button>`;
       })()}
-      <button class="btn btn-ghost btn-block" style="margin-top:8px;" data-end-night-from-direct-pay="${m.gameId}">סגירת הערב לכולם</button>
+      <button class="btn ${autoSel ? "btn-primary" : "btn-ghost"} btn-block" style="margin-top:8px;" data-end-night-from-direct-pay="${m.gameId}" ${autoSel ? "" : "disabled"}>סגירת הערב לכולם</button>
       <p style="color:var(--muted);font-size:15px;margin:6px 2px 0;text-align:center;">לחיצה כאן תסגור את הערב לכולם, והאפליקציה תחשב בעצמה מי מעביר למי</p>
     `;
   } else if (m.type === "payboxSettings") {
@@ -16338,8 +16347,8 @@ function attachHandlers(){
     const confirmDirectPay = app.querySelector("[data-confirm-direct-pay]");
     if (confirmDirectPay) confirmDirectPay.onclick = async () => {
       const amt = parseFloat(modal.amount);
-      const toPlayerId = modal.toPlayerId || (otherPlayers[0] && otherPlayers[0].id);
-      if (!amt || amt <= 0 || !toPlayerId) return;
+      const toPlayerId = modal.toPlayerId;
+      if (!amt || amt <= 0 || !toPlayerId || toPlayerId === "__auto__") return;
       confirmDirectPay.disabled = true;
       showButtonLoading(confirmDirectPay);
       if (USE_RELATIONAL_API) {
