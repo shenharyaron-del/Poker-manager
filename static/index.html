@@ -1267,6 +1267,15 @@ html:not(.theme-light) .bit-open-link{color:#7cc4ff;}
 .ls-tile .co-edit-pen{font-size:17px;padding:0 2px;}
 .fb-note{color:#b91c1c;font-size:15px;font-weight:700;text-align:center;margin:0 0 12px;line-height:1.45;}
 html:not(.theme-light) .fb-note{color:#fda4af;}
+.res-st{margin:18px 0 4px;font-size:15px;}
+.res-st-title{font-size:14px;font-weight:700;color:var(--muted);margin:0 0 4px;}
+.res-st-row{display:flex;align-items:center;gap:6px;padding:5px 2px;border-bottom:1px solid var(--card-b);cursor:pointer;color:var(--muted);}
+.res-st-row .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.res-st-row .nm small{font-size:13px;}
+.res-st-row.me .nm{color:var(--text);font-weight:700;}
+.res-st-row .amt{font-weight:700;opacity:.85;}
+.res-st-row .chev{color:var(--muted);opacity:.6;flex-shrink:0;}
+.res-st-row span:first-child svg{width:13px;height:13px;}
 .pay-hint{font-size:14px;color:var(--muted);text-align:center;margin-top:6px;}
 .bit-link-box{border:1.5px solid var(--card-b);border-radius:12px;padding:10px 12px;margin-bottom:4px;}
 .bit-link-box .bl-ok{font-weight:700;color:var(--gold);font-size:16px;}
@@ -10354,18 +10363,16 @@ function renderGameResultsScreen(gameId){
     const crownHtml = `<span style="width:18px;display:inline-flex;justify-content:center;flex-shrink:0;color:var(--gold);">${isWinner ? icon('crown') : ''}</span>`;
     // A group-pot night (Paybox / Bit) shows no "who paid" ticks - nobody tracks those
     // payments here; only player-to-player nights do (see "מי מעביר למי" below).
+    // A quiet list (the transfers are the screen's point): small rows, no cards.
     return `
-      <div class="card" data-player-night="${r.id}" data-game-id="${g.id}" style="cursor:pointer;${isMe ? 'border:1.5px solid var(--gold);' : ''}">
-        <div class="flex1" style="display:flex;align-items:center;gap:6px;min-width:0;">
-          ${crownHtml}
-          <span style="font-weight:700;font-size:24px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.name)}${isMe ? ' <span style="color:var(--muted);font-weight:400;font-size:21px;">(' + g2("אתה", "את") + ')</span>' : ''}</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
-          <span style="font-weight:800;font-size:21px;color:${profitColor(r.profit)};">₪${Math.abs(r.profit)}</span>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted);flex-shrink:0;"><path d="M15 18l-6-6 6-6"/></svg>
-        </div>
+      <div class="res-st-row${isMe ? " me" : ""}" data-player-night="${r.id}" data-game-id="${g.id}">
+        ${crownHtml}
+        <span class="nm">${esc(r.name)}${isMe ? ` <small>(${g2("אתה", "את")})</small>` : ""}</span>
+        <span class="amt" style="color:${profitColor(r.profit)};">₪${Math.abs(r.profit)}</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" class="chev"><path d="M15 18l-6-6 6-6"/></svg>
       </div>`;
   }).join("");
+  const standingsHtml = `<div class="res-st"><div class="res-st-title">תוצאות הערב</div>${playerRowsHtml}</div>`;
 
   let topButtonHtml = "";
   let transfersHtml = "";
@@ -10410,7 +10417,7 @@ function renderGameResultsScreen(gameId){
         </div>`;
     }).join("");
     transfersHtml = `
-      <div class="section-title" style="padding:0;margin:20px 0 8px;font-size:19px;">מי מעביר למי</div>
+      <div class="section-title" style="padding:0;margin:6px 0 8px;font-size:19px;">מי מעביר למי</div>
       ${payerCardsHtml || `<div class="empty" style="padding:10px 0;font-size:21px;">אין תשלומים נדרשים</div>`}
     `;
   }
@@ -10418,7 +10425,8 @@ function renderGameResultsScreen(gameId){
   return `
     <div style="flex:1;min-height:0;overflow-y:auto;padding:8px 20px 20px;touch-action:pan-y;font-size:20px;">
       ${topButtonHtml}
-      ${playerRowsHtml}
+      ${isGroupPay ? "" : transfersHtml}
+      ${standingsHtml}
       ${(() => {
         // settled with a small gap (up to ₪5 counts as balanced): say how much
         const inTotal = synthGame.buyins.reduce((s, b) => s + (b.amount || 0), 0);
@@ -10428,7 +10436,6 @@ function renderGameResultsScreen(gameId){
         const n = Math.abs(gap) === 1 ? "שקל אחד" : `${Math.abs(gap)} שקלים`;
         return `<div class="res-gap">${gap > 0 ? `הקופה בעודף של ${n}` : `הקופה בחוסר של ${n}`}</div>`;
       })()}
-      ${transfersHtml}
       <button class="btn btn-ghost btn-block" data-open-my-stats style="font-size:22px;margin-top:16px;display:flex;align-items:center;justify-content:center;gap:6px;">${icon('bar')} הביצועים שלי</button>
     </div>
   `;
