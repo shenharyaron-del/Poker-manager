@@ -5498,12 +5498,13 @@ function bitSetupStepsHtml(opts){
 }
 // The scan / paste / edit / remove handlers - the profile and the window share them;
 // onSaved runs after a link is saved (the window closes itself).
-function attachBitLinkHandlers(onSaved){
+function attachBitLinkHandlers(onSaved, targetId){
+  const who = targetId || myIdentity.id;   // the super admin may set another player's (playerProfile)
   const keepNameEdit = () => { if (document.getElementById("identity-name-input")) myIdentity.name = nameFromInputs("identity-name-input", "identity-last-name-input"); };
   const saveBitLink = async (link) => {
     keepNameEdit();
     await syncLegacyOnlyFields();
-    setGlobalPlayer(myIdentity.id, {bitLink: link || null});
+    setGlobalPlayer(who, {bitLink: link || null});
     bitLinkEditing = false;
     if (link && onSaved) onSaved(); else render();
     try { await saveState(); } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); }
@@ -11262,6 +11263,28 @@ function renderModal(m){
       <button class="btn btn-primary btn-block" style="margin-bottom:12px;" data-confirm-identity-name>שמור</button>
       ${loginSection}
     `;
+  } else if (m.type === "playerProfile") {
+    // Super admin only (from the club's player list): another player's profile - for now
+    // their Bit link, to set or test it for them. Saved on their account's globalPlayers.
+    const c = getCommunity(m.communityId) || {roster: []};
+    const pl = c.roster.find(r => r.id === m.playerId) || {};
+    const key = pl.clientId;
+    const theirBit = key ? parseBitLink(getGlobalPlayer(key).bitLink) : null;
+    title = `הפרופיל של ${esc(pl.name || "")}`;
+    body = `
+      <div style="text-align:center;margin-bottom:14px;">
+        <img src="${getPlayerPhoto(pl) || '/static/logo-watermark.png'}" style="width:76px;height:76px;border-radius:50%;object-fit:cover;display:block;margin:0 auto 6px;border:2px solid var(--gold);">
+        <div style="font-size:20px;font-weight:800;">${esc(pl.name || "")}</div>
+      </div>
+      <div class="section-title" style="padding:0;margin:0 0 6px;">קישור לקבלת תשלום בביט</div>
+      ${!key ? `<p style="color:var(--muted);font-size:16px;">לשחקן הזה עוד אין חשבון באפליקציה (לא נכנס בעצמו) - אין איפה לשמור לו קישור.</p>`
+        : theirBit && !bitLinkEditing ? `
+      <div class="bit-link-box">
+        <div class="bl-ok">✓ קישור הביט שמור</div>
+        <div class="bl-url" dir="ltr">${esc(theirBit)}</div>
+        <div style="display:flex;gap:8px;margin-top:8px;"><button class="btn btn-ghost btn-sm flex1" data-bit-link-edit>החלף</button><button class="btn btn-ghost btn-sm flex1" data-bit-link-remove>הסר</button></div>
+      </div>`
+        : bitSetupStepsHtml({collapseImage: true}) + (theirBit ? `<button class="btn btn-ghost btn-sm" style="display:block;margin:6px auto 0;" data-bit-link-cancel>ביטול</button>` : "")}`;
   } else if (m.type === "bitSetup") {
     // Opened once a night after sitting down at a table whose money goes between the
     // players (see the table screen's check), for someone with no Bit link saved yet.
@@ -11873,6 +11896,7 @@ function renderModal(m){
           ? `<button type="button" class="roster-stats-link rr-name" data-player-stats="${p.id}" title="הביצועים של ${esc(p.name)}">${icon('bar')}<span>${esc(p.name)}</span></button>`
           : `<span class="rr-name"><span>${esc(p.name)}</span></span>`}${netBadge(playerNetProfit(m.communityId, p.id))}</div>
         <div class="row" style="gap:4px;flex-shrink:0;">
+          ${isSuperAdmin() ? `<button class="icon-btn" data-player-profile="${p.id}" title="הפרופיל של ${esc(p.name)}">${icon('user')}</button>` : ""}
           ${roleBtn}
           ${(viewerIsAdmin || isSuperAdmin()) && !isCreatorRow ? `<button class="icon-btn danger" data-remove-player="${p.id}" title="הורדה מהמועדון">${icon('trash')}</button>` : ""}
         </div>
@@ -14913,6 +14937,16 @@ function attachHandlers(){
     go("community", {communityId});
   };
 
+  if (modal && modal.type === "playerProfile" && isSuperAdmin()) {
+    const pl = ((getCommunity(modal.communityId) || {}).roster || []).find(r => r.id === modal.playerId);
+    if (pl && pl.clientId) attachBitLinkHandlers(() => { render(); showAlert("✓ קישור הביט נשמר", 2500); }, pl.clientId);
+  }
+  // Super admin: a player's profile from the club's player list (closing returns to the list).
+  app.querySelectorAll("[data-player-profile]").forEach(el => el.onclick = () => {
+    if (!modal || modal.type !== "roster" || !isSuperAdmin()) return;
+    bitLinkEditing = false;
+    openModal({type: "playerProfile", playerId: el.dataset.playerProfile, communityId: modal.communityId, back: modal});
+  });
   if (modal && modal.type === "bitSetup") {
     attachBitLinkHandlers(() => { closeModal(); showAlert("✓ קישור הביט נשמר", 2500); });
     const later = app.querySelector("[data-bit-setup-later]");
