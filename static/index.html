@@ -5494,10 +5494,7 @@ function bitSetupStepsHtml(opts){
     </ol>
     ${o.collapseImage ? `<details class="bit-steps-more"><summary>איך זה נראה בביט?</summary>${img}</details>` : img}
     <button class="btn btn-primary btn-block" style="margin:10px 0 6px;" data-bit-link-scan>📷 העלאת צילום QR</button>
-    <input type="file" accept="image/*" id="bit-qr-file" style="display:none;">
-    <details class="bit-steps-more"><summary>או הדבקת קישור ביט</summary>
-      <div style="display:flex;gap:8px;margin-top:8px;"><input type="url" id="bit-link-input" dir="ltr" placeholder="https://www.bitpay.co.il/..." style="flex:1;min-width:0;"><button class="btn btn-ghost btn-sm" data-bit-link-save>שמור</button></div>
-    </details>`;
+    <input type="file" accept="image/*" id="bit-qr-file" style="display:none;">`;
 }
 // The scan / paste / edit / remove handlers - the profile and the window share them;
 // onSaved runs after a link is saved (the window closes itself).
@@ -5511,13 +5508,6 @@ function attachBitLinkHandlers(onSaved){
     if (link && onSaved) onSaved(); else render();
     try { await saveState(); } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); }
   };
-  const bitSaveBtn = app.querySelector("[data-bit-link-save]");
-  if (bitSaveBtn) bitSaveBtn.onclick = () => {
-    const raw = (document.getElementById("bit-link-input") || {}).value || "";
-    const link = parseBitLink(raw);
-    if (!link) { showAlert(raw.trim() ? "זה לא נראה כמו קישור של ביט - הוא צריך להתחיל ב-https://www.bitpay.co.il" : "הדביקו את הקישור מביט, או בחרו צילום מסך של הקוד."); return; }
-    saveBitLink(link);
-  };
   const bitScanBtn = app.querySelector("[data-bit-link-scan]"), bitFile = app.querySelector("#bit-qr-file");
   if (bitScanBtn && bitFile) {
     bitScanBtn.onclick = () => { bitFile.value = ""; bitFile.click(); };
@@ -5530,7 +5520,7 @@ function attachBitLinkHandlers(onSaved){
       const link = parseBitLink(text);
       if (link) { saveBitLink(link); return; }
       render();
-      showAlert(text ? "הקוד בתמונה הוא לא קישור של ביט. ודאו שזה \"קוד ה-QR הקבוע שלי לקבלת כסף\" מביט." : "לא הצלחנו לקרוא קוד QR מהתמונה. נסו צילום מסך חד של הקוד, או הדביקו את הקישור.");
+      showAlert(text ? "הקוד בתמונה הוא לא קישור של ביט. ודאו שזה \"קוד ה-QR הקבוע שלי לקבלת כסף\" מביט." : "לא הצלחנו לקרוא קוד QR מהתמונה. נסו צילום מסך חד של הקוד.");
     };
   }
   const bitEdit = app.querySelector("[data-bit-link-edit]");
