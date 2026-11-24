@@ -1249,6 +1249,10 @@ html.theme-light .tp-row{border-color:var(--card-b)!important;}
 .pf-change{font-size:15px;font-weight:800;} .pf-change.up{color:#4ade80;} .pf-change.down{color:#f87171;}
 html.theme-light .pf-change.up{color:#15803d;} html.theme-light .pf-change.down{color:#b91c1c;}
 .modal .pay-pair{width:auto;margin-top:0;}
+.bit-steps{margin:0 0 8px;padding-inline-start:22px;font-size:16px;line-height:1.6;}
+.bit-steps-img{display:block;width:62%;max-width:240px;margin:6px auto;border-radius:12px;border:1px solid var(--card-b);}
+.bit-steps-more{margin:4px 0;font-size:15px;}
+.bit-steps-more summary{cursor:pointer;color:var(--gold);font-weight:700;}
 .pay-hint{font-size:14px;color:var(--muted);text-align:center;margin-top:6px;}
 .bit-link-box{border:1.5px solid var(--card-b);border-radius:12px;padding:10px 12px;margin-bottom:4px;}
 .bit-link-box .bl-ok{font-weight:700;color:var(--gold);font-size:16px;}
@@ -5472,7 +5476,71 @@ async function decodeQrFromFile(file){
     return null;
   } finally { URL.revokeObjectURL(url); }
 }
-let bitLinkEditing = false;   // the profile's "החלף" - shows the paste / scan fields again
+// How to get the Bit QR (with the annotated Bit screenshot) + the "pick the screenshot" /
+// paste controls - one copy for the profile section and the window after sitting down.
+function bitSetupStepsHtml(opts){
+  const o = opts || {};
+  const img = `<img src="/static/help/bit-qr-steps.jpg" alt="ביט: עוד ← קוד ה-QR הקבוע שלי לקבלת כסף" class="bit-steps-img">`;
+  return `
+    <ol class="bit-steps">
+      <li>בביט לחצו על <b>עוד</b></li>
+      <li>בחרו <b>קוד ה-QR הקבוע שלי לקבלת כסף</b></li>
+      <li>צלמו מסך של הקוד</li>
+      <li>חזרו לכאן ולחצו <b>בחירת צילום המסך</b></li>
+    </ol>
+    ${o.collapseImage ? `<details class="bit-steps-more"><summary>איך זה נראה בביט?</summary>${img}</details>` : img}
+    <button class="btn btn-primary btn-block" style="margin:10px 0 6px;" data-bit-link-scan>📷 בחירת צילום המסך</button>
+    <input type="file" accept="image/*" id="bit-qr-file" style="display:none;">
+    <details class="bit-steps-more"><summary>או הדבקת הקישור (לחיצה על הקוד בביט מעתיקה אותו)</summary>
+      <div style="display:flex;gap:8px;margin-top:8px;"><input type="url" id="bit-link-input" dir="ltr" placeholder="https://www.bitpay.co.il/..." style="flex:1;min-width:0;"><button class="btn btn-ghost btn-sm" data-bit-link-save>שמור</button></div>
+    </details>`;
+}
+// The scan / paste / edit / remove handlers - the profile and the window share them;
+// onSaved runs after a link is saved (the window closes itself).
+function attachBitLinkHandlers(onSaved){
+  const keepNameEdit = () => { if (document.getElementById("identity-name-input")) myIdentity.name = nameFromInputs("identity-name-input", "identity-last-name-input"); };
+  const saveBitLink = async (link) => {
+    keepNameEdit();
+    await syncLegacyOnlyFields();
+    setGlobalPlayer(myIdentity.id, {bitLink: link || null});
+    bitLinkEditing = false;
+    if (link && onSaved) onSaved(); else render();
+    try { await saveState(); } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); }
+  };
+  const bitSaveBtn = app.querySelector("[data-bit-link-save]");
+  if (bitSaveBtn) bitSaveBtn.onclick = () => {
+    const raw = (document.getElementById("bit-link-input") || {}).value || "";
+    const link = parseBitLink(raw);
+    if (!link) { showAlert(raw.trim() ? "זה לא נראה כמו קישור של ביט - הוא צריך להתחיל ב-https://www.bitpay.co.il" : "הדביקו את הקישור מביט, או בחרו צילום מסך של הקוד."); return; }
+    saveBitLink(link);
+  };
+  const bitScanBtn = app.querySelector("[data-bit-link-scan]"), bitFile = app.querySelector("#bit-qr-file");
+  if (bitScanBtn && bitFile) {
+    bitScanBtn.onclick = () => { bitFile.value = ""; bitFile.click(); };
+    bitFile.onchange = async () => {
+      const f = bitFile.files && bitFile.files[0];
+      if (!f) return;
+      showButtonLoading(bitScanBtn);
+      let text = null;
+      try { text = await decodeQrFromFile(f); } catch(e) { text = null; }
+      const link = parseBitLink(text);
+      if (link) { saveBitLink(link); return; }
+      render();
+      showAlert(text ? "הקוד בתמונה הוא לא קישור של ביט. ודאו שזה \"קוד ה-QR הקבוע שלי לקבלת כסף\" מביט." : "לא הצלחנו לקרוא קוד QR מהתמונה. נסו צילום מסך חד של הקוד, או הדביקו את הקישור.");
+    };
+  }
+  const bitEdit = app.querySelector("[data-bit-link-edit]");
+  if (bitEdit) bitEdit.onclick = () => { keepNameEdit(); bitLinkEditing = true; render(); };
+  const bitCancel = app.querySelector("[data-bit-link-cancel]");
+  if (bitCancel) bitCancel.onclick = () => { keepNameEdit(); bitLinkEditing = false; render(); };
+  const bitRemove = app.querySelector("[data-bit-link-remove]");
+  if (bitRemove) bitRemove.onclick = async () => { if (await showConfirm("להסיר את קישור הביט?", {okLabel: "הסר", cancelLabel: "ביטול"})) saveBitLink(null); };
+}
+let bitLinkEditing = false;
+// The bitSetup window opens once per night per device (closing it with "אחר כך" or the X counts).
+const bitSetupAskedMem = new Set();
+function bitSetupAsked(gameId){ if (bitSetupAskedMem.has(gameId)) return true; try { return localStorage.getItem("bit-setup-asked:" + gameId) === "1"; } catch(e) { return false; } }
+function markBitSetupAsked(gameId){ bitSetupAskedMem.add(gameId); try { localStorage.setItem("bit-setup-asked:" + gameId, "1"); } catch(e) {} }   // the profile's "החלף" - shows the paste / scan fields again
 
 function getPlayerPhone(p){ return p.clientId ? (getGlobalPlayer(p.clientId).phone || "") : (p.phone || ""); }
 function setPlayerPhone(p, phone){ if (p.clientId) setGlobalPlayer(p.clientId, {phone}); else p.phone = phone; }
@@ -11183,16 +11251,12 @@ function renderModal(m){
         const myBit = parseBitLink(getGlobalPlayer(myIdentity.id).bitLink);
         if (myBit && !bitLinkEditing) return `
       <div class="bit-link-box">
-        <div class="bl-ok">✓ שמור - מי שצריך להעביר לך כסף יגיע ישר אליך בביט</div>
+        <div class="bl-ok">✓ קישור הביט שלך שמור</div>
         <div class="bl-url" dir="ltr">${esc(myBit)}</div>
         <div style="display:flex;gap:8px;margin-top:8px;"><button class="btn btn-ghost btn-sm flex1" data-bit-link-edit>החלף</button><button class="btn btn-ghost btn-sm flex1" data-bit-link-remove>הסר</button></div>
       </div>`;
-        return `
-      <p style="color:var(--muted);font-size:15px;margin:0 0 8px;line-height:1.5;">כך מי שצריך להעביר לך כסף יגיע ישר אליך בביט. בביט: <b>עוד</b> ← <b>קוד ה-QR הקבוע שלי לקבלת כסף</b>, ואז אחד משניים:<br>• לחצו על הקוד (מעתיק את הקישור) והדביקו כאן<br>• או צלמו מסך של הקוד ובחרו את התמונה</p>
-      <div style="display:flex;gap:8px;margin-bottom:8px;"><input type="url" id="bit-link-input" dir="ltr" placeholder="https://www.bitpay.co.il/..." style="flex:1;min-width:0;"><button class="btn btn-primary btn-sm" data-bit-link-save>שמור</button></div>
-      <button class="btn btn-ghost btn-block" style="margin-bottom:6px;" data-bit-link-scan>📷 קריאת קוד ה-QR מתמונה</button>
-      <input type="file" accept="image/*" id="bit-qr-file" style="display:none;">
-      ${myBit ? `<button class="btn btn-ghost btn-sm" style="display:block;margin:0 auto 6px;" data-bit-link-cancel>ביטול</button>` : ""}`;
+        return bitSetupStepsHtml({collapseImage: true})
+          + (myBit ? `<button class="btn btn-ghost btn-sm" style="display:block;margin:6px auto 0;" data-bit-link-cancel>ביטול</button>` : "");
       })()}
       <div style="height:14px;"></div>
       <div class="section-title" style="padding:0;margin:0 0 8px;">עיצוב האפליקציה</div>
@@ -11204,6 +11268,14 @@ function renderModal(m){
       <button class="btn btn-primary btn-block" style="margin-bottom:12px;" data-confirm-identity-name>שמור</button>
       ${loginSection}
     `;
+  } else if (m.type === "bitSetup") {
+    // Opened once a night after sitting down at a table whose money goes between the
+    // players (see the table screen's check), for someone with no Bit link saved yet.
+    title = "קבלת כסף בביט";
+    body = `
+      <p style="font-size:17px;margin:0 0 10px;line-height:1.5;">הערב ההעברות הן בין השחקנים. שמרו פעם אחת את קוד הביט שלכם, וכל מי שיעביר לכם ייפתח לו ביט ישר עליכם.</p>
+      ${bitSetupStepsHtml()}
+      <button class="btn btn-ghost btn-block" style="margin-top:6px;" data-bit-setup-later>אחר כך</button>`;
   } else if (m.type === "inviteGone") {
     title = "הקישור לא בתוקף";
     body = `<p style="color:var(--muted);font-size:17px;">ערב המשחק שאליו הוזמנתם כבר לא קיים - כנראה שהמארגן מחק אותו. אפשר לבקש קישור עדכני.</p>`;
@@ -12853,6 +12925,18 @@ function attachHandlers(){
       setTimeout(() => {
         const fresh = getGame(g.id);
         if (!modal && !pendingBuyinRequest && fresh && !(fresh.buyins || []).some(b => b.playerId === pid)) openModal({type: "entryBuyin", gameId: g.id, playerId: pid});
+      }, 0);
+    }
+    // Seated and bought in at a table where the money goes between the players, with no
+    // Bit link saved: once a night, the window that saves it (see "bitSetup").
+    if (g && pid && !g.closed && g.gameType !== "tournament" && (g.seats||[]).includes(pid) && !(pid in (g.cashouts||{}))
+        && Array.isArray(g.buyins) && g.buyins.some(b => b.playerId === pid)
+        && ((getCommunity(g.communityId) || {}).settlementDefault || "direct") === "direct"
+        && !parseBitLink(getGlobalPlayer(myIdentity.id).bitLink) && !bitSetupAsked(g.id)) {
+      setTimeout(() => {
+        if (modal || pendingBuyinRequest || bitSetupAsked(g.id) || parseBitLink(getGlobalPlayer(myIdentity.id).bitLink)) return;
+        markBitSetupAsked(g.id);
+        openModal({type: "bitSetup", gameId: g.id});
       }, 0);
     }
   }
@@ -14836,6 +14920,11 @@ function attachHandlers(){
     go("community", {communityId});
   };
 
+  if (modal && modal.type === "bitSetup") {
+    attachBitLinkHandlers(() => { closeModal(); showAlert("✓ קישור הביט נשמר", 2500); });
+    const later = app.querySelector("[data-bit-setup-later]");
+    if (later) later.onclick = () => closeModal();
+  }
   if (modal && modal.type === "identityName") {
     const confirmBtn = app.querySelector("[data-confirm-identity-name]");
     if (confirmBtn) confirmBtn.onclick = async () => {
@@ -14877,43 +14966,7 @@ function attachHandlers(){
       render();
     });
     // Bit "receive money" link: saved right away (like the seat position), not with שמור.
-    const keepNameEdit = () => { if (document.getElementById("identity-name-input")) myIdentity.name = nameFromInputs("identity-name-input", "identity-last-name-input"); };
-    const saveBitLink = async (link) => {
-      keepNameEdit();
-      await syncLegacyOnlyFields();
-      setGlobalPlayer(myIdentity.id, {bitLink: link || null});
-      bitLinkEditing = false;
-      render();
-      try { await saveState(); } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); }
-    };
-    const bitSaveBtn = app.querySelector("[data-bit-link-save]");
-    if (bitSaveBtn) bitSaveBtn.onclick = () => {
-      const raw = (document.getElementById("bit-link-input") || {}).value || "";
-      const link = parseBitLink(raw);
-      if (!link) { showAlert(raw.trim() ? "זה לא נראה כמו קישור של ביט - הוא צריך להתחיל ב-https://www.bitpay.co.il" : "הדביקו את הקישור מביט, או קראו אותו מתמונה של הקוד."); return; }
-      saveBitLink(link);
-    };
-    const bitScanBtn = app.querySelector("[data-bit-link-scan]"), bitFile = app.querySelector("#bit-qr-file");
-    if (bitScanBtn && bitFile) {
-      bitScanBtn.onclick = () => { bitFile.value = ""; bitFile.click(); };
-      bitFile.onchange = async () => {
-        const f = bitFile.files && bitFile.files[0];
-        if (!f) return;
-        showButtonLoading(bitScanBtn);
-        let text = null;
-        try { text = await decodeQrFromFile(f); } catch(e) { text = null; }
-        const link = parseBitLink(text);
-        if (link) { saveBitLink(link); return; }
-        render();
-        showAlert(text ? "הקוד בתמונה הוא לא קישור של ביט. ודאו שזה \"קוד ה-QR הקבוע שלי לקבלת כסף\" מביט." : "לא הצלחנו לקרוא קוד QR מהתמונה. נסו צילום מסך חד של הקוד, או הדביקו את הקישור.");
-      };
-    }
-    const bitEdit = app.querySelector("[data-bit-link-edit]");
-    if (bitEdit) bitEdit.onclick = () => { keepNameEdit(); bitLinkEditing = true; render(); };
-    const bitCancel = app.querySelector("[data-bit-link-cancel]");
-    if (bitCancel) bitCancel.onclick = () => { keepNameEdit(); bitLinkEditing = false; render(); };
-    const bitRemove = app.querySelector("[data-bit-link-remove]");
-    if (bitRemove) bitRemove.onclick = async () => { if (await showConfirm("להסיר את קישור הביט?", {okLabel: "הסר", cancelLabel: "ביטול"})) saveBitLink(null); };
+    attachBitLinkHandlers(null);
     app.querySelectorAll("[data-identity-gender]").forEach(el => el.onclick = async () => {
       // Preserve an unsaved name edit across the re-render below, same reasoning as the
       // seat-position picker just above.
