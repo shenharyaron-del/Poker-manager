@@ -1251,6 +1251,8 @@ html.theme-light .pf-change.up{color:#15803d;} html.theme-light .pf-change.down{
 .modal .pay-pair{width:auto;margin-top:0;}
 .bit-more-ic{display:inline-flex;align-items:center;justify-content:center;gap:3px;width:28px;height:28px;border-radius:50%;background:#26262a;vertical-align:middle;margin-inline-start:2px;}
 .bit-more-ic i{width:4px;height:4px;border-radius:50%;background:#c9c9cf;display:block;}
+.bit-open-link{color:#0070E0;font-weight:800;text-decoration:underline;}
+html:not(.theme-light) .bit-open-link{color:#7cc4ff;}
 .bit-steps{margin:0 0 8px;padding-inline-start:22px;font-size:16px;line-height:1.6;}
 .bit-steps-img{display:block;width:62%;max-width:240px;margin:6px auto;border-radius:12px;border:1px solid var(--card-b);}
 .bit-steps-more{margin:4px 0;font-size:15px;}
@@ -5485,7 +5487,7 @@ function bitSetupStepsHtml(opts){
   const img = `<img src="/static/help/bit-qr-steps.jpg" alt="ביט: עוד ← קוד ה-QR הקבוע שלי לקבלת כסף" class="bit-steps-img">`;
   return `
     <ol class="bit-steps">
-      <li>כנסו לביט ולחצו על <b>עוד</b> <span class="bit-more-ic" aria-hidden="true"><i></i><i></i><i></i></span></li>
+      <li><a href="bit://" class="bit-open-link">כנסו לביט</a> ולחצו על <b>עוד</b> <span class="bit-more-ic" aria-hidden="true"><i></i><i></i><i></i></span></li>
       <li>בחרו <b>קוד ה-QR הקבוע שלי לקבלת כסף</b></li>
       <li>צלמו צילום מסך של ה-QR ושמרו</li>
       <li>חזרו לכאן והעלו את תמונת ה-QR</li>
