@@ -1283,7 +1283,8 @@ html:not(.theme-light) .rr-nobit{color:#fda4af;}
 .menu-ic{position:relative;}
 .menu-dot{position:absolute;top:-3px;inset-inline-end:-5px;width:9px;height:9px;border-radius:50%;background:#dc2626;}
 .modal .dp-tg:disabled,.modal .dp-pay .btn:disabled{opacity:.4;filter:grayscale(.4);}
-.dp-area{min-height:118px;margin-bottom:6px;}
+.dp-area{min-height:116px;}   /* the tallest variant (no Bit link, hint on two lines) */
+.dp-amt{font-weight:700;margin:0 0 8px;}
 .dp-area .pay-pair{margin:0;}
 .dp-hint{margin:6px 0 2px;}
 .dp-bit-wide{background:#0070E0;color:#fff;display:flex;align-items:center;justify-content:center;gap:8px;font-size:19px;margin:0;}
@@ -5485,24 +5486,29 @@ function resultBitButtonHtml(g, toPid, amount){
   return link ? `<a href="${esc(link)}" class="btn btn-sm" data-copy-amount="${amt}" style="${st}">${inner}</a>`
     : `<button type="button" class="btn btn-sm" data-open-bit-generic data-copy-amount="${amt}" style="${st}">${inner}</button>`;
 }
-// The paying window's pay area, per picked recipient - one fixed height (see .dp-area), so
-// switching between them moves nothing:
-//  - nobody picked yet (the auto row): ביט / פייבוקס, off;
+// The paying window's action area, per picked recipient - one fixed height (see .dp-area),
+// so switching between them moves nothing:
+//  - the auto row: "סגירת הערב לכולם" and what it does;
 //  - a player with a saved Bit link: one wide "פתיחת ביט ישירה ל..." (Bit opens on them), and
 //    "או פייבוקס";
 //  - a player without one: ביט / פייבוקס side by side.
 function dpAreaHtml(g, toPid, amount){
   const amt = Math.round((Number(amount) || 0) * 100) / 100;
   const auto = !toPid || toPid === "__auto__";
-  const link = auto ? null : playerBitLink(g, toPid);
+  if (auto) return `
+      <button class="btn btn-primary btn-block dp-tg" data-end-night-from-direct-pay="${g.id}">סגירת הערב לכולם</button>
+      <div class="pay-hint dp-hint">לחיצה כאן תסגור את הערב לכולם, והאפליקציה תחשב בעצמה מי מעביר למי</div>`;
+  const amountLine = `<p class="dp-amt">סכום העברה: ${amt} שח</p>`;
+  const link = playerBitLink(g, toPid);
   if (link) {
     const nm = esc(tableShortName(g, toPid));
+    // (the amount is in the line under the button)
     return `
       <button type="button" class="btn btn-block dp-bit-wide" data-dp-pay="bit"><img src="/static/bit-icon.png" style="height:22px;width:auto;display:block;"> פתיחת ביט ישירה ל${nm}</button>
       <div class="pay-hint dp-hint">${nm} ייבחר בביט, הדבק את הסכום (${amt} שח) ואשר העברה</div>
       <div class="dp-alt">או <a href="#" data-dp-pay="paybox">פייבוקס</a></div>`;
   }
-  return `
+  return `${amountLine}
       <div class="pay-pair dp-pay">
         <button type="button" class="btn flex1" data-dp-pay="bit" ${auto ? "disabled" : ""} style="background:#0070E0;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;"> ביט</button>
         <button type="button" class="btn btn-blue flex1" data-dp-pay="paybox" ${auto ? "disabled" : ""} style="display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</button>
@@ -12489,11 +12495,11 @@ function renderModal(m){
           </div>`).join("")}
         </div>
       </div>
+      ${isForSelf ? `<div class="dp-area" data-dp-area>${dpAreaHtml(g, selectedToPlayerId, m.amount)}</div>` : `
       <p style="font-weight:700;margin:0 0 10px;">סכום העברה: ${m.amount||0} שח</p>
-      ${isForSelf ? `<div class="dp-area" data-dp-area>${dpAreaHtml(g, selectedToPlayerId, m.amount)}</div>`
-      : `<button class="btn btn-primary btn-block dp-tg" data-confirm-direct-pay ${autoSel ? "disabled" : ""}>רישום ההעברה ל${esc(fromP ? fromP.name : "")}</button>`}
+      <button class="btn btn-primary btn-block dp-tg" data-confirm-direct-pay ${autoSel ? "disabled" : ""}>רישום ההעברה ל${esc(fromP ? fromP.name : "")}</button>
       <button class="btn btn-primary btn-block dp-tg" style="margin-top:8px;" data-end-night-from-direct-pay="${m.gameId}" ${autoSel ? "" : "disabled"}>סגירת הערב לכולם</button>
-      <p style="color:var(--muted);font-size:15px;margin:6px 2px 0;text-align:center;">לחיצה כאן תסגור את הערב לכולם, והאפליקציה תחשב בעצמה מי מעביר למי</p>
+      <p style="color:var(--muted);font-size:15px;margin:6px 2px 0;text-align:center;">לחיצה כאן תסגור את הערב לכולם, והאפליקציה תחשב בעצמה מי מעביר למי</p>`}
     `;
   } else if (m.type === "payboxSettings") {
     const c = getCommunity(m.communityId);
@@ -16409,7 +16415,7 @@ function attachHandlers(){
       app.querySelectorAll("[data-select-direct-pay-to]").forEach(r => { const i = r.querySelector("input"); if (i) i.checked = r.dataset.selectDirectPayTo === sel; });
       // only enabled / disabled, and the pay area redrawn inside its fixed height - so nothing moves
       const area = app.querySelector("[data-dp-area]");
-      if (area) { area.innerHTML = dpAreaHtml(getGame(modal.gameId), sel, modal.amount); wireDpPay(); }
+      if (area) { area.innerHTML = dpAreaHtml(getGame(modal.gameId), sel, modal.amount); wireDpPay(); wireEndNight(); }
       app.querySelectorAll("[data-confirm-direct-pay]").forEach(b => { b.disabled = auto; });
       const endBtn = app.querySelector("[data-end-night-from-direct-pay]");
       if (endBtn) endBtn.disabled = !auto;
@@ -16469,6 +16475,9 @@ function attachHandlers(){
       e.preventDefault();
       openPayboxSettingsModal(el.dataset.directPayOpenGroupSetup);
     });
+    wireEndNight();
+  }
+  function wireEndNight(){
     const endNightFromDirectPayBtn = app.querySelector("[data-end-night-from-direct-pay]");
     if (endNightFromDirectPayBtn) endNightFromDirectPayBtn.onclick = async () => {
       endNightFromDirectPayBtn.disabled = true;
