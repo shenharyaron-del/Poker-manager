@@ -1253,12 +1253,11 @@ html.theme-light .pf-change.up{color:#15803d;} html.theme-light .pf-change.down{
 .bit-more-ic i{width:4px;height:4px;border-radius:50%;background:#c9c9cf;display:block;}
 .bit-open-link{color:#0070E0;font-weight:800;text-decoration:underline;}
 html:not(.theme-light) .bit-open-link{color:#7cc4ff;}
-.bit-row{display:flex;flex-direction:column;align-items:flex-start;gap:6px;}
-.bit-row .txt{min-width:0;}
-.bit-row .btn{flex-shrink:0;white-space:nowrap;margin:0;}
-.bit-row-or{margin:10px 0 6px;font-size:16px;line-height:1.5;}
-.bit-paste-note{font-size:13px;color:var(--muted);margin:-2px 0 6px;}
-.bit-row .btn:disabled{opacity:.45;}
+.bit-btn-c{display:flex;justify-content:center;margin:2px 0 6px;}
+.bit-btn-c .btn{white-space:nowrap;margin:0;}
+.bit-row-or{margin:10px 0 4px;font-size:16px;line-height:1.5;}
+.bit-paste-note{font-size:13px;color:var(--muted);margin:-2px 0 6px;text-align:center;}
+.bit-btn-c .btn:disabled{opacity:.45;}
 .bit-steps{margin:0 0 8px;padding-inline-start:22px;font-size:16px;line-height:1.6;}
 .bit-steps-img{display:block;width:62%;max-width:240px;margin:6px auto;border-radius:12px;border:1px solid var(--card-b);}
 .bit-steps-more{margin:4px 0;font-size:15px;}
@@ -5500,11 +5499,13 @@ function bitSetupStepsHtml(opts){
     </ol>
     ${o.collapseImage ? `<details class="bit-steps-more"><summary>איך זה נראה בביט?</summary>${img}</details>` : img}
     <ol class="bit-steps" start="3">
-      <li><div class="bit-row"><span class="txt">לחיצה על קוד ה-QR למשך שנייה מעתיקה את הקישור לטלפון</span><button class="btn btn-primary btn-sm" data-bit-link-paste>📋 הדבקת הקישור</button></div></li>
+      <li>לחיצה על קוד ה-QR למשך שנייה מעתיקה את הקישור לטלפון</li>
     </ol>
+    <div class="bit-btn-c"><button class="btn btn-primary btn-sm" data-bit-link-paste>📋 הדבקת הקישור</button></div>
     <div class="bit-paste-note" data-bit-paste-note hidden>הכפתור יופעל כשקישור הביט יהיה בזיכרון</div>
     ${bitPasteField ? `<div style="display:flex;gap:8px;margin:0 0 8px;"><input type="url" id="bit-link-input" dir="ltr" placeholder="לחיצה ארוכה כאן ← הדבק" style="flex:1;min-width:0;"><button class="btn btn-ghost btn-sm" data-bit-link-save>שמור</button></div>` : ""}
-    <div class="bit-row bit-row-or"><span class="txt">או צלמו מסך של הקוד והעלו אותו</span><button class="btn btn-ghost btn-sm" data-bit-link-scan>📷 העלאת צילום QR</button></div>
+    <div class="bit-row-or">או צלמו מסך של הקוד והעלו אותו</div>
+    <div class="bit-btn-c"><button class="btn btn-ghost btn-sm" data-bit-link-scan>📷 העלאת צילום QR</button></div>
     <input type="file" accept="image/*" id="bit-qr-file" style="display:none;">`;
 }
 // The scan / paste / edit / remove handlers - the profile and the window share them;
