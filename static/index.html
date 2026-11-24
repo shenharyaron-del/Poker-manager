@@ -5478,15 +5478,18 @@ function playerBitLink(g, pid){
 // paste in the app's amount field) and opens the app - Bit straight on the recipient when
 // they saved their link. A real link (not a click handler that navigates) so the phone hands
 // it to the Bit app.
-// A small ביט button on the results screen's "מי מעביר למי", on my own open transfers: Bit
-// straight on the recipient when they saved their link, and the amount copied to paste.
+// Small pay buttons on the results screen's "מי מעביר למי", on my own open transfers: Bit
+// straight on the recipient when they saved their link (Bit only then); otherwise ביט and
+// פייבוקס. The amount is copied to paste either way.
 function resultBitButtonHtml(g, toPid, amount){
   const amt = String(Math.round((Number(amount) || 0) * 100) / 100);
   const link = playerBitLink(g, toPid);
   const inner = `<img src="/static/bit-icon.png" style="height:16px;width:auto;display:block;"> ביט`;
   const st = `background:#0070E0;color:#fff;display:inline-flex;align-items:center;gap:4px;text-decoration:none;padding:4px 10px;font-size:15px;`;
-  return link ? `<a href="${esc(link)}" class="btn btn-sm" data-copy-amount="${amt}" style="${st}">${inner}</a>`
-    : `<button type="button" class="btn btn-sm" data-open-bit-generic data-copy-amount="${amt}" style="${st}">${inner}</button>`;
+  if (link) return `<a href="${esc(link)}" class="btn btn-sm" data-copy-amount="${amt}" style="${st}">${inner}</a>`;
+  // no Bit link saved: Bit (opened plain) and PayBox, both copying the amount
+  return `<button type="button" class="btn btn-sm" data-open-bit-generic data-copy-amount="${amt}" style="${st}">${inner}</button>`
+    + `<a href="https://links.payboxapp.com" class="btn btn-sm btn-blue" data-copy-amount="${amt}" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;padding:4px 10px;font-size:15px;"><img src="/static/paybox-icon.png" style="height:16px;width:auto;display:block;"> פייבוקס</a>`;
 }
 // The paying window's action area, per picked recipient - one fixed height (see .dp-area),
 // so switching between them moves nothing:
