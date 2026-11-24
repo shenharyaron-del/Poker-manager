@@ -5452,6 +5452,16 @@ function playerBitLink(g, pid){
 // paste in the app's amount field) and opens the app - Bit straight on the recipient when
 // they saved their link. A real link (not a click handler that navigates) so the phone hands
 // it to the Bit app.
+// A small ביט button on the results screen's "מי מעביר למי", on my own open transfers: Bit
+// straight on the recipient when they saved their link, and the amount copied to paste.
+function resultBitButtonHtml(g, toPid, amount){
+  const amt = String(Math.round((Number(amount) || 0) * 100) / 100);
+  const link = playerBitLink(g, toPid);
+  const inner = `<img src="/static/bit-icon.png" style="height:16px;width:auto;display:block;"> ביט`;
+  const st = `background:#0070E0;color:#fff;display:inline-flex;align-items:center;gap:4px;text-decoration:none;padding:4px 10px;font-size:15px;`;
+  return link ? `<a href="${esc(link)}" class="btn btn-sm" data-copy-amount="${amt}" style="${st}">${inner}</a>`
+    : `<button type="button" class="btn btn-sm" data-open-bit-generic data-copy-amount="${amt}" style="${st}">${inner}</button>`;
+}
 function payAppButtonsHtml(g, toPid, amount){
   const amt = String(Math.round((Number(amount) || 0) * 100) / 100);
   const link = toPid && toPid !== "__group__" ? playerBitLink(g, toPid) : null;
@@ -10370,9 +10380,14 @@ function renderGameResultsScreen(gameId){
     }
   } else {
     const txns = settlementWithPayments({...synthGame, playerPayments, payboxPayments});
+    // A fixed order (the night's players), for the cards and the rows in them: ticking a
+    // transfer as done used to move it up among the paid ones, so the box under the finger
+    // turned out to be someone else's.
+    const order = id => { const k = (synthGame.players || []).findIndex(pl => pl.id === id); return k === -1 ? 9999 : k; };
+    txns.sort((a, b) => order(a.from) - order(b.from) || order(a.to) - order(b.to));
     const byPayer = {};
     txns.forEach(t => { (byPayer[t.from] = byPayer[t.from] || {name:t.fromName, items:[]}).items.push(t); });
-    const payerCardsHtml = Object.keys(byPayer).map(fromId => {
+    const payerCardsHtml = Object.keys(byPayer).sort((a, b) => order(a) - order(b)).map(fromId => {
       const payer = byPayer[fromId];
       const rowsHtml = payer.items.map(t => {
         const existing = t.paid ? {id: t.paymentId} : null;
@@ -10383,6 +10398,7 @@ function renderGameResultsScreen(gameId){
             <div style="display:flex;align-items:center;gap:8px;">
               <span style="font-weight:700;color:var(--gold);${paidStyle}">₪${t.amount}</span>
               ${existing ? '<span style="font-size:20px;font-weight:700;color:#6ee7b7;">עבר</span>' : ''}
+              ${!existing && fromId === myPlayerId ? resultBitButtonHtml(g, t.to, t.amount) : ""}
               <input type="checkbox" data-result-player-payment-toggle data-from="${fromId}" data-to="${t.to}" data-amount="${t.amount}" data-payment-id="${existing?existing.id:''}" ${existing?'checked':''} style="width:22px;height:18px;accent-color:var(--gold);">
             </div>
           </div>`;
