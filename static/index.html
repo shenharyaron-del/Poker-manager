@@ -12401,7 +12401,7 @@ function renderModal(m){
           </div>
           <div class="checkbox-row" data-select-direct-pay-to="__auto__" style="cursor:pointer;">
             <input type="radio" name="direct-pay-to" ${autoSel?"checked":""} style="pointer-events:none;">
-            <span class="flex1"><b>סיום ערב לכולם</b> · חישוב העברות אוטומטי</span>
+            <span class="flex1">האפליקציה תחשב מי מעביר למי</span>
           </div>
           ${otherPlayers.map(p => `<div class="checkbox-row" data-select-direct-pay-to="${p.id}" style="cursor:pointer;">
             <input type="radio" name="direct-pay-to" ${selectedToPlayerId===p.id?"checked":""} style="pointer-events:none;">
