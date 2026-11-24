@@ -1276,6 +1276,12 @@ html:not(.theme-light) .fb-note{color:#fda4af;}
 .res-st-row .amt{font-weight:700;opacity:.85;}
 .res-st-row .chev{color:var(--muted);opacity:.6;flex-shrink:0;}
 .res-st-row span:first-child svg{width:13px;height:13px;}
+.rr-bit{height:16px;width:auto;flex-shrink:0;margin-inline-start:4px;border-radius:3px;}
+.rr-nobit{font-size:12px;font-weight:700;color:#b91c1c;border:1px solid currentColor;border-radius:999px;padding:0 6px;margin-inline-start:4px;white-space:nowrap;flex-shrink:0;opacity:.8;}
+html:not(.theme-light) .rr-nobit{color:#fda4af;}
+.menu-bit-ic{height:20px;width:auto;border-radius:4px;display:block;}
+.menu-ic{position:relative;}
+.menu-dot{position:absolute;top:-3px;inset-inline-end:-5px;width:9px;height:9px;border-radius:50%;background:#dc2626;}
 .pay-hint{font-size:14px;color:var(--muted);text-align:center;margin-top:6px;}
 .bit-link-box{border:1.5px solid var(--card-b);border-radius:12px;padding:10px 12px;margin-bottom:4px;}
 .bit-link-box .bl-ok{font-weight:700;color:var(--gold);font-size:16px;}
@@ -11372,8 +11378,15 @@ function renderModal(m){
     // Opened once a night after sitting down at a table whose money goes between the
     // players (see the table screen's check), for someone with no Bit link saved yet.
     title = "קבלת כסף בביט";
-    body = `
-      ${bitSetupStepsHtml()}`;
+    const myBitNow = parseBitLink(getGlobalPlayer(myIdentity.id).bitLink);
+    body = myBitNow && !bitLinkEditing ? `
+      <div class="bit-link-box">
+        <div class="bl-ok">✓ קישור הביט שלך שמור</div>
+        <div class="bl-url" dir="ltr">${esc(myBitNow)}</div>
+        <div style="display:flex;gap:8px;margin-top:8px;"><button class="btn btn-ghost btn-sm flex1" data-bit-link-edit>החלף</button><button class="btn btn-ghost btn-sm flex1" data-bit-link-remove>הסר</button></div>
+      </div>` : `
+      ${bitSetupStepsHtml()}
+      ${myBitNow ? `<button class="btn btn-ghost btn-sm" style="display:block;margin:6px auto 0;" data-bit-link-cancel>ביטול</button>` : ""}`;
   } else if (m.type === "inviteGone") {
     title = "הקישור לא בתוקף";
     body = `<p style="color:var(--muted);font-size:17px;">ערב המשחק שאליו הוזמנתם כבר לא קיים - כנראה שהמארגן מחק אותו. אפשר לבקש קישור עדכני.</p>`;
@@ -11966,6 +11979,12 @@ function renderModal(m){
     // everyone else's row does, but only for a viewer who is themselves a community admin -
     // read-only (a plain badge, same icon) for anyone else looking at this same list.
     const viewerIsAdmin = isCommunityAdmin(c);
+    // In a club where the players pay each other: who hasn't saved a Bit link yet.
+    const directClub = (c.settlementDefault || "direct") === "direct";
+    const bitBadge = p => !directClub ? ""
+      : p.clientId && parseBitLink(getGlobalPlayer(p.clientId).bitLink)
+        ? `<img src="/static/bit-icon.png" class="rr-bit" alt="ביט" title="הגדיר קישור ביט">`
+        : `<span class="rr-nobit" title="לא הגדיר קישור ביט לקבלת כסף">ללא ביט</span>`;
     const rows = c.roster.map(p => {
       const isCreatorRow = !!(p.clientId && c.createdBy && p.clientId === c.createdBy);
       const isAdminRow = isCreatorRow || !!p.isAdmin;
@@ -11976,7 +11995,7 @@ function renderModal(m){
       return `<div class="roster-row">
         <div class="row rr-main">${isSuperAdmin()
           ? `<button type="button" class="roster-stats-link rr-name" data-player-stats="${p.id}" title="הביצועים של ${esc(p.name)}">${icon('bar')}<span>${esc(p.name)}</span></button>`
-          : `<span class="rr-name"><span>${esc(p.name)}</span></span>`}${netBadge(playerNetProfit(m.communityId, p.id))}</div>
+          : `<span class="rr-name"><span>${esc(p.name)}</span></span>`}${bitBadge(p)}${netBadge(playerNetProfit(m.communityId, p.id))}</div>
         <div class="row" style="gap:4px;flex-shrink:0;">
           ${roleBtn}
           ${(viewerIsAdmin || isSuperAdmin()) && !isCreatorRow ? `<button class="icon-btn danger" data-remove-player="${p.id}" title="הורדה מהמועדון">${icon('trash')}</button>` : ""}
@@ -12276,6 +12295,7 @@ function renderModal(m){
       ["אני", [
         tile('data-game-menu-go="profile"', "👤", "הפרופיל שלי"),
         tile('data-game-menu-go="stats"', icon('bar'), "הביצועים שלי"),
+        tile('data-game-menu-go="bit"', `<img src="/static/bit-icon.png" class="menu-bit-ic" alt="">${parseBitLink(getGlobalPlayer(myIdentity.id).bitLink) ? "" : '<span class="menu-dot"></span>'}`, "ביט לקבלת כסף"),
       ]],
       ["אפליקציה", [
         tile('data-game-menu-go="home"', "🏠", "מסך הבית"),
@@ -13879,6 +13899,7 @@ function attachHandlers(){
     else if (to === "profile") openModal({type: "identityName", forced: false});
     else if (to === "stats") openModal({type: "stats", clientId: myIdentity.id, selectedCommunityId: nav.communityId || (nav.gameId && getGame(nav.gameId) && getGame(nav.gameId).communityId) || null});
     else if (to === "theme") openModal({type: "themePicker"});
+    else if (to === "bit") { bitLinkEditing = false; bitPasteField = false; openModal({type: "bitSetup", fromMenu: true}); }
     else if (to === "report") {
       const cid = g ? g.communityId : (nav.screen === "community" && nav.communityId);
       if (cid) openModal({type: "monthlyReport", communityId: cid});
