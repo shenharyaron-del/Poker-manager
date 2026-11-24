@@ -1249,6 +1249,8 @@ html.theme-light .tp-row{border-color:var(--card-b)!important;}
 .pf-change{font-size:15px;font-weight:800;} .pf-change.up{color:#4ade80;} .pf-change.down{color:#f87171;}
 html.theme-light .pf-change.up{color:#15803d;} html.theme-light .pf-change.down{color:#b91c1c;}
 .modal .pay-pair{width:auto;margin-top:0;}
+.bit-more-ic{display:inline-flex;align-items:center;justify-content:center;gap:3px;width:28px;height:28px;border-radius:50%;background:#26262a;vertical-align:middle;margin-inline-start:2px;}
+.bit-more-ic i{width:4px;height:4px;border-radius:50%;background:#c9c9cf;display:block;}
 .bit-steps{margin:0 0 8px;padding-inline-start:22px;font-size:16px;line-height:1.6;}
 .bit-steps-img{display:block;width:62%;max-width:240px;margin:6px auto;border-radius:12px;border:1px solid var(--card-b);}
 .bit-steps-more{margin:4px 0;font-size:15px;}
@@ -5483,13 +5485,13 @@ function bitSetupStepsHtml(opts){
   const img = `<img src="/static/help/bit-qr-steps.jpg" alt="ביט: עוד ← קוד ה-QR הקבוע שלי לקבלת כסף" class="bit-steps-img">`;
   return `
     <ol class="bit-steps">
-      <li>בביט לחצו על <b>עוד</b></li>
+      <li>כנסו לביט ולחצו על <b>עוד</b> <span class="bit-more-ic" aria-hidden="true"><i></i><i></i><i></i></span></li>
       <li>בחרו <b>קוד ה-QR הקבוע שלי לקבלת כסף</b></li>
-      <li>צלמו מסך של הקוד</li>
-      <li>חזרו לכאן ולחצו <b>בחירת צילום המסך</b></li>
+      <li>צלמו צילום מסך של ה-QR ושמרו</li>
+      <li>חזרו לכאן והעלו את תמונת ה-QR</li>
     </ol>
     ${o.collapseImage ? `<details class="bit-steps-more"><summary>איך זה נראה בביט?</summary>${img}</details>` : img}
-    <button class="btn btn-primary btn-block" style="margin:10px 0 6px;" data-bit-link-scan>📷 בחירת צילום המסך</button>
+    <button class="btn btn-primary btn-block" style="margin:10px 0 6px;" data-bit-link-scan>📷 העלאת צילום QR</button>
     <input type="file" accept="image/*" id="bit-qr-file" style="display:none;">
     <details class="bit-steps-more"><summary>או הדבקת הקישור (לחיצה על הקוד בביט מעתיקה אותו)</summary>
       <div style="display:flex;gap:8px;margin-top:8px;"><input type="url" id="bit-link-input" dir="ltr" placeholder="https://www.bitpay.co.il/..." style="flex:1;min-width:0;"><button class="btn btn-ghost btn-sm" data-bit-link-save>שמור</button></div>
@@ -11273,7 +11275,6 @@ function renderModal(m){
     // players (see the table screen's check), for someone with no Bit link saved yet.
     title = "קבלת כסף בביט";
     body = `
-      <p style="font-size:17px;margin:0 0 10px;line-height:1.5;">הערב ההעברות הן בין השחקנים. שמרו פעם אחת את קוד הביט שלכם, וכל מי שיעביר לכם ייפתח לו ביט ישר עליכם.</p>
       ${bitSetupStepsHtml()}
       <button class="btn btn-ghost btn-block" style="margin-top:6px;" data-bit-setup-later>אחר כך</button>`;
   } else if (m.type === "inviteGone") {
