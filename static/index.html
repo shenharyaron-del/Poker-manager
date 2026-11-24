@@ -1282,6 +1282,7 @@ html:not(.theme-light) .rr-nobit{color:#fda4af;}
 .menu-bit-ic{height:20px;width:auto;border-radius:4px;display:block;}
 .menu-ic{position:relative;}
 .menu-dot{position:absolute;top:-3px;inset-inline-end:-5px;width:9px;height:9px;border-radius:50%;background:#dc2626;}
+.modal .dp-tg:disabled,.modal .dp-pay .btn:disabled{opacity:.4;filter:grayscale(.4);}
 .pay-hint{font-size:14px;color:var(--muted);text-align:center;margin-top:6px;}
 .bit-link-box{border:1.5px solid var(--card-b);border-radius:12px;padding:10px 12px;margin-bottom:4px;}
 .bit-link-box .bl-ok{font-weight:700;color:var(--gold);font-size:16px;}
@@ -12426,22 +12427,17 @@ function renderModal(m){
     const otherPlayers = g.players.filter(p => p.id !== m.fromPlayerId);
     const myPlayerId = myIdentity.myPlayers && myIdentity.myPlayers[g.communityId];
     const isForSelf = myPlayerId === m.fromPlayerId;
-    // Falls back to the first candidate so there's always a valid selection even before
-    // the viewer taps a row, same as a native <select> always having SOME option active -
-    // data-confirm-direct-pay's handler reads the exact same fallback.
-    // "__auto__" (the default): close the night for everyone and let the app work out who
-    // pays whom - the close-all button is the action then, the per-recipient one is off.
-    const selectedToPlayerId = m.toPlayerId || "__auto__";
+    // Always one recipient picked - "__auto__" (the default): close the night for everyone
+    // and let the app work out who pays whom. Picking a row updates the window in place
+    // (no redraw - see the handler), and every part below is always there, only enabled or
+    // not, so nothing moves when the choice changes.
+    const selectedToPlayerId = (m.toPlayerId && (m.toPlayerId === "__auto__" || otherPlayers.some(p => p.id === m.toPlayerId))) ? m.toPlayerId : "__auto__";
     const autoSel = selectedToPlayerId === "__auto__";
     title = `${esc(fromP ? fromP.name : "")} מעביר כסף`;
     body = `
-      <p style="color:var(--muted);font-size:16px;margin-top:0;">בחרו למי ${g2("אתה מעביר", "את מעבירה")} את הכסף במזומן${isForSelf ? ', או פתחו ביט/פייבוקס לתשלום' : ''}.</p>
+      <p style="color:var(--muted);font-size:16px;margin-top:0;">בחרו למי ${g2("אתה מעביר", "את מעבירה")} את הכסף במזומן</p>
       <div class="field"><label>למי?</label>
         <div class="scroll-list" style="max-height:240px;">
-          <div class="checkbox-row" data-select-direct-pay-to="__group__" style="cursor:pointer;">
-            <input type="radio" name="direct-pay-to" ${selectedToPlayerId==="__group__"?"checked":""} style="pointer-events:none;">
-            <span class="flex1" style="display:flex;align-items:center;gap:6px;"><span style="display:inline-flex;background:#0891b2;border-radius:5px;padding:2px;"><img src="/static/paybox-icon.png" style="height:16px;width:auto;display:block;"></span><img src="/static/bit-icon.png" style="height:20px;width:auto;"> פייבוקס / ביט קבוצתי</span>
-          </div>
           <div class="checkbox-row" data-select-direct-pay-to="__auto__" style="cursor:pointer;">
             <input type="radio" name="direct-pay-to" ${autoSel?"checked":""} style="pointer-events:none;">
             <span class="flex1">האפליקציה תחשב מי מעביר למי</span>
@@ -12452,30 +12448,15 @@ function renderModal(m){
           </div>`).join("")}
         </div>
       </div>
-      ${selectedToPlayerId === "__group__" ? (() => {
-        // Paying the group's PayBox / Bit: suggest setting the group's details in the club
-        // profile (with a way there for whoever can edit it).
-        const gc = getCommunity(g.communityId) || {};
-        const canSetup = isSuperAdmin() || isClubCreator(gc);
-        return `<p style="color:var(--muted);font-size:15px;margin:-6px 0 12px;">מומלץ להגדיר את פרטי הקבוצה בהגדרות המועדון${canSetup ? ` - <a href="#" data-direct-pay-open-group-setup="${g.communityId}" style="color:var(--gold);font-weight:700;">להגדרות התשלומים</a>` : ' (מנהל המועדון יכול להגדיר)'}.</p>`;
-      })() : ""}
-      ${autoSel ? "" : `<p style="font-weight:700;margin:0 0 14px;">סכום העברה: ${m.amount||0} שח</p>`}
-      ${isForSelf && !autoSel ? `
-      <div style="margin-bottom:14px;">${payAppButtonsHtml(g, selectedToPlayerId, m.amount)}</div>` : ""}
-      ${(() => {
-        // Spells out exactly what confirming will record (who it's for, who the money
-        // went to, how much) instead of a generic "I paid" - a single tap here can be
-        // wrong in two ways (wrong recipient, stale amount left over from auto-fill), and
-        // a button that silently just says "done" doesn't let you catch either.
-        const toP = g.players.find(pl => pl.id === selectedToPlayerId);
-        const toName = selectedToPlayerId === "__group__" ? "קבוצה" : esc(toP ? toP.name : "");
-        const amt = m.amount || "0";
-        const forWhom = isForSelf ? "" : ` ל${esc(fromP ? fromP.name : "")}`;
-        return autoSel
-          ? `<button class="btn btn-ghost btn-block" data-confirm-direct-pay disabled>סיים ערב${forWhom} - בחרו למי הועבר</button>`
-          : `<button class="btn btn-primary btn-block" data-confirm-direct-pay>סיים ערב${forWhom}, הועבר ל${toName} ₪${amt}</button>`;
-      })()}
-      <button class="btn ${autoSel ? "btn-primary" : "btn-ghost"} btn-block" style="margin-top:8px;" data-end-night-from-direct-pay="${m.gameId}" ${autoSel ? "" : "disabled"}>סגירת הערב לכולם</button>
+      <p style="font-weight:700;margin:0 0 10px;">סכום העברה: ${m.amount||0} שח</p>
+      ${isForSelf ? `
+      <div class="pay-pair dp-pay">
+        <button type="button" class="btn flex1" data-dp-pay="bit" ${autoSel ? "disabled" : ""} style="background:#0070E0;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;"> ביט</button>
+        <button type="button" class="btn btn-blue flex1" data-dp-pay="paybox" ${autoSel ? "disabled" : ""} style="display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</button>
+      </div>
+      <div class="pay-hint" style="margin-bottom:12px;">ההעברה תירשם, הסכום (₪${m.amount||0}) יועתק והאפליקציה תיפתח</div>`
+      : `<button class="btn btn-primary btn-block dp-tg" data-confirm-direct-pay ${autoSel ? "disabled" : ""}>רישום ההעברה ל${esc(fromP ? fromP.name : "")}</button>`}
+      <button class="btn btn-primary btn-block dp-tg" style="margin-top:8px;" data-end-night-from-direct-pay="${m.gameId}" ${autoSel ? "" : "disabled"}>סגירת הערב לכולם</button>
       <p style="color:var(--muted);font-size:15px;margin:6px 2px 0;text-align:center;">לחיצה כאן תסגור את הערב לכולם, והאפליקציה תחשב בעצמה מי מעביר למי</p>
     `;
   } else if (m.type === "payboxSettings") {
@@ -16385,8 +16366,35 @@ function attachHandlers(){
   if (modal && modal.type === "directPay") {
     const g = getGame(modal.gameId);
     const otherPlayers = g.players.filter(p => p.id !== modal.fromPlayerId);
+    // Picking a recipient: in place, no redraw - a redraw scrolled the list back to the top
+    // and changed what showed under it, so the window jumped.
+    const syncDirectPay = () => {
+      const sel = modal.toPlayerId || "__auto__", auto = sel === "__auto__";
+      app.querySelectorAll("[data-select-direct-pay-to]").forEach(r => { const i = r.querySelector("input"); if (i) i.checked = r.dataset.selectDirectPayTo === sel; });
+      // only enabled / disabled - the same look and size either way, so nothing moves
+      app.querySelectorAll("[data-dp-pay], [data-confirm-direct-pay]").forEach(b => { b.disabled = auto; });
+      const endBtn = app.querySelector("[data-end-night-from-direct-pay]");
+      if (endBtn) endBtn.disabled = !auto;
+    };
     app.querySelectorAll("[data-select-direct-pay-to]").forEach(el => el.onclick = () => {
-      updateModal({toPlayerId: el.dataset.selectDirectPayTo});
+      modal.toPlayerId = el.dataset.selectDirectPayTo;
+      syncDirectPay();
+    });
+    // ביט / פייבוקס: what "סיים ערב, הועבר ל..." did (record the transfer to the picked
+    // player), then the window closes and the app opens - Bit straight on the recipient when
+    // they saved their link - with the amount copied (during the tap itself).
+    app.querySelectorAll("[data-dp-pay]").forEach(el => el.onclick = async () => {
+      const toPlayerId = modal.toPlayerId, amt = parseFloat(modal.amount);
+      if (!toPlayerId || toPlayerId === "__auto__" || !amt || amt <= 0) return;
+      copyQuiet(String(Math.round(amt * 100) / 100));
+      const gameId = modal.gameId, fromId = modal.fromPlayerId;
+      const target = el.dataset.dpPay === "bit" ? (playerBitLink(getGame(gameId), toPlayerId) || "bit://") : "https://links.payboxapp.com";
+      app.querySelectorAll("[data-dp-pay]").forEach(b => b.disabled = true);
+      showButtonLoading(el);
+      try { await v2AddPlayerPayment(gameId, uid(), fromId, toPlayerId, amt); }
+      catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); render(); return; }
+      closeModal();
+      window.location.href = target;
     });
     const confirmDirectPay = app.querySelector("[data-confirm-direct-pay]");
     if (confirmDirectPay) confirmDirectPay.onclick = async () => {
