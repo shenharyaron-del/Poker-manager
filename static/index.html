@@ -1263,16 +1263,8 @@ html:not(.theme-light) .bit-open-link{color:#7cc4ff;}
 .bit-steps-img{display:block;width:62%;max-width:240px;margin:6px auto;border-radius:12px;border:1px solid var(--card-b);}
 .bit-steps-more{margin:4px 0;font-size:15px;}
 .bit-steps-more summary{cursor:pointer;color:var(--gold);font-weight:700;}
-.fb-list{display:flex;flex-direction:column;gap:8px;margin-bottom:12px;}
-.fb-row{display:flex;align-items:center;gap:8px;}
-.fb-row .fb-lbl{flex:1;min-width:0;font-weight:700;}
-.fb-row .fb-lbl small{color:var(--muted);font-weight:400;margin-inline-start:4px;}
-.fb-row .fb-amt{width:96px;flex-shrink:0;text-align:center;font-size:18px;}
-.fb-row.fb-gone .fb-lbl{text-decoration:line-through;opacity:.5;}
-.fb-trash-ph,.fb-row .icon-btn{width:36px;flex-shrink:0;justify-content:center;}
-.fb-row .icon-btn{font-size:18px;}
-.fb-total{text-align:center;font-size:18px;margin:4px 0 12px;}
-.ls-tile .co-edit-pen{font-size:14px;padding:0 2px;}
+.ls-amt{display:flex;align-items:center;justify-content:center;gap:2px;direction:rtl;}
+.ls-tile .co-edit-pen{font-size:17px;padding:0 2px;}
 .pay-hint{font-size:14px;color:var(--muted);text-align:center;margin-top:6px;}
 .bit-link-box{border:1.5px solid var(--card-b);border-radius:12px;padding:10px 12px;margin-bottom:4px;}
 .bit-link-box .bl-ok{font-weight:700;color:var(--gold);font-size:16px;}
@@ -10216,7 +10208,7 @@ function renderPlayerScreen(gameId){
         ${nav ? `<button type="button" class="ls-arrow ls-next" data-ls-go="${esc(step(1))}" aria-label="השחקן הבא"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>` : ""}</div>`;
       })()}
       <div class="ls-tiles" data-ls-buyin="${buyinTotal}">
-        <div class="ls-tile"><span>קנייה${canFixBuyins(g, pid) ? `<button type="button" class="co-edit-pen" data-fix-buyins="${pid}" title="תיקון סכום הקנייה" aria-label="תיקון סכום הקנייה">✎</button>` : ""}</span><b>₪${Math.round(buyinTotal * 100) / 100}</b><small>${myBuyins.length <= 1 ? "כניסה" : `${myBuyins.length} קניות`}</small></div>
+        <div class="ls-tile"><span>קנייה</span><div class="ls-amt">${canFixBuyins(g, pid) ? `<button type="button" class="co-edit-pen" data-fix-buyins="${pid}" title="תיקון סכום הקנייה" aria-label="תיקון סכום הקנייה">✎</button>` : ""}<b>₪${Math.round(buyinTotal * 100) / 100}</b></div><small>${myBuyins.length <= 1 ? "כניסה" : `${myBuyins.length} קניות`}</small></div>
         <div class="ls-tile"><span>בסוף הערב</span><b data-ls-end>—</b><small>&nbsp;</small></div>
         <div class="ls-tile ls-res"><span>רווח / הפסד</span><b data-ls-res>—</b><small data-ls-res-l>&nbsp;</small></div>
       </div>
@@ -11337,21 +11329,19 @@ function renderModal(m){
       ${loginSection}
     `;
   } else if (m.type === "fixBuyins") {
-    // Fixing a player's buy-ins (the ✎ by their total): each amount can be changed, a rebuy
-    // removed (the entry stays - it can only be changed); the total updates as you type.
+    // Fixing a player's total buy-in (the ✎ by it): type the right total. More than now is
+    // recorded as one more buy-in (a missing one); less takes it off the latest buy-ins
+    // (the entry itself is kept, just smaller).
     const g = getGame(m.gameId), pl = (g.players || []).find(x => x.id === m.playerId);
-    const rows = (g.buyins || []).filter(b => b.playerId === m.playerId).sort((a, b) => (a.ts || 0) - (b.ts || 0));
-    const removed = m.removed || [];
-    title = `תיקון הקנייה${pl ? ` - ${esc(pl.name)}` : ""}`;
+    const mine = (g.buyins || []).filter(b => b.playerId === m.playerId);
+    const total = Math.round(mine.reduce((t, b) => t + (b.amount || 0), 0) * 100) / 100;
+    title = `תיקון סכום הקנייה${pl ? ` - ${esc(pl.name)}` : ""}`;
     body = `
-      <div class="fb-list">${rows.map((b, i) => `
-        <div class="fb-row${removed.includes(b.id) ? " fb-gone" : ""}">
-          <span class="fb-lbl">${i === 0 ? "קנייה ראשונית" : `ריביי ${i}`}${b.ts ? ` <small dir="ltr">${fmtTime(b.ts)}</small>` : ""}</span>
-          <input type="number" inputmode="decimal" min="1" class="fb-amt" data-fb-amt="${esc(b.id)}" value="${b.amount}" ${removed.includes(b.id) ? "disabled" : ""}>
-          ${i === 0 ? `<span class="fb-trash-ph"></span>` : `<button type="button" class="icon-btn danger" data-fb-del="${esc(b.id)}" title="${removed.includes(b.id) ? "החזר" : "הסר את הריביי"}">${removed.includes(b.id) ? "↺" : icon('trash')}</button>`}
-        </div>`).join("")}
+      <p style="color:var(--muted);font-size:16px;margin:0 0 10px;text-align:center;">כרגע: ₪${total}${mine.length > 1 ? ` (${mine.length} קניות)` : ""}</p>
+      <div class="field" style="margin-bottom:8px;"><label>סכום הקנייה הנכון</label>
+        <input type="number" inputmode="decimal" min="1" id="fb-total-input" value="${total}" style="text-align:center;font-size:22px;font-weight:800;">
       </div>
-      <div class="fb-total">סה"כ קנייה: <b data-fb-total>₪0</b></div>
+      <p style="color:var(--muted);font-size:14px;margin:0 0 14px;text-align:center;">סכום גבוה יותר נרשם כקנייה נוספת · נמוך יותר מקטין את הקניות האחרונות</p>
       <button class="btn btn-primary btn-block" data-fb-save>שמור</button>`;
   } else if (m.type === "bitSetup") {
     // Opened once a night after sitting down at a table whose money goes between the
@@ -15008,33 +14998,30 @@ function attachHandlers(){
     if (nav.gameId) openModal({type: "fixBuyins", gameId: nav.gameId, playerId: el.dataset.fixBuyins});
   });
   if (modal && modal.type === "fixBuyins") {
-    const totalEl = app.querySelector("[data-fb-total]");
-    const sum = () => { let t = 0; app.querySelectorAll("[data-fb-amt]").forEach(i => { if (!i.disabled) t += parseFloat(i.value) || 0; }); if (totalEl) totalEl.textContent = `₪${Math.round(t * 100) / 100}`; };
-    app.querySelectorAll("[data-fb-amt]").forEach(i => i.oninput = sum);
-    sum();
-    app.querySelectorAll("[data-fb-del]").forEach(el => el.onclick = () => {
-      // keep what's typed in the other rows across the redraw
-      app.querySelectorAll("[data-fb-amt]").forEach(i => { modal.typed = Object.assign({}, modal.typed, {[i.dataset.fbAmt]: i.value}); });
-      const id = el.dataset.fbDel, r = modal.removed || [];
-      modal.removed = r.includes(id) ? r.filter(x => x !== id) : r.concat(id);
-      render();
-    });
-    if (modal.typed) app.querySelectorAll("[data-fb-amt]").forEach(i => { if (modal.typed[i.dataset.fbAmt] !== undefined) i.value = modal.typed[i.dataset.fbAmt]; }), sum();
+    const inp = app.querySelector("#fb-total-input");
+    if (inp && !modal.focused) { modal.focused = true; inp.focus(); inp.select(); }
     const saveBtn = app.querySelector("[data-fb-save]");
     if (saveBtn) saveBtn.onclick = async () => {
-      const g = getGame(modal.gameId), removed = modal.removed || [];
-      const changes = [];
-      for (const i of app.querySelectorAll("[data-fb-amt]")) {
-        const id = i.dataset.fbAmt, b = (g.buyins || []).find(x => x.id === id);
-        if (!b || removed.includes(id)) continue;
-        const v = Math.round((parseFloat(i.value) || 0) * 100) / 100;
-        if (v <= 0) { showAlert("כל סכום צריך להיות גדול מ-0 (ריביי מיותר - הסירו אותו בפח)."); return; }
-        if (v !== b.amount) changes.push([id, v]);
-      }
+      const g = getGame(modal.gameId), pid = modal.playerId;
+      const mine = (g.buyins || []).filter(b => b.playerId === pid).sort((a, b) => (a.ts || 0) - (b.ts || 0));
+      const now = Math.round(mine.reduce((t, b) => t + (b.amount || 0), 0) * 100) / 100;
+      const want = Math.round((parseFloat(inp && inp.value) || 0) * 100) / 100;
+      if (want <= 0) { showAlert("הזינו סכום גדול מ-0."); return; }
+      if (want === now) { closeModal(); return; }
       saveBtn.disabled = true; showButtonLoading(saveBtn);
       try {
-        for (const [id, v] of changes) await v2UpdateBuyinAmount(g.id, id, v);
-        for (const id of removed) await v2DeleteBuyin(g.id, id);
+        if (want > now) {
+          // the missing buy-in
+          await v2AddBuyin(g.id, uid(), pid, Math.round((want - now) * 100) / 100, myIdentity.name);
+        } else {
+          // take the difference off the latest buy-ins; the entry stays (above 0)
+          let left = Math.round((now - want) * 100) / 100;
+          for (let i = mine.length - 1; i >= 0 && left > 0.001; i--) {
+            const b = mine[i];
+            if (i > 0 && b.amount <= left + 0.001) { await v2DeleteBuyin(g.id, b.id); left = Math.round((left - b.amount) * 100) / 100; }
+            else { const nv = Math.round((b.amount - left) * 100) / 100; await v2UpdateBuyinAmount(g.id, b.id, nv); left = 0; }
+          }
+        }
         v2AfterOwnWrite(g);
       } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); saveBtn.disabled = false; render(); return; }
       closeModal();
