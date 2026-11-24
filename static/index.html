@@ -1283,7 +1283,10 @@ html:not(.theme-light) .rr-nobit{color:#fda4af;}
 .menu-ic{position:relative;}
 .menu-dot{position:absolute;top:-3px;inset-inline-end:-5px;width:9px;height:9px;border-radius:50%;background:#dc2626;}
 .modal .dp-tg:disabled,.modal .dp-pay .btn:disabled{opacity:.4;filter:grayscale(.4);}
-.dp-area{min-height:86px;}   /* the tallest variant (סגירת הערב לכולם with its two-line note) */
+.dp-area{min-height:0;}
+.dp-paypart{min-height:86px;}   /* the buttons + their line on two lines - so what's under them never moves */
+.dp-or{display:flex;align-items:center;gap:8px;margin:2px 0 8px;color:var(--muted);font-size:14px;}
+.dp-or span{flex:1;height:1px;background:var(--card-b);}
 .dp-amt{font-weight:700;margin:0 0 8px;}
 .dp-area .pay-pair{margin:0;}
 .dp-hint{margin:6px 0 2px;}
@@ -5515,34 +5518,35 @@ function resultBitButtonHtml(g, toPid, amount){
 //  - a player without one: ביט / פייבוקס side by side.
 // The amount is in the window's title and the line under the buttons.
 function dpAreaHtml(g, toPid, amount){
+  const auto = !toPid || toPid === "__auto__";
+  // both ways always in view: pay now (top) "או" close the night for everyone (bottom) -
+  // only one of them enabled, by the pick
+  return `<div class="dp-paypart">${dpPayPartHtml(g, toPid, amount)}</div>
+      <div class="dp-or"><span></span>או<span></span></div>
+      <button class="btn btn-primary btn-block dp-tg" data-end-night-from-direct-pay="${g.id}" ${auto ? "" : "disabled"}>סגירת הערב לכולם</button>
+      <div class="pay-hint dp-hint">האפליקציה תחשב בעצמה מי מעביר למי</div>`;
+}
+function dpPayPartHtml(g, toPid, amount){
   const amt = Math.round((Number(amount) || 0) * 100) / 100;
   const auto = !toPid || toPid === "__auto__";
-  if (auto) return `
-      <button class="btn btn-primary btn-block dp-tg" data-end-night-from-direct-pay="${g.id}">סגירת הערב לכולם</button>
-      <div class="pay-hint dp-hint">לחיצה כאן תסגור את הערב לכולם, והאפליקציה תחשב בעצמה מי מעביר למי</div>`;
-  const link = playerBitLink(g, toPid);
-  if (playerNoBit(g, toPid)) {
-    const nm = esc(tableShortName(g, toPid));
-    return `
+  const pb = `<button type="button" class="btn btn-blue dp-pb" data-dp-pay="paybox" ${auto ? "disabled" : ""}><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</button>`;
+  const twoButtons = `
+      <div class="pay-pair dp-pay">
+        <button type="button" class="btn flex1" data-dp-pay="bit" ${auto ? "disabled" : ""} style="background:#0070E0;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;"> ביט</button>${pb.replace('dp-pb', 'dp-pb flex1')}
+      </div>`;
+  if (auto) return twoButtons + `<div class="pay-hint dp-hint">להעברה עכשיו - בחרו למעלה למי מעבירים</div>`;
+  const nm = esc(tableShortName(g, toPid));
+  if (playerNoBit(g, toPid)) return `
       <div class="pay-pair dp-pay">
         <button type="button" class="btn btn-blue flex1" data-dp-pay="paybox" style="display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פתיחת פייבוקס</button>
       </div>
       <div class="pay-hint dp-hint">ל${nm} אין ביט. בפייבוקס בחרו את ${nm}, הדביקו את הסכום (${amt} שח) ואשרו</div>`;
-  }
-  const pb = `<button type="button" class="btn btn-blue dp-pb" data-dp-pay="paybox"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</button>`;
-  if (link) {
-    const nm = esc(tableShortName(g, toPid));
-    return `
+  if (playerBitLink(g, toPid)) return `
       <div class="pay-pair dp-pay">
         <button type="button" class="btn dp-bit-wide" data-dp-pay="bit" data-short="ביט ל${nm}">${bitTapIcon(20)} <span class="lbl">פתיחת ביט ישירה ל${nm}</span></button>${pb}
       </div>
       <div class="pay-hint dp-hint">${nm} ייבחר בביט, הדבק את הסכום (${amt} שח) ואשר העברה</div>`;
-  }
-  return `
-      <div class="pay-pair dp-pay">
-        <button type="button" class="btn flex1" data-dp-pay="bit" style="background:#0070E0;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;"> ביט</button>${pb.replace('dp-pb', 'dp-pb flex1')}
-      </div>
-      <div class="pay-hint dp-hint">ההעברה תירשם, הסכום (${amt} שח) יועתק והאפליקציה תיפתח</div>`;
+  return twoButtons + `<div class="pay-hint dp-hint">ההעברה תירשם, הסכום (${amt} שח) יועתק והאפליקציה תיפתח</div>`;
 }
 // After ביט / פייבוקס was tapped (the transfer recorded, the app opened): the window stays,
 // so if the app didn't land on the payment (Bit sometimes shows a screen of its own first)
@@ -16515,7 +16519,7 @@ function attachHandlers(){
       // the window stays - recorded, with a way to open the app again (see dpPaidHtml)
       modal.paid = {toPlayerId, amount: Math.round(amt * 100) / 100, app: el.dataset.dpPay, target};
       const area = app.querySelector("[data-dp-area]");
-      if (area) area.innerHTML = dpPaidHtml(getGame(gameId), modal.paid);
+      if (area) { area.style.minHeight = area.offsetHeight + "px"; area.innerHTML = dpPaidHtml(getGame(gameId), modal.paid); }   // same height - nothing jumps
       const list = app.querySelector(".modal .scroll-list"); if (list) list.classList.add("dp-locked");
       wireDpPaid();
       window.location.href = target;
