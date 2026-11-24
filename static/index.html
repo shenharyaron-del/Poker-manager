@@ -1265,6 +1265,8 @@ html:not(.theme-light) .bit-open-link{color:#7cc4ff;}
 .bit-steps-more summary{cursor:pointer;color:var(--gold);font-weight:700;}
 .ls-amt{display:flex;align-items:center;justify-content:center;gap:2px;direction:rtl;}
 .ls-tile .co-edit-pen{font-size:17px;padding:0 2px;}
+.fb-note{color:#b91c1c;font-size:15px;font-weight:700;text-align:center;margin:0 0 12px;line-height:1.45;}
+html:not(.theme-light) .fb-note{color:#fda4af;}
 .pay-hint{font-size:14px;color:var(--muted);text-align:center;margin-top:6px;}
 .bit-link-box{border:1.5px solid var(--card-b);border-radius:12px;padding:10px 12px;margin-bottom:4px;}
 .bit-link-box .bl-ok{font-weight:700;color:var(--gold);font-size:16px;}
@@ -11330,8 +11332,8 @@ function renderModal(m){
     `;
   } else if (m.type === "fixBuyins") {
     // Fixing a player's total buy-in (the ✎ by it): type the right total. More than now is
-    // recorded as one more buy-in (a missing one); less takes it off the latest buy-ins
-    // (the entry itself is kept, just smaller).
+    // recorded as one more rebuy (a missing one); less by exactly a recorded rebuy's amount
+    // removes that rebuy; any other lower amount isn't saved (a note says why).
     const g = getGame(m.gameId), pl = (g.players || []).find(x => x.id === m.playerId);
     const mine = (g.buyins || []).filter(b => b.playerId === m.playerId);
     const total = Math.round(mine.reduce((t, b) => t + (b.amount || 0), 0) * 100) / 100;
@@ -11341,7 +11343,7 @@ function renderModal(m){
       <div class="field" style="margin-bottom:8px;"><label>סכום הקנייה הנכון</label>
         <input type="number" inputmode="decimal" min="1" id="fb-total-input" value="${total}" style="text-align:center;font-size:22px;font-weight:800;">
       </div>
-      <p style="color:var(--muted);font-size:14px;margin:0 0 14px;text-align:center;">סכום גבוה יותר נרשם כקנייה נוספת · נמוך יותר מקטין את הקניות האחרונות</p>
+      <p class="fb-note" data-fb-note hidden></p>
       <button class="btn btn-primary btn-block" data-fb-save>שמור</button>`;
   } else if (m.type === "bitSetup") {
     // Opened once a night after sitting down at a table whose money goes between the
@@ -15008,19 +15010,32 @@ function attachHandlers(){
       const want = Math.round((parseFloat(inp && inp.value) || 0) * 100) / 100;
       if (want <= 0) { showAlert("הזינו סכום גדול מ-0."); return; }
       if (want === now) { closeModal(); return; }
+      // Lowering only by a rebuy that was recorded (the entry isn't one) - anything else
+      // can't be matched to a buy-in, so it's not saved; the note says what can be.
+      let rebuyToDrop = null;
+      if (want < now) {
+        const diff = Math.round((now - want) * 100) / 100;
+        rebuyToDrop = mine.slice(1).reverse().find(b => Math.abs(b.amount - diff) < 0.005) || null;
+        if (!rebuyToDrop) {
+          const amts = [...new Set(mine.slice(1).map(b => b.amount))];
+          const note = app.querySelector("[data-fb-note]");
+          if (note) {
+            note.textContent = amts.length
+              ? `הסכום ירד ב-₪${diff}, ואין ריביי בסכום הזה. אפשר להוריד רק בסכום של ריביי שנרשם: ${amts.map(a => "₪" + a).join(", ")}.`
+              : `הסכום ירד ב-₪${diff}, אבל לא נרשם ריביי שאפשר להסיר.`;
+            note.hidden = false;
+          }
+          return;
+        }
+      }
       saveBtn.disabled = true; showButtonLoading(saveBtn);
       try {
         if (want > now) {
           // the missing buy-in
           await v2AddBuyin(g.id, uid(), pid, Math.round((want - now) * 100) / 100, myIdentity.name);
         } else {
-          // take the difference off the latest buy-ins; the entry stays (above 0)
-          let left = Math.round((now - want) * 100) / 100;
-          for (let i = mine.length - 1; i >= 0 && left > 0.001; i--) {
-            const b = mine[i];
-            if (i > 0 && b.amount <= left + 0.001) { await v2DeleteBuyin(g.id, b.id); left = Math.round((left - b.amount) * 100) / 100; }
-            else { const nv = Math.round((b.amount - left) * 100) / 100; await v2UpdateBuyinAmount(g.id, b.id, nv); left = 0; }
-          }
+          // less by exactly one rebuy's amount: that rebuy (the latest of that amount) goes
+          await v2DeleteBuyin(g.id, rebuyToDrop.id);
         }
         v2AfterOwnWrite(g);
       } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); saveBtn.disabled = false; render(); return; }
