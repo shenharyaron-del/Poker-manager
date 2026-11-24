@@ -1290,6 +1290,9 @@ html:not(.theme-light) .rr-nobit{color:#fda4af;}
 .dp-bit-wide{flex:2;min-width:0;background:#0070E0;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;font-size:16px;white-space:nowrap;overflow:hidden;padding-inline:8px;}
 .dp-pb{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;}
 .dp-bit-ic{height:16px;width:auto;vertical-align:middle;border-radius:3px;margin-inline-start:4px;}
+.dp-paid-msg{font-weight:800;color:#15803d;text-align:center;margin:0 0 8px;font-size:17px;}
+html:not(.theme-light) .dp-paid-msg{color:#6ee7b7;}
+.dp-locked{pointer-events:none;opacity:.55;}
 .pay-hint{font-size:14px;color:var(--muted);text-align:center;margin-top:6px;}
 .bit-link-box{border:1.5px solid var(--card-b);border-radius:12px;padding:10px 12px;margin-bottom:4px;}
 .bit-link-box .bl-ok{font-weight:700;color:var(--gold);font-size:16px;}
@@ -5513,6 +5516,19 @@ function dpAreaHtml(g, toPid, amount){
         <button type="button" class="btn flex1" data-dp-pay="bit" style="background:#0070E0;color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;"> ביט</button>${pb.replace('dp-pb', 'dp-pb flex1')}
       </div>
       <div class="pay-hint dp-hint">ההעברה תירשם, הסכום (${amt} שח) יועתק והאפליקציה תיפתח</div>`;
+}
+// After ביט / פייבוקס was tapped (the transfer recorded, the app opened): the window stays,
+// so if the app didn't land on the payment (Bit sometimes shows a screen of its own first)
+// it can be opened again from here - without recording the transfer a second time.
+function dpPaidHtml(g, paid){
+  const nm = esc(tableShortName(g, paid.toPlayerId));
+  const appName = paid.app === "bit" ? "ביט" : "פייבוקס";
+  return `
+      <div class="dp-paid-msg">✓ ההעברה ל${nm} (${paid.amount} שח) נרשמה</div>
+      <div class="pay-pair dp-pay">
+        <button type="button" class="btn ${paid.app === "bit" ? "dp-bit-wide" : "btn-blue dp-pb"}" data-dp-reopen style="flex:2;"><img src="/static/${paid.app === "bit" ? "bit" : "paybox"}-icon.png" style="height:20px;width:auto;display:block;"> פתיחת ${appName} שוב</button>
+        <button type="button" class="btn btn-ghost dp-pb" data-dp-done>סיימתי</button>
+      </div>`;
 }
 // "פתיחת ביט ישירה ל..." beside פייבוקס doesn't fit every phone / name: then the short "ביט ל...".
 function fitDpBitLabel(){
@@ -12488,7 +12504,7 @@ function renderModal(m){
     body = `
       <p style="color:var(--muted);font-size:16px;margin-top:0;">בחרו למי ${g2("אתה מעביר", "את מעבירה")} את הכסף במזומן</p>
       <div class="field"><label>למי?</label>
-        <div class="scroll-list" style="max-height:240px;">
+        <div class="scroll-list${m.paid ? " dp-locked" : ""}" style="max-height:240px;">
           <div class="checkbox-row" data-select-direct-pay-to="__auto__" style="cursor:pointer;">
             <input type="radio" name="direct-pay-to" ${autoSel?"checked":""} style="pointer-events:none;">
             <span class="flex1">האפליקציה תחשב מי מעביר למי</span>
@@ -12499,7 +12515,7 @@ function renderModal(m){
           </div>`).join("")}
         </div>
       </div>
-      ${isForSelf ? `<div class="dp-area" data-dp-area>${dpAreaHtml(g, selectedToPlayerId, m.amount)}</div>` : `
+      ${isForSelf ? `<div class="dp-area" data-dp-area>${m.paid ? dpPaidHtml(g, m.paid) : dpAreaHtml(g, selectedToPlayerId, m.amount)}</div>` : `
       <p style="font-weight:700;margin:0 0 10px;">סכום העברה: ${m.amount||0} שח</p>
       <button class="btn btn-primary btn-block dp-tg" data-confirm-direct-pay ${autoSel ? "disabled" : ""}>רישום ההעברה ל${esc(fromP ? fromP.name : "")}</button>
       <button class="btn btn-primary btn-block dp-tg" style="margin-top:8px;" data-end-night-from-direct-pay="${m.gameId}" ${autoSel ? "" : "disabled"}>סגירת הערב לכולם</button>
@@ -16425,6 +16441,7 @@ function attachHandlers(){
       if (endBtn) endBtn.disabled = !auto;
     };
     app.querySelectorAll("[data-select-direct-pay-to]").forEach(el => el.onclick = () => {
+      if (modal.paid) return;   // already paid - the window only offers opening the app again
       modal.toPlayerId = el.dataset.selectDirectPayTo;
       syncDirectPay();
     });
@@ -16443,9 +16460,21 @@ function attachHandlers(){
       showButtonLoading(el);
       try { await v2AddPlayerPayment(gameId, uid(), fromId, toPlayerId, amt); }
       catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); render(); return; }
-      closeModal();
+      // the window stays - recorded, with a way to open the app again (see dpPaidHtml)
+      modal.paid = {toPlayerId, amount: Math.round(amt * 100) / 100, app: el.dataset.dpPay, target};
+      const area = app.querySelector("[data-dp-area]");
+      if (area) area.innerHTML = dpPaidHtml(getGame(gameId), modal.paid);
+      const list = app.querySelector(".modal .scroll-list"); if (list) list.classList.add("dp-locked");
+      wireDpPaid();
       window.location.href = target;
     });
+    const wireDpPaid = () => {
+      const again = app.querySelector("[data-dp-reopen]");
+      if (again) again.onclick = () => { if (!modal || !modal.paid) return; copyQuiet(String(modal.paid.amount)); window.location.href = modal.paid.target; };
+      const done = app.querySelector("[data-dp-done]");
+      if (done) done.onclick = () => closeModal();
+    };
+    wireDpPaid();
     wireDpPay();
     fitDpBitLabel();
     const confirmDirectPay = app.querySelector("[data-confirm-direct-pay]");
