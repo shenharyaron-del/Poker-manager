@@ -1293,6 +1293,9 @@ html:not(.theme-light) .rr-nobit{color:#fda4af;}
 .dp-paid-msg{font-weight:800;color:#15803d;text-align:center;margin:0 0 8px;font-size:17px;}
 html:not(.theme-light) .dp-paid-msg{color:#6ee7b7;}
 .dp-locked{pointer-events:none;opacity:.55;}
+.bit-tap{position:relative;display:inline-block;width:var(--s);height:var(--s);margin-inline-start:calc(var(--s) * .3);vertical-align:middle;flex-shrink:0;}
+.bit-tap img{width:100%;height:100%;border-radius:calc(var(--s) * .2);display:block;}
+.bit-tap i{position:absolute;font-style:normal;line-height:1;font-size:calc(var(--s) * .58);left:calc(var(--s) * -.28);top:calc(var(--s) * -.06);}
 .pay-hint{font-size:14px;color:var(--muted);text-align:center;margin-top:6px;}
 .bit-link-box{border:1.5px solid var(--card-b);border-radius:12px;padding:10px 12px;margin-bottom:4px;}
 .bit-link-box .bl-ok{font-weight:700;color:var(--gold);font-size:16px;}
@@ -5481,12 +5484,15 @@ function playerBitLink(g, pid){
 // Small pay buttons on the results screen's "מי מעביר למי", on my own open transfers: Bit
 // straight on the recipient when they saved their link (Bit only then); otherwise ביט and
 // פייבוקס. The amount is copied to paste either way.
+// The "this player saved a Bit link" icon: Bit's logo with a pointing finger on its top -
+// next to such players' names and on the buttons that open Bit straight on them.
+function bitTapIcon(size){ return `<span class="bit-tap" style="--s:${size}px" title="שמר קישור ביט"><img src="/static/bit-icon.png" alt="ביט"><i>👉</i></span>`; }
 function resultBitButtonHtml(g, toPid, amount){
   const amt = String(Math.round((Number(amount) || 0) * 100) / 100);
   const link = playerBitLink(g, toPid);
   const inner = `<img src="/static/bit-icon.png" style="height:16px;width:auto;display:block;"> ביט`;
   const st = `background:#0070E0;color:#fff;display:inline-flex;align-items:center;gap:4px;text-decoration:none;padding:4px 10px;font-size:15px;`;
-  if (link) return `<a href="${esc(link)}" class="btn btn-sm" data-copy-amount="${amt}" style="${st}">${inner}</a>`;
+  if (link) return `<a href="${esc(link)}" class="btn btn-sm" data-copy-amount="${amt}" style="${st}">${bitTapIcon(16)} ביט</a>`;
   // no Bit link saved: Bit (opened plain) and PayBox, both copying the amount
   return `<button type="button" class="btn btn-sm" data-open-bit-generic data-copy-amount="${amt}" style="${st}">${inner}</button>`
     + `<a href="https://links.payboxapp.com" class="btn btn-sm btn-blue" data-copy-amount="${amt}" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;padding:4px 10px;font-size:15px;"><img src="/static/paybox-icon.png" style="height:16px;width:auto;display:block;"> פייבוקס</a>`;
@@ -5510,7 +5516,7 @@ function dpAreaHtml(g, toPid, amount){
     const nm = esc(tableShortName(g, toPid));
     return `
       <div class="pay-pair dp-pay">
-        <button type="button" class="btn dp-bit-wide" data-dp-pay="bit" data-short="ביט ל${nm}"><img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;"> <span class="lbl">פתיחת ביט ישירה ל${nm}</span></button>${pb}
+        <button type="button" class="btn dp-bit-wide" data-dp-pay="bit" data-short="ביט ל${nm}">${bitTapIcon(20)} <span class="lbl">פתיחת ביט ישירה ל${nm}</span></button>${pb}
       </div>
       <div class="pay-hint dp-hint">${nm} ייבחר בביט, הדבק את הסכום (${amt} שח) ואשר העברה</div>`;
   }
@@ -5529,14 +5535,15 @@ function dpPaidHtml(g, paid){
   return `
       <div class="dp-paid-msg">✓ ההעברה ל${nm} (${paid.amount} שח) נרשמה</div>
       <div class="pay-pair dp-pay">
-        <button type="button" class="btn ${paid.app === "bit" ? "dp-bit-wide" : "btn-blue dp-pb"}" data-dp-reopen style="flex:2;"><img src="/static/${paid.app === "bit" ? "bit" : "paybox"}-icon.png" style="height:20px;width:auto;display:block;"> פתיחת ${appName} שוב</button>
+        <button type="button" class="btn ${paid.app === "bit" ? "dp-bit-wide" : "btn-blue dp-pb"}" data-dp-reopen style="flex:2;">${paid.app === "bit" ? (playerBitLink(g, paid.toPlayerId) ? bitTapIcon(20) : `<img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;">`) : `<img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;">`} פתיחת ${appName} שוב</button>
         <button type="button" class="btn btn-ghost dp-pb" data-dp-done>סיימתי</button>
       </div>`;
 }
 // "פתיחת ביט ישירה ל..." beside פייבוקס doesn't fit every phone / name: then the short "ביט ל...".
 function fitDpBitLabel(){
   const b = document.querySelector(".dp-bit-wide"), l = b && b.querySelector(".lbl");
-  if (l && b.scrollWidth > b.clientWidth + 1) l.textContent = b.dataset.short;
+  // (a little slack: the finger on the Bit icon sticks out of it)
+  if (l && (b.scrollWidth > b.clientWidth + 1 || l.getBoundingClientRect().width > b.clientWidth - 40)) l.textContent = b.dataset.short;
 }
 function payAppButtonsHtml(g, toPid, amount){
   const amt = String(Math.round((Number(amount) || 0) * 100) / 100);
@@ -5545,7 +5552,7 @@ function payAppButtonsHtml(g, toPid, amount){
   const st = `display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;`;
   return `
     <div class="pay-pair">
-      ${link ? `<a href="${esc(link)}" class="btn flex1" data-copy-amount="${amt}" style="background:#0070E0;color:#fff;${st}">${bitInner}</a>`
+      ${link ? `<a href="${esc(link)}" class="btn flex1" data-copy-amount="${amt}" style="background:#0070E0;color:#fff;${st}">${bitTapIcon(20)} ביט</a>`
         : `<button class="btn flex1" data-open-bit-generic data-copy-amount="${amt}" style="background:#0070E0;color:#fff;${st}">${bitInner}</button>`}
       <a href="https://links.payboxapp.com" class="btn btn-blue flex1" data-copy-amount="${amt}" style="${st}"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</a>
     </div>
@@ -10434,7 +10441,7 @@ function renderGameResultsScreen(gameId){
     return `
       <div class="res-st-row${isMe ? " me" : ""}" data-player-night="${r.id}" data-game-id="${g.id}">
         ${crownHtml}
-        <span class="nm">${esc(r.name)}${isMe ? ` <small>(${g2("אתה", "את")})</small>` : ""}</span>
+        <span class="nm">${esc(r.name)}${isMe ? ` <small>(${g2("אתה", "את")})</small>` : ""}${playerBitLink(g, r.id) ? ` ${bitTapIcon(13)}` : ""}</span>
         <span class="amt" style="color:${profitColor(r.profit)};">₪${Math.abs(r.profit)}</span>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" class="chev"><path d="M15 18l-6-6 6-6"/></svg>
       </div>`;
@@ -10468,7 +10475,7 @@ function renderGameResultsScreen(gameId){
         const paidStyle = existing ? 'text-decoration:line-through;opacity:.5;' : '';
         return `
           <div class="row-between" style="padding:6px 0;">
-            <span style="${paidStyle}">${esc(t.toName)}</span>
+            <span style="${paidStyle}">${esc(t.toName)}${playerBitLink(g, t.to) ? ` ${bitTapIcon(14)}` : ""}</span>
             <div style="display:flex;align-items:center;gap:8px;">
               <span style="font-weight:700;color:var(--gold);${paidStyle}">₪${t.amount}</span>
               ${existing ? '<span style="font-size:20px;font-weight:700;color:#6ee7b7;">עבר</span>' : ''}
@@ -12044,7 +12051,7 @@ function renderModal(m){
     const directClub = (c.settlementDefault || "direct") === "direct";
     const bitBadge = p => !directClub ? ""
       : p.clientId && parseBitLink(getGlobalPlayer(p.clientId).bitLink)
-        ? `<img src="/static/bit-icon.png" class="rr-bit" alt="ביט" title="הגדיר קישור ביט">`
+        ? bitTapIcon(16)
         : `<span class="rr-nobit" title="לא הגדיר קישור ביט לקבלת כסף">ללא ביט</span>`;
     const rows = c.roster.map(p => {
       const isCreatorRow = !!(p.clientId && c.createdBy && p.clientId === c.createdBy);
@@ -12514,7 +12521,7 @@ function renderModal(m){
           </div>
           ${otherPlayers.map(p => `<div class="checkbox-row" data-select-direct-pay-to="${p.id}" style="cursor:pointer;">
             <input type="radio" name="direct-pay-to" ${selectedToPlayerId===p.id?"checked":""} style="pointer-events:none;">
-            <span class="flex1">${esc(p.name)}${playerBitLink(g, p.id) ? ` <img src="/static/bit-icon.png" class="dp-bit-ic" alt="ביט" title="שמר קישור ביט">` : ""}</span>
+            <span class="flex1">${esc(p.name)}${playerBitLink(g, p.id) ? ` ${bitTapIcon(16)}` : ""}</span>
           </div>`).join("")}
         </div>
       </div>
