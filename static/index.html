@@ -1255,7 +1255,8 @@ html.theme-light .pf-change.up{color:#15803d;} html.theme-light .pf-change.down{
 html:not(.theme-light) .bit-open-link{color:#7cc4ff;}
 .bit-btn-c{display:flex;justify-content:center;margin:2px 0 6px;}
 .bit-btn-c .btn{white-space:nowrap;margin:0;}
-.bit-row-or{margin:10px 0 4px;font-size:16px;line-height:1.5;}
+.bit-row-or{margin:10px 0 4px;font-size:16px;line-height:1.5;padding-inline-start:22px;}
+.bit-btn-up{margin-top:-4px;}
 .bit-paste-note{font-size:13px;color:var(--muted);margin:-2px 0 6px;text-align:center;}
 .bit-btn-c .btn:disabled{opacity:.45;}
 .bit-steps{margin:0 0 8px;padding-inline-start:22px;font-size:16px;line-height:1.6;}
@@ -5499,9 +5500,9 @@ function bitSetupStepsHtml(opts){
     </ol>
     ${o.collapseImage ? `<details class="bit-steps-more"><summary>איך זה נראה בביט?</summary>${img}</details>` : img}
     <ol class="bit-steps" start="3">
-      <li>לחיצה על קוד ה-QR למשך שנייה מעתיקה את הקישור לטלפון</li>
+      <li>לחיצה של שנייה על ה-QR מעתיקה את הקישור</li>
     </ol>
-    <div class="bit-btn-c"><button class="btn btn-primary btn-sm" data-bit-link-paste>📋 הדבקת הקישור</button></div>
+    <div class="bit-btn-c bit-btn-up"><button class="btn btn-primary btn-sm" data-bit-link-paste>📋 הדבקת הקישור</button></div>
     <div class="bit-paste-note" data-bit-paste-note hidden>הכפתור יופעל כשקישור הביט יהיה בזיכרון</div>
     ${bitPasteField ? `<div style="display:flex;gap:8px;margin:0 0 8px;"><input type="url" id="bit-link-input" dir="ltr" placeholder="לחיצה ארוכה כאן ← הדבק" style="flex:1;min-width:0;"><button class="btn btn-ghost btn-sm" data-bit-link-save>שמור</button></div>` : ""}
     <div class="bit-row-or">או צלמו מסך של הקוד והעלו אותו</div>
