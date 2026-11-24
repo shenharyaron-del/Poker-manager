@@ -1263,6 +1263,16 @@ html:not(.theme-light) .bit-open-link{color:#7cc4ff;}
 .bit-steps-img{display:block;width:62%;max-width:240px;margin:6px auto;border-radius:12px;border:1px solid var(--card-b);}
 .bit-steps-more{margin:4px 0;font-size:15px;}
 .bit-steps-more summary{cursor:pointer;color:var(--gold);font-weight:700;}
+.fb-list{display:flex;flex-direction:column;gap:8px;margin-bottom:12px;}
+.fb-row{display:flex;align-items:center;gap:8px;}
+.fb-row .fb-lbl{flex:1;min-width:0;font-weight:700;}
+.fb-row .fb-lbl small{color:var(--muted);font-weight:400;margin-inline-start:4px;}
+.fb-row .fb-amt{width:96px;flex-shrink:0;text-align:center;font-size:18px;}
+.fb-row.fb-gone .fb-lbl{text-decoration:line-through;opacity:.5;}
+.fb-trash-ph,.fb-row .icon-btn{width:36px;flex-shrink:0;justify-content:center;}
+.fb-row .icon-btn{font-size:18px;}
+.fb-total{text-align:center;font-size:18px;margin:4px 0 12px;}
+.ls-tile .co-edit-pen{font-size:14px;padding:0 2px;}
 .pay-hint{font-size:14px;color:var(--muted);text-align:center;margin-top:6px;}
 .bit-link-box{border:1.5px solid var(--card-b);border-radius:12px;padding:10px 12px;margin-bottom:4px;}
 .bit-link-box .bl-ok{font-weight:700;color:var(--gold);font-size:16px;}
@@ -4785,6 +4795,9 @@ function iAmTreasurer(g){
 }
 // May I make or cancel a rebuy (for anyone) tonight?
 // (Nobody bypasses a treasurer - not even the super admin.)
+// The ✎ by a player's total buy-in (the end-of-night screen and after leaving): fixing the
+// amounts is money, so whoever may make rebuys tonight (the treasurer, when there is one).
+function canFixBuyins(g, pid){ return !!pid && canHandleMoney(g) && !gameLocked(g) && (g.buyins || []).some(b => b.playerId === pid); }
 function canHandleMoney(g){ return !gameTreasurer(g) || iAmTreasurer(g); }
 // May I open another player's screen (act on their behalf)? With a treasurer tonight only
 // they do (the table admin included - "הסר מהשולחן" is the treasurer's then too); for
@@ -9843,7 +9856,7 @@ function renderPlayerScreen(gameId){
     const breakdownHtml = `
       ${viewingOther && p ? `<div class="co-who"><bdi>${esc(p.name)}</bdi></div>` : ""}
       <div class="co-lines">
-        <div>קניה: ${Math.round(buyinTotal)} שח</div>
+        <div>קניה: ${Math.round(buyinTotal)} שח${canFixBuyins(g, pid) ? `<button type="button" class="co-edit-pen" data-fix-buyins="${pid}" title="תיקון סכום הקנייה" aria-label="תיקון סכום הקנייה">✎</button>` : ""}</div>
         ${editing ? "" : `<div>ז'יטונים בסוף הערב: ${Math.round(finalChipsForInfo)} שח${canEndNightFor(g, pid) && !gameLocked(g) ? ` <button type="button" class="co-edit-pen" data-co-edit="${pid}" title="עדכון סכום היציאה" aria-label="עדכון סכום היציאה">✎</button>` : ""}</div>`}
       </div>
       ${editing ? editFrame + shownProfitLine : shownProfitLine}
@@ -10203,7 +10216,7 @@ function renderPlayerScreen(gameId){
         ${nav ? `<button type="button" class="ls-arrow ls-next" data-ls-go="${esc(step(1))}" aria-label="השחקן הבא"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>` : ""}</div>`;
       })()}
       <div class="ls-tiles" data-ls-buyin="${buyinTotal}">
-        <div class="ls-tile"><span>קנייה</span><b>₪${Math.round(buyinTotal * 100) / 100}</b><small>${myBuyins.length <= 1 ? "כניסה" : `${myBuyins.length} קניות`}</small></div>
+        <div class="ls-tile"><span>קנייה${canFixBuyins(g, pid) ? `<button type="button" class="co-edit-pen" data-fix-buyins="${pid}" title="תיקון סכום הקנייה" aria-label="תיקון סכום הקנייה">✎</button>` : ""}</span><b>₪${Math.round(buyinTotal * 100) / 100}</b><small>${myBuyins.length <= 1 ? "כניסה" : `${myBuyins.length} קניות`}</small></div>
         <div class="ls-tile"><span>בסוף הערב</span><b data-ls-end>—</b><small>&nbsp;</small></div>
         <div class="ls-tile ls-res"><span>רווח / הפסד</span><b data-ls-res>—</b><small data-ls-res-l>&nbsp;</small></div>
       </div>
@@ -11323,6 +11336,23 @@ function renderModal(m){
       <button class="btn btn-primary btn-block" style="margin-bottom:12px;" data-confirm-identity-name>שמור</button>
       ${loginSection}
     `;
+  } else if (m.type === "fixBuyins") {
+    // Fixing a player's buy-ins (the ✎ by their total): each amount can be changed, a rebuy
+    // removed (the entry stays - it can only be changed); the total updates as you type.
+    const g = getGame(m.gameId), pl = (g.players || []).find(x => x.id === m.playerId);
+    const rows = (g.buyins || []).filter(b => b.playerId === m.playerId).sort((a, b) => (a.ts || 0) - (b.ts || 0));
+    const removed = m.removed || [];
+    title = `תיקון הקנייה${pl ? ` - ${esc(pl.name)}` : ""}`;
+    body = `
+      <div class="fb-list">${rows.map((b, i) => `
+        <div class="fb-row${removed.includes(b.id) ? " fb-gone" : ""}">
+          <span class="fb-lbl">${i === 0 ? "קנייה ראשונית" : `ריביי ${i}`}${b.ts ? ` <small dir="ltr">${fmtTime(b.ts)}</small>` : ""}</span>
+          <input type="number" inputmode="decimal" min="1" class="fb-amt" data-fb-amt="${esc(b.id)}" value="${b.amount}" ${removed.includes(b.id) ? "disabled" : ""}>
+          ${i === 0 ? `<span class="fb-trash-ph"></span>` : `<button type="button" class="icon-btn danger" data-fb-del="${esc(b.id)}" title="${removed.includes(b.id) ? "החזר" : "הסר את הריביי"}">${removed.includes(b.id) ? "↺" : icon('trash')}</button>`}
+        </div>`).join("")}
+      </div>
+      <div class="fb-total">סה"כ קנייה: <b data-fb-total>₪0</b></div>
+      <button class="btn btn-primary btn-block" data-fb-save>שמור</button>`;
   } else if (m.type === "bitSetup") {
     // Opened once a night after sitting down at a table whose money goes between the
     // players (see the table screen's check), for someone with no Bit link saved yet.
@@ -14973,6 +15003,43 @@ function attachHandlers(){
     go("community", {communityId});
   };
 
+  app.querySelectorAll("[data-fix-buyins]").forEach(el => el.onclick = (e) => {
+    e.stopPropagation();
+    if (nav.gameId) openModal({type: "fixBuyins", gameId: nav.gameId, playerId: el.dataset.fixBuyins});
+  });
+  if (modal && modal.type === "fixBuyins") {
+    const totalEl = app.querySelector("[data-fb-total]");
+    const sum = () => { let t = 0; app.querySelectorAll("[data-fb-amt]").forEach(i => { if (!i.disabled) t += parseFloat(i.value) || 0; }); if (totalEl) totalEl.textContent = `₪${Math.round(t * 100) / 100}`; };
+    app.querySelectorAll("[data-fb-amt]").forEach(i => i.oninput = sum);
+    sum();
+    app.querySelectorAll("[data-fb-del]").forEach(el => el.onclick = () => {
+      // keep what's typed in the other rows across the redraw
+      app.querySelectorAll("[data-fb-amt]").forEach(i => { modal.typed = Object.assign({}, modal.typed, {[i.dataset.fbAmt]: i.value}); });
+      const id = el.dataset.fbDel, r = modal.removed || [];
+      modal.removed = r.includes(id) ? r.filter(x => x !== id) : r.concat(id);
+      render();
+    });
+    if (modal.typed) app.querySelectorAll("[data-fb-amt]").forEach(i => { if (modal.typed[i.dataset.fbAmt] !== undefined) i.value = modal.typed[i.dataset.fbAmt]; }), sum();
+    const saveBtn = app.querySelector("[data-fb-save]");
+    if (saveBtn) saveBtn.onclick = async () => {
+      const g = getGame(modal.gameId), removed = modal.removed || [];
+      const changes = [];
+      for (const i of app.querySelectorAll("[data-fb-amt]")) {
+        const id = i.dataset.fbAmt, b = (g.buyins || []).find(x => x.id === id);
+        if (!b || removed.includes(id)) continue;
+        const v = Math.round((parseFloat(i.value) || 0) * 100) / 100;
+        if (v <= 0) { showAlert("כל סכום צריך להיות גדול מ-0 (ריביי מיותר - הסירו אותו בפח)."); return; }
+        if (v !== b.amount) changes.push([id, v]);
+      }
+      saveBtn.disabled = true; showButtonLoading(saveBtn);
+      try {
+        for (const [id, v] of changes) await v2UpdateBuyinAmount(g.id, id, v);
+        for (const id of removed) await v2DeleteBuyin(g.id, id);
+        v2AfterOwnWrite(g);
+      } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); saveBtn.disabled = false; render(); return; }
+      closeModal();
+    };
+  }
   if (modal && modal.type === "bitSetup") {
     attachBitLinkHandlers(() => { closeModal(); showAlert("✓ קישור הביט נשמר", 2500); });
   }
