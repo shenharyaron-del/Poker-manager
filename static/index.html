@@ -1296,6 +1296,9 @@ html:not(.theme-light) .dp-paid-msg{color:#6ee7b7;}
 .bit-tap{position:relative;display:inline-block;width:var(--s);height:var(--s);margin-inline-start:calc(var(--s) * .3);vertical-align:middle;flex-shrink:0;}
 .bit-tap img{width:100%;height:100%;border-radius:calc(var(--s) * .2);display:block;}
 .bit-tap i{position:absolute;font-style:normal;line-height:1;font-size:calc(var(--s) * .58);left:calc(var(--s) * -.28);top:calc(var(--s) * -.06);}
+.bit-why{font-size:15px;color:var(--muted);line-height:1.5;margin:0 0 10px;background:rgba(0,112,224,.06);border-radius:10px;padding:8px 10px;}
+.bit-none-link{display:block;margin:8px auto 0;background:none;border:none;color:var(--muted);text-decoration:underline;font:inherit;font-size:15px;cursor:pointer;}
+.rr-pbonly{font-size:12px;font-weight:700;color:#0891b2;border:1px solid currentColor;border-radius:999px;padding:0 6px;margin-inline-start:4px;white-space:nowrap;flex-shrink:0;}
 .pay-hint{font-size:14px;color:var(--muted);text-align:center;margin-top:6px;}
 .bit-link-box{border:1.5px solid var(--card-b);border-radius:12px;padding:10px 12px;margin-bottom:4px;}
 .bit-link-box .bl-ok{font-weight:700;color:var(--gold);font-size:16px;}
@@ -5472,6 +5475,12 @@ function parseBitLink(s){
   } catch(e) { return null; }
 }
 // The Bit link of a player at this game (via their roster row's account), if they saved one.
+// The player said they have no Bit (and saved no link): pay them with PayBox.
+function playerNoBit(g, pid){
+  const c = g && getCommunity(g.communityId);
+  const row = c && (c.roster || []).find(r => r.id === pid);
+  return !!(row && row.clientId && getGlobalPlayer(row.clientId).noBit) && !playerBitLink(g, pid);
+}
 function playerBitLink(g, pid){
   const c = g && getCommunity(g.communityId);
   const row = c && (c.roster || []).find(r => r.id === pid);
@@ -5493,6 +5502,7 @@ function resultBitButtonHtml(g, toPid, amount){
   const inner = `<img src="/static/bit-icon.png" style="height:16px;width:auto;display:block;"> ביט`;
   const st = `background:#0070E0;color:#fff;display:inline-flex;align-items:center;gap:4px;text-decoration:none;padding:4px 10px;font-size:15px;`;
   if (link) return `<a href="${esc(link)}" class="btn btn-sm" data-copy-amount="${amt}" style="${st}">${bitTapIcon(16)} ביט</a>`;
+  if (playerNoBit(g, toPid)) return `<a href="https://links.payboxapp.com" class="btn btn-sm btn-blue" data-copy-amount="${amt}" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;padding:4px 10px;font-size:15px;"><img src="/static/paybox-icon.png" style="height:16px;width:auto;display:block;"> פייבוקס</a>`;
   // no Bit link saved: Bit (opened plain) and PayBox, both copying the amount
   return `<button type="button" class="btn btn-sm" data-open-bit-generic data-copy-amount="${amt}" style="${st}">${inner}</button>`
     + `<a href="https://links.payboxapp.com" class="btn btn-sm btn-blue" data-copy-amount="${amt}" style="display:inline-flex;align-items:center;gap:4px;text-decoration:none;padding:4px 10px;font-size:15px;"><img src="/static/paybox-icon.png" style="height:16px;width:auto;display:block;"> פייבוקס</a>`;
@@ -5511,6 +5521,14 @@ function dpAreaHtml(g, toPid, amount){
       <button class="btn btn-primary btn-block dp-tg" data-end-night-from-direct-pay="${g.id}">סגירת הערב לכולם</button>
       <div class="pay-hint dp-hint">לחיצה כאן תסגור את הערב לכולם, והאפליקציה תחשב בעצמה מי מעביר למי</div>`;
   const link = playerBitLink(g, toPid);
+  if (playerNoBit(g, toPid)) {
+    const nm = esc(tableShortName(g, toPid));
+    return `
+      <div class="pay-pair dp-pay">
+        <button type="button" class="btn btn-blue flex1" data-dp-pay="paybox" style="display:flex;align-items:center;justify-content:center;gap:6px;"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פתיחת פייבוקס</button>
+      </div>
+      <div class="pay-hint dp-hint">ל${nm} אין ביט. בפייבוקס בחרו את ${nm}, הדביקו את הסכום (${amt} שח) ואשרו</div>`;
+  }
   const pb = `<button type="button" class="btn btn-blue dp-pb" data-dp-pay="paybox"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</button>`;
   if (link) {
     const nm = esc(tableShortName(g, toPid));
@@ -5550,6 +5568,9 @@ function payAppButtonsHtml(g, toPid, amount){
   const link = toPid && toPid !== "__group__" ? playerBitLink(g, toPid) : null;
   const bitInner = `<img src="/static/bit-icon.png" style="height:20px;width:auto;display:block;"> ביט`;
   const st = `display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;`;
+  if (toPid && toPid !== "__group__" && playerNoBit(g, toPid)) return `
+    <div class="pay-pair"><a href="https://links.payboxapp.com" class="btn btn-blue flex1" data-copy-amount="${amt}" style="${st}"><img src="/static/paybox-icon.png" style="height:20px;width:auto;display:block;"> פייבוקס</a></div>
+    <div class="pay-hint">אין לו ביט - בפייבוקס בחרו אותו, הדביקו את הסכום (₪${amt}) ואשרו</div>`;
   return `
     <div class="pay-pair">
       ${link ? `<a href="${esc(link)}" class="btn flex1" data-copy-amount="${amt}" style="background:#0070E0;color:#fff;${st}">${bitTapIcon(20)} ביט</a>`
@@ -5590,6 +5611,28 @@ async function decodeQrFromFile(file){
 }
 // How to get the Bit QR (with the annotated Bit screenshot) + the "pick the screenshot" /
 // paste controls - one copy for the profile section and the window after sitting down.
+// My Bit section (the profile and the "קבלת כסף בביט" window): saved link / "אין לי ביט" /
+// the steps, with a short note on what the QR is and isn't.
+function bitSectionHtml(opts){
+  const o = opts || {}, gp = getGlobalPlayer(myIdentity.id), myBit = parseBitLink(gp.bitLink);
+  if (myBit && !bitLinkEditing) return `
+      <div class="bit-link-box">
+        <div class="bl-ok">✓ קישור הביט שלך שמור</div>
+        <div class="bl-url" dir="ltr">${esc(myBit)}</div>
+        <div style="display:flex;gap:8px;margin-top:8px;"><button class="btn btn-ghost btn-sm flex1" data-bit-link-edit>החלף</button><button class="btn btn-ghost btn-sm flex1" data-bit-link-remove>הסר</button></div>
+      </div>`;
+  if (gp.noBit && !myBit && !bitLinkEditing) return `
+      <div class="bit-link-box">
+        <div class="bl-ok">סימנת שאין לך ביט</div>
+        <div style="font-size:15px;color:var(--muted);margin-top:4px;line-height:1.45;">מי שיעביר לך כסף יקבל כפתור פייבוקס. פייבוקס ייפתח בלי לבחור אותך - הם יחפשו אותך שם בעצמם.</div>
+        <button class="btn btn-ghost btn-sm btn-block" style="margin-top:8px;" data-bit-has>יש לי ביט - להגדרת הקוד</button>
+      </div>`;
+  return `
+      <p class="bit-why">קוד ה-QR הקבוע של ביט נועד לקבל כסף: מי שסורק אותו יכול רק להעביר לך, בלי לשמור איש קשר ובלי להקליד טלפון. הוא לא נותן גישה לחשבון שלך. אנחנו משתמשים בו רק כדי לפתוח לחברים ביט ישר עליך כשהם מעבירים לך כסף.</p>
+      ${bitSetupStepsHtml(o)}
+      ${myBit ? `<button class="btn btn-ghost btn-sm" style="display:block;margin:6px auto 0;" data-bit-link-cancel>ביטול</button>`
+        : `<button type="button" class="bit-none-link" data-bit-none>אין לי ביט</button>`}`;
+}
 function bitSetupStepsHtml(opts){
   const o = opts || {};
   const img = `<img src="/static/help/bit-qr-steps.jpg" alt="ביט: עוד ← קוד ה-QR הקבוע שלי לקבלת כסף" class="bit-steps-img">`;
@@ -5616,7 +5659,7 @@ function attachBitLinkHandlers(onSaved){
   const saveBitLink = async (link) => {
     keepNameEdit();
     await syncLegacyOnlyFields();
-    setGlobalPlayer(myIdentity.id, {bitLink: link || null});
+    setGlobalPlayer(myIdentity.id, link ? {bitLink: link, noBit: false} : {bitLink: null});
     bitLinkEditing = false;
     if (link && onSaved) onSaved(); else render();
     try { await saveState(); } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); }
@@ -5658,6 +5701,20 @@ function attachBitLinkHandlers(onSaved){
       showAlert(text ? "הקוד בתמונה הוא לא קישור של ביט. ודאו שזה \"קוד ה-QR הקבוע שלי לקבלת כסף\" מביט." : "לא הצלחנו לקרוא קוד QR מהתמונה. נסו צילום מסך חד של הקוד.");
     };
   }
+  const setNoBit = async (v) => {
+    keepNameEdit();
+    await syncLegacyOnlyFields();
+    setGlobalPlayer(myIdentity.id, {noBit: v});
+    bitLinkEditing = false;
+    render();
+    try { await saveState(); } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); }
+  };
+  const noneBtn = app.querySelector("[data-bit-none]");
+  if (noneBtn) noneBtn.onclick = async () => {
+    if (await showConfirm("בלי ביט, מי שיעביר לך כסף יקבל כפתור פייבוקס.\nפייבוקס ייפתח בלי לבחור אותך - הם יצטרכו לחפש אותך שם.", {okLabel: "אין לי ביט", cancelLabel: "ביטול"})) setNoBit(true);
+  };
+  const hasBtn = app.querySelector("[data-bit-has]");
+  if (hasBtn) hasBtn.onclick = () => setNoBit(false);
   const bitEdit = app.querySelector("[data-bit-link-edit]");
   if (bitEdit) bitEdit.onclick = () => { keepNameEdit(); bitLinkEditing = true; render(); };
   const bitCancel = app.querySelector("[data-bit-link-cancel]");
@@ -11407,15 +11464,7 @@ function renderModal(m){
       ${seatPickerHtml}
       <div class="section-title" style="padding:0;margin:0 0 6px;">קישור לקבלת תשלום בביט</div>
       ${(() => {
-        const myBit = parseBitLink(getGlobalPlayer(myIdentity.id).bitLink);
-        if (myBit && !bitLinkEditing) return `
-      <div class="bit-link-box">
-        <div class="bl-ok">✓ קישור הביט שלך שמור</div>
-        <div class="bl-url" dir="ltr">${esc(myBit)}</div>
-        <div style="display:flex;gap:8px;margin-top:8px;"><button class="btn btn-ghost btn-sm flex1" data-bit-link-edit>החלף</button><button class="btn btn-ghost btn-sm flex1" data-bit-link-remove>הסר</button></div>
-      </div>`;
-        return bitSetupStepsHtml({collapseImage: true})
-          + (myBit ? `<button class="btn btn-ghost btn-sm" style="display:block;margin:6px auto 0;" data-bit-link-cancel>ביטול</button>` : "");
+        return bitSectionHtml({collapseImage: true});
       })()}
       <div style="height:14px;"></div>
       <div class="section-title" style="padding:0;margin:0 0 8px;">עיצוב האפליקציה</div>
@@ -11446,15 +11495,7 @@ function renderModal(m){
     // Opened once a night after sitting down at a table whose money goes between the
     // players (see the table screen's check), for someone with no Bit link saved yet.
     title = "קבלת כסף בביט";
-    const myBitNow = parseBitLink(getGlobalPlayer(myIdentity.id).bitLink);
-    body = myBitNow && !bitLinkEditing ? `
-      <div class="bit-link-box">
-        <div class="bl-ok">✓ קישור הביט שלך שמור</div>
-        <div class="bl-url" dir="ltr">${esc(myBitNow)}</div>
-        <div style="display:flex;gap:8px;margin-top:8px;"><button class="btn btn-ghost btn-sm flex1" data-bit-link-edit>החלף</button><button class="btn btn-ghost btn-sm flex1" data-bit-link-remove>הסר</button></div>
-      </div>` : `
-      ${bitSetupStepsHtml()}
-      ${myBitNow ? `<button class="btn btn-ghost btn-sm" style="display:block;margin:6px auto 0;" data-bit-link-cancel>ביטול</button>` : ""}`;
+    body = bitSectionHtml();
   } else if (m.type === "inviteGone") {
     title = "הקישור לא בתוקף";
     body = `<p style="color:var(--muted);font-size:17px;">ערב המשחק שאליו הוזמנתם כבר לא קיים - כנראה שהמארגן מחק אותו. אפשר לבקש קישור עדכני.</p>`;
@@ -12052,6 +12093,7 @@ function renderModal(m){
     const bitBadge = p => !directClub ? ""
       : p.clientId && parseBitLink(getGlobalPlayer(p.clientId).bitLink)
         ? bitTapIcon(16)
+        : p.clientId && getGlobalPlayer(p.clientId).noBit ? `<span class="rr-pbonly" title="אין לו ביט - מקבל בפייבוקס">פייבוקס</span>`
         : `<span class="rr-nobit" title="לא הגדיר קישור ביט לקבלת כסף">ללא ביט</span>`;
     const rows = c.roster.map(p => {
       const isCreatorRow = !!(p.clientId && c.createdBy && p.clientId === c.createdBy);
@@ -12362,7 +12404,7 @@ function renderModal(m){
       ]],
       ["אני", [
         tile('data-game-menu-go="profile"', "👤", "הפרופיל שלי"),
-        tile('data-game-menu-go="bit"', `<img src="/static/bit-icon.png" class="menu-bit-ic" alt="">${parseBitLink(getGlobalPlayer(myIdentity.id).bitLink) ? "" : '<span class="menu-dot"></span>'}`, "ביט לקבלת כסף"),
+        tile('data-game-menu-go="bit"', `<img src="/static/bit-icon.png" class="menu-bit-ic" alt="">${parseBitLink(getGlobalPlayer(myIdentity.id).bitLink) || getGlobalPlayer(myIdentity.id).noBit ? "" : '<span class="menu-dot"></span>'}`, "ביט לקבלת כסף"),
         tile('data-game-menu-go="stats"', icon('bar'), "הביצועים שלי"),
       ]],
       ["אפליקציה", [
@@ -13112,7 +13154,7 @@ function attachHandlers(){
     if (g && pid && !g.closed && g.gameType !== "tournament" && (g.seats||[]).includes(pid) && !(pid in (g.cashouts||{}))
         && Array.isArray(g.buyins) && g.buyins.some(b => b.playerId === pid)
         && ((getCommunity(g.communityId) || {}).settlementDefault || "direct") === "direct"
-        && !parseBitLink(getGlobalPlayer(myIdentity.id).bitLink) && !bitSetupAsked(g.id)) {
+        && !parseBitLink(getGlobalPlayer(myIdentity.id).bitLink) && !getGlobalPlayer(myIdentity.id).noBit && !bitSetupAsked(g.id)) {
       setTimeout(() => {
         if (modal || pendingBuyinRequest || bitSetupAsked(g.id) || parseBitLink(getGlobalPlayer(myIdentity.id).bitLink)) return;
         markBitSetupAsked(g.id);
