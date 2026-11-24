@@ -1253,11 +1253,11 @@ html.theme-light .pf-change.up{color:#15803d;} html.theme-light .pf-change.down{
 .bit-more-ic i{width:4px;height:4px;border-radius:50%;background:#c9c9cf;display:block;}
 .bit-open-link{color:#0070E0;font-weight:800;text-decoration:underline;}
 html:not(.theme-light) .bit-open-link{color:#7cc4ff;}
-.bit-row{display:flex;align-items:center;gap:8px;}
-.bit-row .txt{flex:1;min-width:0;}
+.bit-row{display:flex;flex-direction:column;align-items:flex-start;gap:6px;}
+.bit-row .txt{min-width:0;}
 .bit-row .btn{flex-shrink:0;white-space:nowrap;margin:0;}
 .bit-row-or{margin:10px 0 6px;font-size:16px;line-height:1.5;}
-.bit-paste-note{font-size:13px;color:var(--muted);margin:-2px 0 6px;text-align:left;}
+.bit-paste-note{font-size:13px;color:var(--muted);margin:-2px 0 6px;}
 .bit-row .btn:disabled{opacity:.45;}
 .bit-steps{margin:0 0 8px;padding-inline-start:22px;font-size:16px;line-height:1.6;}
 .bit-steps-img{display:block;width:62%;max-width:240px;margin:6px auto;border-radius:12px;border:1px solid var(--card-b);}
@@ -5590,7 +5590,7 @@ async function refreshBitPasteBtn(){
 }
 window.addEventListener("focus", () => refreshBitPasteBtn());
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshBitPasteBtn(); });   // reading the clipboard wasn't allowed - a field to paste into by hand instead
-// The bitSetup window opens once per night per device (closing it with "אחר כך" or the X counts).
+// The bitSetup window opens once per night per device (closing it with the X counts).
 const bitSetupAskedMem = new Set();
 function bitSetupAsked(gameId){ if (bitSetupAskedMem.has(gameId)) return true; try { return localStorage.getItem("bit-setup-asked:" + gameId) === "1"; } catch(e) { return false; } }
 function markBitSetupAsked(gameId){ bitSetupAskedMem.add(gameId); try { localStorage.setItem("bit-setup-asked:" + gameId, "1"); } catch(e) {} }   // the profile's "החלף" - shows the paste / scan fields again
@@ -11326,8 +11326,7 @@ function renderModal(m){
     // players (see the table screen's check), for someone with no Bit link saved yet.
     title = "קבלת כסף בביט";
     body = `
-      ${bitSetupStepsHtml()}
-      <button class="btn btn-ghost btn-block" style="margin-top:6px;" data-bit-setup-later>אחר כך</button>`;
+      ${bitSetupStepsHtml()}`;
   } else if (m.type === "inviteGone") {
     title = "הקישור לא בתוקף";
     body = `<p style="color:var(--muted);font-size:17px;">ערב המשחק שאליו הוזמנתם כבר לא קיים - כנראה שהמארגן מחק אותו. אפשר לבקש קישור עדכני.</p>`;
@@ -14974,8 +14973,6 @@ function attachHandlers(){
 
   if (modal && modal.type === "bitSetup") {
     attachBitLinkHandlers(() => { closeModal(); showAlert("✓ קישור הביט נשמר", 2500); });
-    const later = app.querySelector("[data-bit-setup-later]");
-    if (later) later.onclick = () => closeModal();
   }
   if (modal && modal.type === "identityName") {
     const confirmBtn = app.querySelector("[data-confirm-identity-name]");
