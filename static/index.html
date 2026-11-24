@@ -1253,6 +1253,12 @@ html.theme-light .pf-change.up{color:#15803d;} html.theme-light .pf-change.down{
 .bit-more-ic i{width:4px;height:4px;border-radius:50%;background:#c9c9cf;display:block;}
 .bit-open-link{color:#0070E0;font-weight:800;text-decoration:underline;}
 html:not(.theme-light) .bit-open-link{color:#7cc4ff;}
+.bit-row{display:flex;align-items:center;gap:8px;}
+.bit-row .txt{flex:1;min-width:0;}
+.bit-row .btn{flex-shrink:0;white-space:nowrap;margin:0;}
+.bit-row-or{margin:10px 0 6px;font-size:16px;line-height:1.5;}
+.bit-paste-note{font-size:13px;color:var(--muted);margin:-2px 0 6px;text-align:left;}
+.bit-row .btn:disabled{opacity:.45;}
 .bit-steps{margin:0 0 8px;padding-inline-start:22px;font-size:16px;line-height:1.6;}
 .bit-steps-img{display:block;width:62%;max-width:240px;margin:6px auto;border-radius:12px;border:1px solid var(--card-b);}
 .bit-steps-more{margin:4px 0;font-size:15px;}
@@ -5417,6 +5423,7 @@ function getMySeatPosition(){
 // כסף"), kept on globalPlayers like the photo, so whoever owes them money opens Bit straight
 // on them. Only an https link on bitpay.co.il is accepted - also pulled out of a longer text
 // (a copied share message), so a stray word around it doesn't matter.
+const BIT_ME_PREFIX = "https://www.bitpay.co.il/app/me";
 function parseBitLink(s){
   const m = String(s || "").match(/https?:\/\/[^\s"'<>]+/i);
   if (!m) return null;
@@ -5424,7 +5431,8 @@ function parseBitLink(s){
     const u = new URL(m[0]);
     const h = u.hostname.toLowerCase();
     if (u.protocol !== "https:" || !(h === "bitpay.co.il" || h.endsWith(".bitpay.co.il"))) return null;
-    return u.href;
+    // a personal "receive money" link: https://www.bitpay.co.il/app/me/...
+    return u.href.startsWith(BIT_ME_PREFIX) ? u.href : null;
   } catch(e) { return null; }
 }
 // The Bit link of a player at this game (via their roster row's account), if they saved one.
@@ -5492,14 +5500,11 @@ function bitSetupStepsHtml(opts){
     </ol>
     ${o.collapseImage ? `<details class="bit-steps-more"><summary>איך זה נראה בביט?</summary>${img}</details>` : img}
     <ol class="bit-steps" start="3">
-      <li>לחיצה על קוד ה-QR למשך שנייה מעתיקה את הקישור לטלפון, ואז:</li>
+      <li><div class="bit-row"><span class="txt">לחיצה על קוד ה-QR למשך שנייה מעתיקה את הקישור לטלפון</span><button class="btn btn-primary btn-sm" data-bit-link-paste>📋 הדבקת הקישור</button></div></li>
     </ol>
-    <button class="btn btn-primary btn-block" style="margin:2px 0 6px;" data-bit-link-paste>📋 הדבקת הקישור</button>
+    <div class="bit-paste-note" data-bit-paste-note hidden>הכפתור יופעל כשקישור הביט יהיה בזיכרון</div>
     ${bitPasteField ? `<div style="display:flex;gap:8px;margin:0 0 8px;"><input type="url" id="bit-link-input" dir="ltr" placeholder="לחיצה ארוכה כאן ← הדבק" style="flex:1;min-width:0;"><button class="btn btn-ghost btn-sm" data-bit-link-save>שמור</button></div>` : ""}
-    <ol class="bit-steps" start="4">
-      <li>או צלמו מסך של הקוד והעלו אותו:</li>
-    </ol>
-    <button class="btn btn-ghost btn-block" style="margin:2px 0 6px;" data-bit-link-scan>📷 העלאת צילום QR</button>
+    <div class="bit-row bit-row-or"><span class="txt">או צלמו מסך של הקוד והעלו אותו</span><button class="btn btn-ghost btn-sm" data-bit-link-scan>📷 העלאת צילום QR</button></div>
     <input type="file" accept="image/*" id="bit-qr-file" style="display:none;">`;
 }
 // The scan / paste / edit / remove handlers - the profile and the window share them;
@@ -5521,15 +5526,18 @@ function attachBitLinkHandlers(onSaved){
     let text = null;
     try { if (navigator.clipboard && navigator.clipboard.readText) text = await navigator.clipboard.readText(); } catch(e) { text = null; }
     if (text === null) { keepNameEdit(); bitPasteField = true; render(); const f = document.getElementById("bit-link-input"); if (f) f.focus(); return; }
-    const link = parseBitLink(text);
+    const link = parseBitLink(text.trim());
     if (link) { bitPasteField = false; saveBitLink(link); return; }
-    showAlert("בזיכרון אין קישור של ביט. בביט לחצו על קוד ה-QR למשך שנייה, וחזרו ללחוץ על הדבקה.");
+    pasteBtn.disabled = true;
+    const note = document.querySelector("[data-bit-paste-note]"); if (note) note.hidden = false;
+    showAlert("בזיכרון אין קישור של ביט. בביט לחצו על קוד ה-QR למשך שנייה, וחזרו לכאן.");
   };
+  refreshBitPasteBtn();
   const bitSaveBtn = app.querySelector("[data-bit-link-save]");
   if (bitSaveBtn) bitSaveBtn.onclick = () => {
     const raw = (document.getElementById("bit-link-input") || {}).value || "";
     const link = parseBitLink(raw);
-    if (!link) { showAlert(raw.trim() ? "זה לא נראה כמו קישור של ביט - הוא צריך להתחיל ב-https://www.bitpay.co.il" : "לחצו לחיצה ארוכה בשדה ובחרו הדבק."); return; }
+    if (!link) { showAlert(raw.trim() ? "זה לא קישור של ביט - הוא צריך להתחיל ב-https://www.bitpay.co.il/app/me" : "לחצו לחיצה ארוכה בשדה ובחרו הדבק."); return; }
     bitPasteField = false;
     saveBitLink(link);
   };
@@ -5556,7 +5564,32 @@ function attachBitLinkHandlers(onSaved){
   if (bitRemove) bitRemove.onclick = async () => { if (await showConfirm("להסיר את קישור הביט?", {okLabel: "הסר", cancelLabel: "ביטול"})) saveBitLink(null); };
 }
 let bitLinkEditing = false;
-let bitPasteField = false;   // reading the clipboard wasn't allowed - a field to paste into by hand instead
+let bitPasteField = false;
+// Whether the clipboard holds a Bit "me" link: "yes" / "no", "denied" (the page may not
+// read it - a field to paste into instead), or "unknown" (can't tell before a tap asks).
+async function bitClipboardState(){
+  try {
+    if (!navigator.clipboard || !navigator.clipboard.readText) return "unknown";
+    let perm = null;
+    try { perm = (await navigator.permissions.query({name: "clipboard-read"})).state; } catch(e) {}
+    if (perm === "denied") return "denied";
+    if (perm !== "granted") return "unknown";
+    return parseBitLink((await navigator.clipboard.readText() || "").trim()) ? "yes" : "no";
+  } catch(e) { return "unknown"; }
+}
+// 📋 הדבקת הקישור works only with a Bit link on the clipboard - checked when the steps
+// show and each time the app comes back to the front (back from Bit after the long press).
+async function refreshBitPasteBtn(){
+  const btn = document.querySelector("[data-bit-link-paste]");
+  if (!btn) return;
+  const st = await bitClipboardState();
+  if (st === "denied" && !bitPasteField) { bitPasteField = true; render(); return; }
+  btn.disabled = st === "no";
+  const note = document.querySelector("[data-bit-paste-note]");
+  if (note) note.hidden = st !== "no";
+}
+window.addEventListener("focus", () => refreshBitPasteBtn());
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshBitPasteBtn(); });   // reading the clipboard wasn't allowed - a field to paste into by hand instead
 // The bitSetup window opens once per night per device (closing it with "אחר כך" or the X counts).
 const bitSetupAskedMem = new Set();
 function bitSetupAsked(gameId){ if (bitSetupAskedMem.has(gameId)) return true; try { return localStorage.getItem("bit-setup-asked:" + gameId) === "1"; } catch(e) { return false; } }
