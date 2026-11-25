@@ -1305,6 +1305,9 @@ html:not(.theme-light) .dp-paid-msg{color:#6ee7b7;}
 .pb-name-ic img{width:76%;height:76%;object-fit:contain;display:block;}
 .res-mine{border:2px solid var(--gold)!important;background:rgba(201,162,74,.12)!important;}
 .res-to-me{background:rgba(201,162,74,.2);border-radius:8px;padding-inline:6px!important;margin-inline:-6px;}
+.owe-rest{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:10px;font-size:17px;flex-wrap:wrap;}
+.owe-rest b{color:#b91c1c;}
+html:not(.theme-light) .owe-rest b{color:#fda4af;}
 .pay-hint{font-size:14px;color:var(--muted);text-align:center;margin-top:6px;}
 .bit-link-box{border:1.5px solid var(--card-b);border-radius:12px;padding:10px 12px;margin-bottom:4px;}
 .bit-link-box .bl-ok{font-weight:700;color:var(--gold);font-size:16px;}
@@ -10061,6 +10064,14 @@ function renderPlayerScreen(gameId){
       ` : `<div style="margin-top:10px;font-weight:700;color:#6ee7b7;">מקבל מ-${esc(t.fromName)} ${t.amount} שח</div>`).join("");
     } else if (potOff) {
       statusHtml = "";   // the pot-off note / button below says it
+    } else if ((c.settlementDefault || "direct") === "direct" && stillOpenForInfo < -0.5) {
+      // still owes (e.g. the amount was fixed after a transfer was already made): how much,
+      // with the paying window one tap away
+      const rest = Math.round(Math.abs(stillOpenForInfo) * 100) / 100;
+      statusHtml = `<div class="owe-rest"><span>${viewingOther && p ? `נשאר ל<bdi>${esc(tableShortName(g, pid))}</bdi>` : "נשאר לך"} להעביר${directPaidNet(g, pid) > 0.5 ? " עוד" : ""} <b>₪${rest}</b></span><button type="button" class="btn btn-primary btn-sm" data-pay-rest="${pid}" data-amount="${rest}">להעברה</button></div>`;
+    } else if ((c.settlementDefault || "direct") === "direct" && profitForInfo < -0.5 && stillOpenForInfo > 0.5) {
+      // paid more than the (fixed) loss: the difference comes back in the end-of-night settlement
+      statusHtml = `<div style="font-size:17px;color:var(--muted);margin-top:10px;">${viewingOther ? "שולם" : "שילמת"} ₪${Math.round(stillOpenForInfo * 100) / 100} יותר מדי - ${viewingOther ? "יוחזרו" : "יוחזרו לך"} בחישוב של סוף הערב</div>`;
     } else if (g.closed) {
       statusHtml = `<div style="font-size:17px;color:var(--muted);margin-top:10px;">ממתין/ה שכולם יצאו מהשולחן</div>`;
     } else if (stillOpenForInfo >= -0.5) {
@@ -14668,6 +14679,12 @@ function attachHandlers(){
       else await mutateAndSave(() => { const fg = getGame(gameId); fg.cashouts[pid] = {...fg.cashouts[pid], amount: rounded}; if (!fg.liveChips) fg.liveChips = {}; fg.liveChips[pid] = rounded; maybeAutoCloseNight(fg); });
     } catch(e) { showAlert(e && e.status === 423 ? "הערב נעול - צריך לפתוח אותו לעריכה קודם." : "שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); el.disabled = false; render(); return; }
     delete coEditDraft[coEditFor]; coEditFor = null; render();
+    // the fix left more to pay than was already transferred: the paying window again, for the rest
+    maybeOpenDirectPayAfterCashout(gameId, pid, rounded, true);
+  });
+  // "נשאר לך להעביר עוד ₪X" on the after-leaving screen: the paying window for the rest
+  app.querySelectorAll("[data-pay-rest]").forEach(el => el.onclick = () => {
+    openModal({type: "directPay", gameId: nav.gameId, fromPlayerId: el.dataset.payRest, amount: el.dataset.amount});
   });
   app.querySelectorAll("[data-leave-confirm]").forEach(el => el.onclick = async () => {
     if (document.activeElement && document.activeElement.dataset && document.activeElement.dataset.hintReplace) document.activeElement.blur();
