@@ -5521,6 +5521,11 @@ function resultBitButtonHtml(g, toPid, amount){
 //    a smaller פייבוקס;
 //  - a player without one: ביט / פייבוקס side by side.
 // The amount is in the window's title and the line under the buttons.
+// Recording someone else's payment (an admin / the treasurer, on their behalf): who pays whom.
+function dpConfirmLabel(g, fromPid, toPid){
+  const from = tableShortName(g, fromPid);
+  return !toPid || toPid === "__auto__" ? `רישום העברה של ${from} - בחרו למי` : `רישום העברה של ${from} ל${tableShortName(g, toPid)}`;
+}
 function dpAreaHtml(g, toPid, amount){
   const auto = !toPid || toPid === "__auto__";
   // both ways always in view: pay now (top) "או" close the night for everyone (bottom) -
@@ -12563,7 +12568,8 @@ function renderModal(m){
     const autoSel = selectedToPlayerId === "__auto__";
     title = `${esc(fromP ? fromP.name : "")} ${playerIsFemale(g, getCommunity(g.communityId), m.fromPlayerId) ? "מעבירה" : "מעביר"} ₪${Math.round((parseFloat(m.amount) || 0) * 100) / 100}`;
     body = `
-      <p style="color:var(--muted);font-size:16px;margin-top:0;">בחרו למי ${g2("אתה מעביר", "את מעבירה")} את הכסף במזומן</p>
+      <p style="color:var(--muted);font-size:16px;margin-top:0;">${isForSelf ? `בחרו למי ${g2("אתה מעביר", "את מעבירה")} את הכסף במזומן`
+        : `בחרו למי ${esc(fromP ? tableShortName(g, fromP.id) : "")} ${playerIsFemale(g, getCommunity(g.communityId), m.fromPlayerId) ? "מעבירה" : "מעביר"} את הכסף`}</p>
       <div class="field"><label>למי?</label>
         <div class="scroll-list${m.paid ? " dp-locked" : ""}" style="max-height:240px;">
           <div class="checkbox-row" data-select-direct-pay-to="__auto__" style="cursor:pointer;">
@@ -12578,7 +12584,7 @@ function renderModal(m){
       </div>
       ${isForSelf ? `<div class="dp-area" data-dp-area>${m.paid ? dpPaidHtml(g, m.paid) : dpAreaHtml(g, selectedToPlayerId, m.amount)}</div>` : `
       <p style="font-weight:700;margin:0 0 10px;">סכום העברה: ${m.amount||0} שח</p>
-      <button class="btn btn-primary btn-block dp-tg" data-confirm-direct-pay ${autoSel ? "disabled" : ""}>רישום ההעברה ל${esc(fromP ? fromP.name : "")}</button>
+      <button class="btn btn-primary btn-block dp-tg" data-confirm-direct-pay ${autoSel ? "disabled" : ""}>${esc(dpConfirmLabel(g, m.fromPlayerId, selectedToPlayerId))}</button>
       <button class="btn btn-primary btn-block dp-tg" style="margin-top:8px;" data-end-night-from-direct-pay="${m.gameId}" ${autoSel ? "" : "disabled"}>סגירת הערב לכולם</button>
       <p style="color:var(--muted);font-size:15px;margin:6px 2px 0;text-align:center;">לחיצה כאן תסגור את הערב לכולם, והאפליקציה תחשב בעצמה מי מעביר למי</p>`}
     `;
@@ -16497,7 +16503,7 @@ function attachHandlers(){
       // only enabled / disabled, and the pay area redrawn inside its fixed height - so nothing moves
       const area = app.querySelector("[data-dp-area]");
       if (area) { area.innerHTML = dpAreaHtml(getGame(modal.gameId), sel, modal.amount); wireDpPay(); wireEndNight(); fitDpBitLabel(); }
-      app.querySelectorAll("[data-confirm-direct-pay]").forEach(b => { b.disabled = auto; });
+      app.querySelectorAll("[data-confirm-direct-pay]").forEach(b => { b.disabled = auto; b.textContent = dpConfirmLabel(getGame(modal.gameId), modal.fromPlayerId, sel); });
       const endBtn = app.querySelector("[data-end-night-from-direct-pay]");
       if (endBtn) endBtn.disabled = !auto;
     };
