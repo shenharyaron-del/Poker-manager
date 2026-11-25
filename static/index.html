@@ -1303,6 +1303,8 @@ html:not(.theme-light) .dp-paid-msg{color:#6ee7b7;}
 .bit-none-link{display:block;margin:8px auto 0;background:none;border:none;color:var(--muted);text-decoration:underline;font:inherit;font-size:15px;cursor:pointer;}
 .pb-name-ic{display:inline-flex;align-items:center;justify-content:center;width:var(--s);height:var(--s);background:#0891b2;border-radius:calc(var(--s) * .22);vertical-align:middle;flex-shrink:0;margin-inline-start:calc(var(--s) * .3);}
 .pb-name-ic img{width:76%;height:76%;object-fit:contain;display:block;}
+.res-mine{border:2px solid var(--gold)!important;background:rgba(201,162,74,.12)!important;}
+.res-to-me{background:rgba(201,162,74,.2);border-radius:8px;padding-inline:6px!important;margin-inline:-6px;}
 .pay-hint{font-size:14px;color:var(--muted);text-align:center;margin-top:6px;}
 .bit-link-box{border:1.5px solid var(--card-b);border-radius:12px;padding:10px 12px;margin-bottom:4px;}
 .bit-link-box .bl-ok{font-weight:700;color:var(--gold);font-size:16px;}
@@ -10544,9 +10546,11 @@ function renderGameResultsScreen(gameId){
       const rowsHtml = payer.items.map(t => {
         const existing = t.paid ? {id: t.paymentId} : null;
         const paidStyle = existing ? 'text-decoration:line-through;opacity:.5;' : '';
+        // money coming to me: the row says "אליך", on a light gold background
+        const toMe = t.to === myPlayerId;
         return `
-          <div class="row-between" style="padding:6px 0;">
-            <span style="${paidStyle}">${esc(t.toName)}${playerBitLink(g, t.to) ? ` ${bitTapIcon(14)}` : playerNoBit(g, t.to) ? ` ${payboxNameIcon(14)}` : ""}</span>
+          <div class="row-between${toMe ? " res-to-me" : ""}" style="padding:6px 0;">
+            <span style="${paidStyle}">${toMe ? "<b>אליך</b>" : `${esc(t.toName)}${playerBitLink(g, t.to) ? ` ${bitTapIcon(14)}` : playerNoBit(g, t.to) ? ` ${payboxNameIcon(14)}` : ""}`}</span>
             <div style="display:flex;align-items:center;gap:8px;">
               <span style="font-weight:700;color:var(--gold);${paidStyle}">₪${t.amount}</span>
               ${existing ? '<span style="font-size:20px;font-weight:700;color:#6ee7b7;">עבר</span>' : ''}
@@ -10555,9 +10559,11 @@ function renderGameResultsScreen(gameId){
             </div>
           </div>`;
       }).join("");
+      // my own payments: a gold frame, "אתה מעביר ל:"
+      const mine = fromId === myPlayerId, fem = ((c.roster||[]).find(rp => rp.id === fromId)||{}).gender === "female";
       return `
-        <div class="roster-row" style="flex-direction:column;align-items:stretch;">
-          <div style="font-weight:700;color:var(--text);margin-bottom:4px;">${esc(payer.name)} ${((c.roster||[]).find(rp => rp.id === fromId)||{}).gender === "female" ? "מעבירה" : "מעביר"} ל:</div>
+        <div class="roster-row${mine ? " res-mine" : ""}" style="flex-direction:column;align-items:stretch;">
+          <div style="font-weight:700;color:var(--text);margin-bottom:4px;">${mine ? `<b>${fem ? "את" : "אתה"}</b>` : esc(payer.name)} ${fem ? "מעבירה" : "מעביר"} ל:</div>
           ${rowsHtml}
         </div>`;
     }).join("");
