@@ -1301,7 +1301,8 @@ html:not(.theme-light) .dp-paid-msg{color:#6ee7b7;}
 .bit-tap i{position:absolute;font-style:normal;line-height:1;font-size:calc(var(--s) * .58);left:calc(var(--s) * -.28);top:calc(var(--s) * -.06);}
 .bit-why{font-size:15px;color:var(--muted);line-height:1.5;margin:0 0 10px;background:rgba(0,112,224,.06);border-radius:10px;padding:8px 10px;}
 .bit-none-link{display:block;margin:8px auto 0;background:none;border:none;color:var(--muted);text-decoration:underline;font:inherit;font-size:15px;cursor:pointer;}
-.rr-pbonly{font-size:12px;font-weight:700;color:#0891b2;border:1px solid currentColor;border-radius:999px;padding:0 6px;margin-inline-start:4px;white-space:nowrap;flex-shrink:0;}
+.pb-name-ic{display:inline-flex;align-items:center;justify-content:center;width:var(--s);height:var(--s);background:#0891b2;border-radius:calc(var(--s) * .22);vertical-align:middle;flex-shrink:0;margin-inline-start:calc(var(--s) * .3);}
+.pb-name-ic img{width:76%;height:76%;object-fit:contain;display:block;}
 .pay-hint{font-size:14px;color:var(--muted);text-align:center;margin-top:6px;}
 .bit-link-box{border:1.5px solid var(--card-b);border-radius:12px;padding:10px 12px;margin-bottom:4px;}
 .bit-link-box .bl-ok{font-weight:700;color:var(--gold);font-size:16px;}
@@ -5498,6 +5499,9 @@ function playerBitLink(g, pid){
 // פייבוקס. The amount is copied to paste either way.
 // The "this player saved a Bit link" icon: Bit's logo with a pointing finger on its top -
 // next to such players' names and on the buttons that open Bit straight on them.
+// "This player has no Bit - pay them with PayBox": PayBox's logo, next to their name (where
+// players with a Bit link get bitTapIcon).
+function payboxNameIcon(size){ return `<span class="pb-name-ic" style="--s:${size}px" title="אין לו ביט - מקבל בפייבוקס"><img src="/static/paybox-icon.png" alt="פייבוקס"></span>`; }
 function bitTapIcon(size){ return `<span class="bit-tap" style="--s:${size}px" title="שמר קישור ביט"><img src="/static/bit-icon.png" alt="ביט"><i>👉</i></span>`; }
 function resultBitButtonHtml(g, toPid, amount){
   const amt = String(Math.round((Number(amount) || 0) * 100) / 100);
@@ -10537,7 +10541,7 @@ function renderGameResultsScreen(gameId){
         const paidStyle = existing ? 'text-decoration:line-through;opacity:.5;' : '';
         return `
           <div class="row-between" style="padding:6px 0;">
-            <span style="${paidStyle}">${esc(t.toName)}${playerBitLink(g, t.to) ? ` ${bitTapIcon(14)}` : ""}</span>
+            <span style="${paidStyle}">${esc(t.toName)}${playerBitLink(g, t.to) ? ` ${bitTapIcon(14)}` : playerNoBit(g, t.to) ? ` ${payboxNameIcon(14)}` : ""}</span>
             <div style="display:flex;align-items:center;gap:8px;">
               <span style="font-weight:700;color:var(--gold);${paidStyle}">₪${t.amount}</span>
               ${existing ? '<span style="font-size:20px;font-weight:700;color:#6ee7b7;">עבר</span>' : ''}
@@ -12098,7 +12102,7 @@ function renderModal(m){
     const bitBadge = p => !directClub ? ""
       : p.clientId && parseBitLink(getGlobalPlayer(p.clientId).bitLink)
         ? bitTapIcon(16)
-        : p.clientId && getGlobalPlayer(p.clientId).noBit ? `<span class="rr-pbonly" title="אין לו ביט - מקבל בפייבוקס">פייבוקס</span>`
+        : p.clientId && getGlobalPlayer(p.clientId).noBit ? payboxNameIcon(16)
         : `<span class="rr-nobit" title="לא הגדיר קישור ביט לקבלת כסף">ללא ביט</span>`;
     const rows = c.roster.map(p => {
       const isCreatorRow = !!(p.clientId && c.createdBy && p.clientId === c.createdBy);
@@ -12568,7 +12572,7 @@ function renderModal(m){
           </div>
           ${otherPlayers.map(p => `<div class="checkbox-row" data-select-direct-pay-to="${p.id}" style="cursor:pointer;">
             <input type="radio" name="direct-pay-to" ${selectedToPlayerId===p.id?"checked":""} style="pointer-events:none;">
-            <span class="flex1">${esc(p.name)}${playerBitLink(g, p.id) ? ` ${bitTapIcon(16)}` : ""}</span>
+            <span class="flex1">${esc(p.name)}${playerBitLink(g, p.id) ? ` ${bitTapIcon(16)}` : playerNoBit(g, p.id) ? ` ${payboxNameIcon(16)}` : ""}</span>
           </div>`).join("")}
         </div>
       </div>
