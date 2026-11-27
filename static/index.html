@@ -1303,7 +1303,8 @@ html:not(.theme-light) .dp-paid-msg{color:#6ee7b7;}
 .bit-none-link{display:block;margin:8px auto 0;background:none;border:none;color:var(--muted);text-decoration:underline;font:inherit;font-size:15px;cursor:pointer;}
 .pb-name-ic{display:inline-flex;align-items:center;justify-content:center;width:var(--s);height:var(--s);background:#0891b2;border-radius:calc(var(--s) * .22);vertical-align:middle;flex-shrink:0;margin-inline-start:calc(var(--s) * .3);}
 .pb-name-ic img{width:76%;height:76%;object-fit:contain;display:block;}
-.res-mine{border:2px solid var(--gold)!important;background:rgba(201,162,74,.12)!important;}
+/* the transfer cards: on the dark theme the same green as the club screen's night cards */
+html:not(.theme-light) .res-card{background:var(--card);}
 .res-to-me{background:rgba(201,162,74,.2);border-radius:8px;padding-inline:6px!important;margin-inline:-6px;}
 .owe-rest{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:10px;font-size:17px;flex-wrap:wrap;}
 .owe-rest b{color:#b91c1c;}
@@ -10570,10 +10571,10 @@ function renderGameResultsScreen(gameId){
             </div>
           </div>`;
       }).join("");
-      // my own payments: a gold frame, "{my name} (אני) מעביר ל:"
+      // my own payments: "{my name} (אני) מעביר ל:"
       const mine = fromId === myPlayerId, fem = ((c.roster||[]).find(rp => rp.id === fromId)||{}).gender === "female";
       return `
-        <div class="roster-row${mine ? " res-mine" : ""}" style="flex-direction:column;align-items:stretch;">
+        <div class="roster-row res-card${mine ? " res-mine" : ""}" style="flex-direction:column;align-items:stretch;">
           <div style="font-weight:700;color:var(--text);margin-bottom:4px;">${mine ? `${esc(payer.name)} (אני)` : esc(payer.name)} ${fem ? "מעבירה" : "מעביר"} ל:</div>
           ${rowsHtml}
         </div>`;
