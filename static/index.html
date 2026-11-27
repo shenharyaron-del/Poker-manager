@@ -1305,7 +1305,8 @@ html:not(.theme-light) .dp-paid-msg{color:#6ee7b7;}
 .pb-name-ic img{width:76%;height:76%;object-fit:contain;display:block;}
 /* the transfer cards: on the dark theme the same green as the club screen's night cards */
 html:not(.theme-light) .res-card{background:var(--card);}
-.res-to-me{background:rgba(201,162,74,.2);border-radius:8px;padding-inline:6px!important;margin-inline:-6px;}
+/* me in the transfers: my name in gold */
+.res-me-name{color:var(--gold);font-weight:800;}
 .owe-rest{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:10px;font-size:17px;flex-wrap:wrap;}
 .owe-rest b{color:#b91c1c;}
 html:not(.theme-light) .owe-rest b{color:#fda4af;}
@@ -10558,11 +10559,11 @@ function renderGameResultsScreen(gameId){
       const rowsHtml = payer.items.map(t => {
         const existing = t.paid ? {id: t.paymentId} : null;
         const paidStyle = existing ? 'text-decoration:line-through;opacity:.5;' : '';
-        // money coming to me: "{my name} (אני)", on a light gold background
+        // money coming to me: "{my name} (אני)", the name in gold
         const toMe = t.to === myPlayerId;
         return `
           <div class="row-between${toMe ? " res-to-me" : ""}" style="padding:6px 0;">
-            <span style="${paidStyle}">${toMe ? `<b>${esc(t.toName)}</b> (אני)` : `${esc(t.toName)}${playerBitLink(g, t.to) ? ` ${bitTapIcon(14)}` : playerNoBit(g, t.to) ? ` ${payboxNameIcon(14)}` : ""}`}</span>
+            <span style="${paidStyle}">${toMe ? `<b class="res-me-name">${esc(t.toName)}</b> (אני)` : `${esc(t.toName)}${playerBitLink(g, t.to) ? ` ${bitTapIcon(14)}` : playerNoBit(g, t.to) ? ` ${payboxNameIcon(14)}` : ""}`}</span>
             <div style="display:flex;align-items:center;gap:8px;">
               <span style="font-weight:700;color:var(--gold);${paidStyle}">₪${t.amount}</span>
               ${existing ? '<span style="font-size:20px;font-weight:700;color:#6ee7b7;">עבר</span>' : ''}
@@ -10575,7 +10576,7 @@ function renderGameResultsScreen(gameId){
       const mine = fromId === myPlayerId, fem = ((c.roster||[]).find(rp => rp.id === fromId)||{}).gender === "female";
       return `
         <div class="roster-row res-card${mine ? " res-mine" : ""}" style="flex-direction:column;align-items:stretch;">
-          <div style="font-weight:700;color:var(--text);margin-bottom:4px;">${mine ? `${esc(payer.name)} (אני)` : esc(payer.name)} ${fem ? "מעבירה" : "מעביר"} ל:</div>
+          <div style="font-weight:700;color:var(--text);margin-bottom:4px;">${mine ? `<span class="res-me-name">${esc(payer.name)}</span> (אני)` : esc(payer.name)} ${fem ? "מעבירה" : "מעביר"} ל:</div>
           ${rowsHtml}
         </div>`;
     }).join("");
