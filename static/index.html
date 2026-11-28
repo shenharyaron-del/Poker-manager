@@ -1310,6 +1310,13 @@ html:not(.theme-light) .res-card{background:var(--card);}
 .owe-rest{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:10px;font-size:17px;flex-wrap:wrap;}
 .owe-rest b{color:#b91c1c;}
 html:not(.theme-light) .owe-rest b{color:#fda4af;}
+.bit-steps-title{font-weight:800;font-size:16px;margin:0 0 4px;}
+.bit-skip{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.25);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);}
+.bit-skip-box{width:100%;max-width:360px;background:var(--card,#fff);border:1px solid var(--card-b);border-radius:18px;padding:18px 16px 12px;box-shadow:0 10px 30px rgba(0,0,0,.3);text-align:center;display:flex;flex-direction:column;gap:8px;}
+html.theme-light .bit-skip-box{background:#fff;}
+.bit-skip-box .bs-title{font-size:20px;font-weight:800;}
+.bit-skip-box .bs-text{font-size:16px;color:var(--muted);line-height:1.45;margin-bottom:4px;}
+.bit-skip-box .bs-later{background:none;border:none;color:var(--muted);text-decoration:underline;font:inherit;font-size:15px;padding:6px;cursor:pointer;}
 .pay-hint{font-size:14px;color:var(--muted);text-align:center;margin-top:6px;}
 .bit-link-box{border:1.5px solid var(--card-b);border-radius:12px;padding:10px 12px;margin-bottom:4px;}
 .bit-link-box .bl-ok{font-weight:700;color:var(--gold);font-size:16px;}
@@ -5648,7 +5655,8 @@ function bitSectionHtml(opts){
         <button class="btn btn-ghost btn-sm btn-block" style="margin-top:8px;" data-bit-has>יש לי ביט - להגדרת הקוד</button>
       </div>`;
   return `
-      <p class="bit-why">קוד ה-QR הקבוע של ביט נועד לקבל כסף: מי שסורק אותו יכול רק להעביר לך, בלי לשמור איש קשר ובלי להקליד טלפון. הוא לא נותן גישה לחשבון שלך. אנחנו משתמשים בו רק כדי לפתוח לחברים ביט ישר עליך כשהם מעבירים לך כסף.</p>
+      <p class="bit-why">קוד ה-QR הקבוע של ביט נועד לקבל כסף. הקוד לא נותן גישה לחשבון או לטלפון שלך - אנחנו משתמשים בו רק כדי לפתוח לחברים ביט ישר עליך כשהם מעבירים לך כסף.</p>
+      <div class="bit-steps-title">שלבי ההגדרה:</div>
       ${bitSetupStepsHtml(o)}
       ${myBit ? `<button class="btn btn-ghost btn-sm" style="display:block;margin:6px auto 0;" data-bit-link-cancel>ביטול</button>`
         : `<button type="button" class="bit-none-link" data-bit-none>אין לי ביט</button>`}`;
@@ -5744,6 +5752,36 @@ function attachBitLinkHandlers(onSaved){
 }
 let bitLinkEditing = false;
 let bitPasteField = false;
+// Closing the Bit setup window with nothing set: say what that means, and offer the three ways
+// out - back to the setup, "אין לי ביט" (they get paid with PayBox), or "later" (it shows again
+// at the next night). Over a blurred backdrop.
+function bitSkipNeedsPrompt(){
+  if (!modal || modal.type !== "bitSetup" || bitLinkEditing) return false;
+  const gp = getGlobalPlayer(myIdentity.id);
+  return !parseBitLink(gp.bitLink) && !gp.noBit;
+}
+function showBitSkipPrompt(){
+  const el = document.createElement("div");
+  el.className = "bit-skip";
+  el.innerHTML = `<div class="bit-skip-box" role="dialog">
+      <div class="bs-title">בלי קישור ביט?</div>
+      <div class="bs-text">מי שיעביר לך כסף יצטרך לחפש את השם שלך בביט, במקום שביט ייפתח ישר עליך.</div>
+      <button type="button" class="btn btn-primary btn-block" data-bs="back">חזרה להגדרה</button>
+      <button type="button" class="btn btn-ghost btn-block" data-bs="nobit">אין לי ביט</button>
+      <button type="button" class="bs-later" data-bs="later">אחר כך (נזכיר במשחק הבא)</button>
+    </div>`;
+  document.body.appendChild(el);
+  el.querySelector('[data-bs="back"]').onclick = () => el.remove();
+  el.querySelector('[data-bs="later"]').onclick = () => { el.remove(); closeModal(); };
+  el.querySelector('[data-bs="nobit"]').onclick = async () => {
+    el.remove();
+    await syncLegacyOnlyFields();
+    setGlobalPlayer(myIdentity.id, {noBit: true});
+    closeModal();
+    showAlert("נשמר - יעבירו לך בפייבוקס", 2500);
+    try { await saveState(); } catch(e) { showAlert("שמירה נכשלה - בדקו את החיבור לאינטרנט ונסו שוב."); }
+  };
+}
 // Whether the clipboard holds a Bit "me" link: "yes" / "no", "denied" (the page may not
 // read it - a field to paste into instead), or "unknown" (can't tell before a tap asks).
 async function bitClipboardState(){
@@ -11527,7 +11565,7 @@ function renderModal(m){
   } else if (m.type === "bitSetup") {
     // Opened once a night after sitting down at a table whose money goes between the
     // players (see the table screen's check), for someone with no Bit link saved yet.
-    title = "קבלת כסף בביט";
+    title = "הגדרת קבלה מהירה בביט";
     body = bitSectionHtml();
   } else if (m.type === "inviteGone") {
     title = "הקישור לא בתוקף";
@@ -13133,7 +13171,7 @@ function renderModal(m){
       return (sc.chipValues||[]).length > 0;
     })());
   return `
-    <div class="overlay${topAnchored ? ' overlay-top' : ''}${m.type === "entryBuyin" || m.type === "nightResult" ? ' overlay-center' : ''}${isSetupFlow ? ' overlay-fullscreen' : ''}${m.type === "stats" || m.type === "terms" ? ' overlay-full' : ''}">
+    <div class="overlay${topAnchored ? ' overlay-top' : ''}${m.type === "entryBuyin" || m.type === "nightResult" ? ' overlay-center' : ''}${isSetupFlow ? ' overlay-fullscreen' : ''}${m.type === "stats" || m.type === "terms" || m.type === "bitSetup" ? ' overlay-full' : ''}">
       <div class="modal${["chipSetup","payboxSettings","buyinSetup","permSetup","seatChips"].includes(m.type) ? "" : " modal-big"}" onclick="event.stopPropagation()">
         <div class="modal-head"><h3 class="serif">${title}</h3>${dismissable ? `<button class="close-x" data-close-modal>${icon('x')}</button>` : ""}</div>
         ${body}${body.includes('class="mode-panel ' + SETUP_PANEL_MARK) ? '</div></div>' + SETUP_FOOTER_HTML : ''}
@@ -15133,6 +15171,7 @@ function attachHandlers(){
   // easy to accidentally dismiss a modal (and lose in-progress input) with a stray
   // tap near its edge. Only the explicit X button closes/backs out of a modal.
   const closeModalOrBack = () => {
+    if (bitSkipNeedsPrompt()) { showBitSkipPrompt(); return; }
     if (modal && (modal.type === "chipSetup" || modal.type === "payboxSettings" || modal.type === "buyinSetup")) { tryCloseSetupModal(); return; }
     if (modal && modal.type === "tourSetup") { leaveTourSetup(closeModal); return; }
     closeModal();
@@ -17149,6 +17188,7 @@ window.addEventListener("popstate", async () => {
     const t = modal.type;
     const dismissable = t !== "loginRequired" && !(t === "identityName" && modal.forced) && t !== "directPay" && t !== "entryBuyin";
     if (!dismissable) return;
+    if (bitSkipNeedsPrompt()) { if (!document.querySelector(".bit-skip")) showBitSkipPrompt(); else document.querySelector(".bit-skip").remove(); return; }
     if (t === "tourSetup") {
       const clubProfile = !modal.gameId && !modal.forNewGame;   // a night's / new table's settings: back to where it was
       await leaveTourSetup(closeModal);
