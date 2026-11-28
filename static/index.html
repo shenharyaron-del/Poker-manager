@@ -612,6 +612,7 @@ input:focus,.select-input:focus{border-color:var(--gold);}
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center;z-index:50;}
 @media(min-width:600px){.overlay{align-items:center;}}
 .overlay.overlay-blur{backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);}
+.overlay.overlay-bit .modal{max-height:94vh;padding:14px 16px;}
 /* Anchors the sheet to the top of the screen instead of the bottom - used for the
    chip-counting screen (seatChips), which got long enough (recap header + mode tabs +
    mode body) that opening from the bottom kept its own top - the part you look at
@@ -13172,7 +13173,7 @@ function renderModal(m){
       return (sc.chipValues||[]).length > 0;
     })());
   return `
-    <div class="overlay${topAnchored ? ' overlay-top' : ''}${m.type === "entryBuyin" || m.type === "nightResult" ? ' overlay-center' : ''}${m.type === "entryBuyin" ? ' overlay-blur' : ''}${isSetupFlow ? ' overlay-fullscreen' : ''}${m.type === "stats" || m.type === "terms" || m.type === "bitSetup" ? ' overlay-full' : ''}">
+    <div class="overlay${topAnchored ? ' overlay-top' : ''}${m.type === "entryBuyin" || m.type === "nightResult" || m.type === "bitSetup" ? ' overlay-center' : ''}${m.type === "entryBuyin" || m.type === "bitSetup" ? ' overlay-blur' : ''}${m.type === "bitSetup" ? ' overlay-bit' : ''}${isSetupFlow ? ' overlay-fullscreen' : ''}${m.type === "stats" || m.type === "terms" ? ' overlay-full' : ''}">
       <div class="modal${["chipSetup","payboxSettings","buyinSetup","permSetup","seatChips"].includes(m.type) ? "" : " modal-big"}" onclick="event.stopPropagation()">
         <div class="modal-head"><h3 class="serif">${title}</h3>${dismissable ? `<button class="close-x" data-close-modal>${icon('x')}</button>` : ""}</div>
         ${body}${body.includes('class="mode-panel ' + SETUP_PANEL_MARK) ? '</div></div>' + SETUP_FOOTER_HTML : ''}
